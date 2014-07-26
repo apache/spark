@@ -21,7 +21,7 @@ import java.io._
 import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL, URLConnection}
 import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
-import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -553,19 +553,19 @@ private[spark] object Utils extends Logging {
     new ThreadFactoryBuilder().setDaemon(true)
 
   /**
+   * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
+   */
+  def namedThreadFactory(prefix: String): ThreadFactory = {
+    daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+  }
+
+  /**
    * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
    * unique, sequentially assigned integer.
    */
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+    val threadFactory = namedThreadFactory(prefix)
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
-  /**
-   * Return the string to tell how long has passed in milliseconds.
-   */
-  def getUsedTimeMs(startTimeMs: Long): String = {
-    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
@@ -573,8 +573,15 @@ private[spark] object Utils extends Logging {
    * unique, sequentially assigned integer.
    */
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+    val threadFactory = namedThreadFactory(prefix)
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Return the string to tell how long has passed in milliseconds.
+   */
+  def getUsedTimeMs(startTimeMs: Long): String = {
+    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
