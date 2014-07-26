@@ -112,6 +112,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   def startTime: java.lang.Long = sc.startTime
 
+  /** The version of Spark on which this application is running. */
+  def version: String = sc.version
+
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
