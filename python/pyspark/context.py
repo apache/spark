@@ -53,7 +53,6 @@ class SparkContext(object):
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
     _default_batch_size_for_serialized_input = 10
 
-
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
                  gateway=None):

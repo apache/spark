@@ -295,12 +295,6 @@ class TestInputFormat(PySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        unbatched_ints = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfint/",
-                                           "org.apache.hadoop.io.IntWritable",
-                                           "org.apache.hadoop.io.Text",
-                                           batchSize=1).collect())
-        self.assertEqual(unbatched_ints, ei)
-
         doubles = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfdouble/",
                                               "org.apache.hadoop.io.DoubleWritable",
                                               "org.apache.hadoop.io.Text").collect())
@@ -395,18 +389,12 @@ class TestInputFormat(PySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        unbatched_ints = sorted(self.sc.hadoopFile(basepath + "/sftestdata/sfint/",
-                                         "org.apache.hadoop.mapred.SequenceFileInputFormat",
-                                         "org.apache.hadoop.io.IntWritable",
-                                         "org.apache.hadoop.io.Text",
-                                         batchSize=1).collect())
-        self.assertEqual(unbatched_ints, ei)
-
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
-        hello = self.sc.hadoopFile(hellopath,
-                                   "org.apache.hadoop.mapred.TextInputFormat",
-                                   "org.apache.hadoop.io.LongWritable",
-                                   "org.apache.hadoop.io.Text").collect()
+        oldconf = {"mapred.input.dir" : hellopath}
+        hello = self.sc.hadoopRDD("org.apache.hadoop.mapred.TextInputFormat",
+                                  "org.apache.hadoop.io.LongWritable",
+                                  "org.apache.hadoop.io.Text",
+                                  conf=oldconf).collect()
         result = [(0, u'Hello World!')]
         self.assertEqual(hello, result)
 
@@ -420,19 +408,12 @@ class TestInputFormat(PySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        unbatched_ints = sorted(self.sc.newAPIHadoopFile(
-            basepath + "/sftestdata/sfint/",
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_ints, ei)
-
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
-        hello = self.sc.newAPIHadoopFile(hellopath,
-                                         "org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
-                                         "org.apache.hadoop.io.LongWritable",
-                                         "org.apache.hadoop.io.Text").collect()
+        newconf = {"mapred.input.dir" : hellopath}
+        hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
+                                        "org.apache.hadoop.io.LongWritable",
+                                        "org.apache.hadoop.io.Text",
+                                        conf=newconf).collect()
         result = [(0, u'Hello World!')]
         self.assertEqual(hello, result)
 
@@ -620,14 +601,17 @@ class TestOutputFormat(PySparkTestCase):
         rdd.saveAsSequenceFile(basepath + "/reserialize/sequence")
         result1 = sorted(self.sc.sequenceFile(basepath + "/reserialize/sequence").collect())
         self.assertEqual(result1, data)
+
         rdd.saveAsHadoopFile(basepath + "/reserialize/hadoop",
                              "org.apache.hadoop.mapred.SequenceFileOutputFormat")
         result2 = sorted(self.sc.sequenceFile(basepath + "/reserialize/hadoop").collect())
         self.assertEqual(result2, data)
+
         rdd.saveAsNewAPIHadoopFile(basepath + "/reserialize/newhadoop",
                              "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
         result3 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newhadoop").collect())
         self.assertEqual(result3, data)
+
         conf4 = {
             "mapred.output.format.class" : "org.apache.hadoop.mapred.SequenceFileOutputFormat",
             "mapred.output.key.class" : "org.apache.hadoop.io.IntWritable",
@@ -636,6 +620,7 @@ class TestOutputFormat(PySparkTestCase):
         rdd.saveAsHadoopDataset(conf4)
         result4 = sorted(self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
         self.assertEqual(result4, data)
+
         conf5 = {"mapreduce.outputformat.class" :
                      "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
             "mapred.output.key.class" : "org.apache.hadoop.io.IntWritable",
@@ -645,13 +630,47 @@ class TestOutputFormat(PySparkTestCase):
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
 
-        # unbatched save and read
+    def test_unbatched_save_and_read(self):
+        basepath = self.tempdir.name
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
-            basepath + "/reserialize/unbatched")
-        unbatched_ints = sorted(self.sc.sequenceFile(basepath + "/reserialize/unbatched",
-                                                     batchSize=1).collect())
-        self.assertEqual(unbatched_ints, ei)
+            basepath + "/unbatched/")
+
+        unbatched_sequence = sorted(self.sc.sequenceFile(basepath + "/unbatched/",
+            batchSize=1).collect())
+        self.assertEqual(unbatched_sequence, ei)
+
+        unbatched_hadoopFile = sorted(self.sc.hadoopFile(basepath + "/unbatched/",
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            batchSize=1).collect())
+        self.assertEqual(unbatched_hadoopFile, ei)
+
+        unbatched_newAPIHadoopFile = sorted(self.sc.newAPIHadoopFile(basepath + "/unbatched/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            batchSize=1).collect())
+        self.assertEqual(unbatched_newAPIHadoopFile, ei)
+
+        oldconf = {"mapred.input.dir" : basepath + "/unbatched/"}
+        unbatched_hadoopRDD = sorted(self.sc.hadoopRDD(
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            conf=oldconf,
+            batchSize=1).collect())
+        self.assertEqual(unbatched_hadoopRDD, ei)
+
+        newconf = {"mapred.input.dir" : basepath + "/unbatched/"}
+        unbatched_newAPIHadoopRDD = sorted(self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            conf=newconf,
+            batchSize=1).collect())
+        self.assertEqual(unbatched_newAPIHadoopRDD, ei)
 
 class TestDaemon(unittest.TestCase):
     def connect(self, port):
