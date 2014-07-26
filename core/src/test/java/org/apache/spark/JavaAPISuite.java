@@ -118,8 +118,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> intersections = s1.intersection(s2);
     Assert.assertEquals(3, intersections.count());
 
-    List<Integer> list = new ArrayList<Integer>();
-    JavaRDD<Integer> empty = sc.parallelize(list);
+    JavaRDD<Integer> empty = sc.emptyRDD();
     JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
     Assert.assertEquals(0, emptyIntersection.count());
 
@@ -182,6 +181,12 @@ public class JavaAPISuite implements Serializable {
     sortedPairs = sortedRDD.collect();
     Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+  }
+
+  @Test
+  public void emptyRDD() {
+    JavaRDD<String> rdd = sc.emptyRDD();
+    Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
   }
 
   @Test
