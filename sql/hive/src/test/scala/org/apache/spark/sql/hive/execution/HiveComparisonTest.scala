@@ -350,12 +350,6 @@ abstract class HiveComparisonTest
 
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
 
-              println("hive output")
-              hive.foreach(println)
-
-              println("catalyst printout")
-              catalyst.foreach(println)
-
               if (recomputeCache) {
                 logger.warn(s"Clearing cache files for failed test $testCaseName")
                 hiveCacheFiles.foreach(_.delete())

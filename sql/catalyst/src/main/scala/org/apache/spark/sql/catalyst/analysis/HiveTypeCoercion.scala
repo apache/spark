@@ -50,6 +50,7 @@ trait HiveTypeCoercion {
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CastNulls ::
+    Division ::
     Nil
 
   /**
@@ -314,6 +315,23 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
+    }
+  }
+
+  /**
+   * Hive only performs integral division with the DIV operator. The arguments to / are always
+   * converted to fractional types.
+   */
+  object Division extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      // Decimal and Double remain the same
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType == DecimalType => d
+
+      case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
   }
 

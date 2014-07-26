@@ -52,7 +52,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT * FROM src WHERE key Between 1 and 2")
 
   createQueryTest("div",
-    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2 FROM src LIMIT 1")
+    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2, 100 DIV 51, 100 DIV 49 FROM src LIMIT 1")
+
+  createQueryTest("division",
+    "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
