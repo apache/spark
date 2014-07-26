@@ -22,6 +22,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 
 import java.io.{BufferedReader, InputStreamReader}
+import java.net.ServerSocket
 import java.sql.{Connection, DriverManager, Statement}
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
@@ -39,9 +40,15 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
 
   val DRIVER_NAME  = "org.apache.hive.jdbc.HiveDriver"
   val TABLE = "test"
-  // use a different port, than the hive standard 10000,
-  // for tests to avoid issues with the port being taken on some machines
-  val PORT = "10000"
+  val HOST = "localhost"
+  val PORT =  {
+    // Let the system to choose a random available port to avoid collision with other parallel
+    // builds.
+    val socket = new ServerSocket(0)
+    val port = socket.getLocalPort
+    socket.close()
+    port
+  }
 
   // If verbose is true, the test program will print all outputs coming from the Hive Thrift server.
   val VERBOSE = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).getOrElse("false").toBoolean
@@ -66,6 +73,9 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
       "--hiveconf",
       s"hive.metastore.warehouse.dir=$WAREHOUSE_PATH")
     val pb = new ProcessBuilder(defaultArgs ++ args)
+    val environment = pb.environment()
+    environment.put("HIVE_SERVER2_THRIFT_PORT", PORT.toString)
+    environment.put("HIVE_SERVER2_THRIFT_BIND_HOST", HOST)
     process = pb.start()
     inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
     errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream))

@@ -22,8 +22,6 @@ import java.io.{BufferedReader, InputStreamReader, PrintWriter}
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.sql.hive.test.TestHive
-
 class CliSuite extends FunSuite with BeforeAndAfterAll with TestUtils {
   val WAREHOUSE_PATH = TestUtils.getWarehousePath("cli")
   val METASTORE_PATH = TestUtils.getMetastorePath("cli")
