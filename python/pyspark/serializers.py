@@ -66,7 +66,8 @@ import marshal
 import struct
 import sys
 from pyspark import cloudpickle
-
+import mypickle
+import collections
 
 __all__ = ["PickleSerializer", "MarshalSerializer"]
 
@@ -267,6 +268,33 @@ class NoOpSerializer(FramedSerializer):
         return obj
 
 
+# Hook namedtuple, make it picklable
+# pyspark should be imported before 'from collections import namedtuple'
+
+old_namedtuple = collections.namedtuple
+__cls = {}
+
+def _restore(name, fields, value):
+    k = (name, fields)
+    cls = __cls.get(k)
+    if cls is None:
+        cls = namedtuple(name, fields)
+        __cls[k] = cls
+    return cls(*value)
+
+def namedtuple(name, fields, verbose=False, rename=False):
+    """ Pickable namedtuple """
+    cls = old_namedtuple(name, fields, verbose, rename)
+
+    def __reduce__(self):
+        return (_restore, (cls.__name__, cls._fields, tuple(self)))
+
+    cls.__reduce__ = __reduce__
+    return cls
+
+collections.namedtuple = namedtuple
+
+
 class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's cPickle serializer:
@@ -277,10 +305,27 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def dumps(self, obj):
-        return cPickle.dumps(obj, 2)
+    def __init__(self):
+        FramedSerializer.__init__(self)
+        self.failed = False
 
-    loads = cPickle.loads
+    def dumps(self, obj):
+        if self.failed:
+            return mypickle.dumps(obj)
+        try:
+            return cPickle.dumps(obj, 2)
+        except Exception:
+            self.failed = True
+            return mypickle.dumps(obj)
+
+    def loads(self, obj):
+        if self.failed:
+            return mypickle.loads(obj)
+        try:
+            return cPickle.loads(obj)
+        except Exception:
+            self.failed = True
+            return mypickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):

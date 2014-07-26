@@ -714,7 +714,7 @@ class SparkContext(object):
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
-        mappedRDD = rdd.mapPartitions(partitionFunc)
+        mappedRDD = rdd.mapPartitionsWithIndex(lambda _, it: partitionFunc(it))
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
 

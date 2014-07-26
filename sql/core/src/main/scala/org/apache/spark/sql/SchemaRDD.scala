@@ -376,47 +376,42 @@ class SchemaRDD(
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
-      val fields = structType.fields.map(field => (field.name, field.dataType))
-      val map: JMap[String, Any] = new java.util.HashMap
-      row.zip(fields).foreach {
-        case (obj, (attrName, dataType)) =>
+    def rowToArray(row: Row, structType: StructType): Array[Any] = {
+      val fields = structType.fields.map(field => field.dataType)
+      row.zip(fields).map {
+        case (obj, dataType) =>
           dataType match {
-            case struct: StructType => map.put(attrName, rowToMap(obj.asInstanceOf[Row], struct))
+            case struct: StructType => rowToArray(obj.asInstanceOf[Row], struct)
             case array @ ArrayType(struct: StructType) =>
-              val arrayValues = obj match {
+              obj match {
                 case seq: Seq[Any] =>
-                  seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
+                  seq.map(element => rowToArray(element.asInstanceOf[Row], struct)).asJava
                 case list: JList[_] =>
-                  list.map(element => rowToMap(element.asInstanceOf[Row], struct))
+                  list.map(element => rowToArray(element.asInstanceOf[Row], struct))
                 case set: JSet[_] =>
-                  set.map(element => rowToMap(element.asInstanceOf[Row], struct))
+                  set.map(element => rowToArray(element.asInstanceOf[Row], struct))
                 case arr if arr != null && arr.getClass.isArray =>
                   arr.asInstanceOf[Array[Any]].map {
-                    element => rowToMap(element.asInstanceOf[Row], struct)
+                    element => rowToArray(element.asInstanceOf[Row], struct)
                   }
                 case other => other
               }
-              map.put(attrName, arrayValues)
             case array: ArrayType => {
-              val arrayValues = obj match {
+              obj match {
                 case seq: Seq[Any] => seq.asJava
                 case other => other
               }
-              map.put(attrName, arrayValues)
             }
-            case other => map.put(attrName, obj)
+            case other => obj
           }
-      }
-
-      map
+      }.toArray
     }
 
     val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToMap(row, rowSchema)
+        rowToArray(row, rowSchema)
       }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }
