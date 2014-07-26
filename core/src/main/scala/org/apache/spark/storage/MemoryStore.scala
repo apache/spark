@@ -434,7 +434,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * Reserve additional memory for unrolling blocks used by this thread.
    */
-  private def reserveUnrollMemoryForThisThread(memory: Long): Unit = {
+  private[spark] def reserveUnrollMemoryForThisThread(memory: Long): Unit = {
     val threadId = Thread.currentThread().getId
     accountingLock.synchronized {
       unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, 0L) + memory
@@ -463,14 +463,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * Return the amount of memory currently occupied for unrolling blocks across all threads.
    */
-  private def currentUnrollMemory: Long = accountingLock.synchronized {
+  private[spark] def currentUnrollMemory: Long = accountingLock.synchronized {
     unrollMemoryMap.values.sum
   }
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks by this thread.
    */
-  private def currentUnrollMemoryForThisThread: Long = accountingLock.synchronized {
+  private[spark] def currentUnrollMemoryForThisThread: Long = accountingLock.synchronized {
     unrollMemoryMap.getOrElse(Thread.currentThread().getId, 0L)
   }
 }
