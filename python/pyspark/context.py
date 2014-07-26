@@ -217,6 +217,13 @@ class SparkContext(object):
         SparkContext._jvm.java.lang.System.setProperty(key, value)
 
     @property
+    def version(self):
+        """
+        The version of Spark on which this application is running.
+        """
+        return self._jsc.version()
+
+    @property
     def defaultParallelism(self):
         """
         Default level of parallelism to use when not given by user (e.g. for
