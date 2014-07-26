@@ -105,6 +105,9 @@ private[spark] class RollingFileAppender(
       } else {
         logWarning(s"File $activeFile does not exist")
       }
+    } catch {
+      case e: Exception =>
+        logError(s"Error moving $activeFile", e)
     }
   }
 
