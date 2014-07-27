@@ -31,9 +31,9 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -264,7 +264,7 @@ private[spark] object Utils extends Logging {
       try {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)
         if (dir.exists() || !dir.mkdirs()) {
-          dir = null
+          if (!dir.isDirectory) dir = null
         }
       } catch { case e: IOException => ; }
     }
@@ -275,6 +275,7 @@ private[spark] object Utils extends Logging {
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
       override def run() {
         // Attempt to delete if some patch which is parent of this is not already registered.
+        Utils.setShutdownStarted()
         if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
       }
     })
@@ -339,17 +340,18 @@ private[spark] object Utils extends Logging {
           logDebug("fetchFile with security enabled")
           val newuri = constructURIForAuthentication(uri, securityMgr)
           uc = newuri.toURL().openConnection()
-          uc.setAllowUserInteraction(false)
         } else {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()
         }
 
         val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
+        uc.setAllowUserInteraction(false)
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
-        val in = uc.getInputStream()
+        val len = uc.getContentLengthLong
+        val in = if (len < 0) uc.getInputStream else ByteStreams.limit(uc.getInputStream, len)
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
@@ -618,18 +620,22 @@ private[spark] object Utils extends Logging {
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
-    if (file == null) throw new NullPointerException("File must not be null")
-    if (isWindows) return false
-    val fileInCanonicalDir = if (file.getParent() == null) {
-      file
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_7)) {
+      Java7Util.isSymlink(file)
     } else {
-      new File(file.getParentFile().getCanonicalFile(), file.getName())
-    }
+      if (file == null) throw new NullPointerException("File must not be null")
+      if (isWindows) return false
+      val fileInCanonicalDir = if (file.getParent() == null) {
+        file
+      } else {
+        new File(file.getParentFile().getCanonicalFile(), file.getName())
+      }
 
-    if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
-      return false
-    } else {
-      return true
+      if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
+        return false
+      } else {
+        return true
+      }
     }
   }
 
@@ -809,8 +815,8 @@ private[spark] object Utils extends Logging {
    */
   def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot { ste:StackTraceElement => 
-        // When running under some profilers, the current stack trace might contain some bogus 
+      .filterNot { ste:StackTraceElement =>
+        // When running under some profilers, the current stack trace might contain some bogus
         // frames. This is intended to ensure that we don't crash in these situations by
         // ignoring any frames that we can't examine.
         (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
@@ -935,15 +941,22 @@ private[spark] object Utils extends Logging {
    * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
    * an IllegalStateException.
    */
+  @volatile private var shutdownStarted = false
+  private[spark] def setShutdownStarted() {
+    shutdownStarted = true
+  }
   def inShutdown(): Boolean = {
     try {
+      if (shutdownStarted) return true
       val hook = new Thread {
         override def run() {}
       }
       Runtime.getRuntime.addShutdownHook(hook)
       Runtime.getRuntime.removeShutdownHook(hook)
     } catch {
-      case ise: IllegalStateException => return true
+      case ise: IllegalStateException =>
+        shutdownStarted = true
+        return true
     }
     false
   }

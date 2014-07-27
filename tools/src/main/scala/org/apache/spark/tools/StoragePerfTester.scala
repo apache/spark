@@ -62,9 +62,8 @@ object StoragePerfTester {
         writers(i % numOutputSplits).write(writeData)
       }
       writers.map {w =>
-        w.commit()
+        w.commitAndClose()
         total.addAndGet(w.fileSegment().length)
-        w.close()
       }
 
       shuffle.releaseWriters(true)
