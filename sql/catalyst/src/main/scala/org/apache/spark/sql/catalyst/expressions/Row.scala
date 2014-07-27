@@ -88,15 +88,6 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-
-  /**
-   * Experimental
-   *
-   * Returns a mutable string builder for the specified column.  A given row should return the
-   * result of any mutations made to the returned buffer next time getString is called for the same
-   * column.
-   */
-  def getStringBuilder(ordinal: Int): StringBuilder
 }
 
 /**
@@ -215,8 +206,6 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
 class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   /** No-arg constructor for serialization. */
   def this() = this(0)
-
-  def getStringBuilder(ordinal: Int): StringBuilder = ???
 
   override def setBoolean(ordinal: Int,value: Boolean): Unit = { values(ordinal) = value }
   override def setByte(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
