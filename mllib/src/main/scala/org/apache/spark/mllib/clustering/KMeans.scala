@@ -165,18 +165,21 @@ class KMeans private (
       val activeCenters = activeRuns.map(r => centers(r)).toArray
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
+      val bcActiveCenters = sc.broadcast(activeCenters)
+
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>
-        val runs = activeCenters.length
-        val k = activeCenters(0).length
-        val dims = activeCenters(0)(0).vector.length
+        val thisActiveCenters = bcActiveCenters.value
+        val runs = thisActiveCenters.length
+        val k = thisActiveCenters(0).length
+        val dims = thisActiveCenters(0)(0).vector.length
 
         val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
         val counts = Array.fill(runs, k)(0L)
 
         points.foreach { point =>
           (0 until runs).foreach { i =>
-            val (bestCenter, cost) = KMeans.findClosest(activeCenters(i), point)
+            val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
             costAccums(i) += cost
             sums(i)(bestCenter) += point.vector
             counts(i)(bestCenter) += 1
@@ -264,16 +267,17 @@ class KMeans private (
     // to their squared distance from that run's current centers
     var step = 0
     while (step < initializationSteps) {
+      val bcCenters = data.context.broadcast(centers)
       val sumCosts = data.flatMap { point =>
         (0 until runs).map { r =>
-          (r, KMeans.pointCost(centers(r), point))
+          (r, KMeans.pointCost(bcCenters.value(r), point))
         }
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         points.flatMap { p =>
           (0 until runs).filter { r =>
-            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
+            rand.nextDouble() < 2.0 * KMeans.pointCost(bcCenters.value(r), p) * k / sumCosts(r)
           }.map((_, p))
         }
       }.collect()
@@ -286,9 +290,10 @@ class KMeans private (
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
+    val bcCenters = data.context.broadcast(centers)
     val weightMap = data.flatMap { p =>
       (0 until runs).map { r =>
-        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+        ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>
