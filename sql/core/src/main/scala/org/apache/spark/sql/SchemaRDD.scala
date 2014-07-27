@@ -395,11 +395,10 @@ class SchemaRDD(
                   arr.asInstanceOf[Array[Any]].map {
                     element => rowToMap(element.asInstanceOf[Row], struct)
                   }
-                case t: java.sql.Timestamp => {
+                case t: java.sql.Timestamp =>
                   val c = java.util.Calendar.getInstance()
                   c.setTimeInMillis(t.getTime())
                   c
-                }
                 case other => other
               }
               map.put(attrName, arrayValues)
