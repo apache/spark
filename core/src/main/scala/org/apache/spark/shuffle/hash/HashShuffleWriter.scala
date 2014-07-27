@@ -61,7 +61,8 @@ class HashShuffleWriter[K, V](
   }
 
   /** Close this writer, passing along whether the map completed */
-  override def stop(success: Boolean): Option[MapStatus] = {
+  override def stop(successInput: Boolean): Option[MapStatus] = {
+    var success = successInput
     try {
       if (stopping) {
         return None
@@ -71,7 +72,8 @@ class HashShuffleWriter[K, V](
         try {
           return Some(commitWritesAndBuildStatus())
         } catch {
-          case e: Exception =>
+          case e: Throwable =>
+            success = false // for finally block
             revertWrites()
             throw e
         }
@@ -96,9 +98,9 @@ class HashShuffleWriter[K, V](
     var totalBytes = 0L
     var totalTime = 0L
     val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
-      writer.commit()
-      writer.close()
+      writer.commitAndClose()
       val size = writer.fileSegment().length
+      assert (size >= 0)
       totalBytes += size
       totalTime += writer.timeWriting()
       MapOutputTracker.compressSize(size)
@@ -116,8 +118,13 @@ class HashShuffleWriter[K, V](
   private def revertWrites(): Unit = {
     if (shuffle != null && shuffle.writers != null) {
       for (writer <- shuffle.writers) {
-        writer.revertPartialWrites()
-        writer.close()
+        try {
+          writer.revertPartialWritesAndClose()
+        } catch {
+          // Ensure that all revert's get done - log exception and continue
+          case ex: Exception =>
+            logError("Exception reverting/closing writers", ex)
+        }
       }
     }
   }

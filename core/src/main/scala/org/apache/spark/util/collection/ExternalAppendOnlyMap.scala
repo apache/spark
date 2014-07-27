@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
+import java.io.{BufferedInputStream, File, FileInputStream, EOFException, IOException, Serializable}
 import java.util.Comparator
 
 import scala.collection.BufferedIterator
@@ -28,7 +28,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 
@@ -161,16 +161,22 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
+    var totalBytesWritten = 0L
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush() = {
-      writer.commit()
-      val bytesWritten = writer.bytesWritten
+      val w = writer
+      writer = null
+      w.commitAndClose()
+      val bytesWritten = w.bytesWritten
       batchSizes.append(bytesWritten)
+      totalBytesWritten += bytesWritten
+      assert (file.length() == totalBytesWritten)
       _diskBytesSpilled += bytesWritten
       objectsWritten = 0
     }
 
+    var success = false
     try {
       val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
@@ -180,16 +186,25 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          writer.close()
           writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
         }
       }
       if (objectsWritten > 0) {
         flush()
+      } else if (null != writer) {
+        val w = writer
+        writer = null
+        w.revertPartialWritesAndClose()
       }
+      success = true
     } finally {
-      // Partial failures cannot be tolerated; do not revert partial writes
-      writer.close()
+      if (success) {
+        assert (writer eq null)
+        assert (file.length() == totalBytesWritten)
+      } else {
+        if (writer ne null) writer.revertPartialWritesAndClose()
+        if (file.exists()) file.delete()
+      }
     }
 
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
@@ -353,26 +368,53 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
-    private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+
+    assert (! batchSizes.isEmpty)
+    assert (! batchSizes.exists(_ <= 0))
+    private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)
+    assert (file.length() == batchOffsets(batchOffsets.length - 1))
+
+    private var batchIndex = 0
+    private var fileStream: FileInputStream = null
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    private var batchStream = nextBatchStream()
-    private var compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-    private var deserializeStream = ser.deserializeStream(compressedStream)
+    private var deserializeStream = nextBatchStream()
     private var nextItem: (K, C) = null
     private var objectsRead = 0
 
     /**
      * Construct a stream that reads only from the next batch.
      */
-    private def nextBatchStream(): InputStream = {
-      if (batchSizes.length > 0) {
-        ByteStreams.limit(bufferedStream, batchSizes.remove(0))
+    private def nextBatchStream(): DeserializationStream = {
+      if (batchIndex + 1 < batchOffsets.length) {
+        assert (file.length() == batchOffsets(batchOffsets.length - 1))
+        if (null != deserializeStream) {
+          deserializeStream.close()
+          fileStream.close()
+          deserializeStream = null
+          fileStream = null
+        }
+        val start = batchOffsets(batchIndex)
+        fileStream = new FileInputStream(file)
+        fileStream.getChannel.position(start)
+        assert (start == fileStream.getChannel.position())
+        batchIndex += 1
+
+        val end = batchOffsets(batchIndex)
+
+        assert (end >= start, "start = " + start + ", end = " + end +
+          ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
+
+        val strm = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
+
+        val compressedStream = blockManager.wrapForCompression(blockId, strm)
+        val ser = serializer.newInstance()
+        ser.deserializeStream(compressedStream)
       } else {
         // No more batches left
-        bufferedStream
+        cleanup()
+        null
       }
     }
 
@@ -387,10 +429,8 @@ class ExternalAppendOnlyMap[K, V, C](
         val item = deserializeStream.readObject().asInstanceOf[(K, C)]
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {
-          batchStream = nextBatchStream()
-          compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-          deserializeStream = ser.deserializeStream(compressedStream)
           objectsRead = 0
+          deserializeStream = nextBatchStream()
         }
         item
       } catch {
@@ -402,6 +442,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     override def hasNext: Boolean = {
       if (nextItem == null) {
+        if (null == deserializeStream) return false
         nextItem = readNextItem()
       }
       nextItem != null
@@ -418,7 +459,25 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // TODO: Ensure this gets called even if the iterator isn't drained.
     private def cleanup() {
-      deserializeStream.close()
+      batchIndex = batchOffsets.length
+      val dstrm = deserializeStream
+      val fstrm = fileStream
+      deserializeStream = null
+      fileStream = null
+
+      if (dstrm ne null) {
+        try {
+          dstrm.close()
+        } catch {
+          case ioEx: IOException => {
+            // best case attempt - atleast free the handles
+            if (fstrm ne null) {
+              try { fstrm.close() } catch {case ioEx: IOException => }
+            }
+            throw ioEx
+          }
+        }
+      }
       file.delete()
     }
   }

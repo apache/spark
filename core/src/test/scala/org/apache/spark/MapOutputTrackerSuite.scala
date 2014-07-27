@@ -199,4 +199,6 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     }
     intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
   }
+
+  test("")
 }
