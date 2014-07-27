@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.optimization
 
-import scala.util.Random
 import scala.collection.JavaConversions._
+import scala.util.Random
 
-import org.scalatest.FunSuite
-import org.scalatest.Matchers
+import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 object GradientDescentSuite {
 
@@ -46,7 +45,7 @@ object GradientDescentSuite {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
-    val unifRand = new scala.util.Random(45)
+    val unifRand = new Random(45)
     val rLogis = (0 until nPoints).map { i =>
       val u = unifRand.nextDouble()
       math.log(u) - math.log(1.0-u)
@@ -142,5 +141,28 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
       compareDouble(newWeights1(1) , newWeights0(1) - initialWeightsWithIntercept(1)),
       "The different between newWeights with/without regularization " +
         "should be initialWeightsWithIntercept.")
+  }
+}
+
+class GradientDescentClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val (weights, loss) = GradientDescent.runMiniBatchSGD(
+      points,
+      new LogisticGradient,
+      new SquaredL2Updater,
+      0.1,
+      2,
+      1.0,
+      1.0,
+      Vectors.dense(new Array[Double](n)))
   }
 }

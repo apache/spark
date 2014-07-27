@@ -54,7 +54,13 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  override def predict(testData: RDD[Vector]): RDD[Double] = testData.map(predict)
+  override def predict(testData: RDD[Vector]): RDD[Double] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapPartitions { iter =>
+      val model = bcModel.value
+      iter.map(model.predict)
+    }
+  }
 
   override def predict(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))

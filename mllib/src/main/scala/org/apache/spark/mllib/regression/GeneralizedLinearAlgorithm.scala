@@ -56,9 +56,12 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weights
+    val bcWeights = testData.context.broadcast(localWeights)
     val localIntercept = intercept
-
-    testData.map(v => predictPoint(v, localWeights, localIntercept))
+    testData.mapPartitions { iter =>
+      val w = bcWeights.value
+      iter.map(v => predictPoint(v, w, localIntercept))
+    }
   }
 
   /**
