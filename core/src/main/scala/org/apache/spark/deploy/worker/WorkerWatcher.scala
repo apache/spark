@@ -52,7 +52,7 @@ private[spark] class WorkerWatcher(workerUrl: String) extends Actor
     case AssociatedEvent(localAddress, remoteAddress, inbound) if isWorker(remoteAddress) =>
       logInfo(s"Successfully connected to $workerUrl")
 
-    case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound)
+    case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _)
         if isWorker(remoteAddress) =>
       // These logs may not be seen if the worker (and associated pipe) has died
       logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
