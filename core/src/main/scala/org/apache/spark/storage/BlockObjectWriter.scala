@@ -175,7 +175,8 @@ private[spark] class DiskBlockObjectWriter(
       channel = fos.getChannel
       val fosPos = channel.position()
       if (initialPosition != fosPos) {
-        throw new IOException("file cleaned up ? " + file.exists() + ", initialpos = " + initialPosition +
+        throw new IOException("file cleaned up ? " + file.exists() + 
+          ", initialpos = " + initialPosition +
           "current len = " + fosPos + ", in shutdown ? " + Utils.inShutdown)
       }
 
@@ -311,9 +312,9 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   private def validateBytesWritten() {
-    // This should happen due to file deletion, during cleanup. Ensure bytesWritten is in sane state.
-    // Note, parallel threads continue to run while shutdown threads are running : so this prevents
-    // unwanted assertion failures and exception elsewhere.
+    // This should happen due to file deletion, during cleanup. Ensure bytesWritten is in sane 
+    // state. Note, parallel threads continue to run while shutdown threads are running : so 
+    // this prevents unwanted assertion failures and exception elsewhere.
     if (lastValidPosition < initialPosition) {
       // This is invoked so that assertions within bytes written are validated.
       assert (bytesWritten >= 0)
