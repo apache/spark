@@ -176,11 +176,6 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     file.delete()
   }
 
-  // val confCopy = conf.clone
-  // // Ensure we always write data after object ser
-  // confCopy.set("spark.serializer.objectStreamReset", "1")
-
-
   test("If file changes before the open, throw exception instead of corrupting file") {
     val (file, bow) = createWriter()
 
