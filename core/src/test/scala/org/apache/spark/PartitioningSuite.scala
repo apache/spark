@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
 import scala.math.abs
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
@@ -100,6 +101,28 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     partitioner.getPartition(Row(100))
   }
 
+  test("RangPartitioner.sketch") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(i)(random.nextDouble())
+    }.cache()
+    val sampleSizePerPartition = 10
+    val (count, sketched) = RangePartitioner.sketch(rdd, sampleSizePerPartition)
+    assert(count === rdd.count())
+    sketched.foreach { case (idx, n, sample) =>
+      assert(n === idx)
+      assert(sample.size === math.min(n, sampleSizePerPartition))
+    }
+  }
+
+  test("RangePartitioner.determineBounds") {
+    assert(RangePartitioner.determineBounds(ArrayBuffer.empty[(Int, Float)], 10).isEmpty,
+      "Bounds on an empty candidates set should be empty.")
+    val candidates = ArrayBuffer(
+      (0.7, 2.0f), (0.1, 1.0f), (0.4, 1.0f), (0.3, 1.0f), (0.2, 1.0f), (0.5, 1.0f), (1.0, 3.0f))
+    assert(RangePartitioner.determineBounds(candidates, 3) === Array(0.4, 0.7))
+  }
+
   test("RangePartitioner should run only one job if data is roughly balanced") {
     val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
       val random = new java.util.Random(i)
@@ -108,9 +131,8 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     for (numPartitions <- Seq(10, 20, 40)) {
       val partitioner = new RangePartitioner(numPartitions, rdd)
       assert(partitioner.numPartitions === numPartitions)
-      assert(partitioner.singlePass === true)
       val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
-      assert(counts.max < 2.0 * counts.min)
+      assert(counts.max < 3.0 * counts.min)
     }
   }
 
@@ -122,10 +144,18 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     for (numPartitions <- Seq(2, 4, 8)) {
       val partitioner = new RangePartitioner(numPartitions, rdd)
       assert(partitioner.numPartitions === numPartitions)
-      assert(partitioner.singlePass === false)
       val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
-      assert(counts.max < 2.0 * counts.min)
+      assert(counts.max < 3.0 * counts.min)
     }
+  }
+
+  test("RangePartitioner should return a single partition for empty RDDs") {
+    val empty1 = sc.emptyRDD[(Int, Double)]
+    val partitioner1 = new RangePartitioner(0, empty1)
+    assert(partitioner1.numPartitions === 1)
+    val empty2 = sc.makeRDD(0 until 2, 2).flatMap(i => Seq.empty[(Int, Double)])
+    val partitioner2 = new RangePartitioner(2, empty2)
+    assert(partitioner2.numPartitions === 1)
   }
 
   test("HashPartitioner not equal to RangePartitioner") {

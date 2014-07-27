@@ -604,6 +604,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("sort an empty RDD") {
+    val data = sc.emptyRDD[Int]
+    assert(data.sortBy(x => x).collect() === Array.empty)
+  }
+
   test("sortByKey") {
     val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
 
