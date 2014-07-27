@@ -209,6 +209,12 @@ class TestAddFile(PySparkTestCase):
 
 class TestRDDFunctions(PySparkTestCase):
 
+    def test_failed_sparkcontext_creation(self):
+        # Regression test for SPARK-1550
+        self.sc.stop()
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
+        self.sc = SparkContext("local")
+
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"
