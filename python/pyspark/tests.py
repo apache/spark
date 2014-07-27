@@ -226,6 +226,15 @@ class TestRDDFunctions(PySparkTestCase):
         cart = rdd1.cartesian(rdd2)
         result = cart.map(lambda (x, y): x + y).collect()
 
+    def test_transforming_pickle_file(self):
+        # Regression test for SPARK-2601
+        data = self.sc.parallelize(["Hello", "World!"])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsPickleFile(tempFile.name)
+        pickled_file = self.sc.pickleFile(tempFile.name)
+        pickled_file.map(lambda x: x).collect()
+
     def test_cartesian_on_textfile(self):
         # Regression test for
         path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
