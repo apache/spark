@@ -53,9 +53,6 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  /** Codegenned rows are not serializable... */
-  override val codegenEnabled = false
-
   override def execute() = {
     if (join) {
       child.execute().mapPartitions { iter =>
