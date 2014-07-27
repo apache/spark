@@ -31,7 +31,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
@@ -892,7 +892,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.diskStore.contains("list2"), "list2 was not in disk store")
     assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
 
-    // 0 updated blocks - list5 is too big to fit in store
+    // No updated blocks - list5 is too big to fit in store and nothing is kicked out
     val updatedBlocks5 =
       store.putIterator("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(updatedBlocks5.size === 0)
@@ -1102,7 +1102,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(result1.size > 0) // unroll was successful
     assert(result2.size > 0)
     assert(result1.data.isLeft) // unroll did not drop this block to disk
-    assert(result2.data.isLeft) // unroll did not drop this block to disk
+    assert(result2.data.isLeft)
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
     // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
