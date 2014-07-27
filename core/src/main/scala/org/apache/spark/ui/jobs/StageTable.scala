@@ -119,14 +119,14 @@ private[ui] class StageTableBase(
       </div>
     }
 
-    val stageDataOption = listener.stageIdToData.get(s.stageId)
-    // Too many nested map/flatMaps with options are just annoying to read. Do this imperatively.
-    if (stageDataOption.isDefined && stageDataOption.get.description.isDefined) {
-      val desc = stageDataOption.get.description
-      <div><em>{desc}</em></div><div>{killLink} {nameLink} {details}</div>
-    } else {
-      <div>{killLink} {nameLink} {details}</div>
+    val stageDesc = for {
+      stageData <- listener.stageIdToData.get(s.stageId)
+      desc <- stageData.description
+    } yield {
+      <div><em>{desc}</em></div>
     }
+
+    <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
