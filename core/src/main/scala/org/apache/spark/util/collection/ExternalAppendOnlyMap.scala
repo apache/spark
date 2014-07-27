@@ -111,7 +111,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * Insert the given key and value into the map.
    */
-  def insert(key: K, value: V) {
+  def insert(key: K, value: V): Unit = {
     insertAll(Iterator((key, value)))
   }
 
@@ -124,7 +124,7 @@ class ExternalAppendOnlyMap[K, V, C](
    *
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
    */
-  def insertAll(entries: Iterator[Product2[K, V]]) {
+  def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
     // An update function for the map that we reuse across entries to avoid allocating
     // a new closure each time
     var curEntry: Product2[K, V] = null
@@ -160,6 +160,19 @@ class ExternalAppendOnlyMap[K, V, C](
       currentMap.changeValue(curEntry._1, update)
       numPairsInMemory += 1
     }
+  }
+
+  /**
+   * Insert the given iterable of keys and values into the map.
+   *
+   * When the underlying map needs to grow, check if the global pool of shuffle memory has
+   * enough room for this to happen. If so, allocate the memory required to grow the map;
+   * otherwise, spill the in-memory map to disk.
+   *
+   * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
+   */
+  def insertAll(entries: Iterable[Product2[K, V]]): Unit = {
+    insertAll(entries.iterator)
   }
 
   /**

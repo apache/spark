@@ -63,7 +63,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
       mergeValue, mergeCombiners)
 
-    map.insertAll(Iterator(
+    map.insertAll(Seq(
       (1, 10),
       (2, 20),
       (3, 30),
