@@ -37,8 +37,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-private[spark] class PythonRDD[T: ClassTag](
-    parent: RDD[T],
+private[spark] class PythonRDD(
+    parent: RDD[_],
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
