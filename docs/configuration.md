@@ -239,7 +239,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.3</td>
+  <td>0.2</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
     <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
