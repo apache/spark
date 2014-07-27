@@ -251,8 +251,10 @@ private[hive] case class HiveGenericUdtf(
   @transient
   protected lazy val function: GenericUDTF = createFunction()
 
+  @transient
   protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
 
+  @transient
   protected lazy val outputInspectors = {
     val structInspector = function.initialize(inputInspectors.toArray)
     structInspector.getAllStructFieldRefs.map(_.getFieldObjectInspector)
