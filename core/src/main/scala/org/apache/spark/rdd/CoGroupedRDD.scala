@@ -154,11 +154,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     } else {
       val map = createExternalMap(numRdds)
-      rddIterators.foreach { case (it, depNum) =>
-        while (it.hasNext) {
-          val kv = it.next()
-          map.insert(kv._1, new CoGroupValue(kv._2, depNum))
-        }
+      for ((it, depNum) <- rddIterators) {
+        map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
       }
       context.taskMetrics.memoryBytesSpilled = map.memoryBytesSpilled
       context.taskMetrics.diskBytesSpilled = map.diskBytesSpilled

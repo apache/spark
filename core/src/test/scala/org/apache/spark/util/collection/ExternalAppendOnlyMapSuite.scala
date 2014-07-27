@@ -63,12 +63,13 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
       mergeValue, mergeCombiners)
 
-    map.insert(1, 10)
-    map.insert(2, 20)
-    map.insert(3, 30)
-    map.insert(1, 100)
-    map.insert(2, 200)
-    map.insert(1, 1000)
+    map.insertAll(Seq(
+      (1, 10),
+      (2, 20),
+      (3, 30),
+      (1, 100),
+      (2, 200),
+      (1, 1000)))
     val it = map.iterator
     assert(it.hasNext)
     val result = it.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.toSet))
@@ -282,7 +283,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       assert(w1.hashCode === w2.hashCode)
     }
 
-    (1 to 100000).map(_.toString).foreach { i => map.insert(i, i) }
+    map.insertAll((1 to 100000).iterator.map(_.toString).map(i => (i, i)))
     collisionPairs.foreach { case (w1, w2) =>
       map.insert(w1, w2)
       map.insert(w2, w1)
@@ -355,7 +356,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](
       createCombiner, mergeValue, mergeCombiners)
 
-    (1 to 100000).foreach { i => map.insert(i, i) }
+    map.insertAll((1 to 100000).iterator.map(i => (i, i)))
     map.insert(null.asInstanceOf[Int], 1)
     map.insert(1, null.asInstanceOf[Int])
     map.insert(null.asInstanceOf[Int], null.asInstanceOf[Int])
