@@ -292,8 +292,9 @@ class DAGScheduler(
       }
     }
     waitingForVisit.push(rdd)
-    while (!waitingForVisit.isEmpty)
+    while (!waitingForVisit.isEmpty) {
       visit(waitingForVisit.pop())
+    }
     parents.toList
   }
 
@@ -307,8 +308,9 @@ class DAGScheduler(
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_, _, _] =>
-              if (!shuffleToMapStage.contains(shufDep.shuffleId))
+              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
                 parents.push(shufDep)
+              }
 
               waitingForVisit.push(shufDep.rdd)
             case _ =>
@@ -319,8 +321,9 @@ class DAGScheduler(
     }
 
     waitingForVisit.push(rdd)
-    while (!waitingForVisit.isEmpty)
+    while (!waitingForVisit.isEmpty) {
       visit(waitingForVisit.pop())
+    }
     parents
   }
 
@@ -347,8 +350,9 @@ class DAGScheduler(
       }
     }
     waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty)
+    while (!waitingForVisit.isEmpty) {
       visit(waitingForVisit.pop())
+    }
     missing.toList
   }
 
@@ -1161,8 +1165,9 @@ class DAGScheduler(
       }
     }
     waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty)
+    while (!waitingForVisit.isEmpty) {
       visit(waitingForVisit.pop())
+    }
     visitedRdds.contains(target.rdd)
   }
 
