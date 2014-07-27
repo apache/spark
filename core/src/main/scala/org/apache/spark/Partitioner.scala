@@ -136,7 +136,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           } else {
             // The weight is 1 over the sampling probability.
             val weight = (n.toDouble / sample.size).toFloat
-            sample.foreach { key =>
+            for (key <- sample) {
               candidates += ((key, weight))
             }
           }
