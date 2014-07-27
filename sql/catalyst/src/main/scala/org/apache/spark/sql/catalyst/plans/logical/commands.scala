@@ -43,8 +43,7 @@ case class NativeCommand(cmd: String) extends Command {
  */
 case class SetCommand(key: Option[String], value: Option[String]) extends Command {
   override def output = Seq(
-    AttributeReference("key", StringType, nullable = false)(),
-    AttributeReference("value", StringType, nullable = false)())
+    AttributeReference("", StringType, nullable = false)())
 }
 
 /**
