@@ -119,8 +119,9 @@
       <artifactId>lz4</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>chill_${scala.binary.version}</artifactId>
+      <groupId>tv.cntt</groupId>
+      <artifactId>chill-scala_${scala.binary.version}</artifactId>
+      <version>${chill.scala.version}</version>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
