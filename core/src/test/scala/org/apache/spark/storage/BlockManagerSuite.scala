@@ -1005,21 +1005,24 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
     // Reserve
-    memoryStore.reserveUnrollMemoryForThisThread(1480)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 1480)
+    memoryStore.reserveUnrollMemoryForThisThread(100)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 100)
+    memoryStore.reserveUnrollMemoryForThisThread(200)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 300)
+    memoryStore.reserveUnrollMemoryForThisThread(500)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 800)
     memoryStore.reserveUnrollMemoryForThisThread(1000000)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 1001480)
-
+    assert(memoryStore.currentUnrollMemoryForThisThread === 800) // not granted
     // Release
-    memoryStore.releaseUnrollMemoryForThisThread(1000000)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 1480)
     memoryStore.releaseUnrollMemoryForThisThread(100)
-    assert(memoryStore.currentUnrollMemoryForThisThread === 1380)
-
+    assert(memoryStore.currentUnrollMemoryForThisThread === 700)
+    memoryStore.releaseUnrollMemoryForThisThread(100)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 600)
     // Reserve again
-    memoryStore.reserveUnrollMemoryForThisThread(3620)
+    memoryStore.reserveUnrollMemoryForThisThread(4400)
     assert(memoryStore.currentUnrollMemoryForThisThread === 5000)
-
+    memoryStore.reserveUnrollMemoryForThisThread(20000)
+    assert(memoryStore.currentUnrollMemoryForThisThread === 5000) // not granted
     // Release again
     memoryStore.releaseUnrollMemoryForThisThread(1000)
     assert(memoryStore.currentUnrollMemoryForThisThread === 4000)

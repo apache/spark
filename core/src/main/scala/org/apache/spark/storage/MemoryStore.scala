@@ -222,23 +222,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
     val memoryGrowthFactor = 1.5
-    // Previous unroll memory held by this thread, for releasing later
+    // Previous unroll memory held by this thread, for releasing later (only at the very end)
     val previousMemoryReserved = currentUnrollMemoryForThisThread
     // Underlying vector for unrolling the block
     var vector = new SizeTrackingVector[Any]
 
-    // Request additional memory for our vector and return whether the request is granted
-    // This involves synchronizing across all threads, which is expensive if called frequently
-    def requestMemory(memoryToRequest: Long): Boolean = {
-      accountingLock.synchronized {
-        val granted = freeMemory > currentUnrollMemory + memoryToRequest
-        if (granted) { reserveUnrollMemoryForThisThread(memoryToRequest) }
-        granted
-      }
-    }
-
     // Request enough memory to begin unrolling
-    keepUnrolling = requestMemory(initialMemoryThreshold)
+    keepUnrolling = reserveUnrollMemoryForThisThread(initialMemoryThreshold)
 
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     try {
@@ -249,10 +239,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           val currentSize = vector.estimateSize()
           if (currentSize >= memoryThreshold) {
             val amountToRequest = (currentSize * (memoryGrowthFactor - 1)).toLong
-            // Hold the put lock, in case another thread concurrently puts a block that takes
-            // up the unrolling space we just ensured here
+            // Hold the accounting lock, in case another thread concurrently puts a block that
+            // takes up the unrolling space we just ensured here
             accountingLock.synchronized {
-              if (!requestMemory(amountToRequest)) {
+              if (!reserveUnrollMemoryForThisThread(amountToRequest)) {
                 // If the first request is not granted, try again after ensuring free space
                 // If there is still not enough space, give up and drop the partition
                 val spaceToEnsure = maxUnrollMemory - currentUnrollMemory
@@ -260,7 +250,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
                   val result = ensureFreeSpace(blockId, spaceToEnsure)
                   droppedBlocks ++= result.droppedBlocks
                 }
-                keepUnrolling = requestMemory(amountToRequest)
+                keepUnrolling = reserveUnrollMemoryForThisThread(amountToRequest)
               }
             }
             // New threshold is currentSize * memoryGrowthFactor
@@ -283,7 +273,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // we can immediately free up space for other threads. Otherwise, if we return an iterator,
       // we release the memory claimed by this thread later on when the task finishes.
       if (keepUnrolling) {
-        vector = null
         val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
         releaseUnrollMemoryForThisThread(amountToRelease)
       }
@@ -433,11 +422,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Reserve additional memory for unrolling blocks used by this thread.
+   * Return whether the request is granted.
    */
-  private[spark] def reserveUnrollMemoryForThisThread(memory: Long): Unit = {
-    val threadId = Thread.currentThread().getId
+  private[spark] def reserveUnrollMemoryForThisThread(memory: Long): Boolean = {
     accountingLock.synchronized {
-      unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, 0L) + memory
+      val granted = freeMemory > currentUnrollMemory + memory
+      if (granted) {
+        val threadId = Thread.currentThread().getId
+        unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, 0L) + memory
+      }
+      granted
     }
   }
 
