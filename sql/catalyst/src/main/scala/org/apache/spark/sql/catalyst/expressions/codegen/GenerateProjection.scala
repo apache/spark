@@ -188,6 +188,11 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         }
       """
 
+    val copyFunction =
+      q"""
+        final def copy() = new $genericRowType(this.toArray)
+      """
+
     val classBody =
       nullFunctions ++ (
         lengthDef +:
@@ -196,16 +201,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         updateFunction +:
         equalsFunction +:
         hashCodeFunction +:
+        copyFunction +:
         (tupleElements ++ specificAccessorFunctions ++ specificMutatorFunctions))
 
     val code = q"""
       final class SpecificRow(i: $rowType) extends $mutableRowType {
         ..$classBody
-
-        // Not safe!
-        final def copy() = scala.sys.error("Not implemented")
-
-        final def getStringBuilder(ordinal: Int): StringBuilder = ???
       }
 
       new $projectionType { def apply(r: $rowType) = new SpecificRow(r) }
