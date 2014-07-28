@@ -330,8 +330,8 @@ private[spark] object Utils extends Logging {
       fetchFile(url, localDir, conf, securityMgr)
       Files.move(new File(localDir, fileName), cachedFile)
     }
-    Files.copy(cachedFile, targetFile)
     lock.release()
+    Files.copy(cachedFile, targetFile)
   }
 
   /**
