@@ -313,6 +313,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Copy cached file to targetDir, if not exists, download it from url.
+   */
+  def fetchCachedFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
+    timestamp: Long) {
+    val fileName = url.split("/").last
+    val cachedFileName = fileName + timestamp
+    val targetFile = new File(targetDir, fileName)
+    val lockFileName = fileName + timestamp + "_lock"
+    val localDir = new File(getLocalDir(conf))
+    val lockFile = new File(localDir, lockFileName)
+    val raf = new RandomAccessFile(lockFile, "rw")
+    val lock = raf.getChannel().lock() // only one executor entry
+    val cachedFile = new File(localDir, cachedFileName)
+    if (!cachedFile.exists()) {
+      fetchFile(url, localDir, conf, securityMgr)
+      Files.move(new File(localDir, fileName), cachedFile)
+    }
+    Files.copy(cachedFile, targetFile)
+    lock.release()
+  }
+
+  /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *

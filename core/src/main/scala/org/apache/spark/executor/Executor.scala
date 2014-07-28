@@ -322,14 +322,13 @@ private[spark] class Executor(
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
-          hadoopConf)
-        currentFiles(name) = timestamp
+        Utils.fetchCachedFile(name, new File(SparkFiles.getRootDirectory), conf,
+          env.securityManager, hadoopConf, timestamp)
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
-          hadoopConf)
+        Utils.fetchCachedFile(name, new File(SparkFiles.getRootDirectory), conf,
+          env.securityManager, hadoopConf, timestamp)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
