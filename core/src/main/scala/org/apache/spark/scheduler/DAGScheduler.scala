@@ -745,6 +745,10 @@ class DAGScheduler(
           return
       }
 
+      // must be run listener before possible NotSerializableException
+      // should be "StageSubmitted" first and then "JobEnded"
+      listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
+
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
