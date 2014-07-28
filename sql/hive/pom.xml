@@ -32,7 +32,7 @@
   <name>Spark Project Hive</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>hive</sbt.project.name>
+     <sbt.project.name>hive</sbt.project.name>
   </properties>
 
   <dependencies>
