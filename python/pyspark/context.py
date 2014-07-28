@@ -100,7 +100,16 @@ class SparkContext(object):
             tempNamedTuple = namedtuple("Callsite", "function file linenum")
             self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
         SparkContext._ensure_initialized(self, gateway=gateway)
+        try:
+            self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
+                          conf)
+        except:
+            # If an error occurs, clean up in order to allow future SparkContext creation:
+            self.stop()
+            raise
 
+    def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
+                 conf):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -249,17 +258,14 @@ class SparkContext(object):
         """
         return self._jsc.sc().defaultMinPartitions()
 
-    def __del__(self):
-        self.stop()
-
     def stop(self):
         """
         Shut down the SparkContext.
         """
-        if self._jsc:
+        if getattr(self, "_jsc", None):
             self._jsc.stop()
             self._jsc = None
-        if self._accumulatorServer:
+        if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None
         with SparkContext._lock:
