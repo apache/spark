@@ -277,5 +277,4 @@ private[spark] object UIUtils extends Logging {
     data: Seq[T]) : JValue = {
       data.map(r => generateDataRow(r))
   }
-
 }

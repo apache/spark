@@ -25,7 +25,7 @@ import org.json4s.JsonAST._
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
+import org.apache.spark.storage._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -34,6 +34,19 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener
+
+  private def getWorkers(rddId: Int, storageStatusList: Seq[StorageStatus]) : Seq[(Int, StorageStatus)] = {
+    storageStatusList.map((rddId, _))
+  }
+
+  private def getBlocks(rddId: Int, storageStatusList: Seq[StorageStatus]) : Seq[(BlockId, BlockStatus, Seq[String])] = {
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
+    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
+    blockStatuses.map { case (blockId, status) =>
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+    }
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
@@ -45,16 +58,11 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     }
 
     // Worker table
-    val workers = storageStatusList.map((rddId, _))
+    val workers = getWorkers(rddId, storageStatusList)
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
+    val blocks = getBlocks(rddId, storageStatusList)
     val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 
     val content =
@@ -159,16 +167,11 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     }
 
     // Worker table
-    val workers = storageStatusList.map((rddId, _))
+    val workers = getWorkers(rddId, storageStatusList)
     val workerJson = UIUtils.listingJson(workerRowJson, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
+    val blocks = getBlocks(rddId, storageStatusList)
     val blockJson = UIUtils.listingJson(blockRowJson, blocks)
 
     val content = ("workerTable" -> workerJson) ~
@@ -176,7 +179,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     content
   }
 
-  /** Render an Json row representing a worker */
+  /** Render a Json row representing a worker */
   private def workerRowJson(worker: (Int, StorageStatus)): JValue = {
     val (rddId, status) = worker
     ("Host" -> {status.blockManagerId.host + ":" + status.blockManagerId.port} ) ~
@@ -185,7 +188,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRDD(rddId))})
   }
 
-  /** Render an Json row representing a block */
+  /** Render a Json row representing a block */
   private def blockRowJson(row: (BlockId, BlockStatus, Seq[String])): JValue = {
     val (id, block, locations) = row
     ("Block Name" -> id.name) ~
@@ -194,6 +197,4 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     ("Size on Disk"-> Utils.bytesToString(block.diskSize)) ~
     ("Executors"-> locations)
   }
-
 }
-
