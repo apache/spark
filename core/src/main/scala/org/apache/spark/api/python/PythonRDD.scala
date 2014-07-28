@@ -37,8 +37,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-private[spark] class PythonRDD[T: ClassTag](
-    parent: RDD[T],
+private[spark] class PythonRDD(
+    parent: RDD[_],
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
@@ -57,7 +57,10 @@ private[spark] class PythonRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(
+      f => f.getPath()).mkString(",")
+    val worker: Socket = env.createPythonWorker(pythonExec,
+      envVars.toMap + ("SPARK_LOCAL_DIR" -> localdir))
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
@@ -599,6 +602,8 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = new Socket(serverHost, serverPort)
+      // SPARK-2282: Immediately reuse closed sockets because we create one per task.
+      socket.setReuseAddress(true)
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)

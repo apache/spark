@@ -30,6 +30,7 @@ import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 
 /**
  * :: DeveloperApi ::
@@ -66,8 +67,6 @@ class ExternalAppendOnlyMap[K, V, C](
     blockManager: BlockManager = SparkEnv.get.blockManager)
   extends Iterable[(K, C)] with Serializable with Logging {
 
-  import ExternalAppendOnlyMap._
-
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
@@ -75,7 +74,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
-    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.3)
+    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
@@ -105,48 +104,75 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
-  private val comparator = new KCComparator[K, C]
+  private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
+  private val threadId = Thread.currentThread().getId
 
   /**
    * Insert the given key and value into the map.
+   */
+  def insert(key: K, value: V): Unit = {
+    insertAll(Iterator((key, value)))
+  }
+
+  /**
+   * Insert the given iterator of keys and values into the map.
    *
-   * If the underlying map is about to grow, check if the global pool of shuffle memory has
+   * When the underlying map needs to grow, check if the global pool of shuffle memory has
    * enough room for this to happen. If so, allocate the memory required to grow the map;
    * otherwise, spill the in-memory map to disk.
    *
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
    */
-  def insert(key: K, value: V) {
+  def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
+    // An update function for the map that we reuse across entries to avoid allocating
+    // a new closure each time
+    var curEntry: Product2[K, V] = null
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
-      if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
+      if (hadVal) mergeValue(oldVal, curEntry._2) else createCombiner(curEntry._2)
     }
-    if (numPairsInMemory > trackMemoryThreshold && currentMap.atGrowThreshold) {
-      val mapSize = currentMap.estimateSize()
-      var shouldSpill = false
-      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
-      // Atomically check whether there is sufficient memory in the global pool for
-      // this map to grow and, if possible, allocate the required amount
-      shuffleMemoryMap.synchronized {
-        val threadId = Thread.currentThread().getId
-        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
-        val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+    while (entries.hasNext) {
+      curEntry = entries.next()
+      if (numPairsInMemory > trackMemoryThreshold && currentMap.atGrowThreshold) {
+        val mapSize = currentMap.estimateSize()
+        var shouldSpill = false
+        val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
-        // Assume map growth factor is 2x
-        shouldSpill = availableMemory < mapSize * 2
-        if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = mapSize * 2
+        // Atomically check whether there is sufficient memory in the global pool for
+        // this map to grow and, if possible, allocate the required amount
+        shuffleMemoryMap.synchronized {
+          val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+          val availableMemory = maxMemoryThreshold -
+            (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+
+          // Assume map growth factor is 2x
+          shouldSpill = availableMemory < mapSize * 2
+          if (!shouldSpill) {
+            shuffleMemoryMap(threadId) = mapSize * 2
+          }
+        }
+        // Do not synchronize spills
+        if (shouldSpill) {
+          spill(mapSize)
         }
       }
-      // Do not synchronize spills
-      if (shouldSpill) {
-        spill(mapSize)
-      }
+      currentMap.changeValue(curEntry._1, update)
+      numPairsInMemory += 1
     }
-    currentMap.changeValue(key, update)
-    numPairsInMemory += 1
+  }
+
+  /**
+   * Insert the given iterable of keys and values into the map.
+   *
+   * When the underlying map needs to grow, check if the global pool of shuffle memory has
+   * enough room for this to happen. If so, allocate the memory required to grow the map;
+   * otherwise, spill the in-memory map to disk.
+   *
+   * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
+   */
+  def insertAll(entries: Iterable[Product2[K, V]]): Unit = {
+    insertAll(entries.iterator)
   }
 
   /**
@@ -154,8 +180,8 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private def spill(mapSize: Long) {
     spillCount += 1
-    logWarning("Spilling in-memory map of %d MB to disk (%d time%s so far)"
-      .format(mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+    logWarning("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
+      .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
     var objectsWritten = 0
@@ -173,7 +199,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     try {
-      val it = currentMap.destructiveSortedIterator(comparator)
+      val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
         val kv = it.next()
         writer.write(kv)
@@ -231,7 +257,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = currentMap.destructiveSortedIterator(comparator)
+    private val sortedMap = currentMap.destructiveSortedIterator(keyComparator)
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -252,7 +278,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
-        val minHash = kc._1.hashCode()
+        val minHash = hashKey(kc)
         while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
           kcPairs += kc
@@ -268,10 +294,10 @@ class ExternalAppendOnlyMap[K, V, C](
     private def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
       var i = 0
       while (i < buffer.pairs.length) {
-        val (k, c) = buffer.pairs(i)
-        if (k == key) {
+        val pair = buffer.pairs(i)
+        if (pair._1 == key) {
           buffer.pairs.remove(i)
-          return mergeCombiners(baseCombiner, c)
+          return mergeCombiners(baseCombiner, pair._2)
         }
         i += 1
       }
@@ -293,9 +319,12 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
-      val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-      var (minKey, minCombiner) = minPairs.remove(0)
-      assert(minKey.hashCode() == minHash)
+      val minPairs = minBuffer.pairs
+      val minHash = minBuffer.minKeyHash
+      val minPair = minPairs.remove(0)
+      val minKey = minPair._1
+      var minCombiner = minPair._2
+      assert(hashKey(minPair) == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
@@ -327,15 +356,16 @@ class ExternalAppendOnlyMap[K, V, C](
      * StreamBuffers are ordered by the minimum key hash found across all of their own pairs.
      */
     private class StreamBuffer(
-        val iterator: BufferedIterator[(K, C)], val pairs: ArrayBuffer[(K, C)])
+        val iterator: BufferedIterator[(K, C)],
+        val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
       def isEmpty = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
-      def minKeyHash = {
+      def minKeyHash: Int = {
         assert(pairs.length > 0)
-        pairs.head._1.hashCode()
+        hashKey(pairs.head)
       }
 
       override def compareTo(other: StreamBuffer): Int = {
@@ -419,13 +449,27 @@ class ExternalAppendOnlyMap[K, V, C](
       file.delete()
     }
   }
+
+  /** Convenience function to hash the given (K, C) pair by the key. */
+  private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
 }
 
 private[spark] object ExternalAppendOnlyMap {
-  private class KCComparator[K, C] extends Comparator[(K, C)] {
-    def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      val hash1 = kc1._1.hashCode()
-      val hash2 = kc2._1.hashCode()
+
+  /**
+   * Return the hash code of the given object. If the object is null, return a special hash code.
+   */
+  private def hash[T](obj: T): Int = {
+    if (obj == null) 0 else obj.hashCode()
+  }
+
+  /**
+   * A comparator which sorts arbitrary keys based on their hash codes.
+   */
+  private class HashComparator[K] extends Comparator[K] {
+    def compare(key1: K, key2: K): Int = {
+      val hash1 = hash(key1)
+      val hash2 = hash(key2)
       if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }

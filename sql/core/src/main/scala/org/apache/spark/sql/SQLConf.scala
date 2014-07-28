@@ -25,15 +25,18 @@ import scala.collection.JavaConverters._
  * SQLConf holds mutable config parameters and hints.  These can be set and
  * queried either by passing SET commands into Spark SQL's DSL
  * functions (sql(), hql(), etc.), or by programmatically using setters and
- * getters of this class.  This class is thread-safe.
+ * getters of this class.
+ *
+ * SQLConf is thread-safe (internally synchronized so safe to be used in multiple threads).
  */
 trait SQLConf {
+  import SQLConf._
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
 
   /** Number of partitions to use for shuffle operators. */
-  private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
+  private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -41,11 +44,10 @@ trait SQLConf {
    * effectively disables auto conversion.
    * Hive setting: hive.auto.convert.join.noconditionaltask.size.
    */
-  private[spark] def autoConvertJoinSize: Int =
-    get("spark.sql.auto.convert.join.size", "10000").toInt
+  private[spark] def autoConvertJoinSize: Int = get(AUTO_CONVERT_JOIN_SIZE, "10000").toInt
 
   /** A comma-separated list of table names marked to be broadcasted during joins. */
-  private[spark] def joinBroadcastTables: String = get("spark.sql.join.broadcastTables", "")
+  private[spark] def joinBroadcastTables: String = get(JOIN_BROADCAST_TABLES, "")
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -59,26 +61,21 @@ trait SQLConf {
 
   def set(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
-    require(value != null, s"value cannot be null for ${key}")
+    require(value != null, s"value cannot be null for $key")
     settings.put(key, value)
   }
 
   def get(key: String): String = {
-    if (!settings.containsKey(key)) {
-      throw new NoSuchElementException(key)
-    }
-    settings.get(key)
+    Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
   def get(key: String, defaultValue: String): String = {
-    if (!settings.containsKey(key)) defaultValue else settings.get(key)
+    Option(settings.get(key)).getOrElse(defaultValue)
   }
 
-  def getAll: Array[(String, String)] = settings.asScala.toArray
+  def getAll: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
 
-  def getOption(key: String): Option[String] = {
-    if (!settings.containsKey(key)) None else Some(settings.get(key))
-  }
+  def getOption(key: String): Option[String] = Option(settings.get(key))
 
   def contains(key: String): Boolean = settings.containsKey(key)
 
@@ -92,4 +89,14 @@ trait SQLConf {
     settings.clear()
   }
 
+}
+
+object SQLConf {
+  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
+  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
+  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
+
+  object Deprecated {
+    val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+  }
 }

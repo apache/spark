@@ -196,18 +196,19 @@ object LBFGS extends Logging {
 
     override def calculate(weights: BDV[Double]) = {
       // Have a local copy to avoid the serialization of CostFun object which is not serializable.
-      val localData = data
       val localGradient = gradient
+      val n = weights.length
+      val bcWeights = data.context.broadcast(weights)
 
-      val (gradientSum, lossSum) = localData.treeAggregate((BDV.zeros[Double](weights.size), 0.0))(
+      val (gradientSum, lossSum) = localData.treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
-              features, label, Vectors.fromBreeze(weights), Vectors.fromBreeze(grad))
+              features, label, Vectors.fromBreeze(bcWeights.value), Vectors.fromBreeze(grad))
             (grad, loss + l)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
             (grad1 += grad2, loss1 + loss2)
-          }, 2)
+          }, depth = 2)
 
       /**
        * regVal is sum of weight squares if it's L2 updater;

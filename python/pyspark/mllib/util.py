@@ -24,7 +24,6 @@ from pyspark.rdd import RDD
 from pyspark.serializers import NoOpSerializer
 
 
-
 class MLUtils:
     """
     Helper methods to load, save and pre-process data used in MLlib.
@@ -153,7 +152,6 @@ class MLUtils:
         """
         lines = data.map(lambda p: MLUtils._convert_labeled_point_to_libsvm(p))
         lines.saveAsTextFile(dir)
-
 
     @staticmethod
     def loadLabeledPoints(sc, path, minPartitions=None):
