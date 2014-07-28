@@ -200,7 +200,7 @@ object LBFGS extends Logging {
       val n = weights.length
       val bcWeights = data.context.broadcast(weights)
 
-      val (gradientSum, lossSum) = localData.treeAggregate((BDV.zeros[Double](n), 0.0))(
+      val (gradientSum, lossSum) = data.treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
               features, label, Vectors.fromBreeze(bcWeights.value), Vectors.fromBreeze(grad))
