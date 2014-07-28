@@ -1174,7 +1174,7 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
         }
         // This is not really vm shutdown - but the codepath is same.
         // Ensure corresponding state checks match.
-        Utils.setShutdownStarted()
+        // Utils.setShutdownStarted()
         dagScheduler.sc.stop()
         Stop
     }

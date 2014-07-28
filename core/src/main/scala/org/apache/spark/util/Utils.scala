@@ -275,7 +275,7 @@ private[spark] object Utils extends Logging {
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
       override def run() {
         // Attempt to delete if some patch which is parent of this is not already registered.
-        Utils.setShutdownStarted()
+        // Utils.setShutdownStarted()
         if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
       }
     })
@@ -940,14 +940,39 @@ private[spark] object Utils extends Logging {
    *
    * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
    * an IllegalStateException.
+   *
+   * TODO: This will detect only if VM is shutting down, not when we are programmatically shutting
+   * down spark via stop()'s, like AppClient.markDead, etc. Unfortunately, the attempt (below) to
+   * fix this ran into issues with local mode and how test suites are run.
+   * So for now, some assertions and/or code paths which require latter to be detected will fail
    */
+  def inShutdown(): Boolean = {
+    try {
+      val hook = new Thread {
+        override def run() {}
+      }
+      Runtime.getRuntime.addShutdownHook(hook)
+      Runtime.getRuntime.removeShutdownHook(hook)
+    } catch {
+      case ise: IllegalStateException => return true
+    }
+    false
+  }
+  /*
   @volatile private var shutdownStarted = false
   private[spark] def setShutdownStarted() {
     shutdownStarted = true
   }
+
   def inShutdown(): Boolean = {
+    if (shutdownStarted) return true
+    doShutdownCheck()
+    shutdownStarted
+  }
+
+  private[spark] def doShutdownCheck() {
+    var shutdown = false
     try {
-      if (shutdownStarted) return true
       val hook = new Thread {
         override def run() {}
       }
@@ -955,11 +980,12 @@ private[spark] object Utils extends Logging {
       Runtime.getRuntime.removeShutdownHook(hook)
     } catch {
       case ise: IllegalStateException =>
-        shutdownStarted = true
-        return true
+        shutdown = true
+    } finally {
+      shutdownStarted = shutdown
     }
-    false
   }
+  */
 
   def isSpace(c: Char): Boolean = {
     " \t\r\n".indexOf(c) != -1

@@ -146,6 +146,9 @@ object SparkEnv extends Logging {
     // Listener bus is only used on the driver
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
+      // When running tests in local mode, previous shutdown of sc could have marked it as
+      // VM shutdown. recheck and disable shutdown flag.
+      Utils.doShutdownCheck()
     }
 
     val securityManager = new SecurityManager(conf)
