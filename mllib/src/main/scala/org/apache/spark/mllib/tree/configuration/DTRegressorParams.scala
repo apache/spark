@@ -57,6 +57,11 @@ object DTRegressorParams {
   /**
    * List of supported impurity options.
    */
-  final val supportedImpurities: List[String] = RegressionImpurities.names
+  def supportedImpurities: List[String] = RegressionImpurities.names
+
+  /**
+   * Get list of supported quantileStrategy options.
+   */
+  def supportedQuantileStrategies: List[String] = DTParams.supportedQuantileStrategies
 
 }

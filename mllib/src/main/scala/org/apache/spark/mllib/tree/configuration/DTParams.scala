@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Experimental
  *                      128 MB.
  */
 @Experimental
-class DTParams (
+abstract class DTParams (
     @BeanProperty var maxDepth: Int,
     @BeanProperty var maxBins: Int,
     var quantileStrategy: String,
@@ -46,6 +46,11 @@ class DTParams (
     }
     this.quantileStrategy = quantileStrategy
   }
+
+}
+
+
+object DTParams {
 
   /**
    * Get list of supported quantileStrategy options.

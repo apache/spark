@@ -57,6 +57,11 @@ object DTClassifierParams {
   /**
    * List of supported impurity options.
    */
-  final val supportedImpurities: List[String] = ClassificationImpurities.names
+  def supportedImpurities: List[String] = ClassificationImpurities.names
+
+  /**
+   * Get list of supported quantileStrategy options.
+   */
+  def supportedQuantileStrategies: List[String] = DTParams.supportedQuantileStrategies
 
 }
