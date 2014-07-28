@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{NotSerializableException, PrintWriter, StringWriter}
+import java.io.{NotSerializableException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -35,6 +35,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -694,7 +695,21 @@ class DAGScheduler(
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
     var tasks = ArrayBuffer[Task[_]]()
-    val broadcastRddBinary = stage.rdd.createBroadcastBinary()
+
+    var broadcastRddBinary: Broadcast[Array[Byte]] = null
+    try {
+      broadcastRddBinary = stage.rdd.createBroadcastBinary()
+    } catch {
+      case e: NotSerializableException =>
+        abortStage(stage, "Task not serializable: " + e.toString)
+        runningStages -= stage
+        return
+      case NonFatal(e) =>
+        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        return
+    }
+
     if (stage.isShuffleMap) {
       for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
         val locs = getPreferredLocs(stage.rdd, p)
