@@ -95,7 +95,6 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>sql/hive-thriftserver</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -1114,6 +1113,16 @@
           <scope>provided</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>hive-thriftserver</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
     </profile>
 
   </profiles>
