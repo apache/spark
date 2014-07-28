@@ -278,6 +278,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual(set([2]), sets[3])
         self.assertEqual(set([1, 3]), sets[5])
 
+    def test_namedtuple_in_rdd(self):
+        from collections import namedtuple
+        Person = namedtuple("Person", "id firstName lastName")
+        jon = Person(1, "Jon", "Doe")
+        jane = Person(2, "Jane", "Doe")
+        theDoes = self.sc.parallelize([jon, jane])
+        self.assertEquals([jon, jane], theDoes.collect())
+
 
 class TestIO(PySparkTestCase):
 

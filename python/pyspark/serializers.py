@@ -65,6 +65,8 @@ from itertools import chain, izip, product
 import marshal
 import struct
 import sys
+import collections
+
 from pyspark import cloudpickle
 
 
@@ -265,6 +267,33 @@ class NoOpSerializer(FramedSerializer):
 
     def dumps(self, obj):
         return obj
+
+
+# Hook namedtuple, make it picklable
+# pyspark should be imported before 'from collections import namedtuple'
+
+old_namedtuple = collections.namedtuple
+__cls = {}
+
+def _restore(name, fields, value):
+    k = (name, fields)
+    cls = __cls.get(k)
+    if cls is None:
+        cls = namedtuple(name, fields)
+        __cls[k] = cls
+    return cls(*value)
+
+def namedtuple(name, fields, verbose=False, rename=False):
+    """ Pickable namedtuple """
+    cls = old_namedtuple(name, fields, verbose, rename)
+
+    def __reduce__(self):
+        return (_restore, (name, fields, tuple(self)))
+
+    cls.__reduce__ = __reduce__
+    return cls
+
+collections.namedtuple = namedtuple
 
 
 class PickleSerializer(FramedSerializer):
