@@ -106,6 +106,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Parses the data type in our internal string representation. The data type string should
+   * have the same format as the one generate by `toString` in scala.
+   */
+  private[sql] def parseDataType(dataTypeString: String): DataType = {
+    val parser = org.apache.spark.sql.catalyst.types.DataType
+    parser(dataTypeString)
+  }
+
+  /**
+   * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
+   */
+  private[sql] def applySchema(rdd: RDD[Map[String, _]], schemaString: String): SchemaRDD = {
+    val schema = parseDataType(schemaString).asInstanceOf[StructType]
+    val rowRdd = rdd.mapPartitions { iter =>
+      iter.map { map =>
+        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
+      }
+    }
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd)))
+  }
+
+  /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
