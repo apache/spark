@@ -487,7 +487,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString(): String = {
-    rdd.toDebugString
+    rdd.toDebugString()
+  }
+
+  /** A description of this RDD and its recursive dependencies for debugging. */
+  def toDebugString(debugMemory: Boolean): String = {
+    rdd.toDebugString(debugMemory)
   }
 
   /**
