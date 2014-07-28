@@ -109,7 +109,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
-    val elements = Iterator((1, 1), (5, 5)) ++ (0 until 50000).iterator.map(x => (2, 2))
+    val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
@@ -118,7 +118,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
     assert(iter.next() === (1, List((1, 1))))
-    assert(iter.next() === (2, (0 until 50000).map(x => (2, 2)).toList))
+    assert(iter.next() === (2, (0 until 100000).map(x => (2, 2)).toList))
     assert(iter.next() === (3, Nil))
     assert(iter.next() === (4, Nil))
     assert(iter.next() === (5, List((5, 5))))

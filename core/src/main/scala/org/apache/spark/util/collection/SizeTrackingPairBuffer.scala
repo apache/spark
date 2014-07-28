@@ -23,7 +23,7 @@ import java.util.Comparator
  * Append-only buffer of key-value pairs that keeps track of its estimated size in bytes.
  */
 private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
-  extends SizeTrackingPairCollection[K, V] with SizeTracker
+  extends SizeTracker with SizeTrackingPairCollection[K, V]
 {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
