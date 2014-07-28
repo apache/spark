@@ -85,11 +85,11 @@ private[sql] object CatalystConverter {
       case StructType(fields: Seq[StructField]) => {
         new CatalystStructConverter(fields.toArray, fieldIndex, parent)
       }
-      case MapType(keyType: DataType, valueType: DataType) => {
+      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) => {
         new CatalystMapConverter(
           Array(
             new FieldType(MAP_KEY_SCHEMA_NAME, keyType, false),
-            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, true)),
+            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, valueContainsNull)),
           fieldIndex,
           parent)
       }

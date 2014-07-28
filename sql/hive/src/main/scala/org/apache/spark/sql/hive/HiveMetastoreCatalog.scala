@@ -234,7 +234,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
     case StructType(fields) =>
       s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType) =>
+    case MapType(keyType, valueType, _) =>
       s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
     case StringType => "string"
     case FloatType => "float"

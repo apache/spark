@@ -111,7 +111,30 @@ public abstract class DataType {
       throw new IllegalArgumentException("valueType should not be null.");
     }
 
-    return new MapType(keyType, valueType);
+    return new MapType(keyType, valueType, true);
+  }
+
+  /**
+   * Creates a MapType by specifying the data type of keys ({@code keyType}), the data type of
+   * values ({@code keyType}), and whether values contain any null value
+   * ({@code valueContainsNull}).
+   * @param keyType
+   * @param valueType
+   * @param valueContainsNull
+   * @return
+   */
+  public static MapType createMapType(
+      DataType keyType,
+      DataType valueType,
+      boolean valueContainsNull) {
+    if (keyType == null) {
+      throw new IllegalArgumentException("keyType should not be null.");
+    }
+    if (valueType == null) {
+      throw new IllegalArgumentException("valueType should not be null.");
+    }
+
+    return new MapType(keyType, valueType, valueContainsNull);
   }
 
   /**

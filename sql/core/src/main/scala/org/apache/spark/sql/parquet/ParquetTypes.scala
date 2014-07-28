@@ -130,6 +130,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
           val valueType = toDataType(keyValueGroup.getFields.apply(1))
           assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
+          // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
+          // at here.
           MapType(keyType, valueType)
         }
         case _ => {
@@ -140,6 +142,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
             val valueType = toDataType(keyValueGroup.getFields.apply(1))
             assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
+            // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
+            // at here.
             MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
@@ -248,7 +252,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           }
           new ParquetGroupType(repetition, name, fields)
         }
-        case MapType(keyType, valueType) => {
+        case MapType(keyType, valueType, _) => {
           val parquetKeyType =
             fromDataType(
               keyType,

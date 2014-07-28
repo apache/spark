@@ -191,28 +191,32 @@ class MapType(object):
     The data type representing dict values.
 
     """
-    def __init__(self, keyType, valueType):
+    def __init__(self, keyType, valueType, valueContainsNull=True):
         """Creates a MapType
         :param keyType: the data type of keys.
         :param valueType: the data type of values.
+        :param valueContainsNull: indicates whether values contains null values.
         :return:
 
-        >>> MapType(StringType, IntegerType) == MapType(StringType, IntegerType)
+        >>> MapType(StringType, IntegerType) == MapType(StringType, IntegerType, True)
         True
-        >>> MapType(StringType, IntegerType) == MapType(StringType, FloatType)
+        >>> MapType(StringType, IntegerType, False) == MapType(StringType, FloatType)
         False
         """
         self.keyType = keyType
         self.valueType = valueType
+        self.valueContainsNull = valueContainsNull
 
     def _get_scala_type_string(self):
         return "MapType(" + self.keyType._get_scala_type_string() + "," + \
-               self.valueType._get_scala_type_string() + ")"
+               self.valueType._get_scala_type_string() + "," + \
+               str(self.valueContainsNull).lower() + ")"
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and \
             self.keyType == other.keyType and \
-            self.valueType == other.valueType)
+            self.valueType == other.valueType and \
+            self.valueContainsNull == other.valueContainsNull)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -369,7 +373,7 @@ def _parse_datatype_string(datatype_string):
     >>> check_datatype(complex_arraytype)
     True
     >>> # Complex MapType.
-    >>> complex_maptype = MapType(complex_structtype, complex_arraytype)
+    >>> complex_maptype = MapType(complex_structtype, complex_arraytype, False)
     >>> check_datatype(complex_maptype)
     True
     """
@@ -409,8 +413,12 @@ def _parse_datatype_string(datatype_string):
         elementType = _parse_datatype_string(rest_part[:last_comma_index].strip())
         return ArrayType(elementType, containsNull)
     elif type_or_field == "MapType":
-        keyType, valueType = _parse_datatype_list(rest_part.strip())
-        return MapType(keyType, valueType)
+        last_comma_index = rest_part.rfind(",")
+        valueContainsNull = True
+        if rest_part[last_comma_index+1:].strip().lower() == "false":
+            valueContainsNull = False
+        keyType, valueType = _parse_datatype_list(rest_part[:last_comma_index].strip())
+        return MapType(keyType, valueType, valueContainsNull)
     elif type_or_field == "StructField":
         first_comma_index = rest_part.find(",")
         name = rest_part[:first_comma_index].strip()

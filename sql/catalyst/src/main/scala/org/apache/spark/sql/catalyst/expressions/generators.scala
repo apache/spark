@@ -85,7 +85,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
 
   private lazy val elementTypes = child.dataType match {
     case ArrayType(et, _) => et :: Nil
-    case MapType(kt,vt) => kt :: vt :: Nil
+    case MapType(kt,vt, _) => kt :: vt :: Nil
   }
 
   // TODO: Move this pattern into Generator.
@@ -105,7 +105,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
       case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
-      case MapType(_, _) =>
+      case MapType(_, _, _) =>
         val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
         if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }

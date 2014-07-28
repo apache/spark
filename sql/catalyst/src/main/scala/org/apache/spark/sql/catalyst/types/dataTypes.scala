@@ -53,8 +53,8 @@ object DataType extends RegexParsers {
     }
 
   protected lazy val mapType: Parser[DataType] =
-    "MapType" ~> "(" ~> dataType ~ "," ~ dataType <~ ")" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
+    "MapType" ~> "(" ~> dataType ~ "," ~ dataType ~ "," ~ boolVal <~ ")" ^^ {
+      case t1 ~ _ ~ t2 ~ _ ~ valueContainsNull => MapType(t1, t2, valueContainsNull)
     }
 
   protected lazy val structField: Parser[StructField] =
@@ -344,7 +344,16 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   def simpleString: String = "struct"
 }
 
-case class MapType(keyType: DataType, valueType: DataType) extends DataType {
+object MapType {
+  /**
+   * Construct a [[MapType]] object with the given key type and value type.
+   * The `valueContainsNull` is true.
+   */
+  def apply(keyType: DataType, valueType: DataType): MapType =
+    MapType(keyType: DataType, valueType: DataType, true)
+}
+
+case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
     builder.append(s"${prefix}-- value: ${valueType.simpleString}\n")

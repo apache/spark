@@ -26,10 +26,12 @@ package org.apache.spark.sql.api.java.types;
 public class MapType extends DataType {
   private DataType keyType;
   private DataType valueType;
+  private boolean valueContainsNull;
 
-  protected MapType(DataType keyType, DataType valueType) {
+  protected MapType(DataType keyType, DataType valueType, boolean valueContainsNull) {
     this.keyType = keyType;
     this.valueType = valueType;
+    this.valueContainsNull = valueContainsNull;
   }
 
   public DataType getKeyType() {
@@ -40,6 +42,10 @@ public class MapType extends DataType {
     return valueType;
   }
 
+  public boolean isValueContainsNull() {
+    return valueContainsNull;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
@@ -47,6 +53,7 @@ public class MapType extends DataType {
 
     MapType mapType = (MapType) o;
 
+    if (valueContainsNull != mapType.valueContainsNull) return false;
     if (!keyType.equals(mapType.keyType)) return false;
     if (!valueType.equals(mapType.valueType)) return false;
 
@@ -57,6 +64,7 @@ public class MapType extends DataType {
   public int hashCode() {
     int result = keyType.hashCode();
     result = 31 * result + valueType.hashCode();
+    result = 31 * result + (valueContainsNull ? 1 : 0);
     return result;
   }
 }
