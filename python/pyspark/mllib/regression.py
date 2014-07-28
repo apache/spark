@@ -120,6 +120,23 @@ class LinearRegressionWithSGD(object):
             d._jrdd, iterations, step, miniBatchFraction, i)
         return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
+    @classmethod
+    def trainL2Opt(cls, data, iterations=100, step=1.0, regParam=1.0,
+                   intercept=False, miniBatchFraction=1.0, initialWeights=None):
+        """Train a linear regression model on the given data using L2 optimizer."""
+        sc = data.context
+        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGDL2Opt(
+            d._jrdd, iterations, step, regParam, intercept, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
+
+    @classmethod
+    def trainL1Opt(cls, data, iterations=100, step=1.0, regParam=1.0,
+                   intercept=False, miniBatchFraction=1.0, initialWeights=None):
+        """Train a linear regression model on the given data using L1 optimizer."""
+        sc = data.context
+        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGDL1Opt(
+            d._jrdd, iterations, step, regParam, intercept, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 class LassoModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with an

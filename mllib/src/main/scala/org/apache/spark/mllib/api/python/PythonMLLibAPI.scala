@@ -24,6 +24,7 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils
@@ -256,6 +257,64 @@ class PythonMLLibAPI extends Serializable {
           numIterations,
           stepSize,
           miniBatchFraction,
+          initialWeights),
+      dataBytesJRDD,
+      initialWeightsBA)
+  }
+
+  /**
+   * Java stub for Python mllib LinearRegressionWithSGD.train() function
+   * allowing users to define the regularizer and intercept parameters using L2
+   * optimization.
+   */
+  def trainLinearRegressionModelWithSGDL2Opt(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      intercept: Boolean,
+      miniBatchFraction: Double,
+      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val lrAlg = new LinearRegressionWithSGD()
+    lrAlg.setIntercept(intercept)
+    lrAlg.optimizer.
+      setNumIterations(numIterations).
+      setRegParam(regParam).
+      setStepSize(stepSize).
+      setUpdater(new SquaredL2Updater)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        lrAlg.run(
+          data,
+          initialWeights),
+      dataBytesJRDD,
+      initialWeightsBA)
+  }
+  
+  /**
+   * Java stub for Python mllib LinearRegressionWithSGD.train() function
+   * allowing users to define the regularizer and intercept parameters using L1
+   * optimization.
+   */
+  def trainLinearRegressionModelWithSGDL1Opt(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      intercept: Boolean,
+      miniBatchFraction: Double,
+      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val lrAlg = new LinearRegressionWithSGD()
+    lrAlg.setIntercept(intercept)
+    lrAlg.optimizer.
+      setNumIterations(numIterations).
+      setRegParam(regParam).
+      setStepSize(stepSize).
+      setUpdater(new L1Updater)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        lrAlg.run(
+          data,
           initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
