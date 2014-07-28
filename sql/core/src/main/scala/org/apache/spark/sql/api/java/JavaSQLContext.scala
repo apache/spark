@@ -19,19 +19,18 @@ package org.apache.spark.sql.api.java
 
 import java.beans.Introspector
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructType => JStructType}
-import org.apache.spark.sql.api.java.types.{StructField => JStructField}
+import org.apache.spark.sql.api.java.types.{StructType => JStructType}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.types.util.DataTypeConversions
+import DataTypeConversions.asScalaDataType;
 import org.apache.spark.util.Utils
 
 /**
@@ -107,7 +106,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   @DeveloperApi
   def applySchema(rowRDD: JavaRDD[Row], schema: JStructType): JavaSchemaRDD = {
     val scalaRowRDD = rowRDD.rdd.map(r => r.row)
-    val scalaSchema = sqlContext.asScalaDataType(schema).asInstanceOf[StructType]
+    val scalaSchema = asScalaDataType(schema).asInstanceOf[StructType]
     val logicalPlan = SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
@@ -156,7 +155,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: JStructType): JavaSchemaRDD = {
     val appliedScalaSchema =
-      Option(sqlContext.asScalaDataType(schema)).getOrElse(
+      Option(asScalaDataType(schema)).getOrElse(
         JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[StructType]
     val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
     val logicalPlan = SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))

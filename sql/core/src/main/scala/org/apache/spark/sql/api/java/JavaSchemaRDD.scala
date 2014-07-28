@@ -23,8 +23,10 @@ import org.apache.spark.Partitioner
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.sql.api.java.types.StructType
+import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import DataTypeConversions._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -56,7 +58,7 @@ class JavaSchemaRDD(
 
   /** Returns the schema of this JavaSchemaRDD (represented by a StructType). */
   def schema: StructType =
-    sqlContext.asJavaDataType(baseSchemaRDD.schema).asInstanceOf[StructType]
+    asJavaDataType(baseSchemaRDD.schema).asInstanceOf[StructType]
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

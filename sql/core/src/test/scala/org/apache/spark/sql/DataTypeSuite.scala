@@ -27,6 +27,12 @@ class DataTypeSuite extends FunSuite {
     assert(ArrayType(StringType, false) === array)
   }
 
+  test("construct an MapType") {
+    val map = MapType(StringType, IntegerType)
+
+    assert(MapType(StringType, IntegerType, true) === map)
+  }
+
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::

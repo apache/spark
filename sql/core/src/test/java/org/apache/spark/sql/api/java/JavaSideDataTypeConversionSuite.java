@@ -21,38 +21,18 @@ import java.util.List;
 import java.util.ArrayList;
 
 import org.junit.Assert;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.types.util.DataTypeConversions;
 import org.apache.spark.sql.api.java.types.DataType;
 import org.apache.spark.sql.api.java.types.StructField;
-import org.apache.spark.sql.test.TestSQLContext;
-import org.junit.rules.ExpectedException;
 
 public class JavaSideDataTypeConversionSuite {
-  private transient JavaSparkContext javaCtx;
-  private transient JavaSQLContext javaSqlCtx;
-
   public void checkDataType(DataType javaDataType) {
     org.apache.spark.sql.catalyst.types.DataType scalaDataType =
-      javaSqlCtx.sqlContext().asScalaDataType(javaDataType);
-    DataType actual = javaSqlCtx.sqlContext().asJavaDataType(scalaDataType);
+      DataTypeConversions.asScalaDataType(javaDataType);
+    DataType actual = DataTypeConversions.asJavaDataType(scalaDataType);
     Assert.assertEquals(javaDataType, actual);
-  }
-
-  @Before
-  public void setUp() {
-    javaCtx = new JavaSparkContext(TestSQLContext.sparkContext());
-    javaSqlCtx = new JavaSQLContext(javaCtx);
-  }
-
-  @After
-  public void tearDown() {
-    javaCtx.stop();
-    javaCtx = null;
   }
 
   @Test
@@ -102,7 +82,7 @@ public class JavaSideDataTypeConversionSuite {
 
     // Complex MapType.
     DataType complexJavaMapType =
-      DataType.createMapType(complexJavaStructType, complexJavaArrayType);
+      DataType.createMapType(complexJavaStructType, complexJavaArrayType, false);
     checkDataType(complexJavaMapType);
   }
 

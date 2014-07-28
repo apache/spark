@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructField => JStructField}
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -243,8 +246,7 @@ package object sql {
    * The data type representing `Seq`s.
    * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
    * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
-   * array elements. The field of `containsNull` is used to specify if the array can have
-   * any `null` value.
+   * array elements. The field of `containsNull` is used to specify if the array has `null` valus.
    *
    * @group dataType
    */
@@ -271,10 +273,11 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `Map`s. A [[MapType]] object comprises two fields,
-   * `keyType: [[DataType]]` and `valueType: [[DataType]]`.
+   * The data type representing `Map`s. A [[MapType]] object comprises three fields,
+   * `keyType: [[DataType]]`, `valueType: [[DataType]]` and `valueContainsNull: Boolean`.
    * The field of `keyType` is used to specify the type of keys in the map.
    * The field of `valueType` is used to specify the type of values in the map.
+   * The field of `valueContainsNull` is used to specify if values of this map has `null` values.
    *
    * @group dataType
    */
@@ -284,10 +287,15 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * A [[MapType]] can be constructed by
+   * A [[MapType]] object can be constructed with two ways,
+   * {{{
+   * MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
+   * }}} and
    * {{{
    * MapType(keyType: DataType, valueType: DataType)
    * }}}
+   * For `MapType(keyType: DataType, valueType: DataType)`,
+   * the field of `valueContainsNull` is set to `true`.
    *
    * @group dataType
    */

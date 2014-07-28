@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types.util.DataTypeConversions
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql._
+import DataTypeConversions._
+
 class ScalaSideDataTypeConversionSuite extends FunSuite {
-  val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
-  val javaSqlCtx = new JavaSQLContext(javaCtx)
 
   def checkDataType(scalaDataType: DataType) {
-    val javaDataType = javaSqlCtx.sqlContext.asJavaDataType(scalaDataType)
-    val actual = javaSqlCtx.sqlContext.asScalaDataType(javaDataType)
+    val javaDataType = asJavaDataType(scalaDataType)
+    val actual = asScalaDataType(javaDataType)
     assert(scalaDataType === actual, s"Converted data type ${actual} " +
       s"does not equal the expected data type ${scalaDataType}")
   }
@@ -76,7 +75,7 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
     checkDataType(complexScalaArrayType)
 
     // Complex MapType.
-    val complexScalaMapType = MapType(complexScalaStructType, complexScalaArrayType)
+    val complexScalaMapType = MapType(complexScalaStructType, complexScalaArrayType, false)
     checkDataType(complexScalaMapType)
   }
 }
