@@ -42,13 +42,15 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My fancy app" --master local[4] myApp.jar
+./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
 tool support two ways to load configurations dynamically. The first are command line options,
-such as `--master`, as shown above. Running `./bin/spark-submit --help` will show the entire list
-of options.
+such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
+flag, but uses special flags for properties that play a part in launching the Spark application.
+Running `./bin/spark-submit --help` will show the entire list of these options.
 
 `bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
 each line consists of a key and a value separated by whitespace. For example:
@@ -195,6 +197,15 @@ Apart from these, the following properties are also available, and may be useful
     Spark's dependencies and user dependencies. It is currently an experimental feature.
   </td>
 </tr>
+<tr>
+  <td><code>spark.python.worker.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per python worker process during aggregation, in the same
+    format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
+    used during aggregation goes above this amount, it will spill the data into disks.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -228,7 +239,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.3</td>
+  <td>0.2</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
     <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
@@ -369,13 +380,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.serializer.objectStreamReset</code></td>
-  <td>10000</td>
+  <td>100</td>
   <td>
     When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
     objects to prevent writing redundant data, however that stops garbage collection of those
     objects. By calling 'reset' you flush that info from the serializer, and allow old
     objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
-    By default it will reset the serializer every 10,000 objects.
+    By default it will reset the serializer every 100 objects.
   </td>
 </tr>
 <tr>
@@ -467,6 +478,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
     increase it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.unrollFraction</code></td>
+  <td>0.2</td>
+  <td>
+    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
+    This is dynamically allocated by dropping existing blocks when there is not enough free
+    storage space to unroll the new block in its entirety.
   </td>
 </tr>
 <tr>
