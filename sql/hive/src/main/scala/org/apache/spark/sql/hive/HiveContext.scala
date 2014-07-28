@@ -152,7 +152,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  protected[sql] val functionRegistry = new HiveFunctionRegistry with OverrideFunctionRegistry
+  override protected[sql] lazy val functionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient
