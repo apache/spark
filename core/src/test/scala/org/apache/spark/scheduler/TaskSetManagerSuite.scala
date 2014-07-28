@@ -475,6 +475,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(
       Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+    FakeRackUtil.cleanUp()
   }
 
   test("test RACK_LOCAL tasks") {
@@ -505,6 +506,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Offer host2
     // Task 1 can be scheduled with RACK_LOCAL
     assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 1)
+    FakeRackUtil.cleanUp()
   }
 
   test("do not emit warning when serialized task is small") {
