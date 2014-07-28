@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import _root_.java.io.File
 
 /* Implicits */
 import org.apache.spark.sql.test.TestSQLContext._

@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
+import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow, Expression, ScalaUdf, AttributeReference, GenericRow}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(val sqlContext: SQLContext) {
+class JavaSQLContext(val sqlContext: SQLContext) extends FunctionRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 

@@ -40,8 +40,9 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     """
     }
 
-    */
+  */
 
+  // scalastyle:off
   override def eval(input: Row): Any = {
     children.size match {
       case 1 => function.asInstanceOf[(Any) => Any](children(0).eval(input))
@@ -340,5 +341,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
           children(20).eval(input),
           children(21).eval(input))
     }
+    // scalastyle:on
   }
 }

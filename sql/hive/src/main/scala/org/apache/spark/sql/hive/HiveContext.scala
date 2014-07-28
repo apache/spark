@@ -39,8 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{OverrideFunctionRegistry, Analyze
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUdf}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.execution.{Command => PhysicalCommand}
+import org.apache.spark.sql.execution.{Command => PhysicalCommand, ExtractPythonUdfs, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 /**
@@ -66,7 +65,7 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
  */
-class HiveContext(sc: SparkContext) extends SQLContext(sc) with UdfRegistration{
+class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =

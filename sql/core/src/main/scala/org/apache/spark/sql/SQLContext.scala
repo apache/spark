@@ -52,15 +52,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with SQLConf
   with ExpressionConversions
+  with UdfRegistration
   with Serializable {
 
   self =>
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+
+  @transient
+  protected[sql] lazy val functionRegistry = new SimpleFunctionRegistry
+
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
+    new Analyzer(catalog, functionRegistry, caseSensitive = true)
   @transient
   protected[sql] val optimizer = Optimizer
   @transient
@@ -314,7 +319,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
-    lazy val analyzed = analyzer(logical)
+    lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = planner(optimizedPlan).next()

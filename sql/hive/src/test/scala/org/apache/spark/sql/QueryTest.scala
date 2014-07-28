@@ -53,7 +53,7 @@ class QueryTest extends FunSuite {
             |Exception thrown while executing query:
             |${rdd.queryExecution}
             |== Exception ==
-            |$e
+            |${stackTraceToString(e)}
           """.stripMargin)
     }
 

@@ -15,27 +15,23 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
-import org.apache.spark.annotation.DeveloperApi
-
-import scala.collection.JavaConversions._
-
 import net.razorvine.pickle.{Pickler, Unpickler}
-
-import org.apache.spark.{Logging, Accumulator}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.{Accumulator, Logging => SparkLogging}
+
+import scala.collection.JavaConversions._
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -48,7 +44,7 @@ private[spark] case class PythonUDF(
     pythonExec: String,
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
-    children: Seq[Expression]) extends Expression with Logging {
+    children: Seq[Expression]) extends Expression with SparkLogging {
 
   override def toString = s"PythonUDF#$name(${children.mkString(",")})"
 
@@ -70,7 +66,7 @@ private[spark] case class PythonUDF(
       }
     }.asInstanceOf[RDD[Any]]
 
-    val pyRDD = new PythonRDD[Any](
+    val pyRDD = new PythonRDD(
       parent,
       command,
       envVars,
@@ -144,7 +140,7 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
         assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
 
         // Trim away the new UDF value if it was only used for filtering or something.
-        Project(
+        logical.Project(
           l.output,
           l.transformExpressions {
             case p: PythonUDF if p.id == udf.id => evaluation.resultAttribute

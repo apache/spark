@@ -15,26 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
 import java.util.{List => JList, Map => JMap}
-
-import org.apache.spark.sql.catalyst.types.StringType
-
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.Accumulator
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUdf}
+import org.apache.spark.sql.execution.PythonUDF
+
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 
 /**
- * Functions for registering UDFs.
- *
- * TODO: Move to SQL.
+ * Functions for registering UDFs in a context.
  */
 protected[sql] trait UdfRegistration {
-  self: HiveContext =>
+  self: SQLContext =>
 
   private[spark] def registerPython(
       name: String,
@@ -44,7 +41,7 @@ protected[sql] trait UdfRegistration {
       pythonExec: String,
       accumulator: Accumulator[JList[Array[Byte]]],
       dataType: String): Unit = {
-    println(
+    logger.debug(
       s"""
         | Registering new PythonUDF:
         | name: $name
@@ -62,7 +59,8 @@ protected[sql] trait UdfRegistration {
         pythonIncludes,
         pythonExec,
         accumulator,
-        HiveMetastoreTypes.toDataType(dataType),
+        org.apache.spark.sql.catalyst.types.StringType,
+        // FIXME: HiveMetastoreTypes.toDataType(dataType),
         e)
 
     functionRegistry.registerFunction(name, builder)
@@ -74,13 +72,15 @@ protected[sql] trait UdfRegistration {
       val types = (1 to x).map(x => "_").reduce(_ + ", " + _)
       s"""
         def registerFunction[T: TypeTag](name: String, func: Function$x[$types, T]): Unit = {
-          def builder(e: Seq[Expression]) = ScalaUdf(func, ScalaReflection.schemaFor(typeTag[T]).dataType, e)
+          def builder(e: Seq[Expression]) =
+            ScalaUdf(func, ScalaReflection.schemaFor(typeTag[T]).dataType, e)
           functionRegistry.registerFunction(name, builder)
         }
       """
     }
+  */
 
-    */
+  // scalastyle:off
   def registerFunction[T: TypeTag](name: String, func: Function1[_, T]): Unit = {
     def builder(e: Seq[Expression]) = ScalaUdf(func, ScalaReflection.schemaFor(typeTag[T]).dataType, e)
     functionRegistry.registerFunction(name, builder)
@@ -190,4 +190,5 @@ protected[sql] trait UdfRegistration {
     def builder(e: Seq[Expression]) = ScalaUdf(func, ScalaReflection.schemaFor(typeTag[T]).dataType, e)
     functionRegistry.registerFunction(name, builder)
   }
+  // scalastyle:on
 }
