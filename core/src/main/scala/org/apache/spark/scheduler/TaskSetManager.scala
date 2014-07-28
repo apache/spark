@@ -79,6 +79,7 @@ private[spark] class TaskSetManager(
   private val numFailures = new Array[Int](numTasks)
   // key is taskId, value is a Map of executor id to when it failed
   private val failedExecutors = new HashMap[Int, HashMap[String, Long]]()
+
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksSuccessful = 0
 
@@ -112,6 +113,10 @@ private[spark] class TaskSetManager(
   // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
+
+  // this collection is mainly for ensuring that the NODE_LOCAL task is always scheduled
+  // before NOPREF and it contain all NODE_LOCAL and "not-launched" tasks
+  private[scheduler] val nodeLocalTasks = new HashMap[String, HashSet[Int]]
 
   // Set of pending tasks for each rack -- similar to the above.
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
@@ -188,6 +193,9 @@ private[spark] class TaskSetManager(
         hadAliveLocations = true
       }
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
+      if (loc.executorId == None) {
+        nodeLocalTasks.getOrElseUpdate(loc.host, new HashSet[Int]) += index
+      }
       for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
         if(sched.hasHostAliveOnRack(rack)){
@@ -336,38 +344,22 @@ private[spark] class TaskSetManager(
    * Dequeue a pending task for a given node and return its index and locality level.
    * Only search for tasks matching the given locality constraint.
    *
-   * NOTE: minLocality is for avoiding duplicate traverse of the list (especially when we
-   * pass NOPREF as maxLocality after the others
-   *
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
-  private def findTask(execId: String, host: String, maxLocality: TaskLocality.Value,
-                        minLocality: TaskLocality.Value)
+  private def findTask(execId: String, host: String, maxLocality: TaskLocality.Value)
   : Option[(Int, TaskLocality.Value, Boolean)] =
   {
-    def withinAllowedLocality(locality: TaskLocality.TaskLocality): Boolean = {
-      TaskLocality.isAllowed(maxLocality, locality) && {
-        if (maxLocality != minLocality) {
-          minLocality < locality
-        } else {
-          true
-        }
-      }
+    for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+      return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
-    if (withinAllowedLocality(TaskLocality.PROCESS_LOCAL)) {
-      for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
-        return Some((index, TaskLocality.PROCESS_LOCAL, false))
-      }
-    }
-
-    if (withinAllowedLocality(TaskLocality.NODE_LOCAL)) {
+    if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
       for (index <- findTaskFromList(execId, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
 
-    if (withinAllowedLocality(TaskLocality.NOPREF)) {
+    if (TaskLocality.isAllowed(maxLocality, TaskLocality.NOPREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
       for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
@@ -378,7 +370,7 @@ private[spark] class TaskSetManager(
       if (specTask != None) return specTask
     }
 
-    if (withinAllowedLocality(TaskLocality.RACK_LOCAL)) {
+    if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
         index <- findTaskFromList(execId, getPendingTasksForRack(rack))
@@ -387,7 +379,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (withinAllowedLocality(TaskLocality.ANY)) {
+    if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
       for (index <- findTaskFromList(execId, allPendingTasks)) {
         return Some((index, TaskLocality.ANY, false))
       }
@@ -398,42 +390,36 @@ private[spark] class TaskSetManager(
 
   /**
    * Respond to an offer of a single executor from the scheduler by finding a task
+   *
+   * NOTE: this function is either called with a real preferredLocality level which
+   * would be adjusted by delay scheduling algorithm or it will be with a special
+   * NOPREF locality which will be not modified
+   *
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param preferredLocality the maximum locality we want to schedule the tasks at
-   * @param bottomLocality the minimum locality we want to schedule the tasks at, this
-   *                       parameter is mainly used to avoid some duplicate traversing of
-   *                       the task lists, after we have determined that we have no candidate
-   *                       tasks on certain levels
-   * @param allowAdjustPrefLocality this parameter is mainly for scheduling noPref tasks, where
-   *                                we do not want to apply delay scheduling on this kind of tasks
    */
   def resourceOffer(
       execId: String,
       host: String,
-      preferredLocality: TaskLocality.TaskLocality,
-      bottomLocality: TaskLocality.TaskLocality,
-      allowAdjustPrefLocality: Boolean = true)
+      preferredLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
     if (!isZombie) {
       val curTime = clock.getTime()
 
-      var allowedLocality = getAllowedLocalityLevel(curTime)
+      var allowedLocality = preferredLocality
 
-      if (allowedLocality > preferredLocality) {
-        // We're not allowed to search for farther-away tasks
-        allowedLocality = preferredLocality
-      }
-
-      val foundTask = {
-        if (allowAdjustPrefLocality) {
-          findTask(execId, host, allowedLocality, bottomLocality)
-        } else {
-          findTask(execId, host, preferredLocality, bottomLocality)
+      if (preferredLocality != TaskLocality.NOPREF ||
+        (nodeLocalTasks.contains(host) && nodeLocalTasks(host).size > 0)) {
+        allowedLocality = getAllowedLocalityLevel(curTime)
+        if (allowedLocality > preferredLocality) {
+          // We're not allowed to search for farther-away tasks
+          allowedLocality = preferredLocality
         }
       }
-      foundTask match {
+
+      findTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
@@ -446,8 +432,11 @@ private[spark] class TaskSetManager(
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
-          currentLocalityIndex = getLocalityIndex(taskLocality)
-          lastLaunchTime = curTime
+          // NOPREF will not affect the variables related to delay scheduling
+          if (preferredLocality != TaskLocality.NOPREF) {
+            currentLocalityIndex = getLocalityIndex(taskLocality)
+            lastLaunchTime = curTime
+          }
           // Serialize and return the task
           val startTime = clock.getTime()
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
@@ -471,13 +460,16 @@ private[spark] class TaskSetManager(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
+          if (taskLocality <= TaskLocality.NODE_LOCAL) {
+            for (preferedLocality <- tasks(index).preferredLocations) {
+              if (nodeLocalTasks.contains(preferedLocality.host)) {
+                nodeLocalTasks(preferedLocality.host) -= index
+              }
+            }
+          }
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
         }
         case _ =>
-          if (preferredLocality != TaskLocality.NOPREF) {
-            return resourceOffer(execId, host, TaskLocality.NOPREF, preferredLocality,
-              allowAdjustPrefLocality = false)
-          }
       }
     }
     None
