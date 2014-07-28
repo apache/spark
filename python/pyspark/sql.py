@@ -67,8 +67,7 @@ class BooleanType(object):
         return "BooleanType"
 
 class TimestampType(object):
-    """Spark SQL TimestampType
-    """
+    """Spark SQL TimestampType"""
     __metaclass__ = PrimitiveTypeSingleton
 
     def _get_scala_type_string(self):
@@ -159,11 +158,12 @@ class ArrayType(object):
 
     """
     def __init__(self, elementType, containsNull):
-        """
-        Create an ArrayType
+        """Creates an ArrayType
+
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains null values.
         :return:
+
         >>> ArrayType(StringType, True) == ArrayType(StringType, False)
         False
         >>> ArrayType(StringType, True) == ArrayType(StringType, True)
@@ -192,11 +192,11 @@ class MapType(object):
 
     """
     def __init__(self, keyType, valueType):
-        """
-        Create a MapType
+        """Creates a MapType
         :param keyType: the data type of keys.
         :param valueType: the data type of values.
         :return:
+
         >>> MapType(StringType, IntegerType) == MapType(StringType, IntegerType)
         True
         >>> MapType(StringType, IntegerType) == MapType(StringType, FloatType)
@@ -224,12 +224,12 @@ class StructField(object):
 
     """
     def __init__(self, name, dataType, nullable):
-        """
-        Create a StructField
+        """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
         :param nullable: indicates whether values of this field can be null.
         :return:
+
         >>> StructField("f1", StringType, True) == StructField("f1", StringType, True)
         True
         >>> StructField("f1", StringType, True) == StructField("f2", StringType, True)
@@ -260,10 +260,10 @@ class StructType(object):
 
     """
     def __init__(self, fields):
-        """
-        Create a StructType
+        """Creates a StructType
         :param fields:
         :return:
+
         >>> struct1 = StructType([StructField("f1", StringType, True)])
         >>> struct2 = StructType([StructField("f1", StringType, True)])
         >>> struct1 == struct2
@@ -313,6 +313,7 @@ def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
     :param datatype_string:
     :return:
+
     >>> def check_datatype(datatype):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype._get_scala_type_string())
     ...     python_datatype = _parse_datatype_string(scala_datatype.toString())
@@ -516,6 +517,7 @@ class SQLContext:
         :param rdd:
         :param schema:
         :return:
+
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
         >>> srdd = sqlCtx.applySchema(rdd, schema)
@@ -867,6 +869,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.saveAsTable(tableName)
 
     def schema(self):
+        """Returns the schema of this SchemaRDD (represented by a L{StructType})."""
         return _parse_datatype_string(self._jschema_rdd.schema().toString())
 
     def schemaString(self):
