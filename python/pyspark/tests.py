@@ -34,6 +34,7 @@ import zipfile
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
 try:
@@ -45,6 +46,62 @@ except:
 
 
 SPARK_HOME = os.environ["SPARK_HOME"]
+
+
+class TestMerger(unittest.TestCase):
+
+    def setUp(self):
+        self.N = 1 << 16
+        self.l = [i for i in xrange(self.N)]
+        self.data = zip(self.l, self.l)
+        self.agg = Aggregator(lambda x: [x], 
+                lambda x, y: x.append(y) or x,
+                lambda x, y: x.extend(y) or x)
+
+    def test_in_memory(self):
+        m = InMemoryMerger(self.agg)
+        m.mergeValues(self.data)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = InMemoryMerger(self.agg)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+    def test_small_dataset(self):
+        m = ExternalMerger(self.agg, 1000)
+        m.mergeValues(self.data)
+        self.assertEqual(m.spills, 0)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 1000)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(m.spills, 0)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+    def test_medium_dataset(self):
+        m = ExternalMerger(self.agg, 10)
+        m.mergeValues(self.data)
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 10)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data * 3))
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)) * 3)
+
+    def test_huge_dataset(self):
+        m = ExternalMerger(self.agg, 10)
+        m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
+                self.N * 10)
+        m._cleanup()
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -168,6 +225,15 @@ class TestRDDFunctions(PySparkTestCase):
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
         result = cart.map(lambda (x, y): x + y).collect()
+
+    def test_transforming_pickle_file(self):
+        # Regression test for SPARK-2601
+        data = self.sc.parallelize(["Hello", "World!"])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsPickleFile(tempFile.name)
+        pickled_file = self.sc.pickleFile(tempFile.name)
+        pickled_file.map(lambda x: x).collect()
 
     def test_cartesian_on_textfile(self):
         # Regression test for

@@ -925,12 +925,14 @@ private[hive] object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
-    case Token(DIV(), left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token(DIV(), left :: right:: Nil) =>
+      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
     case Token("==", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("<=>", left :: right:: Nil) => EqualNullSafe(nodeToExpr(left), nodeToExpr(right))
     case Token("!=", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
     case Token("<>", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
