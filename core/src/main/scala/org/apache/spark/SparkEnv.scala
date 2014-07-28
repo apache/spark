@@ -67,7 +67,7 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val conf: SparkConf) extends Logging {
 
-  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 

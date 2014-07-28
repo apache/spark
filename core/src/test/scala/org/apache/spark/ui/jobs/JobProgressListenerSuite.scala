@@ -63,7 +63,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
 
     // finish this task, should get updated shuffleRead
     shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
+    taskMetrics.updateShuffleReadMetrics(shuffleReadMetrics)
     var taskInfo = new TaskInfo(1234L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     var task = new ShuffleMapTask(0, null, null, 0, null)
@@ -81,8 +81,6 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     assert(listener.stageIdToData.size === 1)
 
     // finish this task, should get updated duration
-    shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1235L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     task = new ShuffleMapTask(0, null, null, 0, null)
@@ -91,8 +89,6 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       .shuffleRead === 2000)
 
     // finish this task, should get updated duration
-    shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1236L, 0, 2, 0L, "exe-2", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     task = new ShuffleMapTask(0, null, null, 0, null)

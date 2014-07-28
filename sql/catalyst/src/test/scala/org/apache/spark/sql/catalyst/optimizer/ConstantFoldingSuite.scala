@@ -83,7 +83,7 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(10) as Symbol("2*3+4"),
           Literal(14) as Symbol("2*(3+4)"))
         .where(Literal(true))
-        .groupBy(Literal(3))(Literal(3) as Symbol("9/3"))
+        .groupBy(Literal(3.0))(Literal(3.0) as Symbol("9/3"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -205,7 +205,10 @@ class ConstantFoldingSuite extends PlanTest {
 
           Substring(Literal(null, StringType), 0, 1) as 'c16,
           Substring("abc", Literal(null, IntegerType), 1) as 'c17,
-          Substring("abc", 0, Literal(null, IntegerType)) as 'c18
+          Substring("abc", 0, Literal(null, IntegerType)) as 'c18,
+
+          Contains(Literal(null, StringType), "abc") as 'c19,
+          Contains("abc", Literal(null, StringType)) as 'c20
         )
 
     val optimized = Optimize(originalQuery.analyze)
@@ -237,7 +240,10 @@ class ConstantFoldingSuite extends PlanTest {
 
           Literal(null, StringType) as 'c16,
           Literal(null, StringType) as 'c17,
-          Literal(null, StringType) as 'c18
+          Literal(null, StringType) as 'c18,
+
+          Literal(null, BooleanType) as 'c19,
+          Literal(null, BooleanType) as 'c20
         ).analyze
 
     comparePlans(optimized, correctAnswer)

@@ -20,9 +20,9 @@ package org.apache.spark.ui
 private[spark] object ToolTips {
   val SCHEDULER_DELAY =
     """Scheduler delay includes time to ship the task from the scheduler to
-       the executor, and time the time to send a message from the executor to the scheduler stating
-       that the task has completed. When the scheduler becomes overloaded, task completion messages
-       become queued up, and scheduler delay increases."""
+       the executor, and time to send the task result from the executor to the scheduler. If
+       scheduler delay is large, consider decreasing the size of tasks or decreasing the size
+       of task results."""
 
   val INPUT = "Bytes read from Hadoop or from Spark storage."
 
