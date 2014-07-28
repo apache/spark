@@ -313,7 +313,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Copy cached file to targetDir, if not exists, download it from url.
+   * Copy cached file to targetDir, if not exists, download it from url firstly.
    */
   def fetchCachedFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
     timestamp: Long) {
@@ -326,11 +326,14 @@ private[spark] object Utils extends Logging {
     val raf = new RandomAccessFile(lockFile, "rw")
     val lock = raf.getChannel().lock() // only one executor entry
     val cachedFile = new File(localDir, cachedFileName)
-    if (!cachedFile.exists()) {
-      fetchFile(url, localDir, conf, securityMgr)
-      Files.move(new File(localDir, fileName), cachedFile)
+    try {
+      if (!cachedFile.exists()) {
+        fetchFile(url, localDir, conf, securityMgr)
+        Files.move(new File(localDir, fileName), cachedFile)
+      }
+    } finally {
+      lock.release()
     }
-    lock.release()
     Files.copy(cachedFile, targetFile)
   }
 
