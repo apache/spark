@@ -47,7 +47,8 @@ private[spark] class HashShuffleReader[K, C](
     } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
-      iter
+      // Convert the Product2s to pairs since this is what downstream RDDs currently expect
+      iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
     }
 
     // Sort the output if there is a sort ordering defined.

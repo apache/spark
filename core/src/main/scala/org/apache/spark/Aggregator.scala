@@ -64,10 +64,12 @@ case class Aggregator[K, V, C] (
   }
 
   @deprecated("use combineCombinersByKey with TaskContext argument", "0.9.0")
-  def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] =
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]) : Iterator[(K, C)] =
     combineCombinersByKey(iter, null)
 
-  def combineCombinersByKey(iter: Iterator[(K, C)], context: TaskContext) : Iterator[(K, C)] = {
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext)
+      : Iterator[(K, C)] =
+  {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null
