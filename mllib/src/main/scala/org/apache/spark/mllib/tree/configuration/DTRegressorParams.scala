@@ -41,6 +41,8 @@ class DTRegressorParams (
     maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
 
+  def getImpurity: String = this.impurity
+
   def setImpurity(impurity: String) = {
     if (!RegressionImpurities.nameToImpurityMap.contains(impurity)) {
       throw new IllegalArgumentException(s"Bad impurity parameter for regression: $impurity")

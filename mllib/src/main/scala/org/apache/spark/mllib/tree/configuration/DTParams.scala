@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import scala.beans.BeanProperty
+
 import org.apache.spark.annotation.Experimental
 
 /**
@@ -31,18 +33,12 @@ import org.apache.spark.annotation.Experimental
  */
 @Experimental
 class DTParams (
-    var maxDepth: Int,
-    var maxBins: Int,
+    @BeanProperty var maxDepth: Int,
+    @BeanProperty var maxBins: Int,
     var quantileStrategy: String,
-    var maxMemoryInMB: Int) extends Serializable {
+    @BeanProperty var maxMemoryInMB: Int) extends Serializable {
 
-  def setMaxDepth(maxDepth: Int) = {
-    this.maxDepth = maxDepth
-  }
-
-  def setMaxBins(maxBins: Int) = {
-    this.maxBins = maxBins
-  }
+  def getQuantileStrategy: String = this.quantileStrategy
 
   def setQuantileStrategy(quantileStrategy: String) = {
     if (!QuantileStrategies.nameToStrategyMap.contains(quantileStrategy)) {
@@ -51,15 +47,9 @@ class DTParams (
     this.quantileStrategy = quantileStrategy
   }
 
-  def setMaxMemoryInMB(maxMemoryInMB: Int) = {
-    this.maxMemoryInMB = maxMemoryInMB
-  }
-
   /**
    * Get list of supported quantileStrategy options.
    */
-  def supportedQuantileStrategies(): List[String] = {
-    QuantileStrategies.nameToStrategyMap.keys.toList
-  }
+  def supportedQuantileStrategies: List[String] = QuantileStrategies.nameToStrategyMap.keys.toList
 
 }
