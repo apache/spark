@@ -95,8 +95,8 @@ class SQLContext:
         True
 
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
-        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : [1, 2], "f3" : [1, 2]},
-        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : [2, 3], "f3" : [2, 3]}]
+        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : [1, 2]},
+        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : [2, 3]}]
         True
         """
         if (rdd.__class__ is SchemaRDD):
@@ -511,8 +511,8 @@ def _test():
         {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
         {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])
     globs['nestedRdd2'] = sc.parallelize([
-        {"f1": [[1, 2], [2, 3]], "f2": set([1, 2]), "f3": [1, 2]},
-        {"f1": [[2, 3], [3, 4]], "f2": set([2, 3]), "f3": [2, 3]}])
+        {"f1": [[1, 2], [2, 3]], "f2": [1, 2]},
+        {"f1": [[2, 3], [3, 4]], "f2": [2, 3]}])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

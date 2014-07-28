@@ -352,12 +352,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case c: java.lang.Long => LongType
       case c: java.lang.Double => DoubleType
       case c: java.lang.Boolean => BooleanType
+      case c: java.math.BigDecimal => DecimalType
+      case c: java.sql.Timestamp => TimestampType
+      case c: java.util.Calendar => TimestampType
       case c: java.util.List[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
         MapType(typeFor(key), typeFor(value))
-      case c: java.util.Calendar => TimestampType
       case c if c.getClass.isArray =>
         val elem = c.asInstanceOf[Array[_]].head
         ArrayType(typeFor(elem))
@@ -370,18 +371,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def needTransform(obj: Any): Boolean = obj match {
       case c: java.util.List[_] => true
-      case c: java.util.Set[_] => true
       case c: java.util.Map[_, _] => true
       case c if c.getClass.isArray => true
       case c: java.util.Calendar => true
       case c => false
     }
 
-    // convert JList, JSet into Seq, convert JMap into Map
+    // convert JList, JArray into Seq, convert JMap into Map
     // convert Calendar into Timestamp
     def transform(obj: Any): Any = obj match {
       case c: java.util.List[_] => c.map(transform).toSeq
-      case c: java.util.Set[_] => c.map(transform).toSet.toSeq
       case c: java.util.Map[_, _] => c.map {
         case (key, value) => (key, transform(value))
       }.toMap
