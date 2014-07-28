@@ -161,7 +161,7 @@ class ExternalAppendOnlyMap[K, V, C](
         }
         // Do not synchronize spills
         if (shouldSpill) {
-          spill(mapSize)
+          spill(currentSize)
         }
       }
       currentMap.changeValue(curEntry._1, update)

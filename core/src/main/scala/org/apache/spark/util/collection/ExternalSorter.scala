@@ -110,7 +110,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.3)
+    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
