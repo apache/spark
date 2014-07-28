@@ -21,7 +21,9 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.jblas.{DoubleMatrix, SimpleBlas, NativeBlas}
+import org.jblas.{DoubleMatrix, SimpleBlas}
+
+import org.apache.spark.mllib.util.TestingUtils._
 
 class NNLSSuite extends FunSuite {
   /** Generate an NNLS problem whose optimal solution is the all-ones vector. */
@@ -73,7 +75,7 @@ class NNLSSuite extends FunSuite {
     val ws = NNLS.createWorkspace(n)
     val x = NNLS.solve(ata, atb, ws)
     for (i <- 0 until n) {
-      assert(Math.abs(x(i) - goodx(i)) < 1e-3)
+      assert(x(i) ~== goodx(i) absTol 1E-3)
       assert(x(i) >= 0)
     }
   }
