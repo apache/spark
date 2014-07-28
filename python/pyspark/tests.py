@@ -541,7 +541,12 @@ class TestOutputFormat(PySparkTestCase):
             "mapred.output.value.class" : "org.apache.hadoop.io.MapWritable",
             "mapred.output.dir" : basepath + "/olddataset/"}
         self.sc.parallelize(dict_data).saveAsHadoopDataset(conf)
-        old_dataset = sorted(self.sc.sequenceFile(basepath + "/olddataset/").collect())
+        input_conf = {"mapred.input.dir" : basepath + "/olddataset/"}
+        old_dataset = sorted(self.sc.hadoopRDD(
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.MapWritable",
+            conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
 
     def test_newhadoop(self):
@@ -571,10 +576,13 @@ class TestOutputFormat(PySparkTestCase):
                  "mapred.output.dir" : basepath + "/newdataset/"}
         self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(conf,
             valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
-        new_dataset = sorted(self.sc.sequenceFile(
-            basepath + "/newdataset/",
-            valueClass="org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
+        input_conf = {"mapred.input.dir" : basepath + "/newdataset/"}
+        new_dataset = sorted(self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter",
+            conf=input_conf).collect())
         self.assertEqual(new_dataset, array_data)
 
     def test_newolderror(self):
