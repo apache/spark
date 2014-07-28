@@ -62,6 +62,8 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
+  var _nextExecutorId = 0
+
   override def start() {
     synchronized {
       classLoader = Thread.currentThread.getContextClassLoader
@@ -250,7 +252,7 @@ private[spark] class MesosSchedulerBackend(
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
-      .setExecutor(createExecutorInfo(slaveId))
+      .setExecutor(createExecutorInfo(nextExecutorId(slaveId)))
       .setName(task.name)
       .addResources(cpuResource)
       .setData(ByteString.copyFrom(task.serializedTask))
@@ -333,4 +335,10 @@ private[spark] class MesosSchedulerBackend(
 
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
+  def nextExecutorId(slaveId: String): String = {
+    val id = s"$slaveId-${_nextExecutorId}"
+    _nextExecutorId += 1
+    id
+  }
 }
