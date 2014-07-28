@@ -157,7 +157,7 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  /* Enable Mima for all projects except spark, hive, catalyst, sql  and repl */
+  /* Enable Mima for all projects except spark, hive, catalyst, sql, repl and flume-sink */
   // TODO: Add Sql to mima checks
   allProjects.filterNot(y => Seq(spark, sql, hive, catalyst, repl, streamingFlumeSink).exists(x =>
     x == y)).foreach (x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
