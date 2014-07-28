@@ -59,7 +59,13 @@ private[mllib] object LocalKMeans extends Logging {
         cumulativeScore += weights(j) * KMeans.pointCost(curCenters, points(j))
         j += 1
       }
-      centers(i) = points(j-1).toDense
+      if (j == 0) {
+        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
+          s" Using duplicate point for center k = $i.")
+        centers(i) = points(0).toDense
+      } else {
+        centers(i) = points(j - 1).toDense
+      }
     }
 
     // Run up to maxIterations iterations of Lloyd's algorithm

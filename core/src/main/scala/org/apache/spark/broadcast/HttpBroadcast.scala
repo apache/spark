@@ -40,9 +40,9 @@ private[spark] class HttpBroadcast[T: ClassTag](
     @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def getValue = value_
+  override protected def getValue() = value_
 
-  val blockId = BroadcastBlockId(id)
+  private val blockId = BroadcastBlockId(id)
 
   /*
    * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
@@ -60,14 +60,14 @@ private[spark] class HttpBroadcast[T: ClassTag](
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors.
    */
-  def doUnpersist(blocking: Boolean) {
+  override protected def doUnpersist(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors and driver.
    */
-  def doDestroy(blocking: Boolean) {
+  override protected def doDestroy(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
@@ -102,7 +102,7 @@ private[spark] class HttpBroadcast[T: ClassTag](
   }
 }
 
-private[spark] object HttpBroadcast extends Logging {
+private[broadcast] object HttpBroadcast extends Logging {
   private var initialized = false
   private var broadcastDir: File = null
   private var compress: Boolean = false
@@ -160,7 +160,7 @@ private[spark] object HttpBroadcast extends Logging {
 
   def getFile(id: Long) = new File(broadcastDir, BroadcastBlockId(id).name)
 
-  def write(id: Long, value: Any) {
+  private def write(id: Long, value: Any) {
     val file = getFile(id)
     val out: OutputStream = {
       if (compress) {
@@ -176,7 +176,7 @@ private[spark] object HttpBroadcast extends Logging {
     files += file
   }
 
-  def read[T: ClassTag](id: Long): T = {
+  private def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 

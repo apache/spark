@@ -24,8 +24,10 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.graphx._
 import org.apache.spark.serializer._
+
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
 
 private[graphx]
 class RoutingTableMessageSerializer extends Serializer with Serializable {
@@ -35,10 +37,8 @@ class RoutingTableMessageSerializer extends Serializer with Serializable {
       new ShuffleSerializationStream(s) {
         def writeObject[T: ClassTag](t: T): SerializationStream = {
           val msg = t.asInstanceOf[RoutingTableMessage]
-          writeVarLong(msg.vid, optimizePositive = false)
-          writeUnsignedVarInt(msg.pid)
-          // TODO: Write only the bottom two bits of msg.position
-          s.write(msg.position)
+          writeVarLong(msg._1, optimizePositive = false)
+          writeInt(msg._2)
           this
         }
       }
@@ -47,10 +47,8 @@ class RoutingTableMessageSerializer extends Serializer with Serializable {
       new ShuffleDeserializationStream(s) {
         override def readObject[T: ClassTag](): T = {
           val a = readVarLong(optimizePositive = false)
-          val b = readUnsignedVarInt()
-          val c = s.read()
-          if (c == -1) throw new EOFException
-          new RoutingTableMessage(a, b, c.toByte).asInstanceOf[T]
+          val b = readInt()
+          (a, b).asInstanceOf[T]
         }
       }
   }
@@ -71,78 +69,6 @@ class VertexIdMsgSerializer extends Serializer with Serializable {
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T: ClassTag](): T = {
         (readVarLong(optimizePositive = false), null).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Int]. */
-private[graphx]
-class IntVertexBroadcastMsgSerializer extends Serializer with Serializable {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T: ClassTag](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Int]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeInt(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T: ClassTag](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readInt()
-        new VertexBroadcastMsg[Int](0, a, b).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Long]. */
-private[graphx]
-class LongVertexBroadcastMsgSerializer extends Serializer with Serializable {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T: ClassTag](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Long]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeLong(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T: ClassTag](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readLong()
-        new VertexBroadcastMsg[Long](0, a, b).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Double]. */
-private[graphx]
-class DoubleVertexBroadcastMsgSerializer extends Serializer with Serializable {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T: ClassTag](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Double]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeDouble(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      def readObject[T: ClassTag](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readDouble()
-        new VertexBroadcastMsg[Double](0, a, b).asInstanceOf[T]
       }
     }
   }

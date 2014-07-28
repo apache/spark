@@ -59,10 +59,16 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.storage.MemoryStore.Entry"),
+              "org.apache.spark.storage.MemoryStore.Entry")
+          ) ++
+          Seq(
+            // Renamed putValues -> putArray + putIterator
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
-                + "createZero$1")
+              "org.apache.spark.storage.MemoryStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.DiskStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.TachyonStore.putValues")
           ) ++
           Seq(
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
@@ -73,7 +79,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem]( // The only public constructor is the one without arguments.
               "org.apache.spark.mllib.recommendation.ALS.this"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures")
           ) ++
           MimaBuild.excludeSparkClass("mllib.linalg.distributed.ColumnStatisticsAggregator") ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
@@ -81,7 +89,15 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("util.SerializableHyperLogLog") ++
           MimaBuild.excludeSparkClass("storage.Values") ++
           MimaBuild.excludeSparkClass("storage.Entry") ++
-          MimaBuild.excludeSparkClass("storage.MemoryStore$Entry")
+          MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
+          Seq(
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Variance.calculate")
+          )
         case v if v.startsWith("1.0") =>
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
