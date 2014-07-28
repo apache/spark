@@ -424,11 +424,14 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties = null)
   {
+    val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
-      case JobSucceeded => {}
+      case JobSucceeded => {
+        logInfo("Job " + waiter.jobId + " finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
+      }
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite.shortForm)
+        logInfo("Job " + waiter.jobId + " failed to run " + callSite.shortForm)
         throw exception
     }
   }
