@@ -116,12 +116,10 @@ maximum tree depth of 5. The training error is calculated to measure the algorit
 <div class="codetabs">
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.rdd.DatasetInfo
+import org.apache.spark.mllib.tree.DecisionTreeClassifier
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.Gini
 
 // Load and parse the data file
 val data = sc.textFile("data/mllib/sample_tree_data.csv")
@@ -129,10 +127,17 @@ val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))
 }
+val numFeatures = parsedData.take(1)(0).features.size
+val datasetInfo = new DatasetInfo(numClasses = 2, numFeatures = numFeatures)
 
 // Run training algorithm to build the model
-val maxDepth = 5
-val model = DecisionTree.train(parsedData, Classification, Gini, maxDepth)
+val dtParams = DecisionTreeClassifier.defaultParams()
+dtParams.impurity = "gini"
+dtParams.maxDepth = 4
+val model = DecisionTreeClassifier.train(parsedData, datasetInfo, dtParams)
+
+// Print model in human-readable format.
+model.print()
 
 // Evaluate model on training examples and compute training error
 val labelAndPreds = parsedData.map { point =>
@@ -155,12 +160,10 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 <div class="codetabs">
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.rdd.DatasetInfo
+import org.apache.spark.mllib.tree.DecisionTreeRegressor
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.Variance
 
 // Load and parse the data file
 val data = sc.textFile("data/mllib/sample_tree_data.csv")
@@ -168,10 +171,17 @@ val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))
 }
+val numFeatures = parsedData.take(1)(0).features.size
+val datasetInfo = new DatasetInfo(numClasses = 0, numFeatures = numFeatures)
 
 // Run training algorithm to build the model
-val maxDepth = 5
-val model = DecisionTree.train(parsedData, Regression, Variance, maxDepth)
+val dtParams = DecisionTreeRegressor.defaultParams()
+dtParams.impurity = "variance"
+dtParams.maxDepth = 4
+val model = DecisionTreeRegressor.train(parsedData, datasetInfo, dtParams)
+
+// Print model in human-readable format.
+model.print()
 
 // Evaluate model on training examples and compute training error
 val valuesAndPreds = parsedData.map { point =>
@@ -179,7 +189,7 @@ val valuesAndPreds = parsedData.map { point =>
   (point.label, prediction)
 }
 val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-println("training Mean Squared Error = " + MSE)
+println("Training Mean Squared Error = " + MSE)
 {% endhighlight %}
 </div>
 </div>
