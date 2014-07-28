@@ -29,6 +29,12 @@ You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:** *For Java 8 and above this step is not required.*
 
+# Requirement: build packages before running tests
+Tests must be run AFTER the "package" target has already been executed.  The following is an example of a correct (build, test) sequence:
+
+    mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive clean package
+    mvn -Pyarn -Phadoop-2.3 -Phive test
+
 # Specifying the Hadoop Version
 
 Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default. Note that certain build profiles are required for particular Hadoop versions:
