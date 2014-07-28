@@ -37,6 +37,15 @@ from pyspark.rdd import RDD
 from py4j.java_collections import ListConverter
 
 
+# These are special default configs for PySpark, they will overwrite
+# the default ones for Spark if they are not configured by user.
+DEFAULT_CONFIGS = {
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    "spark.serializer.objectStreamReset": 100,
+    "spark.rdd.compress": True,
+}
+
+
 class SparkContext(object):
     """
     Main entry point for Spark functionality. A SparkContext represents the
@@ -101,7 +110,7 @@ class SparkContext(object):
         else:
             self.serializer = BatchedSerializer(self._unbatched_serializer,
                                                 batchSize)
-        self._conf.setIfMissing("spark.rdd.compress", "true")
+
         # Set any parameters passed directly to us on the conf
         if master:
             self._conf.setMaster(master)
@@ -112,6 +121,8 @@ class SparkContext(object):
         if environment:
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
+        for key, value in DEFAULT_CONFIGS.items():
+            self._conf.setIfMissing(key, value)
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
@@ -215,6 +226,13 @@ class SparkContext(object):
         """
         SparkContext._ensure_initialized()
         SparkContext._jvm.java.lang.System.setProperty(key, value)
+
+    @property
+    def version(self):
+        """
+        The version of Spark on which this application is running.
+        """
+        return self._jsc.version()
 
     @property
     def defaultParallelism(self):

@@ -37,15 +37,15 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
    * @return a PutResult that contains the size of the data, as well as the values put if
    *         returnValues is true (if not, the result's data field can be null)
    */
-  def putValues(
+  def putIterator(
     blockId: BlockId,
     values: Iterator[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
-  def putValues(
+  def putArray(
     blockId: BlockId,
-    values: ArrayBuffer[Any],
+    values: Array[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
