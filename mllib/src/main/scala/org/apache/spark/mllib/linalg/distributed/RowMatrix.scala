@@ -109,7 +109,7 @@ class RowMatrix(
       seqOp = (U, v) => {
         RowMatrix.dspr(1.0, v, U.data)
         U
-      }, combOp = (U1, U2) => U1 += U2, 2)
+      }, combOp = (U1, U2) => U1 += U2, depth = 2)
 
     RowMatrix.triuToFull(n, GU.data)
   }
@@ -293,7 +293,7 @@ class RowMatrix(
       seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
       combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
         (s1._1 + s2._1, s1._2 += s2._2),
-      2)
+      depth = 2)
 
     updateNumRows(m)
 
