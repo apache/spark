@@ -535,6 +535,15 @@ class TestOutputFormat(PySparkTestCase):
             "org.apache.hadoop.io.MapWritable").collect())
         self.assertEqual(result, dict_data)
 
+        conf = {
+            "mapred.output.format.class" : "org.apache.hadoop.mapred.SequenceFileOutputFormat",
+            "mapred.output.key.class" : "org.apache.hadoop.io.IntWritable",
+            "mapred.output.value.class" : "org.apache.hadoop.io.MapWritable",
+            "mapred.output.dir" : basepath + "/olddataset/"}
+        self.sc.parallelize(dict_data).saveAsHadoopDataset(conf)
+        old_dataset = sorted(self.sc.sequenceFile(basepath + "/olddataset/").collect())
+        self.assertEqual(old_dataset, dict_data)
+
     def test_newhadoop(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
@@ -554,6 +563,19 @@ class TestOutputFormat(PySparkTestCase):
             "org.apache.spark.api.python.DoubleArrayWritable",
             valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
         self.assertEqual(result, array_data)
+
+        conf = {"mapreduce.outputformat.class" :
+                     "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+                 "mapred.output.key.class" : "org.apache.hadoop.io.IntWritable",
+                 "mapred.output.value.class" : "org.apache.spark.api.python.DoubleArrayWritable",
+                 "mapred.output.dir" : basepath + "/newdataset/"}
+        self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(conf,
+            valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
+        new_dataset = sorted(self.sc.sequenceFile(
+            basepath + "/newdataset/",
+            valueClass="org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
+        self.assertEqual(new_dataset, array_data)
 
     def test_newolderror(self):
         basepath = self.tempdir.name
