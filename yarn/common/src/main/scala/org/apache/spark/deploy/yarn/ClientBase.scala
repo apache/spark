@@ -386,7 +386,10 @@ trait ClientBase extends Logging {
     // Forward the Spark configuration to the application master / executors.
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
-    javaOpts ++= Utils.sparkJavaOpts(sparkConf)
+    // TODO: Use Utils.sparkJavaOpts here once we figure out how to deal with quotes and backslashes
+    for ((k, v) <- sparkConf.getAll) {
+      javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
+    }
 
     if (args.amClass == classOf[ApplicationMaster].getName) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
