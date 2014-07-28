@@ -369,25 +369,24 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }.toSeq
 
     def needTransform(obj: Any): Boolean = obj match {
-      case c: java.util.List[_] => c.exists(needTransform)
-      case c: java.util.Set[_] => c.exists(needTransform)
-      case c: java.util.Map[_, _] => c.exists {
-        case (key, value) => needTransform(key) || needTransform(value)
-      }
-      case c if c.getClass.isArray =>
-        c.asInstanceOf[Array[_]].exists(needTransform)
+      case c: java.util.List[_] => true
+      case c: java.util.Set[_] => true
+      case c: java.util.Map[_, _] => true
+      case c if c.getClass.isArray => true
       case c: java.util.Calendar => true
       case c => false
     }
 
+    // convert JList, JSet into Seq, convert JMap into Map
+    // convert Calendar into Timestamp
     def transform(obj: Any): Any = obj match {
-      case c: java.util.List[_] => c.map(transform)
-      case c: java.util.Set[_] => c.map(transform)
+      case c: java.util.List[_] => c.map(transform).toSeq
+      case c: java.util.Set[_] => c.map(transform).toSet.toSeq
       case c: java.util.Map[_, _] => c.map {
-        case (key, value) => (transform(key), transform(value))
-      }
+        case (key, value) => (key, transform(value))
+      }.toMap
       case c if c.getClass.isArray =>
-        c.asInstanceOf[Array[_]].map(transform)
+        c.asInstanceOf[Array[_]].map(transform).toSeq
       case c: java.util.Calendar =>
         new java.sql.Timestamp(c.getTime().getTime())
       case c => c

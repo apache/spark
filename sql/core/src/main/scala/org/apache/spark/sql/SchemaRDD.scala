@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types.{ArrayType, BooleanType, StructType}
+import org.apache.spark.sql.catalyst.types.{ArrayType, BooleanType, StructType, MapType}
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
 
@@ -388,20 +388,21 @@ class SchemaRDD(
                 case seq: Seq[Any] =>
                   seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
                 case list: JList[_] =>
-                  list.map(element => rowToMap(element.asInstanceOf[Row], struct))
+                  list.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
                 case set: JSet[_] =>
-                  set.map(element => rowToMap(element.asInstanceOf[Row], struct))
+                  set.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
                 case arr if arr != null && arr.getClass.isArray =>
                   arr.asInstanceOf[Array[Any]].map {
                     element => rowToMap(element.asInstanceOf[Row], struct)
                   }
-                case t: java.sql.Timestamp =>
-                  val c = java.util.Calendar.getInstance()
-                  c.setTimeInMillis(t.getTime())
-                  c
                 case other => other
               }
               map.put(attrName, arrayValues)
+            case m @ MapType(_, struct: StructType) =>
+              val nm = obj.asInstanceOf[Map[_,_]].map {
+                case (k, v) => (k, rowToMap(v.asInstanceOf[Row], struct))
+              }.asJava
+              map.put(attrName, nm)
             case array: ArrayType => {
               val arrayValues = obj match {
                 case seq: Seq[Any] => seq.asJava
@@ -409,6 +410,8 @@ class SchemaRDD(
               }
               map.put(attrName, arrayValues)
             }
+            case m: MapType => map.put(attrName, obj.asInstanceOf[Map[_,_]].asJava)
+            // Pyrolite can handle Timestamp
             case other => map.put(attrName, obj)
           }
       }
