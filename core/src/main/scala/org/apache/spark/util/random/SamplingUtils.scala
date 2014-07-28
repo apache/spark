@@ -91,11 +91,11 @@ private[spark] object SamplingUtils {
    */
   def computeFractionForSampleSize(sampleSizeLowerBound: Int, total: Long,
       withReplacement: Boolean): Double = {
-    val fraction = sampleSizeLowerBound.toDouble / total
     if (withReplacement) {
-      PoissonBounds.getUpperBound(sampleSizeLowerBound)
+      PoissonBounds.getUpperBound(sampleSizeLowerBound) / total
     } else {
-      BernoulliBounds.getLowerBound(1e-4, total, fraction)
+      val fraction = sampleSizeLowerBound.toDouble / total
+      BinomialBounds.getUpperBound(1e-4, total, fraction)
     }
   }
 }
@@ -138,25 +138,25 @@ private[spark] object PoissonBounds {
  * Utility functions that help us determine bounds on adjusted sampling rate to guarantee exact
  * sample size with high confidence when sampling without replacement.
  */
-private[spark] object BernoulliBounds {
+private[spark] object BinomialBounds {
 
   val minSamplingRate = 1e-10
 
   /**
-   * Returns a threshold such that if we apply Bernoulli sampling with that threshold, it is very
-   * unlikely to sample less than `fraction * n` items out of `n` items.
+   * Returns a threshold `p` such that if we conduct n Bernoulli trials with success rate = `p`,
+   * it is very unlikely to have more than `fraction * n` successes.
    */
-  def getUpperBound(delta: Double, n: Long, fraction: Double): Double = {
+  def getLowerBound(delta: Double, n: Long, fraction: Double): Double = {
     val gamma = - math.log(delta) / n * (2.0 / 3.0)
     math.max(minSamplingRate,
       fraction + gamma - math.sqrt(gamma * gamma + 3 * gamma * fraction))
   }
 
   /**
-   * Returns a threshold such that if we apply Bernoulli sampling with that threshold, it is very
-   * unlikely to sample more than `fraction * n` items out of `n` items.
+   * Returns a threshold `p` such that if we conduct n Bernoulli trials with success rate = `p`,
+   * it is very unlikely to have less than `fraction * n` successes.
    */
-  def getLowerBound(delta: Double, n: Long, fraction: Double): Double = {
+  def getUpperBound(delta: Double, n: Long, fraction: Double): Double = {
     val gamma = - math.log(delta) / n
     math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
   }

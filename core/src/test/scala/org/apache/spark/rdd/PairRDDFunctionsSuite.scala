@@ -168,8 +168,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val stratifiedData = data.keyBy(stratifier(fractionPositive))
 
       val samplingRate = 0.1
-      val seed = defaultSeed
-      checkAllCombos(stratifiedData, samplingRate, seed, n)
+      checkAllCombos(stratifiedData, samplingRate, defaultSeed, n)
     }
 
     // vary fractionPositive
@@ -179,8 +178,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val stratifiedData = data.keyBy(stratifier(fractionPositive))
 
       val samplingRate = 0.1
-      val seed = defaultSeed
-      checkAllCombos(stratifiedData, samplingRate, seed, n)
+      checkAllCombos(stratifiedData, samplingRate, defaultSeed, n)
     }
 
     // Use the same data for the rest of the tests
@@ -197,8 +195,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
     // vary sampling rate
     for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
-      val seed = defaultSeed
-      checkAllCombos(stratifiedData, samplingRate, seed, n)
+      checkAllCombos(stratifiedData, samplingRate, defaultSeed, n)
     }
   }
 

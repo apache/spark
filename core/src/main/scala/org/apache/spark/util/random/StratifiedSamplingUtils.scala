@@ -17,18 +17,17 @@
 
 package org.apache.spark.util.random
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
-
 import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
+import cern.jet.random.Poisson
+import cern.jet.random.engine.DRand
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-
-import scala.reflect.ClassTag
 
 /**
  * Auxiliary functions and data structures for the sampleByKey method in PairRDDFunctions.
@@ -119,9 +118,9 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         // using an extra pass over the RDD for computing the count.
         // Hence, acceptBound and waitListBound change on every iteration.
         acceptResult.acceptBound =
-          BernoulliBounds.getUpperBound(delta, acceptResult.numItems, fraction)
+          BinomialBounds.getLowerBound(delta, acceptResult.numItems, fraction)
         acceptResult.waitListBound =
-          BernoulliBounds.getLowerBound(delta, acceptResult.numItems, fraction)
+          BinomialBounds.getUpperBound(delta, acceptResult.numItems, fraction)
 
         val x = rng.nextUniform()
         if (x < acceptResult.acceptBound) {
