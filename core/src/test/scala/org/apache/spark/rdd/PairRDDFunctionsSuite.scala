@@ -159,7 +159,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       takeSampleAndValidatePoisson(stratifiedData, false, samplingRate, seed, n)
     }
 
-    val defaultSeed = 42L
+    val defaultSeed = 1L
 
     // vary RDD size
     for (n <- List(100, 1000, 1000000)) {
