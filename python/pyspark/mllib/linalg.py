@@ -247,6 +247,7 @@ class Vectors(object):
         else:
             return "[" + ",".join([str(v) for v in vector]) + "]"
 
+
 def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)

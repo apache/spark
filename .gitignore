@@ -53,6 +53,7 @@ rat-results.txt
 scalastyle.txt
 conf/spark-defaults.conf.bak
 conf/*.conf
+scalastyle-output.xml
 
 # For Hive
 metastore_db/

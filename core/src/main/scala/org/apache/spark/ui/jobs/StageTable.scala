@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.xml.Node
+import scala.xml.Text
 
 import java.util.Date
 
@@ -99,22 +100,33 @@ private[ui] class StageTableBase(
         {s.name}
       </a>
 
+    val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
     val details = if (s.details.nonEmpty) {
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
             class="expand-details">
-        +show details
-      </span>
-      <pre class="stage-details collapsed">{s.details}</pre>
+        +details
+      </span> ++
+      <div class="stage-details collapsed">
+        {if (cachedRddInfos.nonEmpty) {
+          Text("RDD: ") ++
+          // scalastyle:off
+          cachedRddInfos.map { i =>
+            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(basePath), i.id)}>{i.name}</a>
+          }
+          // scalastyle:on
+        }}
+        <pre>{s.details}</pre>
+      </div>
     }
 
-    val stageDataOption = listener.stageIdToData.get(s.stageId)
-    // Too many nested map/flatMaps with options are just annoying to read. Do this imperatively.
-    if (stageDataOption.isDefined && stageDataOption.get.description.isDefined) {
-      val desc = stageDataOption.get.description
-      <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
-    } else {
-      <div>{killLink} {nameLink} {details}</div>
+    val stageDesc = for {
+      stageData <- listener.stageIdToData.get(s.stageId)
+      desc <- stageData.description
+    } yield {
+      <div><em>{desc}</em></div>
     }
+
+    <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {

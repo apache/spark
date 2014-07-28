@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.scalatest.FunSuite
-import org.scalatest.Matchers
+import scala.util.Random
 
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.scalatest.{FunSuite, Matchers}
+
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
@@ -228,5 +229,26 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
     assert(compareDouble(weightLBFGS(0), weightGD(0), 0.02) &&
       compareDouble(weightLBFGS(1), weightGD(1), 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
+  }
+}
+
+class LBFGSClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small") {
+    val m = 10
+    val n = 200000
+    val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble))))
+    }.cache()
+    val lbfgs = new LBFGS(new LogisticGradient, new SquaredL2Updater)
+      .setNumCorrections(1)
+      .setConvergenceTol(1e-12)
+      .setMaxNumIterations(1)
+      .setRegParam(1.0)
+    val random = new Random(0)
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
   }
 }
