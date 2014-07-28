@@ -17,24 +17,30 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect.ClassTag
+
 /**
- * An append-only map that keeps track of its estimated size in bytes.
+ * An append-only buffer that keeps track of its estimated size in bytes.
  */
-private[spark] class SizeTrackingAppendOnlyMap[K, V] extends AppendOnlyMap[K, V] with SizeTracker {
+private[spark] class SizeTrackingVector[T: ClassTag]
+  extends PrimitiveVector[T]
+  with SizeTracker {
 
-  override def update(key: K, value: V): Unit = {
-    super.update(key, value)
+  override def +=(value: T): Unit = {
+    super.+=(value)
     super.afterUpdate()
   }
 
-  override def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
-    val newValue = super.changeValue(key, updateFunc)
-    super.afterUpdate()
-    newValue
-  }
-
-  override protected def growTable(): Unit = {
-    super.growTable()
+  override def resize(newLength: Int): PrimitiveVector[T] = {
+    super.resize(newLength)
     resetSamples()
+    this
+  }
+
+  /**
+   * Return a trimmed version of the underlying array.
+   */
+  def toArray: Array[T] = {
+    super.iterator.toArray
   }
 }
