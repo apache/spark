@@ -71,7 +71,11 @@ object MimaExcludes {
           "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugString$1"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
-            + "createZero$1")
+            + "createZero$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.toDebugString"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.toDebugString")
       ) ++
       Seq(
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
