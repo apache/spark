@@ -1161,8 +1161,12 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
    */
   def receive = {
     case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
-        listener, properties)
+      new Thread("JobSubmitted for " + jobId) {
+        override def run() {
+          dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
+            listener, properties)
+        }
+      }.start()
 
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)
