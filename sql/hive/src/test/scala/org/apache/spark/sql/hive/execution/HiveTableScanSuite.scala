@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.test.TestHive
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class HiveTableScanSuite extends HiveComparisonTest {
   // MINOR HACK: You must run a query before calling reset the first time.
@@ -31,17 +32,17 @@ class HiveTableScanSuite extends HiveComparisonTest {
                  | 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe' 
                  | STORED AS RCFILE
                """.stripMargin)
-  TestHive.hql("""from src 
-                 | insert into table part_scan_test PARTITION (ds='2010-01-01') 
-                 | select 100,100 limit 1
+  TestHive.hql("""FROM src
+                 | INSERT INTO TABLE part_scan_test PARTITION (ds='2010-01-01')
+                 | SELECT 100,100 LIMIT 1
                """.stripMargin)
-  TestHive.hql("""ALTER TABLE part_scan_test set SERDE 
+  TestHive.hql("""ALTER TABLE part_scan_test SET SERDE
                  | 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe'
                """.stripMargin)
-  TestHive.hql("""from src insert into table part_scan_test PARTITION (ds='2010-01-02') 
-                 | select 200,200 limit 1
+  TestHive.hql("""FROM src INSERT INTO TABLE part_scan_test PARTITION (ds='2010-01-02')
+                 | SELECT 200,200 LIMIT 1
                """.stripMargin)
 
   createQueryTest("partition_based_table_scan_with_different_serde", 
-    "select * from part_scan_test", false)
+    "SELECT * from part_scan_test", false)
 }

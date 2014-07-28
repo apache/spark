@@ -51,8 +51,10 @@ private[hive] sealed trait TableReader {
  * data warehouse directory.
  */
 private[hive]
-class HadoopTableReader(@transient attributes: Seq[Attribute], 
-    @transient relation: MetastoreRelation, @transient sc: HiveContext)
+class HadoopTableReader(
+    @transient attributes: Seq[Attribute],
+    @transient relation: MetastoreRelation,
+    @transient sc: HiveContext)
   extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
@@ -135,7 +137,8 @@ class HadoopTableReader(@transient attributes: Seq[Attribute],
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
+      partitionToDeserializer: Map[HivePartition,
+      Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
@@ -261,8 +264,11 @@ private[hive] object HadoopTableReader extends HiveInspectors {
    * 
    * @return Iterable Row object that transformed from the given iterable input.
    */
-  def fillObject(iter: Iterator[Writable], deserializer: Deserializer, 
-      attrs: Seq[(Attribute, Int)], row: GenericMutableRow): Iterator[Row] = {
+  def fillObject(
+      iter: Iterator[Writable],
+      deserializer: Deserializer,
+      attrs: Seq[(Attribute, Int)],
+      row: GenericMutableRow): Iterator[Row] = {
     val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
     // get the field references according to the attributes(output of the reader) required
     val fieldRefs = attrs.map { case (attr, idx) => (soi.getStructFieldRef(attr.name), idx) }

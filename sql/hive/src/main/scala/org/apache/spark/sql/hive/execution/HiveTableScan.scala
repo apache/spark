@@ -77,7 +77,7 @@ case class HiveTableScan(
     val columnInternalNames = neededColumnIDs.map(HiveConf.getColumnInternalName(_)).mkString(",")
 
     if (attributes.size == relation.output.size) {
-      // TODO what if duplicated attributes queried?
+      // SQLContext#pruneFilterProject guarantees no duplicated value in `attributes`
       ColumnProjectionUtils.setFullyReadColumns(hiveConf)
     } else {
       ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
