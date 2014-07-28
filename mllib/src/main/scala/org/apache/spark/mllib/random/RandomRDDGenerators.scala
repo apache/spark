@@ -79,6 +79,9 @@ object RandomRDDGenerators {
    * :: Experimental ::
    * Generates an RDD comprised of i.i.d samples from the standard normal distribution.
    *
+   * To transform the distribution in the generated RDD from standard normal to some other normal
+   * N(mean, sigma), use `RandomRDDs.normal(sc, n, p, seed).map(v => mean + sigma * v)`
+   *
    * @param sc SparkContext used to create the RDD.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD.
@@ -95,6 +98,9 @@ object RandomRDDGenerators {
    * :: Experimental ::
    * Generates an RDD comprised of i.i.d samples from the standard normal distribution.
    *
+   * To transform the distribution in the generated RDD from standard normal to some other normal
+   * N(mean, sigma), use `RandomRDDs.normal(sc, n, p).map(v => mean + sigma * v)`
+   *
    * @param sc SparkContext used to create the RDD.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD.
@@ -109,6 +115,9 @@ object RandomRDDGenerators {
    * :: Experimental ::
    * Generates an RDD comprised of i.i.d samples from the standard normal distribution.
    * sc.defaultParallelism used for the number of partitions in the RDD.
+   *
+   * To transform the distribution in the generated RDD from standard normal to some other normal
+   * N(mean, sigma), use `RandomRDDs.normal(sc, n).map(v => mean + sigma * v)`
    *
    * @param sc SparkContext used to create the RDD.
    * @param size Size of the RDD.

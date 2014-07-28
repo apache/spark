@@ -24,6 +24,7 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.random.RandomRDDGenerators
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils
@@ -453,4 +454,22 @@ class PythonMLLibAPI extends Serializable {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
+
+  def uniformRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.uniformRDD(jsc.sc, size, numPartitions, seed)
+      .map(serializeDouble).toJavaRDD()
+  }
+
+  def normalRDD(jsc: JavaSparkContext,
+                size: Long,
+                numPartitions: Int,
+                seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.normalRDD(jsc.sc, size, numPartitions, seed)
+      .map(serializeDouble).toJavaRDD()
+  }
+
+
 }
