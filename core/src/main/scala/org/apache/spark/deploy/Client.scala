@@ -61,7 +61,8 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         }
 
         val extraJavaOptsConf = "spark.driver.extraJavaOptions"
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf).toSeq
+        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+          .map(Utils.splitCommandString).getOrElse(Seq.empty)
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
