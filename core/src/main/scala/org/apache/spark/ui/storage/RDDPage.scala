@@ -19,6 +19,10 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
@@ -145,4 +149,51 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
       </td>
     </tr>
   }
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val rddId = request.getParameter("id").toInt
+    val storageStatusList = listener.storageStatusList
+    val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
+      // Rather than crashing, return nothing
+      return JNothing
+    }
+
+    // Worker table
+    val workers = storageStatusList.map((rddId, _))
+    val workerJson = UIUtils.listingJson(workerRowJson, workers)
+
+    // Block table
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
+    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
+    val blocks = blockStatuses.map { case (blockId, status) =>
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+    }
+    val blockJson = UIUtils.listingJson(blockRowJson, blocks)
+
+    val content = ("workerTable" -> workerJson) ~
+      ("blockTable" -> blockJson)
+    content
+  }
+
+  /** Render an Json row representing a worker */
+  private def workerRowJson(worker: (Int, StorageStatus)): JValue = {
+    val (rddId, status) = worker
+    ("Host" -> {status.blockManagerId.host + ":" + status.blockManagerId.port} ) ~
+    ("Memory Usage" -> {Utils.bytesToString(status.memUsedByRDD(rddId))} ) ~
+    ("Remaining Memory" -> {Utils.bytesToString(status.memRemaining)}) ~
+    ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRDD(rddId))})
+  }
+
+  /** Render an Json row representing a block */
+  private def blockRowJson(row: (BlockId, BlockStatus, Seq[String])): JValue = {
+    val (id, block, locations) = row
+    ("Block Name" -> id.name) ~
+    ("Storage Level"-> block.storageLevel.description) ~
+    ("Size in Memory"-> Utils.bytesToString(block.memSize) ) ~
+    ("Size on Disk"-> Utils.bytesToString(block.diskSize)) ~
+    ("Executors"-> locations)
+  }
+
 }
+

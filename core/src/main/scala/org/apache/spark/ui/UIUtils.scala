@@ -20,6 +20,10 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 import org.apache.spark.Logging
 
@@ -266,4 +270,12 @@ private[spark] object UIUtils extends Logging {
       </tbody>
     </table>
   }
+
+  /** Returns an JSON list constructed by generating a row for each object in a sequence. */
+  def listingJson[T](
+    generateDataRow: T => JValue,
+    data: Seq[T]) : JValue = {
+      data.map(r => generateDataRow(r))
+  }
+
 }
