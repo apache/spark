@@ -1239,6 +1239,28 @@ abstract class RDD[T: ClassTag](
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context = sc
 
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(cls: Class[T]): RDD[T] = {
+    val classTag: ClassTag[T] = ClassTag.apply(cls)
+    this.retag(classTag)
+  }
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(classTag: ClassTag[T]): RDD[T] = {
+    val oldRDD = this
+    new RDD[T](sc, Seq(new OneToOneDependency(this)))(classTag) {
+      override protected def getPartitions: Array[Partition] = oldRDD.getPartitions
+      override def compute(split: Partition, context: TaskContext): Iterator[T] =
+        oldRDD.compute(split, context)
+    }
+  }
+
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
 
