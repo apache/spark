@@ -455,6 +455,9 @@ class PythonMLLibAPI extends Serializable {
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformRDD()
+   */
   def uniformRDD(jsc: JavaSparkContext,
       size: Long,
       numPartitions: Int,
@@ -463,13 +466,62 @@ class PythonMLLibAPI extends Serializable {
       .map(serializeDouble).toJavaRDD()
   }
 
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalRDD()
+   */
   def normalRDD(jsc: JavaSparkContext,
-                size: Long,
-                numPartitions: Int,
-                seed: Long): JavaRDD[Array[Byte]] = {
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.normalRDD(jsc.sc, size, numPartitions, seed)
       .map(serializeDouble).toJavaRDD()
   }
 
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
+   */
+  def poissonRDD(jsc: JavaSparkContext,
+      mean: Double,
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.poissonRDD(jsc.sc, mean, size, numPartitions, seed)
+      .map(serializeDouble).toJavaRDD()
+  }
 
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformVectorRDD()
+   */
+  def uniformVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.uniformVectorRDD(jsc.sc, numRows, numCols, numPartitions, seed)
+      .map(serializeDoubleVector).toJavaRDD()
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalVectorRDD()
+   */
+  def normalVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.normalVectorRDD(jsc.sc, numRows, numCols, numPartitions, seed)
+      .map(serializeDoubleVector).toJavaRDD()
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
+   */
+  def poissonVectorRDD(jsc: JavaSparkContext,mean: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.poissonVectorRDD(jsc.sc, mean, numRows, numCols, numPartitions, seed)
+      .map(serializeDoubleVector).toJavaRDD()
+  }
 }
