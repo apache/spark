@@ -18,7 +18,9 @@
 package org.apache.spark.sql.api.java.types;
 
 /**
- * The data type representing Short values.
+ * The data type representing short and Short values.
+ *
+ * {@code ShortType} is represented by the singleton object {@link DataType#ShortType}.
  */
 public class ShortType extends DataType {
   protected ShortType() {}

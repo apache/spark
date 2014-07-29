@@ -23,6 +23,9 @@ import java.util.Set;
 
 /**
  * The base type of all Spark SQL data types.
+ *
+ * To get/create specific data type, users should use singleton objects and factory methods
+ * provided by this class.
  */
 public abstract class DataType {
 
@@ -82,6 +85,21 @@ public abstract class DataType {
   public static final ShortType ShortType = new ShortType();
 
   /**
+   * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
+   * The field of {@code containsNull} is set to {@code false}.
+   *
+   * @param elementType
+   * @return
+   */
+  public static ArrayType createArrayType(DataType elementType) {
+    if (elementType == null) {
+      throw new IllegalArgumentException("elementType should not be null.");
+    }
+
+    return new ArrayType(elementType, false);
+  }
+
+  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}) and
    * whether the array contains null values ({@code containsNull}).
    * @param elementType
@@ -98,7 +116,8 @@ public abstract class DataType {
 
   /**
    * Creates a MapType by specifying the data type of keys ({@code keyType}) and values
-   * ({@code keyType}).
+   * ({@code keyType}). The field of {@code valueContainsNull} is set to {@code true}.
+   *
    * @param keyType
    * @param valueType
    * @return

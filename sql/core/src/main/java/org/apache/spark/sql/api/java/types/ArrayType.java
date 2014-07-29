@@ -21,8 +21,13 @@ package org.apache.spark.sql.api.java.types;
  * The data type representing Lists.
  * An ArrayType object comprises two fields, {@code DataType elementType} and
  * {@code boolean containsNull}. The field of {@code elementType} is used to specify the type of
- * array elements. The field of {@code containsNull} is used to specify if the array can have
- * any {@code null} value.
+ * array elements. The field of {@code containsNull} is used to specify if the array has
+ * {@code null} values.
+ *
+ * To create an {@link ArrayType},
+ * {@link org.apache.spark.sql.api.java.types.DataType#createArrayType(DataType)} or
+ * {@link org.apache.spark.sql.api.java.types.DataType#createArrayType(DataType, boolean)}
+ * should be used.
  */
 public class ArrayType extends DataType {
   private DataType elementType;

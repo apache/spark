@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.api.java.types;
 
+/**
+ * The data type representing boolean and Boolean values.
+ *
+ * {@code BooleanType} is represented by the singleton object {@link DataType#BooleanType}.
+ */
 public class BooleanType extends DataType {
   protected BooleanType() {}
 }

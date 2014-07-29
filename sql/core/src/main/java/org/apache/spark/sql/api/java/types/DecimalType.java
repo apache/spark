@@ -19,6 +19,8 @@ package org.apache.spark.sql.api.java.types;
 
 /**
  * The data type representing java.math.BigDecimal values.
+ *
+ * {@code DecimalType} is represented by the singleton object {@link DataType#DecimalType}.
  */
 public class DecimalType extends DataType {
   protected DecimalType() {}

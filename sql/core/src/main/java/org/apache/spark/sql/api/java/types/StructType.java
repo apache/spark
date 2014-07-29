@@ -23,6 +23,11 @@ import java.util.List;
 /**
  * The data type representing Rows.
  * A StructType object comprises an array of StructFields.
+ *
+ * To create an {@link StructType},
+ * {@link org.apache.spark.sql.api.java.types.DataType#createStructType(java.util.List)} or
+ * {@link org.apache.spark.sql.api.java.types.DataType#createStructType(StructField[])}
+ * should be used.
  */
 public class StructType extends DataType {
   private StructField[] fields;

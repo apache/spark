@@ -17,10 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructField => JStructField}
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -243,10 +240,12 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `Seq`s.
+   * The data type for collections of multiple values.
+   * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+   *
    * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
    * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
-   * array elements. The field of `containsNull` is used to specify if the array has `null` valus.
+   * array elements. The field of `containsNull` is used to specify if the array has `null` values.
    *
    * @group dataType
    */

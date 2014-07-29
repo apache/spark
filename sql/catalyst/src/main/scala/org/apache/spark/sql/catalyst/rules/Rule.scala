@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import com.typesafe.scalalogging.slf4j.Logging
-
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 abstract class Rule[TreeType <: TreeNode[_]] extends Logging {

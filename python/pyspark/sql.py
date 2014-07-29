@@ -41,18 +41,18 @@ class StringType(object):
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "StringType"
 
 class BinaryType(object):
     """Spark SQL BinaryType
 
-    The data type representing bytes values and bytearray values.
+    The data type representing bytearray values.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "BinaryType"
 
 class BooleanType(object):
@@ -63,14 +63,18 @@ class BooleanType(object):
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "BooleanType"
 
 class TimestampType(object):
-    """Spark SQL TimestampType"""
+    """Spark SQL TimestampType
+
+    The data type representing datetime.datetime values.
+
+    """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "TimestampType"
 
 class DecimalType(object):
@@ -81,40 +85,48 @@ class DecimalType(object):
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "DecimalType"
 
 class DoubleType(object):
     """Spark SQL DoubleType
 
-    The data type representing float values. Because a float value
+    The data type representing float values.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "DoubleType"
 
 class FloatType(object):
     """Spark SQL FloatType
 
-    For PySpark, please use L{DoubleType} instead of using L{FloatType}.
+    For now, please use L{DoubleType} instead of using L{FloatType}.
+    Because query evaluation is done in Scala, java.lang.Double will be be used
+    for Python float numbers. Because the underlying JVM type of FloatType is
+    java.lang.Float (in Java) and Float (in scala), there will be a java.lang.ClassCastException
+    if FloatType (Python) used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "FloatType"
 
 class ByteType(object):
     """Spark SQL ByteType
 
-    For PySpark, please use L{IntegerType} instead of using L{ByteType}.
+    For now, please use L{IntegerType} instead of using L{ByteType}.
+    Because query evaluation is done in Scala, java.lang.Integer will be be used
+    for Python int numbers. Because the underlying JVM type of ByteType is
+    java.lang.Byte (in Java) and Byte (in scala), there will be a java.lang.ClassCastException
+    if ByteType (Python) used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "ByteType"
 
 class IntegerType(object):
@@ -125,7 +137,7 @@ class IntegerType(object):
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "IntegerType"
 
 class LongType(object):
@@ -137,18 +149,22 @@ class LongType(object):
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "LongType"
 
 class ShortType(object):
     """Spark SQL ShortType
 
-    For PySpark, please use L{IntegerType} instead of using L{ShortType}.
+    For now, please use L{IntegerType} instead of using L{ShortType}.
+    Because query evaluation is done in Scala, java.lang.Integer will be be used
+    for Python int numbers. Because the underlying JVM type of ShortType is
+    java.lang.Short (in Java) and Short (in scala), there will be a java.lang.ClassCastException
+    if ShortType (Python) used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "ShortType"
 
 class ArrayType(object):
@@ -157,23 +173,23 @@ class ArrayType(object):
     The data type representing list values.
 
     """
-    def __init__(self, elementType, containsNull):
+    def __init__(self, elementType, containsNull=False):
         """Creates an ArrayType
 
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains null values.
         :return:
 
-        >>> ArrayType(StringType, True) == ArrayType(StringType, False)
-        False
-        >>> ArrayType(StringType, True) == ArrayType(StringType, True)
+        >>> ArrayType(StringType) == ArrayType(StringType, False)
         True
+        >>> ArrayType(StringType, True) == ArrayType(StringType)
+        False
         """
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def _get_scala_type_string(self):
-        return "ArrayType(" + self.elementType._get_scala_type_string() + "," + \
+    def __repr__(self):
+        return "ArrayType(" + self.elementType.__repr__() + "," + \
                str(self.containsNull).lower() + ")"
 
     def __eq__(self, other):
@@ -207,9 +223,9 @@ class MapType(object):
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
 
-    def _get_scala_type_string(self):
-        return "MapType(" + self.keyType._get_scala_type_string() + "," + \
-               self.valueType._get_scala_type_string() + "," + \
+    def __repr__(self):
+        return "MapType(" + self.keyType.__repr__() + "," + \
+               self.valueType.__repr__() + "," + \
                str(self.valueContainsNull).lower() + ")"
 
     def __eq__(self, other):
@@ -243,9 +259,9 @@ class StructField(object):
         self.dataType = dataType
         self.nullable = nullable
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "StructField(" + self.name + "," + \
-               self.dataType._get_scala_type_string() + "," + \
+               self.dataType.__repr__() + "," + \
                str(self.nullable).lower() + ")"
 
     def __eq__(self, other):
@@ -280,9 +296,9 @@ class StructType(object):
         """
         self.fields = fields
 
-    def _get_scala_type_string(self):
+    def __repr__(self):
         return "StructType(List(" + \
-               ",".join([field._get_scala_type_string() for field in self.fields]) + "))"
+               ",".join([field.__repr__() for field in self.fields]) + "))"
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and \
@@ -319,7 +335,7 @@ def _parse_datatype_string(datatype_string):
     :return:
 
     >>> def check_datatype(datatype):
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype._get_scala_type_string())
+    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.__repr__())
     ...     python_datatype = _parse_datatype_string(scala_datatype.toString())
     ...     return datatype == python_datatype
     >>> check_datatype(StringType())
@@ -536,7 +552,7 @@ class SQLContext:
         True
         """
         jrdd = self._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchema(jrdd.rdd(), schema._get_scala_type_string())
+        srdd = self._ssql_ctx.applySchema(jrdd.rdd(), schema.__repr__())
         return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
@@ -569,7 +585,7 @@ class SQLContext:
         jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
 
-    def jsonFile(self, path, schema = None):
+    def jsonFile(self, path, schema=None):
         """Loads a text file storing one JSON object per line as a L{SchemaRDD}.
 
         If the schema is provided, applies the given schema to this JSON dataset.
@@ -618,11 +634,11 @@ class SQLContext:
         if schema is None:
             jschema_rdd = self._ssql_ctx.jsonFile(path)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema._get_scala_type_string())
+            scala_datatype = self._ssql_ctx.parseDataType(schema.__repr__())
             jschema_rdd = self._ssql_ctx.jsonFile(path, scala_datatype)
         return SchemaRDD(jschema_rdd, self)
 
-    def jsonRDD(self, rdd, schema = None):
+    def jsonRDD(self, rdd, schema=None):
         """Loads an RDD storing one JSON object per string as a L{SchemaRDD}.
 
         If the schema is provided, applies the given schema to this JSON dataset.
@@ -672,7 +688,7 @@ class SQLContext:
         if schema is None:
             jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema._get_scala_type_string())
+            scala_datatype = self._ssql_ctx.parseDataType(schema.__repr__())
             jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return SchemaRDD(jschema_rdd, self)
 

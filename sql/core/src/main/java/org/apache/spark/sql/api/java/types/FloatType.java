@@ -18,7 +18,9 @@
 package org.apache.spark.sql.api.java.types;
 
 /**
- * The data type representing Float values.
+ * The data type representing float and Float values.
+ *
+ * {@code FloatType} is represented by the singleton object {@link DataType#FloatType}.
  */
 public class FloatType extends DataType {
   protected FloatType() {}

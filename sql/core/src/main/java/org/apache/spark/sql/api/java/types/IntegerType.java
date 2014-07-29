@@ -18,7 +18,9 @@
 package org.apache.spark.sql.api.java.types;
 
 /**
- * The data type representing Int values.
+ * The data type representing int and Integer values.
+ *
+ * {@code IntegerType} is represented by the singleton object {@link DataType#IntegerType}.
  */
 public class IntegerType extends DataType {
   protected IntegerType() {}

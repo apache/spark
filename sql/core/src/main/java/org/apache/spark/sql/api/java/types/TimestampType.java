@@ -19,6 +19,8 @@ package org.apache.spark.sql.api.java.types;
 
 /**
  * The data type representing java.sql.Timestamp values.
+ *
+ * {@code TimestampType} is represented by the singleton object {@link DataType#TimestampType}.
  */
 public class TimestampType extends DataType {
   protected TimestampType() {}

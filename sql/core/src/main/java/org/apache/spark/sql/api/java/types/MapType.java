@@ -19,9 +19,16 @@ package org.apache.spark.sql.api.java.types;
 
 /**
  * The data type representing Maps. A MapType object comprises two fields,
- * {@code DataType keyType} and {@code DataType valueType}.
+ * {@code DataType keyType}, {@code DataType valueType}, and {@code boolean valueContainsNull}.
  * The field of {@code keyType} is used to specify the type of keys in the map.
  * The field of {@code valueType} is used to specify the type of values in the map.
+ * The field of {@code valueContainsNull} is used to specify if map values have
+ * {@code null} values.
+ *
+ * To create a {@link MapType},
+ * {@link org.apache.spark.sql.api.java.types.DataType#createMapType(DataType, DataType)} or
+ * {@link org.apache.spark.sql.api.java.types.DataType#createMapType(DataType, DataType, boolean)}
+ * should be used.
  */
 public class MapType extends DataType {
   private DataType keyType;

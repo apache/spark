@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import com.typesafe.scalalogging.slf4j.Logging
-
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 

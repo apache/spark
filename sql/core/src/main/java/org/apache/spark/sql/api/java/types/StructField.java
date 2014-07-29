@@ -24,6 +24,10 @@ package org.apache.spark.sql.api.java.types;
  * The field of {@code dataType} specifies the data type of a StructField.
  * The field of {@code nullable} specifies if values of a StructField can contain {@code null}
  * values.
+ *
+ * To create a {@link StructField},
+ * {@link org.apache.spark.sql.api.java.types.DataType#createStructField(String, DataType, boolean)}
+ * should be used.
  */
 public class StructField {
   private String name;

@@ -19,6 +19,8 @@ package org.apache.spark.sql.api.java.types;
 
 /**
  * The data type representing String values.
+ *
+ * {@code StringType} is represented by the singleton object {@link DataType#StringType}.
  */
 public class StringType extends DataType {
   protected StringType() {}

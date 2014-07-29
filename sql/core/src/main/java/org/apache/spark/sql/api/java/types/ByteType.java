@@ -18,7 +18,9 @@
 package org.apache.spark.sql.api.java.types;
 
 /**
- * The data type representing Byte values.
+ * The data type representing byte and Byte values.
+ *
+ * {@code ByteType} is represented by the singleton object {@link DataType#ByteType}.
  */
 public class ByteType extends DataType {
   protected ByteType() {}

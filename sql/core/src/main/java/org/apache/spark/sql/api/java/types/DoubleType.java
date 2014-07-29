@@ -18,7 +18,9 @@
 package org.apache.spark.sql.api.java.types;
 
 /**
- * The data type representing Double values.
+ * The data type representing double and Double values.
+ *
+ * {@code DoubleType} is represented by the singleton object {@link DataType#DoubleType}.
  */
 public class DoubleType extends DataType {
   protected DoubleType() {}
