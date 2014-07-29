@@ -86,21 +86,25 @@ private[python] object SerDeUtil extends Logging {
   /**
    * Convert an RDD of serialized Python tuple (K, V) to RDD[(K, V)].
    */
-  def pythonToPairRDD[K, V](pyRDD: RDD[Array[Byte]]): RDD[(K, V)] = {
+  def pythonToPairRDD[K, V](pyRDD: RDD[Array[Byte]], batchSerialized: Boolean): RDD[(K, V)] = {
     def isPair(obj: Any): Boolean = {
       Option(obj.getClass.getComponentType).map(!_.isPrimitive).getOrElse(false) &&
         obj.asInstanceOf[Array[_]].length == 2
     }
     pyRDD.mapPartitions { iter =>
       val unpickle = new Unpickler
-      iter.flatMap { row =>
-        unpickle.loads(row) match {
-          // batch serialized Python RDDs
-          case objs: java.util.List[_] => objs
-          // unbatched case
-          case obj => Seq(obj)
+      val unpickled = if (batchSerialized) {
+        iter.flatMap { batch =>
+          unpickle.loads(batch) match {
+            case objs: java.util.List[_] => collectionAsScalaIterable(objs)
+            case other => throw new SparkException(
+              s"Unexpected type ${other.getClass.getName} for batch serialized Python RDD")
+          }
         }
-      }.map {
+      } else {
+        iter.map(unpickle.loads(_))
+      }
+      unpickled.map {
         // we only accept pickled (K, V)
         case obj if isPair(obj) =>
           val arr = obj.asInstanceOf[Array[_]]

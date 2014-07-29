@@ -702,6 +702,14 @@ class TestOutputFormat(PySparkTestCase):
             batchSize=1).collect())
         self.assertEqual(unbatched_newAPIHadoopRDD, ei)
 
+    def test_malformed_RDD(self):
+        basepath = self.tempdir.name
+        # non-batch-serialized RDD of type RDD[[(K, V)]] should be rejected
+        data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
+        rdd = self.sc.parallelize(data, numSlices=len(data))
+        self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
+            basepath + "/malformed/sequence"))
+
 class TestDaemon(unittest.TestCase):
     def connect(self, port):
         from socket import socket, AF_INET, SOCK_STREAM

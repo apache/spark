@@ -607,9 +607,11 @@ private[spark] object PythonRDD extends Logging {
    */
   def saveAsSequenceFile[K, V, C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
+      batchSerialized: Boolean,
       path: String,
       compressionCodecClass: String) = {
-    saveAsHadoopFile(pyRDD, path, "org.apache.hadoop.mapred.SequenceFileOutputFormat",
+    saveAsHadoopFile(
+      pyRDD, batchSerialized, path, "org.apache.hadoop.mapred.SequenceFileOutputFormat",
       null, null, null, null, new java.util.HashMap(), compressionCodecClass, false)
   }
 
@@ -625,6 +627,7 @@ private[spark] object PythonRDD extends Logging {
   def saveAsHadoopFile[K, V, F <: OutputFormat[_, _], G <: NewOutputFormat[_, _],
                        C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
+      batchSerialized: Boolean,
       path: String,
       outputFormatClass: String,
       keyClass: String,
@@ -634,7 +637,7 @@ private[spark] object PythonRDD extends Logging {
       confAsMap: java.util.HashMap[String, String],
       compressionCodecClass: String,
       useNewAPI: Boolean) = {
-    val rdd = SerDeUtil.pythonToPairRDD(pyRDD)
+    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
     val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
       inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
     val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
@@ -660,13 +663,14 @@ private[spark] object PythonRDD extends Logging {
    */
   def saveAsHadoopDataset[K, V](
       pyRDD: JavaRDD[Array[Byte]],
+      batchSerialzied: Boolean,
       confAsMap: java.util.HashMap[String, String],
       useNewAPI: Boolean,
       keyConverterClass: String,
       valueConverterClass: String) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
-    val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD), keyConverterClass,
-      valueConverterClass, new JavaToWritableConverter)
+    val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD, batchSerialzied),
+      keyConverterClass, valueConverterClass, new JavaToWritableConverter)
     if (useNewAPI) {
       converted.saveAsNewAPIHadoopDataset(conf)
     } else {
