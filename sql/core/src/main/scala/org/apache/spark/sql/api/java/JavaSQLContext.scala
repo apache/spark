@@ -137,7 +137,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [JavaSchemaRDD.
+   * JavaSchemaRDD.
    * It goes through the entire dataset once to determine the schema.
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {

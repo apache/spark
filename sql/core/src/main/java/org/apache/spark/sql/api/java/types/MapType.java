@@ -24,6 +24,7 @@ package org.apache.spark.sql.api.java.types;
  * The field of {@code valueType} is used to specify the type of values in the map.
  * The field of {@code valueContainsNull} is used to specify if map values have
  * {@code null} values.
+ * For values of a MapType column, keys are not allowed to have {@code null} values.
  *
  * To create a {@link MapType},
  * {@link org.apache.spark.sql.api.java.types.DataType#createMapType(DataType, DataType)} or

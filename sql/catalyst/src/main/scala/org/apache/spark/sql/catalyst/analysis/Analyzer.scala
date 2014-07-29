@@ -109,12 +109,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case q: LogicalPlan if q.childrenResolved =>
-        logTrace(s"Attempting to resolve ${q.simpleString}")
+        logger.trace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolve(name).getOrElse(u)
-            logDebug(s"Resolving $u to $result")
+            logger.debug(s"Resolving $u to $result")
             result
         }
     }

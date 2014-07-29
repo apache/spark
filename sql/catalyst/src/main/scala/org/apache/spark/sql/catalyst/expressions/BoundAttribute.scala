@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.Logging
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -79,7 +79,7 @@ object BindReferences extends Logging {
           // produce new attributes that can't be bound.  Likely the right thing to do is remove
           // this rule and require all operators to explicitly bind to the input schema that
           // they specify.
-          logDebug(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+          logger.debug(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
           a
         } else {
           BoundReference(ordinal, a)

@@ -110,6 +110,8 @@ class Row(private[spark] val row: ScalaRow) extends Serializable {
 object Row {
 
   private def toJavaValue(value: Any): Any = value match {
+    // For values of this ScalaRow, we will do the conversion when
+    // they are actually accessed.
     case row: ScalaRow => new Row(row)
     case map: scala.collection.Map[_, _] =>
       JavaConversions.mapAsJavaMap(
@@ -125,6 +127,7 @@ object Row {
 
   // TODO: Consolidate the toScalaValue at here with the scalafy in JsonRDD?
   private def toScalaValue(value: Any): Any = value match {
+    // Values of this row have been converted to Scala values.
     case row: Row => row.row
     case map: java.util.Map[_, _] =>
       JMapWrapper(map).map {

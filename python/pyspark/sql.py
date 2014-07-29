@@ -21,9 +21,9 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer
 from py4j.protocol import Py4JError
 
 __all__ = [
-    "StringType", "BinaryType", "BooleanType", "DecimalType", "DoubleType",
-    "FloatType", "ByteType", "IntegerType", "LongType", "ShortType",
-    "ArrayType", "MapType", "StructField", "StructType",
+    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+    "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
+    "ShortType", "ArrayType", "MapType", "StructField", "StructType",
     "SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext", "SchemaRDD", "Row"]
 
 class PrimitiveTypeSingleton(type):
@@ -106,7 +106,7 @@ class FloatType(object):
     Because query evaluation is done in Scala, java.lang.Double will be be used
     for Python float numbers. Because the underlying JVM type of FloatType is
     java.lang.Float (in Java) and Float (in scala), there will be a java.lang.ClassCastException
-    if FloatType (Python) used.
+    if FloatType (Python) is used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -121,7 +121,7 @@ class ByteType(object):
     Because query evaluation is done in Scala, java.lang.Integer will be be used
     for Python int numbers. Because the underlying JVM type of ByteType is
     java.lang.Byte (in Java) and Byte (in scala), there will be a java.lang.ClassCastException
-    if ByteType (Python) used.
+    if ByteType (Python) is used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -159,7 +159,7 @@ class ShortType(object):
     Because query evaluation is done in Scala, java.lang.Integer will be be used
     for Python int numbers. Because the underlying JVM type of ShortType is
     java.lang.Short (in Java) and Short (in scala), there will be a java.lang.ClassCastException
-    if ShortType (Python) used.
+    if ShortType (Python) is used.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -171,13 +171,16 @@ class ArrayType(object):
     """Spark SQL ArrayType
 
     The data type representing list values.
+    An ArrayType object comprises two fields, elementType (a DataType) and containsNull (a bool).
+    The field of elementType is used to specify the type of array elements.
+    The field of containsNull is used to specify if the array has None values.
 
     """
     def __init__(self, elementType, containsNull=False):
         """Creates an ArrayType
 
         :param elementType: the data type of elements.
-        :param containsNull: indicates whether the list contains null values.
+        :param containsNull: indicates whether the list contains None values.
         :return:
 
         >>> ArrayType(StringType) == ArrayType(StringType, False)
@@ -205,6 +208,12 @@ class MapType(object):
     """Spark SQL MapType
 
     The data type representing dict values.
+    A MapType object comprises three fields,
+    keyType (a DataType), valueType (a DataType) and valueContainsNull (a bool).
+    The field of keyType is used to specify the type of keys in the map.
+    The field of valueType is used to specify the type of values in the map.
+    The field of valueContainsNull is used to specify if values of this map has None values.
+    For values of a MapType column, keys are not allowed to have None values.
 
     """
     def __init__(self, keyType, valueType, valueContainsNull=True):
@@ -241,6 +250,10 @@ class StructField(object):
     """Spark SQL StructField
 
     Represents a field in a StructType.
+    A StructField object comprises three fields, name (a string), dataType (a DataType),
+    and nullable (a bool). The field of name is the name of a StructField. The field of
+    dataType specifies the data type of a StructField.
+    The field of nullable specifies if values of a StructField can contain None values.
 
     """
     def __init__(self, name, dataType, nullable):
@@ -276,7 +289,8 @@ class StructField(object):
 class StructType(object):
     """Spark SQL StructType
 
-    The data type representing tuple values.
+    The data type representing namedtuple values.
+    A StructType object comprises a list of L{StructField}s.
 
     """
     def __init__(self, fields):
@@ -308,6 +322,11 @@ class StructType(object):
         return not self.__eq__(other)
 
 def _parse_datatype_list(datatype_list_string):
+    """Parses a list of comma separated data types.
+
+    :param datatype_list_string:
+    :return:
+    """
     index = 0
     datatype_list = []
     start = 0
@@ -331,6 +350,7 @@ def _parse_datatype_list(datatype_list_string):
 
 def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
+
     :param datatype_string:
     :return:
 

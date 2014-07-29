@@ -99,7 +99,7 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
         !operator.requiredChildDistribution.zip(operator.children).map {
           case (required, child) =>
             val valid = child.outputPartitioning.satisfies(required)
-            logDebug(
+            logger.debug(
               s"${if (valid) "Valid" else "Invalid"} distribution," +
                 s"required: $required current: ${child.outputPartitioning}")
             valid

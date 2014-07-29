@@ -277,6 +277,7 @@ package object sql {
    * The field of `keyType` is used to specify the type of keys in the map.
    * The field of `valueType` is used to specify the type of values in the map.
    * The field of `valueContainsNull` is used to specify if values of this map has `null` values.
+   * For values of a MapType column, keys are not allowed to have `null` values.
    *
    * @group dataType
    */

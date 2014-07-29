@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.Logging
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -113,7 +113,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case join @ Join(left, right, joinType, condition) =>
-      logDebug(s"Considering join on: $condition")
+      logger.debug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
       val (joinPredicates, otherPredicates) = 
@@ -131,7 +131,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
-        logDebug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
+        logger.debug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {
         None
