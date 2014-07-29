@@ -73,6 +73,6 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
     ("Storage Level"-> block.storageLevel.description) ~
     ("Size in Memory"-> Utils.bytesToString(block.memSize) ) ~
     ("Size on Disk"-> Utils.bytesToString(block.diskSize)) ~
-    ("Executors"-> {locations.map(l => "<span>" + l + "<br/></span>")})
+    ("Executors"-> locations)
   }
 }

@@ -36,9 +36,17 @@ Spark.UI = (function ($) {
         var tbl_body = "";
         $.each(data, function() {
             var tbl_row = "";
-            $.each(this, function(k , v) {
-                tbl_row += "<td>"+v+"</td>";
-            })
+            $.each(this, function(k, v) {
+                if (v instanceof Array) {
+                    tbl_longentry = "";
+                    $.each(this, function(i, l) {
+                        tbl_longentry += "<span>" + l + "<br/></span>";
+                    })
+                    tbl_row += "<td>"+tbl_longentry+"</td>";
+                } else {
+                  tbl_row += "<td>"+v+"</td>";
+                }
+            });
             tbl_body += "<tr>"+tbl_row+"</tr>";
         })
         $("#" + tableId + " tbody").html(tbl_body);

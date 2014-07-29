@@ -307,15 +307,15 @@ private[spark] object UIUtils extends Logging {
     </table>
   }
 
-  /** Returns an HTML containing a javascript that fills the table with that id using
-    * a JSON representation in under the given path */
+  /** Returns an HTML containing Javascript that fills the table with that tableId using
+    * a JSON representation under the given path. You can optionally pass an id param */
   def fillTableJavascript(path: String, tableId: String, id: Option[Integer] = None): Seq[Node] = {
     val paramId = id match {
-      case Some(s) => ", {id: " + s + "}"
+      case Some(s) => "id: " + s
       case None => ""
     }
     <script>
-      $.get('/{path}/json'{paramId})
+      $.get('/{path}/json', {{ {paramId} }})
       .done( function(data) {{ Spark.UI.fillTable(data, '{tableId}') }});
     </script>
   }
