@@ -20,7 +20,6 @@ from random import getrandbits
 from pyspark.rdd import RDD
 from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
 from pyspark.serializers import NoOpSerializer
-from pyspark.statcounter import StatCounter
 
 class RandomRDDGenerators:
     """
@@ -31,12 +30,12 @@ class RandomRDDGenerators:
     @staticmethod
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of i.i.d samples from the
+        Generates an RDD comprised of i.i.d. samples from the
         uniform distribution on [0.0, 1.0].
 
         To transform the distribution in the generated RDD from U[0.0, 1.0]
         to U[a, b], use
-        C{RandomRDDGenerators.uniformRDD(sc, n, p, seed).map(lambda v: (b - a) * v)}
+        C{RandomRDDGenerators.uniformRDD(sc, n, p, seed).map(lambda v: a + (b - a) * v)}
 
         >>> x = RandomRDDGenerators.uniformRDD(sc, 100).collect()
         >>> len(x)
@@ -65,6 +64,7 @@ class RandomRDDGenerators:
         C{RandomRDDGenerators.normal(sc, n, p, seed).map(lambda v: mean + sigma * v)}
 
         >>> x = RandomRDDGenerators.normalRDD(sc, 1000, seed=1L).collect()
+        >>> from pyspark.statcounter import StatCounter
         >>> stats = StatCounter(x)
         >>> stats.count()
         1000L
@@ -86,6 +86,7 @@ class RandomRDDGenerators:
 
         >>> mean = 100.0
         >>> x = RandomRDDGenerators.poissonRDD(sc, mean, 1000, seed=1L).collect()
+        >>> from pyspark.statcounter import StatCounter
         >>> stats = StatCounter(x)
         >>> stats.count()
         1000L

@@ -516,7 +516,8 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
    */
-  def poissonVectorRDD(jsc: JavaSparkContext,mean: Double,
+  def poissonVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
       numRows: Long,
       numCols: Int,
       numPartitions: Int,
