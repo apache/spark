@@ -30,8 +30,20 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   private def mergeValue(buffer: ArrayBuffer[Int], i: Int) = buffer += i
   private def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]) = buf1 ++= buf2
 
+  private def createSparkConf(loadDefaults: Boolean): SparkConf = {
+    val conf = new SparkConf(loadDefaults)
+    // So that we have suffix data written for every object
+    // This is to also test if we handle data written after object as part of
+    // spill properly (TC_RESET)
+    conf.set("spark.serializer.objectStreamReset", "0")
+    conf.set("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
+    // Ensure that we actually have multiple blocks per spill
+    conf.set("spark.shuffle.spill.batchSize", "1")
+    conf
+  }
+
   test("simple insert") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
 
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
@@ -57,7 +69,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("insert with collision") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
 
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
@@ -79,7 +91,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("ordering") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
 
     val map1 = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
@@ -124,7 +136,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("null keys and values") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
 
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
@@ -165,7 +177,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("simple aggregator") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
 
     // reduceByKey
@@ -180,7 +192,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("simple cogroup") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     sc = new SparkContext("local", "test", conf)
     val rdd1 = sc.parallelize(1 to 4).map(i => (i, i))
     val rdd2 = sc.parallelize(1 to 4).map(i => (i%2, i))
@@ -198,9 +210,17 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling") {
-    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    // Simple case - should spill ~16 times
+    val rddSimple = sc.parallelize(0 until 100000).map(i => (i, i))
+    val resultSimple: Array[(Int, Int)] = rddSimple.reduceByKey(math.max).collect()
+    assert(resultSimple.length === 100000)
+    assert (resultSimple.map(_._1).toSet.size === 100000)
+    assert (resultSimple.map(_._1).min === 0)
+    assert (resultSimple.map(_._1).max === 99999)
 
     // reduceByKey - should spill ~8 times
     val rddA = sc.parallelize(0 until 100000).map(i => (i/2, i))
@@ -250,7 +270,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with hash collisions") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -305,7 +325,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with many hash collisions") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -330,7 +350,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with hash collisions using the Int.MaxValue key") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -348,7 +368,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with null keys and values") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
