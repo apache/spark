@@ -266,6 +266,13 @@ object ArrayType {
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
 }
 
+/**
+ * The data type for collections of multiple values.
+ * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+ *
+ * @param elementType The data type of values.
+ * @param containsNull Indicates if values have `null` values
+ */
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
@@ -276,6 +283,12 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   def simpleString: String = "array"
 }
 
+/**
+ * A field inside a StructType.
+ * @param name The name of this field.
+ * @param dataType The data type of this field.
+ * @param nullable Indicates if values of this field can be `null` values.
+ */
 case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
@@ -353,6 +366,12 @@ object MapType {
     MapType(keyType: DataType, valueType: DataType, true)
 }
 
+/**
+ * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ * @param keyType The data type of map keys.
+ * @param valueType The data type of map values.
+ * @param valueContainsNull Indicates if map values have `null` values.
+ */
 case class MapType(
     keyType: DataType,
     valueType: DataType,
