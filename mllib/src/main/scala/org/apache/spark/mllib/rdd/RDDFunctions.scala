@@ -54,7 +54,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
    * @see [[org.apache.spark.rdd.RDD#reduce]]
    */
   def treeReduce(f: (T, T) => T, depth: Int): T = {
-    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     val cleanF = self.context.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
@@ -63,7 +63,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
         None
       }
     }
-    val local = self.mapPartitions(it => Iterator(reducePartition(it)))
+    val partiallyReduced = self.mapPartitions(it => Iterator(reducePartition(it)))
     val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
       if (c.isDefined && x.isDefined) {
         Some(cleanF(c.get, x.get))
@@ -75,7 +75,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
         None
       }
     }
-    RDDFunctions.fromRDD(local).treeAggregate(Option.empty[T])(op, op, depth)
+    RDDFunctions.fromRDD(partiallyReduced).treeAggregate(Option.empty[T])(op, op, depth)
       .getOrElse(throw new UnsupportedOperationException("empty collection"))
   }
 
@@ -85,26 +85,28 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
    * @see [[org.apache.spark.rdd.RDD#aggregate]]
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
-    seqOp: (U, T) => U,
-    combOp: (U, U) => U,
-    depth: Int): U = {
-    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int): U = {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (self.partitions.size == 0) {
       return Utils.clone(zeroValue, self.context.env.closureSerializer.newInstance())
     }
     val cleanSeqOp = self.context.clean(seqOp)
     val cleanCombOp = self.context.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-    var local = self.mapPartitions(it => Iterator(aggregatePartition(it)))
-    var numPartitions = local.partitions.size
+    var partiallyAggregated = self.mapPartitions(it => Iterator(aggregatePartition(it)))
+    var numPartitions = partiallyAggregated.partitions.size
     val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+    // If creating an extra level doesn't help reduce the wall-clock time, we stop tree aggregation.
     while (numPartitions > scale + numPartitions / scale) {
       numPartitions /= scale
-      local = local.mapPartitionsWithIndex { (i, iter) =>
-        iter.map((i % numPartitions, _))
-      }.reduceByKey(new HashPartitioner(numPartitions), cleanCombOp).values
+      val curNumPartitions = numPartitions
+      partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex { (i, iter) =>
+        iter.map((i % curNumPartitions, _))
+      }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
     }
-    local.reduce(cleanCombOp)
+    partiallyAggregated.reduce(cleanCombOp)
   }
 }
 

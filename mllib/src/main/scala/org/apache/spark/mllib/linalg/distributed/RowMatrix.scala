@@ -80,7 +80,7 @@ class RowMatrix(
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-    rows.aggregate(BDV.zeros[Double](n))(
+    rows.treeAggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
         val rBrz = r.toBreeze
         val a = rBrz.dot(vbr.value)
@@ -93,8 +93,8 @@ class RowMatrix(
         }
         U
       },
-      combOp = (U1, U2) => U1 += U2
-    )
+      combOp = (U1, U2) => U1 += U2,
+      depth = 2)
   }
 
   /**
