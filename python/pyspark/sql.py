@@ -47,12 +47,14 @@ class SQLContext:
             ...
         ValueError:...
 
-        >>> allTypes = sc.parallelize([{"int" : 1, "string" : "string", "double" : 1.0, "long": 1L,
-        ... "boolean" : True}])
+        >>> from datetime import datetime
+        >>> allTypes = sc.parallelize([{"int": 1, "string": "string", "double": 1.0, "long": 1L,
+        ... "boolean": True, "time": datetime(2010, 1, 1, 1, 1, 1), "dict": {"a": 1},
+        ... "list": [1, 2, 3]}])
         >>> srdd = sqlCtx.inferSchema(allTypes).map(lambda x: (x.int, x.string, x.double, x.long,
-        ... x.boolean))
+        ... x.boolean, x.time, x.dict["a"], x.list))
         >>> srdd.collect()[0]
-        (1, u'string', 1.0, 1, True)
+        (1, u'string', 1.0, 1, True, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, [1, 2, 3])
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -88,13 +90,13 @@ class SQLContext:
 
         >>> from array import array
         >>> srdd = sqlCtx.inferSchema(nestedRdd1)
-        >>> srdd.collect() == [{"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
-        ...                    {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}]
+        >>> srdd.collect() == [{"f1" : [1, 2], "f2" : {"row1" : 1.0}},
+        ...                    {"f1" : [2, 3], "f2" : {"row2" : 2.0}}]
         True
 
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
-        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
-        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}]
+        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : [1, 2]},
+        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : [2, 3]}]
         True
         """
         if (rdd.__class__ is SchemaRDD):
@@ -509,8 +511,8 @@ def _test():
         {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
         {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])
     globs['nestedRdd2'] = sc.parallelize([
-        {"f1": [[1, 2], [2, 3]], "f2": set([1, 2]), "f3": (1, 2)},
-        {"f1": [[2, 3], [3, 4]], "f2": set([2, 3]), "f3": (2, 3)}])
+        {"f1": [[1, 2], [2, 3]], "f2": [1, 2]},
+        {"f1": [[2, 3], [3, 4]], "f2": [2, 3]}])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

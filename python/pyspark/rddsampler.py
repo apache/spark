@@ -19,8 +19,8 @@ import sys
 import random
 
 
-class RDDSampler(object):
-    def __init__(self, withReplacement, fraction, seed=None):
+class RDDSamplerBase(object):
+    def __init__(self, withReplacement, seed=None):
         try:
             import numpy
             self._use_numpy = True
@@ -32,7 +32,6 @@ class RDDSampler(object):
 
         self._seed = seed if seed is not None else random.randint(0, sys.maxint)
         self._withReplacement = withReplacement
-        self._fraction = fraction
         self._random = None
         self._split = None
         self._rand_initialized = False
@@ -94,6 +93,12 @@ class RDDSampler(object):
         else:
             self._random.shuffle(vals, self._random.random)
 
+
+class RDDSampler(RDDSamplerBase):
+    def __init__(self, withReplacement, fraction, seed=None):
+        RDDSamplerBase.__init__(self, withReplacement, seed)
+        self._fraction = fraction
+
     def func(self, split, iterator):
         if self._withReplacement:
             for obj in iterator:
@@ -107,3 +112,22 @@ class RDDSampler(object):
             for obj in iterator:
                 if self.getUniformSample(split) <= self._fraction:
                     yield obj
+
+class RDDStratifiedSampler(RDDSamplerBase):
+    def __init__(self, withReplacement, fractions, seed=None):
+        RDDSamplerBase.__init__(self, withReplacement, seed)
+        self._fractions = fractions
+
+    def func(self, split, iterator):
+        if self._withReplacement:
+            for key, val in iterator:
+                # For large datasets, the expected number of occurrences of each element in
+                # a sample with replacement is Poisson(frac). We use that to get a count for
+                # each element.
+                count = self.getPoissonSample(split, mean=self._fractions[key])
+                for _ in range(0, count):
+                    yield key, val
+        else:
+            for key, val in iterator:
+                if self.getUniformSample(split) <= self._fractions[key]:
+                    yield key, val

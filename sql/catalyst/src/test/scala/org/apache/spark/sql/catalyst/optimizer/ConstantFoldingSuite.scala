@@ -83,7 +83,7 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(10) as Symbol("2*3+4"),
           Literal(14) as Symbol("2*(3+4)"))
         .where(Literal(true))
-        .groupBy(Literal(3))(Literal(3) as Symbol("9/3"))
+        .groupBy(Literal(3.0))(Literal(3.0) as Symbol("9/3"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

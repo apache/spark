@@ -52,7 +52,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   override def blackList = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
-    "hook_context",
+    "hook_context_cs",
     "mapjoin_hook",
     "multi_sahooks",
     "overridden_confs",
@@ -196,7 +196,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Hive returns the results of describe as plain text. Comments with multiple lines
     // introduce extra lines in the Hive results, which make the result comparison fail.
-    "describe_comment_indent"
+    "describe_comment_indent",
+
+    // Limit clause without a ordering, which causes failure.
+    "orc_predicate_pushdown"
   )
 
   /**
@@ -286,7 +289,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "compute_stats_empty_table",
     "compute_stats_long",
     "compute_stats_string",
-    "compute_stats_table",
     "convert_enum_to_string",
     "correlationoptimizer1",
     "correlationoptimizer10",
@@ -391,6 +393,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_sort_8",
     "groupby_sort_9",
     "groupby_sort_test_1",
+    "having",
     "implicit_cast1",
     "innerjoin",
     "inoutdriver",
@@ -501,6 +504,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_hive_626",
     "join_map_ppr",
     "join_nulls",
+    "join_nullsafe",
     "join_rc",
     "join_reorder2",
     "join_reorder3",
@@ -691,8 +695,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf7",
     "udf8",
     "udf9",
-    "udf_E",
-    "udf_PI",
     "udf_abs",
     "udf_acos",
     "udf_add",
@@ -732,6 +734,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_double",
     "udf_E",
     "udf_elt",
+    "udf_equal",
     "udf_exp",
     "udf_field",
     "udf_find_in_set",
