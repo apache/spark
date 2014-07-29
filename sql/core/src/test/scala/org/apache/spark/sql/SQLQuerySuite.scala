@@ -424,25 +424,25 @@ class SQLQuerySuite extends QueryTest {
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Seq(Seq(s"$testKey=$testVal"))
+      Seq(Seq(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
       Seq(
-        Seq(s"$testKey=$testVal"),
-        Seq(s"${testKey + testKey}=${testVal + testVal}"))
+        Seq(testKey, testVal),
+        Seq(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
     checkAnswer(
       sql(s"SET $testKey"),
-      Seq(Seq(s"$testKey=$testVal"))
+      Seq(Seq(testKey, testVal))
     )
     checkAnswer(
       sql(s"SET $nonexistentKey"),
-      Seq(Seq(s"$nonexistentKey=<undefined>"))
+      Seq(Seq(nonexistentKey, "<undefined>"))
     )
     clear()
   }
