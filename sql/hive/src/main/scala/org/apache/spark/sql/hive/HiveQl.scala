@@ -610,7 +610,7 @@ private[hive] object HiveQl {
         // TOK_DESTINATION means to overwrite the table.
         val resultDestination =
           (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
-        val overwrite = if (intoClause.isEmpty) true else false
+        val overwrite = intoClause.isEmpty
         nodeToDest(
           resultDestination,
           withLimit,
