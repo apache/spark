@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types.{ArrayType, BooleanType, StructType}
+import org.apache.spark.sql.catalyst.types.{DataType, ArrayType, BooleanType, StructType, MapType}
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
 
@@ -376,39 +376,27 @@ class SchemaRDD(
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    def toJava(obj: Any, dataType: DataType): Any = dataType match {
+      case struct: StructType => rowToMap(obj.asInstanceOf[Row], struct)
+      case array: ArrayType => obj match {
+        case seq: Seq[Any] => seq.map(x => toJava(x, array.elementType)).asJava
+        case list: JList[_] => list.map(x => toJava(x, array.elementType)).asJava
+        case arr if arr != null && arr.getClass.isArray =>
+          arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
+        case other => other
+      }
+      case mt: MapType => obj.asInstanceOf[Map[_, _]].map {
+        case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      }.asJava
+      // Pyrolite can handle Timestamp
+      case other => obj
+    }
     def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
       val fields = structType.fields.map(field => (field.name, field.dataType))
       val map: JMap[String, Any] = new java.util.HashMap
       row.zip(fields).foreach {
-        case (obj, (attrName, dataType)) =>
-          dataType match {
-            case struct: StructType => map.put(attrName, rowToMap(obj.asInstanceOf[Row], struct))
-            case array @ ArrayType(struct: StructType) =>
-              val arrayValues = obj match {
-                case seq: Seq[Any] =>
-                  seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
-                case list: JList[_] =>
-                  list.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case set: JSet[_] =>
-                  set.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case arr if arr != null && arr.getClass.isArray =>
-                  arr.asInstanceOf[Array[Any]].map {
-                    element => rowToMap(element.asInstanceOf[Row], struct)
-                  }
-                case other => other
-              }
-              map.put(attrName, arrayValues)
-            case array: ArrayType => {
-              val arrayValues = obj match {
-                case seq: Seq[Any] => seq.asJava
-                case other => other
-              }
-              map.put(attrName, arrayValues)
-            }
-            case other => map.put(attrName, obj)
-          }
+        case (obj, (attrName, dataType)) => map.put(attrName, toJava(obj, dataType))
       }
-
       map
     }
 
