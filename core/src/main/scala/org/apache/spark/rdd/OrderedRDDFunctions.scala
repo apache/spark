@@ -58,12 +58,6 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size): RDD[P] = {
     val part = new RangePartitioner(numPartitions, self, ascending)
     new ShuffledRDD[K, V, V, P](self, part)
-      .setKeyOrdering(ordering)
-      .setSortOrder(if (ascending) SortOrder.ASCENDING else SortOrder.DESCENDING)
+      .setKeyOrdering(if (ascending) ordering else ordering.reverse)
   }
-}
-
-private[spark] object SortOrder extends Enumeration {
-  type SortOrder = Value
-  val ASCENDING, DESCENDING = Value
 }
