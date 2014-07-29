@@ -19,17 +19,24 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.SQLConf
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with SQLConf {
   self: Product =>
 
+  // TODO: make a case class?
   protected class Statistics {
     lazy val childrenStats = children.map(_.statistics)
+
     lazy val numTuples: Long = childrenStats.map(_.numTuples).sum
-    lazy val sizeInBytes: Long = childrenStats.map(_.sizeInBytes).sum
+
+    lazy val sizeInBytes: Long = {
+      val sum = childrenStats.map(_.sizeInBytes).sum
+      if (sum == 0) statsDefaultSizeInBytes else sum
+    }
   }
 
   /**

@@ -82,6 +82,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
+      // TODO: use optimization here as well
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
           execution.ShuffledHashJoin(
