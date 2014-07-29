@@ -293,6 +293,7 @@ case class LeftSemiJoinBNL(
   }
 }
 
+
 /**
  * :: DeveloperApi ::
  */
@@ -399,4 +400,59 @@ case class BroadcastNestedLoopJoin(
     sqlContext.sparkContext.union(
       streamedPlusMatches.flatMap(_._1), sqlContext.sparkContext.makeRDD(rightOuterMatches))
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ * In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,
+ * then make the largest key rows as a table rdd.The left rdd will be made  leftSkewedtable
+ * rdd without the largest key and the maxkeyskewedtable rdd with the largest key.
+ * Then,join the two table  with the righttable.
+ * Finally,union the two result rdd.
+ */
+@DeveloperApi
+case class SkewHashJoin(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    buildSide: BuildSide,
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode with HashJoin {
+  override def output = left.output ++ right.output
+
+  override def requiredChildDistribution =
+        ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  override def execute() = {
+    val skewedTable = left.execute()
+    //This will later write as configuration
+    val sample = skewedTable.sample(false, 0.3, 9).collect()
+    val maxrowKey = sample.map(row => buildSideKeyGenerator(row)).groupBy(r =>
+      r).map(rows => (rows._2.size, rows._1)).maxBy(rows => rows._1)._2
+    // I also Send a Pull Request as RDD API span fun to offer the function
+    //split a RDD as two through span function
+    // .https://github.com/apache/spark/pull/1306
+    //    val (maxKeySkewedTable, mainSkewedTable) = skewedTable.span(row => {
+    //      skewSideKeyGenerator(row).toString().equals(maxrowKey.toString())
+    //    })
+    val maxKeySkewedTable = skewedTable.filter(row => {
+      buildSideKeyGenerator(row) == maxrowKey
+        })
+        val mainSkewedTable = skewedTable.filter(row => {
+          !(buildSideKeyGenerator(row) == maxrowKey)
+        })
+        val buildRdd = right.execute()
+        val maxKeyJoinedRdd = maxKeySkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy()
+          ).filter(rows => {
+            (buildSideKeyGenerator(rows._1) == streamSideKeyGenerator(rows._2))
+        }).map {
+            case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        val mainJoinedRdd = mainSkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())
+          ).filter(rows => {
+            (buildSideKeyGenerator(rows._1) == streamSideKeyGenerator(rows._2))
+        }).map {
+          case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        sc.union(maxKeyJoinedRdd, mainJoinedRdd)
+    }
 }

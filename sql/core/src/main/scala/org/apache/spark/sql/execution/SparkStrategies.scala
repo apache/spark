@@ -85,11 +85,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
-        val hashJoin =
-          execution.ShuffledHashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
-
+        val hashJoin ={
+          val skew=System.getProperty("spark.optimization.skew").toBoolean  
+            if(!skew)  
+              {execution.ShuffledHashJoin(
+                leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+              condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil}
+            else
+              {execution.SkewHashJoin(
+                leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+              condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil}
+        }
       case _ => Nil
     }
   }
