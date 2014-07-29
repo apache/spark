@@ -343,6 +343,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
       override def defaultParallelism() = 2
+      override def applicationId() = None
     }
     val noKillScheduler = new DAGScheduler(
       sc,
