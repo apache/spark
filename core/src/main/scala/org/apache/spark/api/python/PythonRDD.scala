@@ -663,13 +663,13 @@ private[spark] object PythonRDD extends Logging {
    */
   def saveAsHadoopDataset[K, V](
       pyRDD: JavaRDD[Array[Byte]],
-      batchSerialzied: Boolean,
+      batchSerialized: Boolean,
       confAsMap: java.util.HashMap[String, String],
       useNewAPI: Boolean,
       keyConverterClass: String,
       valueConverterClass: String) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
-    val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD, batchSerialzied),
+    val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized),
       keyConverterClass, valueConverterClass, new JavaToWritableConverter)
     if (useNewAPI) {
       converted.saveAsNewAPIHadoopDataset(conf)
