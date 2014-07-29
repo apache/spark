@@ -560,8 +560,9 @@ class CloudPickler(pickle.Pickler):
             ]
 
 
-        itemgetter_obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
-        return self.save_reduce(operator.itemgetter, (itemgetter_obj.item,))
+        obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
+        return self.save_reduce(operator.itemgetter,
+                obj.item if obj.nitems > 1 else (obj.item,))
 
     if PyObject_HEAD:
         dispatch[operator.itemgetter] = save_itemgetter

@@ -284,6 +284,12 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual(set([2]), sets[3])
         self.assertEqual(set([1, 3]), sets[5])
 
+    def test_itemgetter(self):
+        rdd = self.sc.parallelize([range(10)])
+        from operator import itemgetter
+        self.assertEqual([1], rdd.map(itemgetter(1)).collect())
+        self.assertEqual([(2, 3)], rdd.map(itemgetter(2, 3)).collect())
+
 
 class TestIO(PySparkTestCase):
 
