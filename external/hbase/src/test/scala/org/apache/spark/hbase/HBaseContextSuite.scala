@@ -33,22 +33,38 @@ import org.apache.hadoop.hbase.client.HConnectionManager
 import org.apache.hadoop.hbase.client.Increment
 import org.apache.hadoop.hbase.client.Delete
 import org.apache.hadoop.hbase.client.Result
+import org.apache.hadoop.conf.Configuration
 
 class HBaseContextSuite extends FunSuite with LocalSparkContext {
 
-  var htu: HBaseTestingUtility = null
 
   val tableName = "t1"
   val columnFamily = "c"
 
-  override def beforeAll() {
-    htu = HBaseTestingUtility.createLocalHTU()
+    val config = new Configuration
+    config.set("hbase.defaults.for.version.skip", "true")
+    config.set("hbase.defaults.for.version", "foo")
+
+
+
+
+
+
+    val htu = HBaseTestingUtility.createLocalHTU(config)
+    htu.getConfiguration().setBoolean("hbase.defaults.for.version.skip", true)
+    htu.getConfiguration().set("hbase.defaults.for.version", "foo")
+
+    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
 
     println("1")
     htu.cleanupTestDir()
+    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
     println("2")
-    println("starting minicluster")
+    println("starting miniclusterFooBar")
     htu.startMiniZKCluster();
+    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
+    htu.getConfiguration().setBoolean("hbase.defaults.for.version.skip", true)
+    htu.getConfiguration().set("hbase.defaults.for.version", "foo")
     htu.startMiniHBaseCluster(1, 1);
     println(" - minicluster started")
     try {
@@ -61,6 +77,9 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     println(" - creating table " + tableName)
     htu.createTable(Bytes.toBytes(tableName), Bytes.toBytes(columnFamily))
     println(" - created table")
+
+  override def beforeAll() {
+    
   }
 
   override def afterAll() {

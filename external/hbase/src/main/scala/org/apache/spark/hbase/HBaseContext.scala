@@ -45,17 +45,11 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.hbase.mapreduce.TableMapper
 import org.apache.hadoop.hbase.mapreduce.IdentityTableMapper
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil
 import org.apache.hadoop.hbase.util.Base64
-import org.apache.hadoop.hbase.mapreduce.MutationSerialization
-import org.apache.hadoop.hbase.mapreduce.ResultSerialization
-import org.apache.hadoop.hbase.mapreduce.KeyValueSerialization
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.SerializableWritable
 import java.util.HashMap
-import org.apache.hadoop.hbase.protobuf.generated.MasterProtos
-import org.apache.hadoop.hbase.protobuf.generated.MasterProtos
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.hbase.HConstants
 import java.util.concurrent.atomic.AtomicLong
@@ -193,18 +187,18 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    * 
    * @param RDD        Original RDD with data to iterate over
-   * @param tableName  The name of the table to put into 
+   * @param tableNm  The name of the table to put into 
    * @param f          Function to convert a value in the RDD to a HBase Put
    * @autoFlush        If autoFlush should be turned on
    */
-  def bulkPut[T](rdd: RDD[T], tableName: String, f: (T) => Put, autoFlush: Boolean) {
+  def bulkPut[T](rdd: RDD[T], tableNm: String, f: (T) => Put, autoFlush: Boolean) {
 
     rdd.foreachPartition(
       it => hbaseForeachPartition[T](
         broadcastedConf,
         it,
         (iterator, hConnection) => {
-          val htable = hConnection.getTable(tableName)
+          val htable = hConnection.getTable(tableNm)
           htable.setAutoFlush(autoFlush, true)
           iterator.foreach(T => htable.put(f(T)))
           htable.flushCommits()
@@ -222,16 +216,16 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    * 
    * @param DStream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to put into 
+   * @param tableNm  The name of the table to put into 
    * @param f          Function to convert a value in the RDD to a HBase Put
    * @autoFlush        If autoFlush should be turned on
    */
   def streamBulkPut[T](dstream: DStream[T],
-    tableName: String,
+    tableNm: String,
     f: (T) => Put,
     autoFlush: Boolean) = {
     dstream.foreach((rdd, time) => {
-      bulkPut(rdd, tableName, f, autoFlush)
+      bulkPut(rdd, tableNm, f, autoFlush)
     })
   }
 
@@ -245,13 +239,13 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    * 
    * @param RDD        Original RDD with data to iterate over
-   * @param tableName  The name of the table to increment to 
+   * @param tableNm  The name of the table to increment to 
    * @param f          Function to convert a value in the RDD to a 
    *                   HBase Increments
    * @batchSize        The number of increments to batch before sending to HBase
    */
-  def bulkIncrement[T](rdd: RDD[T], tableName:String, f:(T) => Increment, batchSize: Int) {
-    bulkMutation(rdd, tableName, f, batchSize)
+  def bulkIncrement[T](rdd: RDD[T], tableNm:String, f:(T) => Increment, batchSize: Int) {
+    bulkMutation(rdd, tableNm, f, batchSize)
   }
   
   /**
@@ -262,13 +256,13 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    *  
    * @param RDD     Original RDD with data to iterate over
-   * @param tableName     The name of the table to delete from 
+   * @param tableNm     The name of the table to delete from 
    * @param f       function to convert a value in the RDD to a 
    *                HBase Deletes
    * @batchSize     The number of delete to batch before sending to HBase
    */
-  def bulkDelete[T](rdd: RDD[T], tableName:String, f:(T) => Delete, batchSize: Int) {
-    bulkMutation(rdd, tableName, f, batchSize)
+  def bulkDelete[T](rdd: RDD[T], tableNm:String, f:(T) => Delete, batchSize: Int) {
+    bulkMutation(rdd, tableNm, f, batchSize)
   }
   
   /** 
@@ -276,13 +270,13 @@ import org.apache.spark.streaming.dstream.DStream
    *  
    *  May be opened up if requested
    */
-  private def bulkMutation[T](rdd: RDD[T], tableName: String, f: (T) => Mutation, batchSize: Int) {
+  private def bulkMutation[T](rdd: RDD[T], tableNm: String, f: (T) => Mutation, batchSize: Int) {
     rdd.foreachPartition(
       it => hbaseForeachPartition[T](
         broadcastedConf,
         it,
         (iterator, hConnection) => {
-          val htable = hConnection.getTable(tableName)
+          val htable = hConnection.getTable(tableNm)
           val mutationList = new ArrayList[Mutation]
           iterator.foreach(T => {
             mutationList.add(f(T))
@@ -309,16 +303,16 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    * 
    * @param DStream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to increments into 
+   * @param tableNm  The name of the table to increments into 
    * @param f          function to convert a value in the RDD to a 
    *                   HBase Increments
    * @batchSize        The number of increments to batch before sending to HBase
    */
   def streamBulkIncrement[T](dstream: DStream[T],
-    tableName: String,
+    tableNm: String,
     f: (T) => Increment,
     batchSize: Int) = {
-    streamBulkMutation(dstream, tableName, f, batchSize)
+    streamBulkMutation(dstream, tableNm, f, batchSize)
   }
   
   /**
@@ -331,16 +325,16 @@ import org.apache.spark.streaming.dstream.DStream
    * removed from the developer
    * 
    * @param DStream   Original DStream with data to iterate over
-   * @param tableName The name of the table to delete from 
+   * @param tableNm The name of the table to delete from 
    * @param f         function to convert a value in the RDD to a 
    *                  HBase Delete
    * @batchSize       The number of deletes to batch before sending to HBase
    */
   def streamBulkDelete[T](dstream: DStream[T],
-    tableName: String,
+    tableNm: String,
     f: (T) => Delete,
     batchSize: Int) = {
-    streamBulkMutation(dstream, tableName, f, batchSize)
+    streamBulkMutation(dstream, tableNm, f, batchSize)
   }
   
   /** 
@@ -349,11 +343,11 @@ import org.apache.spark.streaming.dstream.DStream
    *  May be opened up if requested
    */
   private def streamBulkMutation[T](dstream: DStream[T],
-    tableName: String,
+    tableNm: String,
     f: (T) => Mutation,
     batchSize: Int) = {
     dstream.foreach((rdd, time) => {
-      bulkMutation(rdd, tableName, f, batchSize)
+      bulkMutation(rdd, tableNm, f, batchSize)
     })
   }
 
@@ -365,7 +359,7 @@ import org.apache.spark.streaming.dstream.DStream
    * new RDD based on Gets and the results they bring back from HBase
    * 
    * @param RDD        Original RDD with data to iterate over
-   * @param tableName  The name of the table to get from 
+   * @param tableNm  The name of the table to get from 
    * @param makeGet    Function to convert a value in the RDD to a 
    *                   HBase Get
    * @param convertResult This will convert the HBase Result object to 
@@ -373,13 +367,13 @@ import org.apache.spark.streaming.dstream.DStream
    *                   RDD
    * return            New RDD that is created by the Get to HBase
    */
-  def bulkGet[T, U: ClassTag](tableName: String,
+  def bulkGet[T, U: ClassTag](tableNm: String,
     batchSize: Int,
     rdd: RDD[T],
     makeGet: (T) => Get,
     convertResult: (Result) => U): RDD[U] = {
 
-    val getMapPartition = new GetMapPartition(tableName,
+    val getMapPartition = new GetMapPartition(tableNm,
       batchSize,
       makeGet,
       convertResult)
@@ -397,7 +391,7 @@ import org.apache.spark.streaming.dstream.DStream
    * they bring back from HBase
    * 
    * @param DStream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to get from 
+   * @param tableNm  The name of the table to get from 
    * @param makeGet    Function to convert a value in the DStream to a 
    *                   HBase Get
    * @param convertResult This will convert the HBase Result object to 
@@ -405,13 +399,13 @@ import org.apache.spark.streaming.dstream.DStream
    *                   DStream
    * return            new DStream that is created by the Get to HBase    
    */
-  def streamBulkGet[T, U: ClassTag](tableName: String,
+  def streamBulkGet[T, U: ClassTag](tableNm: String,
       batchSize:Int,
       dstream: DStream[T],
       makeGet: (T) => Get, 
       convertResult: (Result) => U): DStream[U] = {
 
-    val getMapPartition = new GetMapPartition(tableName,
+    val getMapPartition = new GetMapPartition(tableNm,
       batchSize,
       makeGet,
       convertResult)
@@ -425,17 +419,17 @@ import org.apache.spark.streaming.dstream.DStream
    * This function will use the native HBase TableInputFormat with the 
    * given scan object to generate a new RDD
    * 
-   *  @param tableName The name of the table to scan
+   *  @param tableNm The name of the table to scan
    *  @param scan      The HBase scan object to use to read data from HBase
    *  @param f         Function to convert a Result object from HBase into 
    *                   what the user wants in the final generated RDD
    *  @return          New RDD with results from scan 
    */
-  def hbaseRDD[U: ClassTag](tableName: String, scan: Scan, f: ((ImmutableBytesWritable, Result)) => U): RDD[U] = {
+  def hbaseRDD[U: ClassTag](tableNm: String, scan: Scan, f: ((ImmutableBytesWritable, Result)) => U): RDD[U] = {
 
     var job: Job = new Job(broadcastedConf.value.value)
 
-    TableMapReduceUtil.initTableMapperJob(tableName, scan, classOf[IdentityTableMapper], null, null, job)
+    TableMapReduceUtil.initTableMapperJob(tableNm, scan, classOf[IdentityTableMapper], null, null, job)
 
     sc.newAPIHadoopRDD(job.getConfiguration(),
       classOf[TableInputFormat],
@@ -447,14 +441,14 @@ import org.apache.spark.streaming.dstream.DStream
    * A overloaded version of HBaseContext hbaseRDD that predefines the 
    * type of the outputing RDD
    * 
-   *  @param tableName The name of the table to scan
+   *  @param tableNm The name of the table to scan
    *  @param scan      The HBase scan object to use to read data from HBase
    *  @return          New RDD with results from scan 
    * 
    */
-  def hbaseRDD(tableName: String, scans: Scan): RDD[(Array[Byte], java.util.List[(Array[Byte], Array[Byte], Array[Byte])])] = {
+  def hbaseRDD(tableNm: String, scans: Scan): RDD[(Array[Byte], java.util.List[(Array[Byte], Array[Byte], Array[Byte])])] = {
     hbaseRDD[(Array[Byte], java.util.List[(Array[Byte], Array[Byte], Array[Byte])])](
-      tableName,
+      tableNm,
       scans,
       (r: (ImmutableBytesWritable, Result)) => {
         val it = r._2.list().iterator()
@@ -511,14 +505,14 @@ import org.apache.spark.streaming.dstream.DStream
    *  Under lining wrapper all get mapPartition functions in HBaseContext
    *  
    */
-  @serializable private  class GetMapPartition[T, U: ClassTag](tableName: String, 
+  @serializable private  class GetMapPartition[T, U: ClassTag](tableNm: String, 
       batchSize: Int,
       makeGet: (T) => Get,
       convertResult: (Result) => U) {
     
     
     def run(iterator: Iterator[T], hConnection: HConnection): Iterator[U] = {
-      val htable = hConnection.getTable(tableName)
+      val htable = hConnection.getTable(tableNm)
 
       val gets = new ArrayList[Get]()
       var res = List[U]()
