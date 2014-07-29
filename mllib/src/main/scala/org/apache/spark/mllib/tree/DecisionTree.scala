@@ -37,7 +37,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * @param params The configuration parameters for the tree algorithm.
  */
 @Experimental
-private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (params: DTParams)
+private[mllib] abstract class DecisionTree (params: DTParams)
   extends Serializable with Logging {
 
   protected final val InvalidBinIndex = -1
@@ -58,7 +58,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (params: DTPa
    * @param datasetInfo  Dataset metadata.
    * @return top node of a DecisionTreeModel
    */
-  protected def trainSub(
+  protected def runSub(
       input: RDD[LabeledPoint],
       datasetInfo: DatasetInfo): Node = {
 

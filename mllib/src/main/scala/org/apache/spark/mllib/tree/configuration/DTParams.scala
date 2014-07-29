@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Experimental
  *                      128 MB.
  */
 @Experimental
-abstract class DTParams (
+private[mllib] abstract class DTParams (
     @BeanProperty var maxDepth: Int,
     @BeanProperty var maxBins: Int,
     var quantileStrategy: String,
@@ -42,7 +42,8 @@ abstract class DTParams (
 
   def setQuantileStrategy(quantileStrategy: String) = {
     if (!QuantileStrategies.nameToStrategyMap.contains(quantileStrategy)) {
-      throw new IllegalArgumentException(s"Bad QuantileStrategy parameter: $quantileStrategy")
+      throw new IllegalArgumentException(s"Bad quantileStrategy parameter: $quantileStrategy."
+        + s"  Supported values: ${DTParams.supportedQuantileStrategies.mkString(", ")}.")
     }
     this.quantileStrategy = quantileStrategy
   }

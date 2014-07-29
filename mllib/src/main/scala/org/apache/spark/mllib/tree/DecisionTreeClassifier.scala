@@ -34,8 +34,7 @@ import org.apache.spark.rdd.RDD
  * @param params The configuration parameters for the tree algorithm.
  */
 @Experimental
-class DecisionTreeClassifier (params: DTClassifierParams)
-  extends DecisionTree[DecisionTreeClassifierModel](params) {
+class DecisionTreeClassifier (params: DTClassifierParams) extends DecisionTree(params) {
 
   private val impurityFunctor = ClassificationImpurities.impurity(params.impurity)
 
@@ -52,7 +51,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
     require(datasetInfo.isClassification)
     logDebug("algo = Classification")
 
-    val topNode = super.trainSub(input, datasetInfo)
+    val topNode = super.runSub(input, datasetInfo)
     new DecisionTreeClassifierModel(topNode)
   }
 

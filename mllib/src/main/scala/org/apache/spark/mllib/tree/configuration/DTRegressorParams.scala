@@ -45,7 +45,8 @@ class DTRegressorParams (
 
   def setImpurity(impurity: String) = {
     if (!RegressionImpurities.nameToImpurityMap.contains(impurity)) {
-      throw new IllegalArgumentException(s"Bad impurity parameter for regression: $impurity")
+      throw new IllegalArgumentException(s"Bad impurity parameter for regression: $impurity"
+        + s"  Supported values: ${DTRegressorParams.supportedImpurities.mkString(", ")}.")
     }
     this.impurity = impurity
   }

@@ -45,7 +45,8 @@ class DTClassifierParams (
 
   def setImpurity(impurity: String) = {
     if (!ClassificationImpurities.nameToImpurityMap.contains(impurity)) {
-      throw new IllegalArgumentException(s"Bad impurity parameter for classification: $impurity")
+      throw new IllegalArgumentException(s"Bad impurity parameter for classification: $impurity"
+        + s"  Supported values: ${DTClassifierParams.supportedImpurities.mkString(", ")}.")
     }
     this.impurity = impurity
   }

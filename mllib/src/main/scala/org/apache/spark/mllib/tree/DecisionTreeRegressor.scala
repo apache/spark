@@ -34,8 +34,7 @@ import org.apache.spark.rdd.RDD
  * @param params The configuration parameters for the tree algorithm.
  */
 @Experimental
-class DecisionTreeRegressor (params: DTRegressorParams)
-  extends DecisionTree[DecisionTreeRegressorModel](params) {
+class DecisionTreeRegressor (params: DTRegressorParams) extends DecisionTree(params) {
 
   private val impurityFunctor = RegressionImpurities.impurity(params.impurity)
 
@@ -52,7 +51,7 @@ class DecisionTreeRegressor (params: DTRegressorParams)
     require(datasetInfo.isRegression)
     logDebug("algo = Regression")
 
-    val topNode = super.trainSub(input, datasetInfo)
+    val topNode = super.runSub(input, datasetInfo)
 
     new DecisionTreeRegressorModel(topNode)
   }
