@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.lang.{Boolean => JBoolean}
 import java.util.{Collections, Set => JSet}
-import java.util.concurrent.{CopyOnWriteArrayList, ConcurrentHashMap}
+import java.util.concurrent.{CopyOnWriteArrayList, ConcurrentHashMap, LinkedBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection
@@ -90,7 +90,7 @@ private[yarn] class YarnAllocationHandler(
   // Containers to be released in next request to RM
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
   // ContainerRequests which have been added to AMRMClient.
-  private val containerRequestList = new CopyOnWriteArrayList[ContainerRequest]()
+  private val containerRequestList = new LinkedBlockingQueue[ContainerRequest]()
 
   // Additional memory overhead - in mb.
   private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
@@ -256,7 +256,9 @@ private[yarn] class YarnAllocationHandler(
 
         val executorMemoryOverhead = (executorMemory + memoryOverhead)
         assert(container.getResource.getMemory >= executorMemoryOverhead)
-        amClient.removeContainerRequest(containerRequestList.remove(1))
+        if(!containerRequestList.isEmpty()){
+          amClient.removeContainerRequest(containerRequestList.take())
+        }
 
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
@@ -477,7 +479,7 @@ private[yarn] class YarnAllocationHandler(
       }
 
     for (request <- containerRequests) {
-      containerRequestList += request
+      containerRequestList.put(request)
       amClient.addContainerRequest(request)
     }
 
