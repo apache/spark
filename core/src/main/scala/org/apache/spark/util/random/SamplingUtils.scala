@@ -148,8 +148,7 @@ private[spark] object BinomialBounds {
    */
   def getLowerBound(delta: Double, n: Long, fraction: Double): Double = {
     val gamma = - math.log(delta) / n * (2.0 / 3.0)
-    math.max(minSamplingRate,
-      fraction + gamma - math.sqrt(gamma * gamma + 3 * gamma * fraction))
+    fraction + gamma - math.sqrt(gamma * gamma + 3 * gamma * fraction)
   }
 
   /**
@@ -158,6 +157,7 @@ private[spark] object BinomialBounds {
    */
   def getUpperBound(delta: Double, n: Long, fraction: Double): Double = {
     val gamma = - math.log(delta) / n
-    math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
+    math.min(1,
+      math.max(minSamplingRate, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
   }
 }
