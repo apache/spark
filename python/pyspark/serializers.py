@@ -270,7 +270,6 @@ class NoOpSerializer(FramedSerializer):
 
 
 # Hook namedtuple, make it picklable
-# pyspark should be imported before 'from collections import namedtuple'
 
 old_namedtuple = collections.namedtuple
 __cls = {}
@@ -283,16 +282,19 @@ def _restore(name, fields, value):
         __cls[k] = cls
     return cls(*value)
 
-def namedtuple(name, fields, verbose=False, rename=False):
-    """ Pickable namedtuple """
-    cls = old_namedtuple(name, fields, verbose, rename)
-
+def hack_namedtuple(cls):
+    name = cls.__name__
+    fields = cls._fields
     def __reduce__(self):
         return (_restore, (name, fields, tuple(self)))
-
     cls.__reduce__ = __reduce__
     return cls
 
+def namedtuple(name, fields, verbose=False, rename=False):
+    cls = old_namedtuple(name, fields, verbose, rename)
+    return hack_namedtuple(cls)
+
+namedtuple.__doc__ = old_namedtuple.__doc__
 collections.namedtuple = namedtuple
 
 
@@ -305,6 +307,19 @@ class PickleSerializer(FramedSerializer):
     This serializer supports nearly any Python object, but may
     not be as fast as more specialized serializers.
     """
+
+    def _hack_namedtuple(self):
+        # namedtuple created in other module can be pickled normal
+        # hack namedtuple in __main__ module
+        for n, o in sys.modules["__main__"].__dict__.iteritems():
+            if (type(o) is type and o.__base__ is tuple
+                    and hasattr(o, "_fields")
+                    and "__reduce__" not in o.__dict__):
+                hack_namedtuple(o)
+
+    def dump_stream(self, iterator, stream):
+        self._hack_namedtuple()
+        FramedSerializer.dump_stream(self, iterator, stream)
 
     def dumps(self, obj):
         return cPickle.dumps(obj, 2)
@@ -331,7 +346,7 @@ class MarshalSerializer(FramedSerializer):
     loads = marshal.loads
 
 
-class AutoSerializer(FramedSerializer):
+class AutoSerializer(PickleSerializer):
     """
     Choose marshal or cPickle as serialization protocol autumatically
     """
