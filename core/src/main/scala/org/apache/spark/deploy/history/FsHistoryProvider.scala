@@ -106,7 +106,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val ui = {
           val conf = this.conf.clone()
           val appSecManager = new SecurityManager(conf)
-          new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+          new SparkUI(conf, appSecManager, replayBus, appId,
+            s"${HistoryServer.UI_PATH_PREFIX}/$appId")
           // Do not call ui.bind() to avoid creating a new server for each application
         }
 
@@ -219,7 +220,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     val ui: SparkUI = {
       val conf = this.conf.clone()
       val appSecManager = new SecurityManager(conf)
-      new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+      new SparkUI(conf, appSecManager, replayBus, appId, s"${HistoryServer.UI_PATH_PREFIX}/$appId")
       // Do not call ui.bind() to avoid creating a new server for each application
     }
 

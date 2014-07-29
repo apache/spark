@@ -114,7 +114,7 @@ class HistoryServer(
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
-    contextHandler.setContextPath("/history")
+    contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
   }
@@ -171,6 +171,8 @@ class HistoryServer(
  */
 object HistoryServer extends Logging {
   private val conf = new SparkConf
+
+  val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)

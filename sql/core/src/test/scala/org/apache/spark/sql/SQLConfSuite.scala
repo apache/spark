@@ -54,10 +54,10 @@ class SQLConfSuite extends QueryTest {
     assert(get(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
 
-    sql("set mapred.reduce.tasks=20")
-    assert(get("mapred.reduce.tasks", "0") == "20")
-    sql("set mapred.reduce.tasks = 40")
-    assert(get("mapred.reduce.tasks", "0") == "40")
+    sql("set some.property=20")
+    assert(get("some.property", "0") == "20")
+    sql("set some.property = 40")
+    assert(get("some.property", "0") == "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
@@ -70,4 +70,9 @@ class SQLConfSuite extends QueryTest {
     clear()
   }
 
+  test("deprecated property") {
+    clear()
+    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+    assert(get(SQLConf.SHUFFLE_PARTITIONS) == "10")
+  }
 }

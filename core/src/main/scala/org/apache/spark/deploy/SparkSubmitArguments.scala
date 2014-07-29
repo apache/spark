@@ -55,6 +55,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   parseOpts(args.toList)
   loadDefaults()
@@ -177,6 +178,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
+    |  extraSparkProperties    $sparkProperties
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -202,8 +204,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    // Delineates parsing of Spark options from parsing of user options.
     var inSparkOpts = true
+
+    // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
     def parse(opts: Seq[String]): Unit = opts match {
@@ -290,6 +293,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         jars = Utils.resolveURIs(value)
         parse(tail)
 
+      case ("--conf" | "-c") :: value :: tail =>
+        value.split("=", 2).toSeq match {
+          case Seq(k, v) => sparkProperties(k) = v
+          case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
+        }
+        parse(tail)
+
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
@@ -309,7 +319,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
               primaryResource =
-                if (!SparkSubmit.isShell(v)) {
+                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
                   Utils.resolveURI(v).toString
                 } else {
                   v
@@ -349,6 +359,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
+        |
+        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |
