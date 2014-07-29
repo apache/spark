@@ -48,7 +48,7 @@ trait SQLConf {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def codegenEnabled: Boolean =
-    if (get("spark.sql.codegen", "false") == "true") true else false
+    if (get(CODEGEN_ENABLED, "false") == "true") true else false
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -107,6 +107,7 @@ object SQLConf {
   val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
+  val CODEGEN_ENABLED = "spark.sql.codegen"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
