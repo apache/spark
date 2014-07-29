@@ -19,12 +19,10 @@ package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.{HashMap => JHashMap}
+import java.util.{Date, HashMap => JHashMap}
 
+import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
-import scala.collection.Map
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -34,19 +32,19 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob,
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
 RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -193,6 +191,41 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def foldByKey(zeroValue: V)(func: (V, V) => V): RDD[(K, V)] = {
     foldByKey(zeroValue, defaultPartitioner(self))(func)
+  }
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use
+   * additional passes over the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with a 99.99% confidence. When sampling
+   * without replacement, we need one additional pass over the RDD to guarantee sample size;
+   * when sampling with replacement, we need two additional passes.
+   *
+   * @param withReplacement whether to sample with or without replacement
+   * @param fractions map of specific keys to sampling rates
+   * @param seed seed for the random number generator
+   * @param exact whether sample size needs to be exactly math.ceil(fraction * size) per key
+   * @return RDD containing the sampled subset
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: Map[K, Double],
+      exact: Boolean = false,
+      seed: Long = Utils.random.nextLong): RDD[(K, V)]= {
+
+    require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
+
+    val samplingFunc = if (withReplacement) {
+      StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, exact, seed)
+    } else {
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, exact, seed)
+    }
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
 
   /**
@@ -531,6 +564,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Return the key-value pairs in this RDD to the master as a Map.
+   *
+   * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
+   *          one value per key is preserved in the map returned)
    */
   def collectAsMap(): Map[K, V] = {
     val data = self.collect()
