@@ -48,7 +48,7 @@ private[spark] class Executor(
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
-  private var isStopped = false
+  @volatile private var isStopped = false
 
   // No ip or host:port - just hostname
   Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
@@ -149,8 +149,8 @@ private[spark] class Executor(
     extends Runnable {
 
     @volatile private var killed = false
-    @volatile var running = false
     @volatile var task: Task[Any] = _
+    @volatile var attemptedTask: Option[Task[Any]] = None
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -167,7 +167,6 @@ private[spark] class Executor(
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
-      var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
       val startGCTime = gcTime
@@ -195,7 +194,6 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        running = true
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
 
@@ -380,15 +378,14 @@ private[spark] class Executor(
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
-            if (taskRunner.running) {
+            if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 tasksMetrics += ((taskRunner.taskId, metrics))
               }
             }
           }
 
-          val message = Heartbeat(executorId, tasksMetrics.toArray,
-            env.blockManager.blockManagerId)
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
             retryAttempts, retryIntervalMs, timeout)
           if (response.reregisterBlockManager) {

@@ -330,7 +330,7 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, TaskMetrics)],
+      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
       blockManagerId: BlockManagerId): Boolean = {
     val metricsWithStageIds = taskMetrics.flatMap {
       case (id, metrics) => {

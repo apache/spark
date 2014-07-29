@@ -30,7 +30,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * the completed task.
  *
  * So, when adding new fields, take into consideration that the whole object can be serialized for
- * shipping off at any time to consumers of the SparkListener interface..
+ * shipping off at any time to consumers of the SparkListener interface.
  */
 @DeveloperApi
 class TaskMetrics extends Serializable {

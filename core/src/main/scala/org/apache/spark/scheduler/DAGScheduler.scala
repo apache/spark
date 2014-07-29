@@ -162,10 +162,10 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, Int, TaskMetrics)],
+      taskMetrics: Array[(Long, Int, TaskMetrics)], // (taskId, stageId, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
-    implicit val timeout = Timeout(30 seconds)
+    implicit val timeout = Timeout(600 seconds)
 
     Await.result(
       blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),

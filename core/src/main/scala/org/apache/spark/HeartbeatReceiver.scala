@@ -28,7 +28,7 @@ import org.apache.spark.scheduler.TaskScheduler
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    taskMetrics: Array[(Long, TaskMetrics)],
+    taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
   extends Serializable
 
