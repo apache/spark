@@ -37,9 +37,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-
 import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
-import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -386,7 +384,6 @@ trait ClientBase extends Logging {
     // Forward the Spark configuration to the application master / executors.
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
-    // TODO: Use Utils.sparkJavaOpts here once we figure out how to deal with quotes and backslashes
     for ((k, v) <- sparkConf.getAll) {
       javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
     }

@@ -305,9 +305,8 @@ private[spark] object SparkConf {
   /**
    * Return whether the given config should be passed to an executor on start-up.
    *
-   * When connecting to the scheduler, the executor backend needs certain akka and authentication
-   * settings to connect to the scheduler, while the rest of the spark configs can be inherited
-   * from the driver later.
+   * Certain akka and authentication configs are required of the executor when it connects to
+   * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
     isAkkaConf(name) || name.startsWith("spark.akka") || name.startsWith("spark.auth")

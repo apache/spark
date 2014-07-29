@@ -31,7 +31,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.Utils
 
 trait ExecutorRunnableUtil extends Logging {
 
@@ -67,7 +66,6 @@ trait ExecutorRunnableUtil extends Logging {
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
     // uses Akka to connect to the scheduler, the akka settings are needed as well as the
     // authentication settings.
-    // TODO: Use Utils.sparkJavaOpts here once we figure out how to deal with quotes and backslashes
     sparkConf.getAll.
       filter { case (k, v) => k.startsWith("spark.auth") || k.startsWith("spark.akka") }.
       foreach { case (k, v) => javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\"" }
