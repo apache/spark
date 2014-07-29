@@ -119,9 +119,6 @@ class HadoopRDD[K, V](
       minPartitions)
   }
 
-  private val accName = s"rdd-$id.input.bytes.hadoop"
-  val hadoopInputBytes = sc.accumulator(0L, accName)(SparkContext.LongAccumulatorParam)
-
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
 
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
@@ -208,7 +205,6 @@ class HadoopRDD[K, V](
          * always at record boundaries, so tasks may need to read into other splits to complete
          * a record. */
         inputMetrics.bytesRead = split.inputSplit.value.getLength()
-        hadoopInputBytes += split.inputSplit.value.getLength()
       } catch {
         case e: java.io.IOException =>
           logWarning("Unable to get input size to set InputMetrics for task", e)

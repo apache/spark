@@ -1270,10 +1270,4 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
-
-  // =======================================================================
-  // Common metrics
-  // =======================================================================
-  // Input bytes if this RDD was read from persisted data or a filesystem
-  val inputBytes = sc.accumulator(0L, s"rdd-$id.input.bytes.persisted")
 }
