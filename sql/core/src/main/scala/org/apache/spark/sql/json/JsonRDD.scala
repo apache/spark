@@ -28,11 +28,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.Logging
+import org.apache.spark.sql.{SQLContext, Logging}
 
 private[sql] object JsonRDD extends Logging {
 
   private[sql] def inferSchema(
+      sqlContext: SQLContext,
       json: RDD[String],
       samplingRatio: Double = 1.0): LogicalPlan = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
@@ -40,15 +41,17 @@ private[sql] object JsonRDD extends Logging {
     val allKeys = parseJson(schemaData).map(allKeysWithValueTypes).reduce(_ ++ _)
     val baseSchema = createSchema(allKeys)
 
-    createLogicalPlan(json, baseSchema)
+    createLogicalPlan(json, baseSchema, sqlContext)
   }
 
   private def createLogicalPlan(
       json: RDD[String],
-      baseSchema: StructType): LogicalPlan = {
+      baseSchema: StructType,
+      sqlContext: SQLContext): LogicalPlan = {
     val schema = nullTypeToStringType(baseSchema)
 
-    SparkLogicalPlan(ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))
+    SparkLogicalPlan(
+      ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))(sqlContext)
   }
 
   private def createSchema(allKeys: Set[(String, DataType)]): StructType = {

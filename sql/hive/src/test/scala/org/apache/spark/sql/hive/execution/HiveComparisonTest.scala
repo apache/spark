@@ -132,7 +132,7 @@ abstract class HiveComparisonTest
     answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: BaseRelation | _: Generate | _: Sample | _: Distinct => false
+      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case PhysicalOperation(_, _, Sort(_, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }

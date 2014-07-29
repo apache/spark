@@ -56,7 +56,7 @@ private[sql] trait SchemaRDDLike {
     // happen right away to let these side effects take place eagerly.
     case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
       queryExecution.toRdd
-      SparkLogicalPlan(queryExecution.executedPlan)
+      SparkLogicalPlan(queryExecution.executedPlan)(sqlContext)
     case _ =>
       baseLogicalPlan
   }
