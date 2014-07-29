@@ -108,6 +108,7 @@ trait SparkImports {
    * last one imported is actually usable.
    */
   case class SparkComputedImports(prepend: String, append: String, access: String)
+  def fallback = System.getProperty("spark.repl.fallback", "false").toBoolean
 
   protected def importsCode(wanted: Set[Name], definedClass: Boolean): SparkComputedImports = {
     /** Narrow down the list of requests from which imports
@@ -124,8 +125,14 @@ trait SparkImports {
         // Single symbol imports might be implicits! See bug #1752.  Rather than
         // try to finesse this, we will mimic all imports for now.
         def keepHandler(handler: MemberHandler) = handler match {
-          case _: ImportHandler => true
-          case x                => x.definesImplicit || (x.definedNames exists wanted)
+       /* This case clause tries to "precisely" import only what is required. And in this
+        * it may miss out on some implicits, because implicits are not known in `wanted`. Thus 
+        * it is suitable for defining classes. AFAIK while defining classes implicits are not
+        * needed.*/
+          case h: ImportHandler if definedClass && !fallback => 
+            h.importedNames.exists(x => wanted.contains(x))
+          case _: ImportHandler  => true
+          case x                 => x.definesImplicit || (x.definedNames exists wanted)
         }
 
         reqs match {
@@ -138,35 +145,8 @@ trait SparkImports {
         }
       }
 
-      /**
-        * This version of select tries to "precisely" import only what is required. And in this
-        * it may miss out on some implicits, because implicits are not known in `wanted`. Thus 
-        * it is suitable for defining classes. AFAIK while defining classes implicits are not
-        * needed.
-        */
-      def specialSelect(reqs: List[ReqAndHandler], wanted: Set[Name]): List[ReqAndHandler] = {
-        // Single symbol imports might be implicits! See bug #1752.  Rather than
-        // try to finesse this, we will mimic all imports for now.
-        def keepHandler(handler: MemberHandler) = handler match {
-          case h: ImportHandler => h.importedNames.exists(x => wanted.contains(x))
-          case x                => x.definesImplicit || (x.definedNames exists wanted)
-        }
-
-        reqs match {
-          case Nil                                    => Nil
-          case rh :: rest if !keepHandler(rh.handler) => specialSelect(rest, wanted)
-          case rh :: rest                             =>
-            import rh.handler._
-            val newWanted = wanted ++ referencedNames -- definedNames -- importedNames
-            rh :: specialSelect(rest, newWanted)
-        }
-      }
-
       /** Flatten the handlers out and pair each with the original request */
-      if(definedClass)
-        specialSelect(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
-      else
-        select(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
+      select(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
     }
 
     val code, trailingBraces, accessPath = new StringBuilder
@@ -209,7 +189,7 @@ trait SparkImports {
         // ambiguity errors will not be generated. Also, quote
         // the name of the variable, so that we don't need to
         // handle quoting keywords separately.
-        case x: ClassHandler =>
+        case x: ClassHandler if !fallback =>
         // I am trying to guess if the import is a defined class
         // This is an ugly hack, I am not 100% sure of the consequences.
         // Here we, let everything but "defined classes" use the import with val.
