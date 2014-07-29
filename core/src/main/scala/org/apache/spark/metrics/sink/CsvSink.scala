@@ -23,11 +23,11 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.MetricsSystem
 
 private[spark] class CsvSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+    securityMgr: SecurityManager, conf: SparkConf) extends Sink with Logging {
   val CSV_KEY_PERIOD = "period"
   val CSV_KEY_UNIT = "unit"
   val CSV_KEY_DIR = "directory"
@@ -48,16 +48,19 @@ private[spark] class CsvSink(val property: Properties, val registry: MetricRegis
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val pollDir = Option(property.getProperty(CSV_KEY_DIR)) match {
-    case Some(s) => s
-    case None => CSV_DEFAULT_DIR
-  }
+  val pollDir = Option(property.getProperty(CSV_KEY_DIR)).getOrElse(CSV_DEFAULT_DIR) +
+    conf.get("spark.app.uniqueName")
+
+  val file= new File(pollDir)
+  file.mkdirs
+
+  logInfo("Dumping csv metrics to " + pollDir)
 
   val reporter: CsvReporter = CsvReporter.forRegistry(registry)
       .formatFor(Locale.US)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
-      .build(new File(pollDir))
+      .build(file)
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)

@@ -132,8 +132,9 @@ private[spark] class MetricsSystem private (val instance: String,
       if (null != classPath) {
         try {
           val sink = Class.forName(classPath)
-            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-            .newInstance(kv._2, registry, securityMgr)
+            .getConstructor(classOf[Properties], classOf[MetricRegistry],
+              classOf[SecurityManager], classOf[SparkConf])
+            .newInstance(kv._2, registry, securityMgr, conf)
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {
