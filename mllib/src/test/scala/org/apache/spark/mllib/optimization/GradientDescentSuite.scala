@@ -25,6 +25,7 @@ import org.scalatest.{FunSuite, Matchers}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
 
@@ -126,19 +127,14 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
     val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
 
-    def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
-      math.abs(x - y) / (math.abs(y) + 1e-15) < tol
-    }
-
-    assert(compareDouble(
-      loss1(0),
-      loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
-        math.pow(initialWeightsWithIntercept(1), 2)) / 2),
+    assert(
+      loss1(0) ~= (loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
+        math.pow(initialWeightsWithIntercept(1), 2)) / 2) absTol 1E-5,
       """For non-zero weights, the regVal should be \frac{1}{2}\sum_i w_i^2.""")
 
     assert(
-      compareDouble(newWeights1(0) , newWeights0(0) - initialWeightsWithIntercept(0)) &&
-      compareDouble(newWeights1(1) , newWeights0(1) - initialWeightsWithIntercept(1)),
+      (newWeights1(0) ~= (newWeights0(0) - initialWeightsWithIntercept(0)) absTol 1E-5) &&
+      (newWeights1(1) ~= (newWeights0(1) - initialWeightsWithIntercept(1)) absTol 1E-5),
       "The different between newWeights with/without regularization " +
         "should be initialWeightsWithIntercept.")
   }
