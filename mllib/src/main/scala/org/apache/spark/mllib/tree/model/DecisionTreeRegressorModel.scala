@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.Experimental
 
+
 /**
  * :: Experimental ::
  * Decision tree model for regression.
@@ -29,11 +30,10 @@ import org.apache.spark.annotation.Experimental
 class DecisionTreeRegressorModel(topNode: Node) extends DecisionTreeModel(topNode) {
 
   /**
-   * Print tree.
+   * Print full model.
    */
-  def print() {
-    println(s"DecisionTreeRegressorModel")
-    topNode.print("  ")
+  override def toString: String = {
+    s"DecisionTreeRegressorModel" + topNode.toStringRecursive(2)
   }
 
 }

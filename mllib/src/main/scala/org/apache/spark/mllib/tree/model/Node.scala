@@ -95,37 +95,34 @@ class Node (
   }
 
   /**
-   * Recursive print functions.
-   * @param prefix  Prefix for each printed line (for spacing).
+   * Recursive print function.
+   * @param indentFactor  The number of spaces to add to each level of indentation.
    */
-  def print(prefix: String = "") {
+  def toStringRecursive(indentFactor: Int = 0): String = {
 
     def splitToString(split: Split, left: Boolean) : String = {
       split.featureType match {
-        case Continuous => {
-          if (left) {
+        case Continuous => if (left) {
             s"(feature ${split.feature} <= ${split.threshold})"
           } else {
             s"(feature ${split.feature} > ${split.threshold})"
           }
-        }
-        case Categorical => {
-          if (left) {
+        case Categorical => if (left) {
             s"(feature ${split.feature} in ${split.categories})"
           } else {
             s"(feature ${split.feature} not in ${split.categories})"
           }
-        }
       }
     }
-
+    val prefix: String = " " * indentFactor
     if (isLeaf) {
-      println(prefix + s"Predict: $predict")
+      prefix + s"Predict: $predict\n"
     } else {
-      println(prefix + s"If ${splitToString(split.get, true)}")
-      leftNode.get.print(prefix + "  ")
-      println(prefix + s"Else ${splitToString(split.get, false)}")
-      rightNode.get.print(prefix + "  ")
+      prefix + s"If ${splitToString(split.get, left=true)}" +
+        leftNode.get.toStringRecursive(indentFactor + 1) +
+        prefix + s"Else ${splitToString(split.get, left=false)}" +
+        rightNode.get.toStringRecursive(indentFactor + 1)
     }
   }
+
 }

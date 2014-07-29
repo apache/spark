@@ -30,11 +30,10 @@ import org.apache.spark.annotation.Experimental
 class DecisionTreeClassifierModel(topNode: Node) extends DecisionTreeModel(topNode) {
 
   /**
-   * Print tree.
+   * Print full model.
    */
-  def print() {
-    println(s"DecisionTreeClassifierModel")
-    topNode.print("  ")
+  override def toString: String = {
+    s"DecisionTreeClassifierModel" + topNode.toStringRecursive(2)
   }
 
 }
