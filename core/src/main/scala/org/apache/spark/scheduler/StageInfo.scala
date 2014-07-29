@@ -39,7 +39,7 @@ class StageInfo(
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
-  /** Terminal values of accumulables updated during this stage.*/
+  /** Terminal values of accumulables updated during this stage. */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
   def stageFailed(reason: String) {
