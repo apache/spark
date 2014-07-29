@@ -911,6 +911,7 @@ private[mllib] abstract class DecisionTree (params: DTParams)
 }
 
 
+@Experimental
 object DecisionTree extends Serializable with Logging {
 
   /**

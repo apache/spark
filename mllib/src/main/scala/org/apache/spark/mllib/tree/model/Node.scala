@@ -125,4 +125,27 @@ class Node (
     }
   }
 
+  /**
+   * Get number of nodes in tree from this node, including leaf nodes.
+   */
+  def numNodesRecursive: Int = {
+    if (isLeaf) {
+      1
+    } else {
+      1 + leftNode.get.numNodesRecursive + rightNode.get.numNodesRecursive
+    }
+  }
+
+  /**
+   * Get depth of tree from this node.
+   * E.g.: Depth 0 means this is a leaf node.
+   */
+  def depthRecursive: Int = {
+    if (isLeaf) {
+      0
+    } else {
+      1 + math.max(leftNode.get.depthRecursive, rightNode.get.depthRecursive)
+    }
+  }
+
 }

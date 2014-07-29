@@ -258,6 +258,7 @@ class DecisionTreeRegressor (params: DTRegressorParams) extends DecisionTree(par
 }
 
 
+@Experimental
 object DecisionTreeRegressor extends Serializable with Logging {
 
   /**

@@ -683,6 +683,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val model = dtLearner.run(rdd, datasetInfo)
     validateModel(model, arr, 1.0)
+    assert(model.numNodes === 3)
+    assert(model.depth === 1)
 
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 

@@ -51,6 +51,7 @@ private[mllib] abstract class DTParams (
 }
 
 
+@Experimental
 object DTParams {
 
   /**

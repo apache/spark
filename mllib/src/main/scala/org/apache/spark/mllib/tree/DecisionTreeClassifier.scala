@@ -527,6 +527,7 @@ class DecisionTreeClassifier (params: DTClassifierParams) extends DecisionTree(p
 }
 
 
+@Experimental
 object DecisionTreeClassifier extends Serializable with Logging {
 
   /**
