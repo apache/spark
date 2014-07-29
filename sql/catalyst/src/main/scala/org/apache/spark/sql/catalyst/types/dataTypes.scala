@@ -353,7 +353,10 @@ object MapType {
     MapType(keyType: DataType, valueType: DataType, true)
 }
 
-case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) extends DataType {
+case class MapType(
+    keyType: DataType,
+    valueType: DataType,
+    valueContainsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
     builder.append(s"${prefix}-- value: ${valueType.simpleString}\n")

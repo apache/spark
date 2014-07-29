@@ -264,7 +264,7 @@ private[sql] object JsonRDD extends Logging {
     // So, right now, we will have Infinity for those BigDecimal number.
     // TODO: Support BigDecimal.
     json.mapPartitions(iter => {
-      // Also, when there is a key appearing multiple times (a duplicate key),
+      // When there is a key appearing multiple times (a duplicate key),
       // the ObjectMapper will take the last value associated with this duplicate key.
       // For example: for {"key": 1, "key":2}, we will get "key"->2.
       val mapper = new ObjectMapper()
