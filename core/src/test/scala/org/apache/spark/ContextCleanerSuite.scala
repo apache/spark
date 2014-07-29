@@ -19,6 +19,9 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
+import org.apache.spark.broadcast.Broadcast
+
+import scala.collection.mutable
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps
@@ -159,7 +162,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
-    val broadcastIds = 0L until numBroadcasts
+    val broadcastIds = broadcastBuffer.map(_.id)
 
     val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
@@ -190,7 +193,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
-    val broadcastIds = 0L until numBroadcasts
+    val broadcastIds = broadcastBuffer.map(_.id)
 
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
