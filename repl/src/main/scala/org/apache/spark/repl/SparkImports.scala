@@ -109,7 +109,7 @@ trait SparkImports {
    */
   case class SparkComputedImports(prepend: String, append: String, access: String)
 
-  protected def importsCode(wanted: Set[Name]): SparkComputedImports = {
+  protected def importsCode(wanted: Set[Name], definedClass: Boolean): SparkComputedImports = {
     /** Narrow down the list of requests from which imports
      *  should be taken.  Removes requests which cannot contribute
      *  useful imports for the specified set of wanted names.
@@ -138,8 +138,35 @@ trait SparkImports {
         }
       }
 
+      /**
+        * This version of select tries to "precisely" import only what is required. And in this
+        * it may miss out on some implicits, because implicits are not known in `wanted`. Thus 
+        * it is suitable for defining classes. AFAIK while defining classes implicits are not
+        * needed.
+        */
+      def specialSelect(reqs: List[ReqAndHandler], wanted: Set[Name]): List[ReqAndHandler] = {
+        // Single symbol imports might be implicits! See bug #1752.  Rather than
+        // try to finesse this, we will mimic all imports for now.
+        def keepHandler(handler: MemberHandler) = handler match {
+          case h: ImportHandler => h.importedNames.exists(x => wanted.contains(x))
+          case x                => x.definesImplicit || (x.definedNames exists wanted)
+        }
+
+        reqs match {
+          case Nil                                    => Nil
+          case rh :: rest if !keepHandler(rh.handler) => specialSelect(rest, wanted)
+          case rh :: rest                             =>
+            import rh.handler._
+            val newWanted = wanted ++ referencedNames -- definedNames -- importedNames
+            rh :: specialSelect(rest, newWanted)
+        }
+      }
+
       /** Flatten the handlers out and pair each with the original request */
-      select(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
+      if(definedClass)
+        specialSelect(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
+      else
+        select(allReqAndHandlers reverseMap { case (r, h) => ReqAndHandler(r, h) }, wanted).reverse
     }
 
     val code, trailingBraces, accessPath = new StringBuilder
