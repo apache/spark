@@ -35,7 +35,8 @@ private[ui] class WorkersPage(parent: StorageTab) extends WebUIPage("rdd/workers
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  private def getWorkers(rddId: Int, storageStatusList: Seq[StorageStatus]) : Seq[(Int, StorageStatus)] = {
+  private def getWorkers(rddId: Int, storageStatusList: Seq[StorageStatus]):
+  Seq[(Int, StorageStatus)] = {
     storageStatusList.map((rddId, _))
   }
 
@@ -63,7 +64,7 @@ private[ui] class WorkersPage(parent: StorageTab) extends WebUIPage("rdd/workers
   private def workerRowJson(worker: (Int, StorageStatus)): JValue = {
     val (rddId, status) = worker
     val memUsageString = {Utils.bytesToString(status.memUsedByRDD(rddId))} +
-      " ("+ {Utils.bytesToString(status.memRemaining)} + " Remaining)"
+      " (" + {Utils.bytesToString(status.memRemaining)} + " Remaining)"
     ("Host" -> {status.blockManagerId.host + ":" + status.blockManagerId.port} ) ~
     ("Memory Usage" ->  memUsageString) ~
     ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRDD(rddId))})

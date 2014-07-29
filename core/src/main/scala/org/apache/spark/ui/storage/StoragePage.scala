@@ -38,7 +38,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
     val tableId = "storageTable"
-    val content = UIUtils.listingEmptyTable(rddHeader, tableId) ++ UIUtils.fillTableJavascript(parent.prefix, tableId)
+    val content = UIUtils.listingEmptyTable(rddHeader, tableId) ++
+      UIUtils.fillTableJavascript(parent.prefix, tableId)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
   }
 
@@ -82,7 +83,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   /** Render a Json row representing an RDD */
   private def rddRowJson(rdd: RDDInfo): JValue = {
-    val rddNameVal = "<a href=" + {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)} +
+    val rddNameVal = "<a href=" +
+      {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)} +
       ">" + {rdd.name} + "</a>"
     ("RDD Name" -> rddNameVal) ~
     ("Storage Level" -> {rdd.storageLevel.description}) ~

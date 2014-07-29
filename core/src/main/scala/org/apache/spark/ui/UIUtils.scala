@@ -311,7 +311,7 @@ private[spark] object UIUtils extends Logging {
     * a JSON representation in under the given path */
   def fillTableJavascript(path: String, tableId: String, id: Option[Integer] = None): Seq[Node] = {
     val paramId = id match {
-      case Some(s) => ", {id: " + s +"}"
+      case Some(s) => ", {id: " + s + "}"
       case None => ""
     }
     <script>

@@ -35,7 +35,9 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  private def getBlocks(rddId: Int, storageStatusList: Seq[StorageStatus]) : Seq[(BlockId, BlockStatus, Seq[String])] = {
+  private def getBlocks(rddId: Int,
+                        storageStatusList: Seq[StorageStatus]):
+  Seq[(BlockId, BlockStatus, Seq[String])] = {
     val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
@@ -71,6 +73,6 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
     ("Storage Level"-> block.storageLevel.description) ~
     ("Size in Memory"-> Utils.bytesToString(block.memSize) ) ~
     ("Size on Disk"-> Utils.bytesToString(block.diskSize)) ~
-    ("Executors"-> {locations.map(l => "<span>"+ l +"<br/></span>")})
+    ("Executors"-> {locations.map(l => "<span>" + l + "<br/></span>")})
   }
 }
