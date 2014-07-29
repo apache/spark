@@ -53,11 +53,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * This strategy applies a simple optimization based on the estimates of the physical sizes of
    * the two join sides.  When planning a [[execution.BroadcastHashJoin]], if one side has an
    * estimated physical size smaller than the user-settable threshold
-   * `spark.sql.auto.convert.join.size`, the planner would mark it as the ''build'' relation and
-   * mark the other relation as the ''stream'' side.  The build table will be ''broadcasted'' to
-   * all of the executors involved in the join, as a [[org.apache.spark.broadcast.Broadcast]]
-   * object.  If both estimates exceed the threshold, they will instead be used to decide the build
-   * side in a [[execution.ShuffledHashJoin]].
+   * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]], the planner would mark it as the
+   * ''build'' relation and mark the other relation as the ''stream'' side.  The build table will be
+   * ''broadcasted'' to all of the executors involved in the join, as a
+   * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
+   * will instead be used to decide the build side in a [[execution.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
     private[this] def makeBroadcastHashJoin(
@@ -74,13 +74,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if Try(sqlContext.autoConvertJoinSize > 0 &&
-          right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize).getOrElse(false) =>
+        if Try(sqlContext.autoBroadcastJoinThreshold > 0 &&
+          right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold).getOrElse(false) =>
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if Try(sqlContext.autoConvertJoinSize > 0 &&
-          left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize).getOrElse(false) =>
+        if Try(sqlContext.autoBroadcastJoinThreshold > 0 &&
+          left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold).getOrElse(false) =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>

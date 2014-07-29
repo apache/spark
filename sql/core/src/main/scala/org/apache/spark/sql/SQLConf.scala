@@ -21,6 +21,16 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+object SQLConf {
+  val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
+  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
+  val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
+
+  object Deprecated {
+    val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+  }
+}
+
 /**
  * A trait that enables the setting and getting of mutable config parameters/hints.
  *
@@ -49,16 +59,16 @@ trait SQLConf {
    *
    * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is also 10000.
    */
-  private[spark] def autoConvertJoinSize: Int = get(AUTO_CONVERT_JOIN_SIZE, "10000").toInt
+  private[spark] def autoBroadcastJoinThreshold: Int =
+    get(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
    * it is set to a larger value than `autoConvertJoinSize`, hence any logical operator without a
    * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
    */
-  private[spark] def statsDefaultSizeInBytes: Long =
-    getOption("spark.sql.catalyst.stats.sizeInBytes").map(_.toLong)
-      .getOrElse(autoConvertJoinSize + 1)
+  private[spark] def defaultSizeInBytes: Long =
+    getOption(DEFAULT_SIZE_IN_BYTES).map(_.toLong).getOrElse(autoBroadcastJoinThreshold + 1)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -98,13 +108,4 @@ trait SQLConf {
     settings.clear()
   }
 
-}
-
-object SQLConf {
-  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
-  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
-
-  object Deprecated {
-    val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
-  }
 }

@@ -279,7 +279,7 @@ private[hive] case class MetastoreRelation
       BigInt(
         Option(hiveQlTable.getParameters.get("totalSize"))
           .map(_.toLong)
-          .getOrElse(sqlContext.statsDefaultSizeInBytes))
+          .getOrElse(sqlContext.defaultSizeInBytes))
     }
   )
 

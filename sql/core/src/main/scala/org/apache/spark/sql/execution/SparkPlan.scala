@@ -84,7 +84,7 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQ
   @transient override lazy val statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.statsDefaultSizeInBytes)
+    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
   )
 
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLConf, QueryTest}
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -51,7 +51,7 @@ class StatisticsSuite extends QueryTest {
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= autoConvertJoinSize,
+      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -63,9 +63,9 @@ class StatisticsSuite extends QueryTest {
       checkAnswer(rdd, expectedAnswer) // check correctness of output
 
       TestHive.settings.synchronized {
-        val tmp = autoConvertJoinSize
+        val tmp = autoBroadcastJoinThreshold
 
-        hql("""SET spark.sql.auto.convert.join.size=-1""")
+        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
         rdd = hql(query)
         bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
@@ -74,7 +74,7 @@ class StatisticsSuite extends QueryTest {
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        hql(s"""SET spark.sql.auto.convert.join.size=$tmp""")
+        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }
 
       after()
