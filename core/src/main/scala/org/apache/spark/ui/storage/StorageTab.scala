@@ -32,6 +32,9 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))
+  attachPage(new BlocksPage(this))
+  attachPage(new WorkersPage(this))
+
   parent.registerListener(listener)
 }
 

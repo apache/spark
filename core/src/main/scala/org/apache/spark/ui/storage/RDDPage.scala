@@ -59,11 +59,15 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
     // Worker table
     val workers = getWorkers(rddId, storageStatusList)
-    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
+    //val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
+    val workerTableId = "workerTable"
+    val workerTable = UIUtils.listingEmptyTable(workerHeader, workerTableId)
 
     // Block table
     val blocks = getBlocks(rddId, storageStatusList)
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
+    //val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
+    val blockTableId = "blockTable"
+    val blockTable = UIUtils.listingEmptyTable(blockHeader, blockTableId)
 
     val content =
       <div class="row-fluid">
@@ -107,7 +111,11 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, basePath, appName, "RDD Storage Info for " + rddInfo.name,
+    val contentWithJavascript = content ++
+      UIUtils.fillTableJavascript(parent.prefix + "/rdd/workers", workerTableId, Some(rddId)) ++
+      UIUtils.fillTableJavascript(parent.prefix + "/rdd/blocks", blockTableId, Some(rddId))
+
+    UIUtils.headerSparkPage(contentWithJavascript, basePath, appName, "RDD Storage Info for " + rddInfo.name,
       parent.headerTabs, parent)
   }
 
@@ -156,45 +164,5 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         {locations.map(l => <span>{l}<br/></span>)}
       </td>
     </tr>
-  }
-
-  override def renderJson(request: HttpServletRequest): JValue = {
-    val rddId = request.getParameter("id").toInt
-    val storageStatusList = listener.storageStatusList
-    val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
-      // Rather than crashing, return nothing
-      return JNothing
-    }
-
-    // Worker table
-    val workers = getWorkers(rddId, storageStatusList)
-    val workerJson = UIUtils.listingJson(workerRowJson, workers)
-
-    // Block table
-    val blocks = getBlocks(rddId, storageStatusList)
-    val blockJson = UIUtils.listingJson(blockRowJson, blocks)
-
-    val content = ("workerTable" -> workerJson) ~
-      ("blockTable" -> blockJson)
-    content
-  }
-
-  /** Render a Json row representing a worker */
-  private def workerRowJson(worker: (Int, StorageStatus)): JValue = {
-    val (rddId, status) = worker
-    ("Host" -> {status.blockManagerId.host + ":" + status.blockManagerId.port} ) ~
-    ("Memory Usage" -> {Utils.bytesToString(status.memUsedByRDD(rddId))} ) ~
-    ("Remaining Memory" -> {Utils.bytesToString(status.memRemaining)}) ~
-    ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRDD(rddId))})
-  }
-
-  /** Render a Json row representing a block */
-  private def blockRowJson(row: (BlockId, BlockStatus, Seq[String])): JValue = {
-    val (id, block, locations) = row
-    ("Block Name" -> id.name) ~
-    ("Storage Level"-> block.storageLevel.description) ~
-    ("Size in Memory"-> Utils.bytesToString(block.memSize) ) ~
-    ("Size on Disk"-> Utils.bytesToString(block.diskSize)) ~
-    ("Executors"-> locations)
   }
 }

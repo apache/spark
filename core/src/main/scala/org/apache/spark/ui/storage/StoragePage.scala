@@ -19,6 +19,10 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 
 import org.apache.spark.storage.RDDInfo
@@ -33,8 +37,17 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
+    val tableId = "storageTable"
+    val content = UIUtils.listingEmptyTable(rddHeader, tableId) ++ UIUtils.fillTableJavascript(parent.prefix, tableId)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
+  }
+
+  /** Render the whole JSON */
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val rdds = listener.rddInfoList
+    val rddsJson = UIUtils.listingJson(rddRowJson, rdds)
+
+    rddsJson
   }
 
   /** Header fields for the RDD table */
@@ -65,5 +78,18 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td sorttable_customekey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
     // scalastyle:on
+  }
+
+  /** Render a Json row representing an RDD */
+  private def rddRowJson(rdd: RDDInfo): JValue = {
+    val rddNameVal = "<a href=" + {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)} +
+      ">" + {rdd.name} + "</a>"
+    ("RDD Name" -> rddNameVal) ~
+    ("Storage Level" -> {rdd.storageLevel.description}) ~
+    ("Cached Partitions" -> {rdd.numCachedPartitions}) ~
+    ("Fraction Cached" -> {"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}) ~
+    ("Size in Memory" -> {Utils.bytesToString(rdd.memSize)}) ~
+    ("Size in Tachyon" -> {Utils.bytesToString(rdd.tachyonSize)}) ~
+    ("Size on Disk" -> {Utils.bytesToString(rdd.diskSize)})
   }
 }

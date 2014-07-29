@@ -163,6 +163,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={prependBaseUri("/static/spark.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -269,6 +270,54 @@ private[spark] object UIUtils extends Logging {
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+  }
+
+  /** Returns an HTML table constructed by generating a row for each object in a sequence. */
+  def listingEmptyTable[T](
+                       headers: Seq[String],
+                       tableId: String,
+                       fixedWidth: Boolean = false): Seq[Node] = {
+
+    var listingTableClass = TABLE_CLASS
+    if (fixedWidth) {
+      listingTableClass += " table-fixed"
+    }
+    val colWidth = 100.toDouble / headers.size
+    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val headerRow: Seq[Node] = {
+      // if none of the headers have "\n" in them
+      if (headers.forall(!_.contains("\n"))) {
+        // represent header as simple text
+        headers.map(h => <th width={colWidthAttr}>{h}</th>)
+      } else {
+        // represent header text as list while respecting "\n"
+        headers.map { case h =>
+          <th width={colWidthAttr}>
+            <ul class ="unstyled">
+              { h.split("\n").map { case t => <li> {t} </li> } }
+            </ul>
+          </th>
+        }
+      }
+    }
+    <table class={listingTableClass} id={tableId}>
+      <thead>{headerRow}</thead>
+      <tbody>
+      </tbody>
+    </table>
+  }
+
+  /** Returns an HTML containing a javascript that fills the table with that id using
+    * a JSON representation in under the given path */
+  def fillTableJavascript(path: String, tableId: String, id: Option[Integer] = None): Seq[Node] = {
+    val paramId = id match {
+      case Some(s) => ", {id: " + s +"}"
+      case None => ""
+    }
+    <script>
+      $.get('/{path}/json'{paramId})
+      .done( function(data) {{ Spark.UI.fillTable(data, '{tableId}') }});
+    </script>
   }
 
   /** Returns an JSON list constructed by generating a row for each object in a sequence. */
