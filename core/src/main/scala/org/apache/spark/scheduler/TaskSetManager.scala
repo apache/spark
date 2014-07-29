@@ -298,7 +298,7 @@ private[spark] class TaskSetManager(
       for (index <- speculatableTasks if canRunOnHost(index)) {
         val prefs = tasks(index).preferredLocations
         val executors = prefs.flatMap(_.executorId)
-        if (prefs.size == 0 || executors.contains(execId)) {
+        if (executors.contains(execId)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
         }
@@ -311,6 +311,16 @@ private[spark] class TaskSetManager(
           if (locations.contains(host)) {
             speculatableTasks -= index
             return Some((index, TaskLocality.NODE_LOCAL))
+          }
+        }
+      }
+
+      if (TaskLocality.isAllowed(locality, TaskLocality.NO_PREF)) {
+        for (index <- speculatableTasks if canRunOnHost(index)) {
+          val locations = tasks(index).preferredLocations
+          if (locations.size == 0) {
+            speculatableTasks -= index
+            return Some((index, TaskLocality.PROCESS_LOCAL))
           }
         }
       }
@@ -359,15 +369,11 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (TaskLocality.isAllowed(maxLocality, TaskLocality.NOPREF)) {
+    if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
       for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
       }
-      // find a speculative task if all noPref tasks have been scheduled
-      val specTask = findSpeculativeTask(execId, host, maxLocality).map {
-        case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
-      if (specTask != None) return specTask
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
@@ -385,7 +391,9 @@ private[spark] class TaskSetManager(
       }
     }
 
-    None
+    // find a speculative task if all others tasks have been scheduled
+    findSpeculativeTask(execId, host, maxLocality).map {
+      case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
   }
 
   /**
@@ -397,25 +405,25 @@ private[spark] class TaskSetManager(
    *
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
-   * @param preferredLocality the maximum locality we want to schedule the tasks at
+   * @param maxLocality the maximum locality we want to schedule the tasks at
    */
   def resourceOffer(
       execId: String,
       host: String,
-      preferredLocality: TaskLocality.TaskLocality)
+      maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
     if (!isZombie) {
       val curTime = clock.getTime()
 
-      var allowedLocality = preferredLocality
+      var allowedLocality = maxLocality
 
-      if (preferredLocality != TaskLocality.NOPREF ||
+      if (maxLocality != TaskLocality.NO_PREF ||
         (nodeLocalTasks.contains(host) && nodeLocalTasks(host).size > 0)) {
         allowedLocality = getAllowedLocalityLevel(curTime)
-        if (allowedLocality > preferredLocality) {
+        if (allowedLocality > maxLocality) {
           // We're not allowed to search for farther-away tasks
-          allowedLocality = preferredLocality
+          allowedLocality = maxLocality
         }
       }
 
@@ -433,7 +441,7 @@ private[spark] class TaskSetManager(
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
           // NOPREF will not affect the variables related to delay scheduling
-          if (preferredLocality != TaskLocality.NOPREF) {
+          if (maxLocality != TaskLocality.NO_PREF) {
             currentLocalityIndex = getLocalityIndex(taskLocality)
             lastLaunchTime = curTime
           }
@@ -756,8 +764,7 @@ private[spark] class TaskSetManager(
         conf.get("spark.locality.wait.node", defaultWait).toLong
       case TaskLocality.RACK_LOCAL =>
         conf.get("spark.locality.wait.rack", defaultWait).toLong
-      case TaskLocality.ANY =>
-        0L
+      case _ => 0L
     }
   }
 
@@ -765,10 +772,9 @@ private[spark] class TaskSetManager(
    * Compute the locality levels used in this TaskSet. Assumes that all tasks have already been
    * added to queues using addPendingTask.
    *
-   * NOTE: don't need to handle NOPREF here, because NOPREF is scheduled as PROCESS_LOCAL
    */
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
-    import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY}
+    import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
     if (!pendingTasksForExecutor.isEmpty && getLocalityWait(PROCESS_LOCAL) != 0 &&
         pendingTasksForExecutor.keySet.exists(sched.isExecutorAlive(_))) {
@@ -777,6 +783,9 @@ private[spark] class TaskSetManager(
     if (!pendingTasksForHost.isEmpty && getLocalityWait(NODE_LOCAL) != 0 &&
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
+    }
+    if (!pendingTasksWithNoPrefs.isEmpty) {
+      levels += NO_PREF
     }
     if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
         pendingTasksForRack.keySet.exists(sched.hasHostAliveOnRack(_))) {

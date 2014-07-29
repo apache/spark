@@ -147,7 +147,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0) {
 }
 
 class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
-  import TaskLocality.{ANY, PROCESS_LOCAL, NOPREF, NODE_LOCAL, RACK_LOCAL}
+  import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
 
@@ -163,7 +163,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // Offer a host with NOPREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
-    var taskOption = manager.resourceOffer("exec1", "host1", NOPREF)
+    var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
 
     // Tell it the task has finished
@@ -180,7 +180,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
-      var taskOption = manager.resourceOffer("exec1", "host1", NOPREF)
+      var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === "exec1")
@@ -188,7 +188,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(sched.startedTasks.toSet === Set(0, 1, 2))
 
     // Re-offer the host -- now we should get no more tasks
-    assert(manager.resourceOffer("exec1", "host1", NOPREF) === None)
+    assert(manager.resourceOffer("exec1", "host1", NO_PREF) === None)
 
     // Finish the first two tasks
     manager.handleSuccessfulTask(0, createTaskResult(0))
@@ -245,7 +245,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Offer host2, exec3 again, at NODE_LOCAL level: we should get noPref task
     // after failing to find a node_Local task
     assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL) == None)
-    assert(manager.resourceOffer("exec3", "host2", NOPREF).get.index == 3)
+    assert(manager.resourceOffer("exec3", "host2", NO_PREF).get.index == 3)
   }
 
   test("we do not need to delay scheduling when we only have noPref tasks in the queue") {
@@ -262,7 +262,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).get.index === 0)
     assert(manager.resourceOffer("exec3", "host2", PROCESS_LOCAL).get.index === 1)
     assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL) == None)
-    assert(manager.resourceOffer("exec3", "host2", NOPREF).get.index === 2)
+    assert(manager.resourceOffer("exec3", "host2", NO_PREF).get.index === 2)
   }
 
   test("delay scheduling with fallback") {
@@ -482,24 +482,24 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     // Only ANY is valid
-    assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+    assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
     // Add a new executor
     sched.addExecutor("execD", "host1")
     manager.executorAdded()
     // Valid locality should contain NODE_LOCAL and ANY
-    assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, ANY)))
+    assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     // Add another executor
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL and ANY
-    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY)))
     // test if the valid locality is recomputed when the executor is lost
     sched.removeExecutor("execC")
     manager.executorLost("execC", "host2")
-    assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, ANY)))
+    assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     sched.removeExecutor("execD")
     manager.executorLost("execD", "host1")
-    assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+    assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
   test("test RACK_LOCAL tasks") {
@@ -572,15 +572,15 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 0)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
-    assert(manager.resourceOffer("execA", "host1", NOPREF) == None)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF) == None)
     clock.advance(LOCALITY_WAIT)
     // schedule a node local task
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 1)
     manager.speculatableTasks += 1
     // schedule the nonPref task
-    assert(manager.resourceOffer("execA", "host1", NOPREF).get.index === 2)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 2)
     // schedule the speculative task
-    assert(manager.resourceOffer("execB", "host2", NOPREF).get.index === 1)
+    assert(manager.resourceOffer("execB", "host2", NO_PREF).get.index === 1)
     clock.advance(LOCALITY_WAIT * 3)
     // schedule non-local tasks
     assert(manager.resourceOffer("execB", "host2", ANY).get.index === 3)
