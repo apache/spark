@@ -24,14 +24,14 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -86,7 +86,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
@@ -127,7 +127,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
+    new SchemaRDD(this, JsonRDD.inferSchema(self, json, samplingRatio))
 
   /**
    * :: Experimental ::
@@ -170,11 +170,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    val name = tableName
-    val newPlan = rdd.logicalPlan transform {
-      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
-    }
-    catalog.registerTable(None, tableName, newPlan)
+    catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
   /**
@@ -212,7 +208,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
+        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
       case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
@@ -405,7 +401,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
       }
     }
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(self))
   }
 
 }

@@ -27,6 +27,7 @@ import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
@@ -45,7 +46,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  */
 private[sql] case class ParquetRelation(
     path: String,
-    @transient conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
+    @transient conf: Option[Configuration] = None)
+  extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
 

@@ -19,15 +19,16 @@ package org.apache.spark.sql.hive
 
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Logging
+import org.apache.spark.sql.{SQLContext, Logging}
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
@@ -64,9 +65,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(
-      databaseName,
-      tblName,
-      alias)(table.getTTable, partitions.map(part => part.getTPartition))
+      databaseName, tblName, alias)(
+      table.getTTable, partitions.map(part => part.getTPartition))(hive)
   }
 
   def createTable(
@@ -251,7 +251,11 @@ object HiveMetastoreTypes extends RegexParsers {
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
-  extends BaseRelation {
+    (@transient sqlContext: SQLContext)
+  extends LeafNode {
+
+  self: Product =>
+
   // TODO: Can we use org.apache.hadoop.hive.ql.metadata.Table as the type of table and
   // use org.apache.hadoop.hive.ql.metadata.Partition as the type of elements of partitions.
   // Right now, using org.apache.hadoop.hive.ql.metadata.Table and
@@ -264,6 +268,21 @@ private[hive] case class MetastoreRelation
     new Partition(hiveQlTable, p)
   }
 
+  @transient override lazy val statistics = Statistics(
+    sizeInBytes = {
+      // TODO: check if this estimate is valid for tables after partition pruning.
+      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+      // relatively cheap if parameters for the table are populated into the metastore.  An
+      // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
+      // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
+      // `rawDataSize` keys that we can look at in the future.
+      BigInt(
+        Option(hiveQlTable.getParameters.get("totalSize"))
+          .map(_.toLong)
+          .getOrElse(sqlContext.defaultSizeInBytes))
+    }
+  )
+
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
     hiveQlTable.getInputFormatClass,
@@ -275,14 +294,14 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-   implicit class SchemaAttribute(f: FieldSchema) {
-     def toAttribute = AttributeReference(
-       f.getName,
-       HiveMetastoreTypes.toDataType(f.getType),
-       // Since data can be dumped in randomly with no validation, everything is nullable.
-       nullable = true
-     )(qualifiers = tableName +: alias.toSeq)
-   }
+  implicit class SchemaAttribute(f: FieldSchema) {
+    def toAttribute = AttributeReference(
+      f.getName,
+      HiveMetastoreTypes.toDataType(f.getType),
+      // Since data can be dumped in randomly with no validation, everything is nullable.
+      nullable = true
+    )(qualifiers = tableName +: alias.toSeq)
+  }
 
   // Must be a stable value since new attributes are born here.
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)

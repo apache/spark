@@ -21,16 +21,30 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+object SQLConf {
+  val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
+  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
+  val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
+
+  object Deprecated {
+    val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+  }
+}
+
 /**
- * SQLConf holds mutable config parameters and hints.  These can be set and
- * queried either by passing SET commands into Spark SQL's DSL
- * functions (sql(), hql(), etc.), or by programmatically using setters and
- * getters of this class.
+ * A trait that enables the setting and getting of mutable config parameters/hints.
  *
- * SQLConf is thread-safe (internally synchronized so safe to be used in multiple threads).
+ * In the presence of a SQLContext, these can be set and queried by passing SET commands
+ * into Spark SQL's query functions (sql(), hql(), etc.). Otherwise, users of this trait can
+ * modify the hints by programmatically calling the setters and getters of this trait.
+ *
+ * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
 trait SQLConf {
   import SQLConf._
+
+  @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
+    new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
@@ -40,28 +54,33 @@ trait SQLConf {
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
-   * a broadcast value during the physical executions of join operations.  Setting this to 0
+   * a broadcast value during the physical executions of join operations.  Setting this to -1
    * effectively disables auto conversion.
-   * Hive setting: hive.auto.convert.join.noconditionaltask.size.
+   *
+   * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is also 10000.
    */
-  private[spark] def autoConvertJoinSize: Int = get(AUTO_CONVERT_JOIN_SIZE, "10000").toInt
+  private[spark] def autoBroadcastJoinThreshold: Int =
+    get(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
 
-  /** A comma-separated list of table names marked to be broadcasted during joins. */
-  private[spark] def joinBroadcastTables: String = get(JOIN_BROADCAST_TABLES, "")
+  /**
+   * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
+   * it is set to a larger value than `autoConvertJoinSize`, hence any logical operator without a
+   * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
+   */
+  private[spark] def defaultSizeInBytes: Long =
+    getOption(DEFAULT_SIZE_IN_BYTES).map(_.toLong).getOrElse(autoBroadcastJoinThreshold + 1)
 
   /** ********************** SQLConf functionality methods ************ */
 
-  @transient
-  private val settings = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
-
   def set(props: Properties): Unit = {
-    props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
+    settings.synchronized {
+      props.asScala.foreach { case (k, v) => settings.put(k, v) }
+    }
   }
 
   def set(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
-    require(value != null, s"value cannot be null for $key")
+    require(value != null, s"value cannot be null for key: $key")
     settings.put(key, value)
   }
 
@@ -89,14 +108,4 @@ trait SQLConf {
     settings.clear()
   }
 
-}
-
-object SQLConf {
-  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
-  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
-  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
-
-  object Deprecated {
-    val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
-  }
 }
