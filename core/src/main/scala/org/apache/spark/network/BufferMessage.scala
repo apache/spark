@@ -66,7 +66,8 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
         }
         buffer.position(buffer.position + newBuffer.remaining)
         val newChunk = new MessageChunk(new MessageChunkHeader(
-            typ, id, size, newBuffer.remaining, ackId, hasError, security, senderAddress), newBuffer)
+          typ, id, size, newBuffer.remaining, ackId,
+          hasError, security, senderAddress), newBuffer)
         gotChunkForSendingOnce = true
         return Some(newChunk)
       }
