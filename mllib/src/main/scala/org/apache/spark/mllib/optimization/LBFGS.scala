@@ -208,7 +208,7 @@ object LBFGS extends Logging {
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
             (grad1 += grad2, loss1 + loss2)
-          }, depth = 2)
+          })
 
       /**
        * regVal is sum of weight squares if it's L2 updater;

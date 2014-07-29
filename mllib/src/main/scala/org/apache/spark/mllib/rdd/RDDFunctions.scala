@@ -49,11 +49,12 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
   }
 
   /**
-   * Reduces the elements of this RDD in a tree pattern.
-   * @param depth suggested depth of the tree
+   * Reduces the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#reduce]]
    */
-  def treeReduce(f: (T, T) => T, depth: Int): T = {
+  def treeReduce(f: (T, T) => T, depth: Int = 2): T = {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     val cleanF = self.context.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
@@ -80,14 +81,15 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
   }
 
   /**
-   * Aggregates the elements of this RDD in a tree pattern.
-   * @param depth suggested depth of the tree
+   * Aggregates the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#aggregate]]
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
       combOp: (U, U) => U,
-      depth: Int): U = {
+      depth: Int = 2): U = {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (self.partitions.size == 0) {
       return Utils.clone(zeroValue, self.context.env.closureSerializer.newInstance())

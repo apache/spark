@@ -92,9 +92,7 @@ class RowMatrix(
             s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
         U
-      },
-      combOp = (U1, U2) => U1 += U2,
-      depth = 2)
+      }, combOp = (U1, U2) => U1 += U2)
   }
 
   /**
@@ -109,7 +107,7 @@ class RowMatrix(
       seqOp = (U, v) => {
         RowMatrix.dspr(1.0, v, U.data)
         U
-      }, combOp = (U1, U2) => U1 += U2, depth = 2)
+      }, combOp = (U1, U2) => U1 += U2)
 
     RowMatrix.triuToFull(n, GU.data)
   }
@@ -292,8 +290,8 @@ class RowMatrix(
     val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
       seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
       combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
-        (s1._1 + s2._1, s1._2 += s2._2),
-      depth = 2)
+        (s1._1 + s2._1, s1._2 += s2._2)
+    )
 
     updateNumRows(m)
 
@@ -355,8 +353,7 @@ class RowMatrix(
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
     val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2),
-      depth = 2)
+      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
     updateNumRows(summary.count)
     summary
   }
