@@ -100,6 +100,7 @@
     <module>external/twitter</module>
     <module>external/kafka</module>
     <module>external/flume</module>
+    <module>external/flume-sink</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
