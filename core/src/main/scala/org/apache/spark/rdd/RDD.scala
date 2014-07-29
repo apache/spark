@@ -1130,7 +1130,7 @@ abstract class RDD[T: ClassTag](
     mapPartitions { items =>
       // Priority keeps the largest elements, so let's reverse the ordering.
       val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
+      queue ++= items
       Iterator.single(queue)
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
