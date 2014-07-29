@@ -122,6 +122,10 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
   private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], input: RDD[Vector]): RDD[Vector] = {
     val partitioner = new HashPartitioner(input.partitions.size)
     val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
-    cogrouped.map { case (_, values: Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray) }
+    cogrouped.map {
+      case (_, values: Array[Iterable[_]]) =>
+        val doubles = values.asInstanceOf[Array[Iterable[Double]]]
+        new DenseVector(doubles.flatten.toArray)
+    }
   }
 }
