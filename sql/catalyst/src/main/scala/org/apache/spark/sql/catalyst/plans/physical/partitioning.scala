@@ -79,7 +79,7 @@ sealed trait Partitioning {
   val numPartitions: Int
 
   /**
-   * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
+   * Returns true if the guarantees made by this [[Partitioning]] are sufficient
    * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
@@ -87,7 +87,7 @@ sealed trait Partitioning {
   def satisfies(required: Distribution): Boolean
 
   /**
-   * Returns true iff all distribution guarantees made by this partitioning can also be made
+   * Returns true if all distribution guarantees made by this partitioning can also be made
    * for the `other` specified partitioning.
    * For example, two [[HashPartitioning HashPartitioning]]s are
    * only compatible if the `numPartitions` of them is the same.
