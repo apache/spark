@@ -30,6 +30,9 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("having no references",
+    "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
+
   createQueryTest("boolean = number",
     """
       |SELECT
