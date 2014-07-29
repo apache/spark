@@ -26,12 +26,15 @@ __all__ = [
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
     "SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext", "SchemaRDD", "Row"]
 
+
 class PrimitiveTypeSingleton(type):
     _instances = {}
+
     def __call__(cls):
         if cls not in cls._instances:
             cls._instances[cls] = super(PrimitiveTypeSingleton, cls).__call__()
         return cls._instances[cls]
+
 
 class StringType(object):
     """Spark SQL StringType
@@ -44,6 +47,7 @@ class StringType(object):
     def __repr__(self):
         return "StringType"
 
+
 class BinaryType(object):
     """Spark SQL BinaryType
 
@@ -54,6 +58,7 @@ class BinaryType(object):
 
     def __repr__(self):
         return "BinaryType"
+
 
 class BooleanType(object):
     """Spark SQL BooleanType
@@ -66,6 +71,7 @@ class BooleanType(object):
     def __repr__(self):
         return "BooleanType"
 
+
 class TimestampType(object):
     """Spark SQL TimestampType
 
@@ -76,6 +82,7 @@ class TimestampType(object):
 
     def __repr__(self):
         return "TimestampType"
+
 
 class DecimalType(object):
     """Spark SQL DecimalType
@@ -88,6 +95,7 @@ class DecimalType(object):
     def __repr__(self):
         return "DecimalType"
 
+
 class DoubleType(object):
     """Spark SQL DoubleType
 
@@ -99,13 +107,15 @@ class DoubleType(object):
     def __repr__(self):
         return "DoubleType"
 
+
 class FloatType(object):
     """Spark SQL FloatType
 
     For now, please use L{DoubleType} instead of using L{FloatType}.
     Because query evaluation is done in Scala, java.lang.Double will be be used
     for Python float numbers. Because the underlying JVM type of FloatType is
-    java.lang.Float (in Java) and Float (in scala), there will be a java.lang.ClassCastException
+    java.lang.Float (in Java) and Float (in scala), and we are trying to cast the type,
+    there will be a java.lang.ClassCastException
     if FloatType (Python) is used.
 
     """
@@ -114,13 +124,15 @@ class FloatType(object):
     def __repr__(self):
         return "FloatType"
 
+
 class ByteType(object):
     """Spark SQL ByteType
 
     For now, please use L{IntegerType} instead of using L{ByteType}.
     Because query evaluation is done in Scala, java.lang.Integer will be be used
     for Python int numbers. Because the underlying JVM type of ByteType is
-    java.lang.Byte (in Java) and Byte (in scala), there will be a java.lang.ClassCastException
+    java.lang.Byte (in Java) and Byte (in scala), and we are trying to cast the type,
+    there will be a java.lang.ClassCastException
     if ByteType (Python) is used.
 
     """
@@ -128,6 +140,7 @@ class ByteType(object):
 
     def __repr__(self):
         return "ByteType"
+
 
 class IntegerType(object):
     """Spark SQL IntegerType
@@ -139,6 +152,7 @@ class IntegerType(object):
 
     def __repr__(self):
         return "IntegerType"
+
 
 class LongType(object):
     """Spark SQL LongType
@@ -152,13 +166,15 @@ class LongType(object):
     def __repr__(self):
         return "LongType"
 
+
 class ShortType(object):
     """Spark SQL ShortType
 
     For now, please use L{IntegerType} instead of using L{ShortType}.
     Because query evaluation is done in Scala, java.lang.Integer will be be used
     for Python int numbers. Because the underlying JVM type of ShortType is
-    java.lang.Short (in Java) and Short (in scala), there will be a java.lang.ClassCastException
+    java.lang.Short (in Java) and Short (in scala), and we are trying to cast the type,
+    there will be a java.lang.ClassCastException
     if ShortType (Python) is used.
 
     """
@@ -166,6 +182,7 @@ class ShortType(object):
 
     def __repr__(self):
         return "ShortType"
+
 
 class ArrayType(object):
     """Spark SQL ArrayType
@@ -196,9 +213,9 @@ class ArrayType(object):
                str(self.containsNull).lower() + ")"
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and \
-            self.elementType == other.elementType and \
-            self.containsNull == other.containsNull)
+        return (isinstance(other, self.__class__) and
+                self.elementType == other.elementType and
+                self.containsNull == other.containsNull)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -238,13 +255,14 @@ class MapType(object):
                str(self.valueContainsNull).lower() + ")"
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and \
-            self.keyType == other.keyType and \
-            self.valueType == other.valueType and \
-            self.valueContainsNull == other.valueContainsNull)
+        return (isinstance(other, self.__class__) and
+                self.keyType == other.keyType and
+                self.valueType == other.valueType and
+                self.valueContainsNull == other.valueContainsNull)
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
 
 class StructField(object):
     """Spark SQL StructField
@@ -278,13 +296,14 @@ class StructField(object):
                str(self.nullable).lower() + ")"
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and \
-            self.name == other.name and \
-            self.dataType == other.dataType and \
-            self.nullable == other.nullable)
+        return (isinstance(other, self.__class__) and
+                self.name == other.name and
+                self.dataType == other.dataType and
+                self.nullable == other.nullable)
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
 
 class StructType(object):
     """Spark SQL StructType
@@ -315,11 +334,12 @@ class StructType(object):
                ",".join([field.__repr__() for field in self.fields]) + "))"
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and \
-            self.fields == other.fields)
+        return (isinstance(other, self.__class__) and
+                self.fields == other.fields)
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
 
 def _parse_datatype_list(datatype_list_string):
     """Parses a list of comma separated data types.
@@ -347,6 +367,7 @@ def _parse_datatype_list(datatype_list_string):
     datatype_string = datatype_list_string[start:index].strip()
     datatype_list.append(_parse_datatype_string(datatype_string))
     return datatype_list
+
 
 def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
@@ -471,6 +492,7 @@ def _parse_datatype_string(datatype_string):
         field_list_string = rest_part[rest_part.find("(")+1:-1]
         fields = _parse_datatype_list(field_list_string)
         return StructType(fields)
+
 
 class SQLContext:
     """Main entry point for SparkSQL functionality.

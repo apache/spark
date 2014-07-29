@@ -87,9 +87,6 @@ public abstract class DataType {
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code false}.
-   *
-   * @param elementType
-   * @return
    */
   public static ArrayType createArrayType(DataType elementType) {
     if (elementType == null) {
@@ -102,9 +99,6 @@ public abstract class DataType {
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}) and
    * whether the array contains null values ({@code containsNull}).
-   * @param elementType
-   * @param containsNull
-   * @return
    */
   public static ArrayType createArrayType(DataType elementType, boolean containsNull) {
     if (elementType == null) {
@@ -117,10 +111,6 @@ public abstract class DataType {
   /**
    * Creates a MapType by specifying the data type of keys ({@code keyType}) and values
    * ({@code keyType}). The field of {@code valueContainsNull} is set to {@code true}.
-   *
-   * @param keyType
-   * @param valueType
-   * @return
    */
   public static MapType createMapType(DataType keyType, DataType valueType) {
     if (keyType == null) {
@@ -137,10 +127,6 @@ public abstract class DataType {
    * Creates a MapType by specifying the data type of keys ({@code keyType}), the data type of
    * values ({@code keyType}), and whether values contain any null value
    * ({@code valueContainsNull}).
-   * @param keyType
-   * @param valueType
-   * @param valueContainsNull
-   * @return
    */
   public static MapType createMapType(
       DataType keyType,
@@ -159,10 +145,6 @@ public abstract class DataType {
   /**
    * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}) and
    * whether values of this field can be null values ({@code nullable}).
-   * @param name
-   * @param dataType
-   * @param nullable
-   * @return
    */
   public static StructField createStructField(String name, DataType dataType, boolean nullable) {
     if (name == null) {
@@ -177,8 +159,6 @@ public abstract class DataType {
 
   /**
    * Creates a StructType with the given list of StructFields ({@code fields}).
-   * @param fields
-   * @return
    */
   public static StructType createStructType(List<StructField> fields) {
     return createStructType(fields.toArray(new StructField[0]));
@@ -186,8 +166,6 @@ public abstract class DataType {
 
   /**
    * Creates a StructType with the given StructField array ({@code fields}).
-   * @param fields
-   * @return
    */
   public static StructType createStructType(StructField[] fields) {
     if (fields == null) {

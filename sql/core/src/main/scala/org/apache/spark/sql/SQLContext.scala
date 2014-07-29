@@ -94,6 +94,26 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Creates a [[SchemaRDD]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+   *
+   *  val schema =
+   *    StructType(
+   *      StructField("name", StringType, false) ::
+   *      StructField("age", IntegerType, true) :: Nil)
+   *
+   *  val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val peopleSchemaRDD = sqlContext. applySchema(people, schema)
+   *  peopleSchemaRDD.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   *
+   *    peopleSchemaRDD.registerAsTable("people")
+   *  sqlContext.sql("select name from people").collect.foreach(println)
+   * }}}
    *
    * @group userf
    */

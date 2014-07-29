@@ -116,7 +116,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          ArrayType(toDataType(field), false)
+          ArrayType(toDataType(field), containsNull = false)
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -147,7 +147,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
-            ArrayType(elementType, false)
+            ArrayType(elementType, containsNull = false)
           } else { // everything else: StructType
             val fields = groupType
               .getFields
