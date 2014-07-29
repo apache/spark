@@ -612,20 +612,19 @@ private[spark] object PythonRDD extends Logging {
       compressionCodecClass: String) = {
     saveAsHadoopFile(
       pyRDD, batchSerialized, path, "org.apache.hadoop.mapred.SequenceFileOutputFormat",
-      null, null, null, null, new java.util.HashMap(), compressionCodecClass, false)
+      null, null, null, null, new java.util.HashMap(), compressionCodecClass)
   }
 
   /**
-   * Output a Python RDD of key-value pairs to any Hadoop file system, using either old
-   * (mapred package) or new (mapreduce package) Hadoop `OutputFormat`. Keys and values are
-   * converted to suitable output types using either user specified converters or, if not
-   * specified, [[org.apache.spark.api.python.JavaToWritableConverter]]. Post-conversion types
+   * Output a Python RDD of key-value pairs to any Hadoop file system, using old Hadoop
+   * `OutputFormat` in mapred package. Keys and values are converted to suitable output
+   * types using either user specified converters or, if not specified,
+   * [[org.apache.spark.api.python.JavaToWritableConverter]]. Post-conversion types
    * `keyClass` and `valueClass` are automatically inferred if not specified. The passed-in
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
-   * this RDD. Compression codec `codecClass` is only effective with the old format.
+   * this RDD.
    */
-  def saveAsHadoopFile[K, V, F <: OutputFormat[_, _], G <: NewOutputFormat[_, _],
-                       C <: CompressionCodec](
+  def saveAsHadoopFile[K, V, F <: OutputFormat[_, _], C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -635,8 +634,7 @@ private[spark] object PythonRDD extends Logging {
       keyConverterClass: String,
       valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String],
-      compressionCodecClass: String,
-      useNewAPI: Boolean) = {
+      compressionCodecClass: String) = {
     val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
     val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
       inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
@@ -644,13 +642,37 @@ private[spark] object PythonRDD extends Logging {
     val codec = Option(compressionCodecClass).map(Class.forName(_).asInstanceOf[Class[C]])
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
-    if (useNewAPI) {
-      val fc = Class.forName(outputFormatClass).asInstanceOf[Class[G]]
-      converted.saveAsNewAPIHadoopFile(path, kc, vc, fc, mergedConf)
-    } else {
-      val fc = Class.forName(outputFormatClass).asInstanceOf[Class[F]]
-      converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec=codec)
-    }
+    val fc = Class.forName(outputFormatClass).asInstanceOf[Class[F]]
+    converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec=codec)
+  }
+
+  /**
+   * Output a Python RDD of key-value pairs to any Hadoop file system, using new Hadoop
+   * `OutputFormat` in mapreduce package. Keys and values are converted to suitable output
+   * types using either user specified converters or, if not specified,
+   * [[org.apache.spark.api.python.JavaToWritableConverter]]. Post-conversion types
+   * `keyClass` and `valueClass` are automatically inferred if not specified. The passed-in
+   * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
+   * this RDD.
+   */
+  def saveAsNewAPIHadoopFile[K, V, F <: NewOutputFormat[_, _]](
+      pyRDD: JavaRDD[Array[Byte]],
+      batchSerialized: Boolean,
+      path: String,
+      outputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String]) = {
+    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
+    val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
+      inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
+    val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
+    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
+      new JavaToWritableConverter)
+    val fc = Class.forName(outputFormatClass).asInstanceOf[Class[F]]
+    converted.saveAsNewAPIHadoopFile(path, kc, vc, fc, mergedConf)
   }
 
   /**
@@ -665,9 +687,9 @@ private[spark] object PythonRDD extends Logging {
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       confAsMap: java.util.HashMap[String, String],
-      useNewAPI: Boolean,
       keyConverterClass: String,
-      valueConverterClass: String) = {
+      valueConverterClass: String,
+      useNewAPI: Boolean) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val converted = convertRDD(SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized),
       keyConverterClass, valueConverterClass, new JavaToWritableConverter)
