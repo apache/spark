@@ -57,7 +57,7 @@ private[spark] object Utils extends Logging {
     new File(sparkHome + File.separator + "bin", which + suffix)
   }
 
-  /** Serialize an object using the closure serializer. **/
+  /** Serialize an object using the closure serializer. */
   def serializeTaskClosure[T: ClassTag](o: T): Array[Byte] = {
     val ser = SparkEnv.get.closureSerializer.newInstance()
     ser.serialize(o).array()
