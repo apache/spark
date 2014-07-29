@@ -19,13 +19,11 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructField => JStructField}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
@@ -104,7 +102,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *      StructField("name", StringType, false) ::
    *      StructField("age", IntegerType, true) :: Nil)
    *
-   *  val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val people =
+   *    sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
    *  val peopleSchemaRDD = sqlContext. applySchema(people, schema)
    *  peopleSchemaRDD.printSchema
    *  // root
@@ -434,13 +434,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Peek at the first row of the RDD and infer its schema.
+   * It is only used by PySpark.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     import scala.collection.JavaConversions._
     def typeOfComplexValue: PartialFunction[Any, DataType] = {
+      case c: java.util.Calendar => TimestampType
       case c: java.util.List[_] =>
-        ArrayType(typeOfObject(c.head))
-      case c: java.util.Set[_] =>
         ArrayType(typeOfObject(c.head))
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
@@ -450,18 +450,51 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ArrayType(typeOfObject(elem))
       case c => throw new Exception(s"Object of type $c cannot be used")
     }
-
     def typeOfObject = ScalaReflection.typeOfObject orElse typeOfComplexValue
 
-    val schema = rdd.first().map { case (fieldName, obj) =>
-      AttributeReference(fieldName, typeOfObject(obj), true)()
-    }.toSeq
+    val firstRow = rdd.first()
+    val schema = StructType(
+      firstRow.map { case (fieldName, obj) =>
+        StructField(fieldName, typeOfObject(obj), true)
+      }.toSeq)
 
-    val rowRdd = rdd.mapPartitions { iter =>
+    def needTransform(obj: Any): Boolean = obj match {
+      case c: java.util.List[_] => true
+      case c: java.util.Map[_, _] => true
+      case c if c.getClass.isArray => true
+      case c: java.util.Calendar => true
+      case c => false
+    }
+
+    // convert JList, JArray into Seq, convert JMap into Map
+    // convert Calendar into Timestamp
+    def transform(obj: Any): Any = obj match {
+      case c: java.util.List[_] => c.map(transform).toSeq
+      case c: java.util.Map[_, _] => c.map {
+        case (key, value) => (key, transform(value))
+      }.toMap
+      case c if c.getClass.isArray =>
+        c.asInstanceOf[Array[_]].map(transform).toSeq
+      case c: java.util.Calendar =>
+        new java.sql.Timestamp(c.getTime().getTime())
+      case c => c
+    }
+
+    val need = firstRow.exists { case (key, value) => needTransform(value) }
+    val transformed = if (need) {
+      rdd.mapPartitions { iter =>
+        iter.map {
+          m => m.map {case (key, value) => (key, transform(value))}
+        }
+      }
+    } else rdd
+
+    val rowRdd = transformed.mapPartitions { iter =>
       iter.map { map =>
         new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
       }
     }
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd)))
   }
+
 }
