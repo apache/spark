@@ -38,7 +38,7 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
@@ -55,6 +55,12 @@ private[spark] object Utils extends Logging {
   def sparkBin(sparkHome: String, which: String): File = {
     val suffix = if (isWindows) ".cmd" else ""
     new File(sparkHome + File.separator + "bin", which + suffix)
+  }
+
+  /** Serialize an object using the closure serializer. **/
+  def serializeTaskClosure[T: ClassTag](o: T): Array[Byte] = {
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    ser.serialize(o).array()
   }
 
   /** Serialize an object using Java serialization */

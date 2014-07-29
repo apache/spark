@@ -710,9 +710,23 @@ class DAGScheduler(
     // event.
     listenerBus.post(SparkListenerStageSubmitted(stage.info, properties))
 
-    var broadcastRddBinary: Broadcast[Array[Byte]] = null
+    // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
+    // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
+    // the serialized copy of the RDD and for each task we will deserialize it, which means each
+    // task gets a different copy of the RDD. This provides stronger isolation between tasks that
+    // might modify state of objects referenced in their closures. This is necessary in Hadoop
+    // where the JobConf/Configuration object is not thread-safe.
+    var taskBinary: Broadcast[Array[Byte]] = null
     try {
-      broadcastRddBinary = stage.rdd.createBroadcastBinary()
+      // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
+      // For ResultTask, serialize and broadcast (rdd, func).
+      val taskBinaryBytes: Array[Byte] =
+        if (stage.isShuffleMap) {
+          Utils.serializeTaskClosure((stage.rdd, stage.shuffleDep.get) : AnyRef)
+        } else {
+          Utils.serializeTaskClosure((stage.rdd, stage.resultOfJob.get.func) : AnyRef)
+        }
+      taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
@@ -729,7 +743,7 @@ class DAGScheduler(
       for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
         val locs = getPreferredLocs(stage.rdd, p)
         val part = stage.rdd.partitions(p)
-        tasks += new ShuffleMapTask(stage.id, broadcastRddBinary, stage.shuffleDep.get, part, locs)
+        tasks += new ShuffleMapTask(stage.id, taskBinary, part, locs)
       }
     } else {
       // This is a final stage; figure out its job's missing partitions
@@ -738,7 +752,7 @@ class DAGScheduler(
         val p: Int = job.partitions(id)
         val part = stage.rdd.partitions(p)
         val locs = getPreferredLocs(stage.rdd, p)
-        tasks += new ResultTask(stage.id, broadcastRddBinary, job.func, part, locs, id)
+        tasks += new ResultTask(stage.id, taskBinary, part, locs, id)
       }
     }
 
@@ -747,6 +761,9 @@ class DAGScheduler(
       // exception here because it would be fairly hard to catch the non-serializable exception
       // down the road, where we have several different implementations for local scheduler and
       // cluster schedulers.
+      //
+      // We've already serialized RDDs and closures in taskBinary, but here we check for all other
+      // objects such as Partition.
       try {
         SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
       } catch {

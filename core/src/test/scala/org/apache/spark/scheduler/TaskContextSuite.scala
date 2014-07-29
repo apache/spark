@@ -25,6 +25,7 @@ import org.apache.spark.Partition
 import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -40,7 +41,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     }
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val task = new ResultTask[String, String](
-      0, rdd.createBroadcastBinary(), func, rdd.partitions(0), Seq(), 0)
+      0, sc.broadcast(Utils.serializeTaskClosure((rdd, func))), rdd.partitions(0), Seq(), 0)
     intercept[RuntimeException] {
       task.run(0)
     }
