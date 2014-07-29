@@ -33,7 +33,7 @@ class DecisionTreeRegressorModel(topNode: Node) extends DecisionTreeModel(topNod
    * Print full model.
    */
   override def toString: String = {
-    s"DecisionTreeRegressorModel" + topNode.toStringRecursive(2)
+    s"DecisionTreeRegressorModel\n" + topNode.toStringRecursive(2)
   }
 
 }

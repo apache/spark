@@ -176,7 +176,7 @@ object DecisionTreeRunner {
         }
         val dtLearner = new DecisionTreeClassifier(dtParams)
         val model = dtLearner.run(training, datasetInfo)
-        model.print()
+        println(model.toString)
         val accuracy = accuracyScore(model, test)
         println(s"Test accuracy = $accuracy")
       }
@@ -189,7 +189,7 @@ object DecisionTreeRunner {
         }
         val dtLearner = new DecisionTreeRegressor(dtParams)
         val model = dtLearner.run(training, datasetInfo)
-        model.print()
+        println(model.toString)
         val mse = meanSquaredError(model, test)
         println(s"Test mean squared error = $mse")
       }

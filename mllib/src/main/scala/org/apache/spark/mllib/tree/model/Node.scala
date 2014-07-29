@@ -118,9 +118,9 @@ class Node (
     if (isLeaf) {
       prefix + s"Predict: $predict\n"
     } else {
-      prefix + s"If ${splitToString(split.get, left=true)}" +
+      prefix + s"If ${splitToString(split.get, left=true)}\n" +
         leftNode.get.toStringRecursive(indentFactor + 1) +
-        prefix + s"Else ${splitToString(split.get, left=false)}" +
+        prefix + s"Else ${splitToString(split.get, left=false)}\n" +
         rightNode.get.toStringRecursive(indentFactor + 1)
     }
   }

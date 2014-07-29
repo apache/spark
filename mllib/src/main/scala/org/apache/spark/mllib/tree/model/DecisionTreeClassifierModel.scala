@@ -33,7 +33,7 @@ class DecisionTreeClassifierModel(topNode: Node) extends DecisionTreeModel(topNo
    * Print full model.
    */
   override def toString: String = {
-    s"DecisionTreeClassifierModel" + topNode.toStringRecursive(2)
+    s"DecisionTreeClassifierModel\n" + topNode.toStringRecursive(2)
   }
 
 }
