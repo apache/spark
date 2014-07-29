@@ -42,7 +42,7 @@ private[spark] abstract class ApplicationHistoryProvider {
    * @param appId The application ID.
    * @return The application's UI, or null if application is not found.
    */
-  def getAppUI(appId: String): SparkUI
+  def getAppUI(appId: String): Option[SparkUI]
 
   /**
    * Called when the server is shutting down.

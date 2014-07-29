@@ -31,6 +31,8 @@ import org.apache.spark.util.Utils
 private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
 
+  private val NOT_STARTED = "<Not Started>"
+
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
@@ -98,7 +100,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   override def getListing() = appList.values
 
-  override def getAppUI(appId: String): SparkUI = {
+  override def getAppUI(appId: String): Option[SparkUI] = {
     try {
       appList.get(appId).map(info => {
         val (replayBus, appListener) = createReplayBus(fs.getFileStatus(
@@ -114,15 +116,16 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         replayBus.replay()
 
         // Note that this does not have any effect due to SPARK-2169.
-        ui.setAppName(s"${appListener.appName} ($appId)")
+        ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
 
         val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
         ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-        ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+        ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
+          appListener.viewAcls.getOrElse(""))
         ui
-      }).getOrElse(null)
+      })
     } catch {
-      case e: FileNotFoundException => null
+      case e: FileNotFoundException => None
     }
   }
 
@@ -161,18 +164,18 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             new FsApplicationHistoryInfo(
               dir.getPath().getName(),
               appListener.appId.getOrElse(dir.getPath().getName()),
-              appListener.appName,
-              appListener.startTime,
-              appListener.endTime,
+              appListener.appName.getOrElse(NOT_STARTED),
+              appListener.startTime.getOrElse(-1L),
+              appListener.endTime.getOrElse(-1L),
               getModificationTime(dir),
-              appListener.sparkUser)
+              appListener.sparkUser.getOrElse(NOT_STARTED))
           } catch {
             case e: Exception =>
               logInfo(s"Failed to load application log data from $dir.", e)
               null
           }
         }
-        .sortBy { info => -info.endTime }
+        .sortBy { info => if (info != null) -info.endTime else -1 }
 
       mostRecentLogModTime = newMostRecentModTime
 
@@ -228,7 +231,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
     ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-    ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+    ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
+      appListener.viewAcls.getOrElse(""))
     ui
   }
 

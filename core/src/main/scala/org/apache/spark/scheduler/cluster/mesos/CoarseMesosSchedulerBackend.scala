@@ -304,6 +304,6 @@ private[spark] class CoarseMesosSchedulerBackend(
     slaveLost(d, s)
   }
 
-  override def applicationId(): Option[String] =
-    Some(frameworkId).map(id => Some(id.getValue())).getOrElse(null)
+  override def applicationId(): Option[String] = None
+
 }
