@@ -26,6 +26,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * :: DeveloperApi ::
@@ -195,13 +196,14 @@ object LBFGS extends Logging {
 
     override def calculate(weights: BDV[Double]) = {
       // Have a local copy to avoid the serialization of CostFun object which is not serializable.
-      val localData = data
       val localGradient = gradient
+      val n = weights.length
+      val bcWeights = data.context.broadcast(weights)
 
-      val (gradientSum, lossSum) = localData.aggregate((BDV.zeros[Double](weights.size), 0.0))(
+      val (gradientSum, lossSum) = data.treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
-              features, label, Vectors.fromBreeze(weights), Vectors.fromBreeze(grad))
+              features, label, Vectors.fromBreeze(bcWeights.value), Vectors.fromBreeze(grad))
             (grad, loss + l)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
