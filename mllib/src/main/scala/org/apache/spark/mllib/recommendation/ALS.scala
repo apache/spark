@@ -255,6 +255,9 @@ class ALS private (
           rank, lambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
@@ -268,6 +271,9 @@ class ALS private (
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
           rank, lambda, alpha, YtY = None)
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
