@@ -74,7 +74,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
       conf: Configuration = new Configuration()): JavaSchemaRDD = {
     new JavaSchemaRDD(
       sqlContext,
-      ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf))
+      ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf, sqlContext))
   }
 
   /**
@@ -94,7 +94,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
         new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
       }
     }
-    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(sqlContext))
   }
 
   /**
@@ -107,7 +107,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def applySchema(rowRDD: JavaRDD[Row], schema: JStructType): JavaSchemaRDD = {
     val scalaRowRDD = rowRDD.rdd.map(r => r.row)
     val scalaSchema = asScalaDataType(schema).asInstanceOf[StructType]
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))
+    val logicalPlan =
+      SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -117,7 +118,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(
       sqlContext,
-      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration)))
+      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a JavaSchemaRDD.
@@ -143,7 +144,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
     val appliedScalaSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))
     val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))
+    val logicalPlan =
+      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -158,7 +160,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
       Option(asScalaDataType(schema)).getOrElse(
         JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[StructType]
     val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))
+    val logicalPlan =
+      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 

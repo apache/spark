@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
@@ -31,6 +32,16 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.ScalaReflection
+=======
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types._
+>>>>>>> upstream/master
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -85,7 +96,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
 
   /**
    * :: DeveloperApi ::
@@ -121,7 +132,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
     // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))(self)
     new SchemaRDD(this, logicalPlan)
   }
 
@@ -131,7 +142,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration)))
+    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
@@ -197,7 +208,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     applySchema(rowRDD, appliedSchema)
   }
 
-
   /**
    * :: Experimental ::
    * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
@@ -229,7 +239,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       conf: Configuration = new Configuration()): SchemaRDD = {
     new SchemaRDD(
       this,
-      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+      ParquetRelation.createEmpty(
+        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
   /**
@@ -239,11 +250,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    val name = tableName
-    val newPlan = rdd.logicalPlan transform {
-      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
-    }
-    catalog.registerTable(None, tableName, newPlan)
+    catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
   /**
@@ -265,8 +272,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
         currentTable.logicalPlan
 
       case _ =>
-        val useCompression =
-          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
         InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
     }
 
@@ -281,7 +286,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
+        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
       case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
@@ -303,12 +308,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
+    def codegenEnabled = self.codegenEnabled
+
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
       TakeOrdered ::
-      PartialAggregation ::
+      HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
@@ -366,27 +373,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
-   * inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) ::
-      Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
+      Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
+  @DeveloperApi
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = planner(optimizedPlan).next()
+    lazy val sparkPlan = {
+      SparkPlan.currentContext.set(self)
+      planner(optimizedPlan).next()
+    }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
@@ -406,6 +416,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
+         |Code Generation: ${executedPlan.codegenEnabled}
+         |== RDD ==
+         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 
@@ -541,6 +554,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       }
     }
 
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
   }
 }
