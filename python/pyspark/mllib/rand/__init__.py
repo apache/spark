@@ -19,7 +19,6 @@
 Python package for mllib.random
 """
 
-from pyspark.mllib.random import RandomRDDGenerators
-
+import RandomRDDGenerators
 
 __all__ = ["RandomRDDGenerators"]

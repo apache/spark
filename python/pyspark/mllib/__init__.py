@@ -24,3 +24,5 @@ Python bindings for MLlib.
 import numpy
 if numpy.version.version < '1.4':
     raise Exception("MLlib requires NumPy 1.4+")
+
+import rand as random
