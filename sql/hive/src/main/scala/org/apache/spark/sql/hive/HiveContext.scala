@@ -46,6 +46,8 @@ import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
  * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
  */
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
+
+  ///aaaaaaaaaaaaaaaaaaaaa
   
 
   lazy val metastorePath = new File("metastore").getCanonicalPath
