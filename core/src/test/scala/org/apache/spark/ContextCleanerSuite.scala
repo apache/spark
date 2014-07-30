@@ -19,9 +19,6 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
-import org.apache.spark.broadcast.Broadcast
-
-import scala.collection.mutable
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps
@@ -102,7 +99,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[Ha
   }
 
   /** Run GC and make sure it actually has run */
-  private def runGC() {
+  protected def runGC() {
     val weakRef = new WeakReference(new Object())
     val startTime = System.currentTimeMillis
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
@@ -213,7 +210,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val numRdds = 100
     val numBroadcasts = 4 // Broadcasts are more costly
     val rddBuffer = (1 to numRdds).map(i => randomRdd()).toBuffer
-    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
+    val broadcastBuffer = (1 to numBroadcasts).map(i => newBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
@@ -252,7 +249,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val numRdds = 10
     val numBroadcasts = 4 // Broadcasts are more costly
     val rddBuffer = (1 to numRdds).map(i => randomRdd()).toBuffer
-    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
+    val broadcastBuffer = (1 to numBroadcasts).map(i => newBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
@@ -328,7 +325,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     val numRdds = 10
     val numBroadcasts = 4 // Broadcasts are more costly
     val rddBuffer = (1 to numRdds).map(i => randomRdd).toBuffer
-    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast).toBuffer
+    val broadcastBuffer = (1 to numBroadcasts).map(i => newBroadcast).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId()
     val broadcastIds = broadcastBuffer.map(_.id)
