@@ -27,7 +27,7 @@ acquire_rat_jar () {
   
   if [[ ! -f "$rat_jar" ]]; then
     # Download rat launch jar if it hasn't been downloaded yet
-    if [ ! -f ${JAR} ]; then
+    if [ ! -f "$JAR" ]; then
     # Download
     printf "Attempting to fetch rat\n"
     JAR_DL=${JAR}.part
@@ -40,10 +40,10 @@ acquire_rat_jar () {
       exit -1
     fi
     fi
-    if [ ! -f ${JAR} ]; then
-    # We failed to download
-    printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
-    exit -1
+    if [ ! -f "$JAR" ]; then
+      # We failed to download
+      printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+      exit -1
     fi
     printf "Launching rat from ${JAR}\n"
   fi
