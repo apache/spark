@@ -22,7 +22,7 @@ set -e
 
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+cd "$FWDIR"
 
 echo -e "q\n" | sbt/sbt oldDeps/update
 
