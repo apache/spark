@@ -44,6 +44,8 @@ private[hive] case class SourceCommand(filePath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
+private[hive] case class DropTable(tableName: String) extends Command
+
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
   protected val nativeCommands = Seq(
@@ -96,7 +98,6 @@ private[hive] object HiveQl {
     "TOK_CREATEINDEX",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
-    "TOK_DROPTABLE",
     "TOK_MSCK",
 
     // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
@@ -377,6 +378,10 @@ private[hive] object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
+    // Special drop table that also uncaches.
+    case Token("TOK_DROPTABLE",
+           Token("TOK_TABNAME",
+              Token(tableName, Nil) :: Nil) :: Nil) => DropTable(tableName)
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
