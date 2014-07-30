@@ -36,6 +36,14 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
     resetSparkContext()
     super.afterEach()
   }
+  override def afterEach() {
+    resetSparkContext()
+    super.afterEach()
+  }
+  override def afterEach() {
+    resetSparkContext()
+    super.afterEach()
+  }
 
   def resetSparkContext() = {
     LocalSparkContext.stop(sc)

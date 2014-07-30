@@ -78,7 +78,7 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
     *src/*.scala *src/*.py *src/*.java | awk '{ print $4 - $6 }')
   test_line_delta=$(git diff master --shortstat -- \
     *test/*.scala *test/*.py *test/*.java | awk '{ print ($4 - $6 > 0 ? $4 - $6 : 0) }')
-  if [ "$source_line_delta" -gt "50" ]; then
+  if [ "$source_line_delta" -gt "30" ]; then
     test_coverage=$(echo "$test_line_delta $source_line_delta" | awk '{printf "%.1f \n", $1/$2}')
     if [ "$test_line_delta" == "0" ]; then test_coverage_string="NON-EXISTENT"
       elif [ "$test_coverage" == "0.1" ]; then test_coverage_string="MINIMAL"
