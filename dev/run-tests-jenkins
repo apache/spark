@@ -73,12 +73,14 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
   if [ "$new_public_classes" != "" ]; then
     result_message="$result_message- This patch adds the following public classes (experimental):<br>"
     result_message="$result_message$new_public_classes"
-  fi
+  fi 
   source_line_delta=$(git diff master --shortstat -- \
     *src/*.scala *src/*.py *src/*.java | awk '{ print $4 - $6 }')
   test_line_delta=$(git diff master --shortstat -- \
     *test/*.scala *test/*.py *test/*.java | awk '{ print ($4 - $6 > 0 ? $4 - $6 : 0) }')
-  if [ "$source_line_delta" -gt "30" ]; then
+  echo "SOURCES: $source_line_delta"
+  echo "TESTS: $test_line_delta"
+  if [[ (-n "$source_line_delta") && ("$source_line_delta" -gt "10") ]]; then
     test_coverage=$(echo "$test_line_delta $source_line_delta" | awk '{printf "%.1f \n", $1/$2}')
     if [ "$test_line_delta" == "0" ]; then test_coverage_string="NON-EXISTENT"
       elif [ "$test_coverage" == "0.1" ]; then test_coverage_string="MINIMAL"
