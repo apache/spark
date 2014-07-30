@@ -32,6 +32,7 @@ Spark.UI = (function ($) {
 
     // define a function that fills a table with the rows given
     // from a JSON data input: [{row1},{row2},...]
+    // if an entry in a row is an array it will further expand it with <span>
     var fillTable = function (data, tableId) {
         var tbl_body = "";
         $.each(data, function() {
@@ -42,12 +43,12 @@ Spark.UI = (function ($) {
                     $.each(this, function(i, l) {
                         tbl_longentry += "<span>" + l + "<br/></span>";
                     })
-                    tbl_row += "<td>"+tbl_longentry+"</td>";
+                    tbl_row += "<td>" + tbl_longentry + "</td>";
                 } else {
-                  tbl_row += "<td>"+v+"</td>";
+                  tbl_row += "<td>" + v + "</td>";
                 }
             });
-            tbl_body += "<tr>"+tbl_row+"</tr>";
+            tbl_body += "<tr>" + tbl_row + "</tr>";
         })
         $("#" + tableId + " tbody").html(tbl_body);
     };

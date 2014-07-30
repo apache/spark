@@ -105,8 +105,10 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      val taskTable = UIUtils.listingTable(
-        taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      //val taskTable = UIUtils.listingTable(
+      //  taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      val taskTableId = "taskTable"
+      val taskTable = UIUtils.listingEmptyTable(taskHeaders, taskTableId)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
@@ -213,7 +215,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
-        <h4>Tasks</h4> ++ taskTable
+        <h4>Tasks</h4> ++ taskTable ++
+        UIUtils.fillTableJavascript(parent.prefix + "/stage/tasks", taskTableId, Some(stageId))
 
       UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
         parent.headerTabs, parent)
