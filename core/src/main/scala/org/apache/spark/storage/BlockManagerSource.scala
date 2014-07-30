@@ -55,11 +55,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
   metricRegistry.register(MetricRegistry.name("disk", "diskSpaceUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val diskSpaceUsed = storageStatusList
-        .flatMap(_.blocks.values.map(_.diskSize))
-        .reduceOption(_ + _)
-        .getOrElse(0L)
-
+      val diskSpaceUsed = storageStatusList.map(_.diskUsed).reduceOption(_ + _).getOrElse(0L)
       diskSpaceUsed / 1024 / 1024
     }
   })

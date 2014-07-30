@@ -265,8 +265,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case(blockManagerId, info) =>
-      val blockMap = mutable.Map[BlockId, BlockStatus](info.blocks.toSeq: _*)
-      new StorageStatus(blockManagerId, info.maxMem, blockMap)
+      val storageStatus = new StorageStatus(blockManagerId, info.maxMem)
+      info.blocks.foreach { case (id, status) => storageStatus.addBlock(id, status) }
+      storageStatus
     }.toArray
   }
 

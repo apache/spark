@@ -51,9 +51,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   /** Update each RDD's info to reflect any updates to the RDD's storage status */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty) {
     val rddInfos = _rddInfoMap.values.toSeq
-    val updatedRddInfos =
-      StorageUtils.rddInfoFromStorageStatus(storageStatusList, rddInfos, updatedBlocks)
-    updatedRddInfos.foreach { info => _rddInfoMap(info.id) = info }
+    StorageUtils.rddInfoFromStorageStatus(storageStatusList, rddInfos, updatedBlocks)
   }
 
   /**
