@@ -194,7 +194,10 @@ object Flume {
 
 object Catalyst {
   lazy val settings = Seq(
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full))
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
+    // Quasiquotes break compiling scala doc...
+    // TODO: Investigate fixing this.
+    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
 }
 
 object SQL {
