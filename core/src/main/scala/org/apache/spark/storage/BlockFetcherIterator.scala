@@ -370,7 +370,7 @@ object BlockFetcherIterator {
 
     private def readyStatuses = (0 until statuses.size).filter(statuses(_)._1 != null)
 
-    //check if there's new map outputs ready to collect
+    // Check if there's new map outputs available
     private def newStatusesReady = readyStatuses.exists(!delegatedStatuses.contains(_))
 
     private def getIterator() = {
@@ -405,14 +405,10 @@ object BlockFetcherIterator {
       // If we have blocks not delegated yet, try to delegate them to a new iterator
       // and depend on the iterator to tell us if there are valid blocks.
       while (delegatedStatuses.size < statuses.size) {
-        try {
-          val newItr = getIterator()
-          iterators += newItr
-          if (newItr.hasNext) {
-            return true
-          }
-        } catch {
-          case e: SparkException => return false
+        val newItr = getIterator()
+        iterators += newItr
+        if (newItr.hasNext) {
+          return true
         }
       }
       false
