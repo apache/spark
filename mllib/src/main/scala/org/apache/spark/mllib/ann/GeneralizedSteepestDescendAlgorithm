@@ -45,21 +45,21 @@ abstract class GeneralizedSteepestDescendModel(val weights: Vector )
    *
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
-   * 
+   *
    * If the prediction model consists of a multi-dimensional vector, predictPoint
-   * returns only the first element of each vector. To get the whole vector, 
+   * returns only the first element of each vector. To get the whole vector,
    * use predictPointV instead.
    */
   protected def predictPoint( dataMatrix: Vector, weightMatrix: Vector ): Double
-  
+
   /**
    * Predict the result given a data point and the weights learned.
    *
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
-   * 
+   *
    * Returns the complete output vector.
-   */  
+   */
   protected def predictPointV( dataMatrix: Vector, weightsMatrix: Vector ): Vector
 
   /**
@@ -67,57 +67,57 @@ abstract class GeneralizedSteepestDescendModel(val weights: Vector )
    *
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
-   * 
+   *
    * Returns only first element of output vector.
    */
   def predict( testData: RDD[Vector] ): RDD[Double] = {
-    
-    val localWeights = weights    
+
+    val localWeights = weights
     testData.map(v => predictPoint(v, localWeights ) )
-    
+
   }
-  
+
   /**
    * Predict values for the given data set using the model trained.
    *
    * @param testData RDD representing data points to be predicted
    * @return RDD[Vector] where each entry contains the corresponding prediction
-   * 
+   *
    * Returns the complete output vector.
-   */  
+   */
   def predictV( testData: RDD[Vector] ): RDD[Vector] = {
-    
+
     val localWeights = weights
     testData.map( v => predictPointV( v, localWeights ) )
-    
+
   }
-  
+
   /**
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
-   * 
+   *
    * Returns only first element of output vector.
    */
   def predict( testData: Vector ): Double = {
-    
+
     predictPoint( testData, weights )
-    
+
   }
-  
+
   /**
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
-   * 
+   *
    * Returns the complete vector.
    */
   def predictV( testData: Vector ): Vector = {
-    
+
     predictPointV( testData, weights )
-    
+
   }
 
 }
@@ -139,7 +139,7 @@ abstract class GeneralizedSteepestDescendAlgorithm[M <: GeneralizedSteepestDesce
    * Create a model given the weights
    */
   protected def createModel(weights: Vector): M
-  
+
   /** Prepends one to the input vector. */
   private def prependOne(vector: Vector): Vector = {
     val vector1 = vector.toBreeze match {
@@ -154,12 +154,17 @@ abstract class GeneralizedSteepestDescendAlgorithm[M <: GeneralizedSteepestDesce
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    */
-  def run(input: RDD[(Vector,Vector)], initialWeights: Vector): M = {        
-    
-    val data = input.map( v => ( (0.0).toDouble, Vectors.fromBreeze( DenseVector.vertcat( v._1.toBreeze.toDenseVector, v._2.toBreeze.toDenseVector ) ) ) )
+  def run(input: RDD[(Vector,Vector)], initialWeights: Vector): M = {
+
+    val data = input.map( v => (
+      (0.0).toDouble,
+      Vectors.fromBreeze( DenseVector.vertcat(
+        v._1.toBreeze.toDenseVector, 
+        v._2.toBreeze.toDenseVector ) ) 
+      ) )
     val weights = optimizer.optimize(data, initialWeights)
 
     createModel( weights )
-    
+
   }
 }
