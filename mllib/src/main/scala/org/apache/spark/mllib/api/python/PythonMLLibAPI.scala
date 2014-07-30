@@ -43,6 +43,16 @@ class PythonMLLibAPI extends Serializable {
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
 
+  /**
+   * Enumeration used to define the type of Regularizer
+   * used for linear methods.
+   */
+  object RegularizerType extends Serializable {
+    val L2 : Int = 0
+    val L1 : Int = 1
+    val NONE : Int = 2
+  }
+
   private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
     val magic = bytes(offset)
@@ -248,30 +258,8 @@ class PythonMLLibAPI extends Serializable {
       dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int,
       stepSize: Double,
-      miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel(
-      (data, initialWeights) =>
-        LinearRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          miniBatchFraction,
-          initialWeights),
-      dataBytesJRDD,
-      initialWeightsBA)
-  }
-
-  /**
-   * Java stub for Python mllib LinearRegressionWithSGD.train() function
-   * allowing users to define the regularizer and intercept parameters using L2
-   * optimization.
-   */
-  def trainLinearRegressionModelWithSGDL2Opt(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
-      numIterations: Int,
-      stepSize: Double,
       regParam: Double,
+      regType: Int,
       intercept: Boolean,
       miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -280,42 +268,14 @@ class PythonMLLibAPI extends Serializable {
     lrAlg.optimizer.
       setNumIterations(numIterations).
       setRegParam(regParam).
-      setStepSize(stepSize).
-      setUpdater(new SquaredL2Updater)
+      setStepSize(stepSize)
+    if (regType == RegularizerType.L2)
+      lrAlg.optimizer.setUpdater(new SquaredL2Updater)
+    else if (regType == RegularizerType.L1)
+      lrAlg.optimizer.setUpdater(new L1Updater)
     trainRegressionModel(
       (data, initialWeights) =>
-        lrAlg.run(
-          data,
-          initialWeights),
-      dataBytesJRDD,
-      initialWeightsBA)
-  }
-  
-  /**
-   * Java stub for Python mllib LinearRegressionWithSGD.train() function
-   * allowing users to define the regularizer and intercept parameters using L1
-   * optimization.
-   */
-  def trainLinearRegressionModelWithSGDL1Opt(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
-      numIterations: Int,
-      stepSize: Double,
-      regParam: Double,
-      intercept: Boolean,
-      miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    val lrAlg = new LinearRegressionWithSGD()
-    lrAlg.setIntercept(intercept)
-    lrAlg.optimizer.
-      setNumIterations(numIterations).
-      setRegParam(regParam).
-      setStepSize(stepSize).
-      setUpdater(new L1Updater)
-    trainRegressionModel(
-      (data, initialWeights) =>
-        lrAlg.run(
-          data,
-          initialWeights),
+        lrAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }

@@ -109,33 +109,33 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     """
 
+class RegularizerType(object):
+    L2 = 0
+    L1 = 1
+    NONE = 2
 
 class LinearRegressionWithSGD(object):
     @classmethod
-    def train(cls, data, iterations=100, step=1.0,
-              miniBatchFraction=1.0, initialWeights=None):
+    def train(cls, data, iterations=100, step=1.0, regParam=1.0, regType=None,
+              intercept=False, miniBatchFraction=1.0, initialWeights=None):
         """Train a linear regression model on the given data."""
         sc = data.context
-        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-            d._jrdd, iterations, step, miniBatchFraction, i)
-        return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
-
-    @classmethod
-    def trainL2Opt(cls, data, iterations=100, step=1.0, regParam=1.0,
-                   intercept=False, miniBatchFraction=1.0, initialWeights=None):
-        """Train a linear regression model on the given data using L2 optimizer."""
-        sc = data.context
-        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGDL2Opt(
-            d._jrdd, iterations, step, regParam, intercept, miniBatchFraction, i)
-        return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
-
-    @classmethod
-    def trainL1Opt(cls, data, iterations=100, step=1.0, regParam=1.0,
-                   intercept=False, miniBatchFraction=1.0, initialWeights=None):
-        """Train a linear regression model on the given data using L1 optimizer."""
-        sc = data.context
-        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGDL1Opt(
-            d._jrdd, iterations, step, regParam, intercept, miniBatchFraction, i)
+        if regType is None:
+            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
+                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().NONE(),
+                intercept, miniBatchFraction, i)
+        elif regType == RegularizerType.L2:
+            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
+                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().L2(),
+                intercept, miniBatchFraction, i)
+        elif regType == RegularizerType.L1:
+            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
+                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().L1(),
+                intercept, miniBatchFraction, i)
+        elif regType == RegularizerType.NONE:
+            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
+                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().NONE(),
+                intercept, miniBatchFraction, i)
         return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 class LassoModel(LinearRegressionModelBase):
