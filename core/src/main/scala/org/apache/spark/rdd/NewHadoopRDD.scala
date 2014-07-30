@@ -73,9 +73,7 @@ class NewHadoopRDD[K, V](
   with SparkHadoopMapReduceUtil
   with Logging {
 
-  // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
-  // private val serializableConf = new SerializableWritable(conf)
+  private val serializableConf = new SerializableWritable(conf)
 
   private val jobTrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
@@ -104,7 +102,7 @@ class NewHadoopRDD[K, V](
     val iter = new Iterator[(K, V)] {
       val split = theSplit.asInstanceOf[NewHadoopPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
-      val conf = confBroadcast.value.value
+      val conf = serializableConf.value
       val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       val format = inputFormatClass.newInstance
@@ -189,8 +187,6 @@ class NewHadoopRDD[K, V](
     }
     locs.getOrElse(split.getLocations.filter(_ != "localhost"))
   }
-
-  def getConf: Configuration = confBroadcast.value.value
 }
 
 private[spark] object NewHadoopRDD {
