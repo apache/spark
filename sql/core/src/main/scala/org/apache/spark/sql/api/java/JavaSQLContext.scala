@@ -72,7 +72,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
       conf: Configuration = new Configuration()): JavaSchemaRDD = {
     new JavaSchemaRDD(
       sqlContext,
-      ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf))
+      ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf, sqlContext))
   }
 
   /**
@@ -101,7 +101,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(
       sqlContext,
-      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration)))
+      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].

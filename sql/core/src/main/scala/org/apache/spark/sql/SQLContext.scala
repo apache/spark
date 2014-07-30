@@ -94,7 +94,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration)))
+    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
@@ -160,7 +160,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       conf: Configuration = new Configuration()): SchemaRDD = {
     new SchemaRDD(
       this,
-      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+      ParquetRelation.createEmpty(
+        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
   /**
@@ -228,12 +229,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
+    def codegenEnabled = self.codegenEnabled
+
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
       TakeOrdered ::
-      PartialAggregation ::
+      HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
@@ -291,27 +294,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
-   * inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) ::
-      Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
+      Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
+  @DeveloperApi
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = planner(optimizedPlan).next()
+    lazy val sparkPlan = {
+      SparkPlan.currentContext.set(self)
+      planner(optimizedPlan).next()
+    }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
@@ -331,6 +337,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
+         |Code Generation: ${executedPlan.codegenEnabled}
+         |== RDD ==
+         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 

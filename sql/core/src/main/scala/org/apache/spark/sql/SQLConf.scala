@@ -24,8 +24,11 @@ import scala.collection.JavaConverters._
 object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
-  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
+  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
+  val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
+  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
+  val CODEGEN_ENABLED = "spark.sql.codegen"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -55,6 +58,18 @@ trait SQLConf {
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt
+
+  /**
+   * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
+   * that evaluates expressions found in queries.  In general this custom code runs much faster
+   * than interpreted evaluation, but there are significant start-up costs due to compilation.
+   * As a result codegen is only benificial when queries run for a long time, or when the same
+   * expressions are used multiple times.
+   *
+   * Defaults to false as this feature is currently experimental.
+   */
+  private[spark] def codegenEnabled: Boolean =
+    if (get(CODEGEN_ENABLED, "false") == "true") true else false
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -111,5 +126,5 @@ trait SQLConf {
   private[spark] def clear() {
     settings.clear()
   }
-
 }
+

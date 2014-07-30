@@ -41,13 +41,13 @@ package object debug {
    */
   @DeveloperApi
   implicit class DebugQuery(query: SchemaRDD) {
-    def debug(implicit sc: SparkContext): Unit = {
+    def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[Long]()
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(s.id) =>
           visited += s.id
-          DebugNode(sc, s)
+          DebugNode(s)
       }
       println(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
@@ -57,9 +57,7 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugNode(
-      @transient sparkContext: SparkContext,
-      child: SparkPlan) extends UnaryNode {
+  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
     def references = Set.empty
 
     def output = child.output
