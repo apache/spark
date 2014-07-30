@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
-
-import org.apache.spark.sql.Logging
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value

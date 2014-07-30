@@ -24,4 +24,6 @@ package object catalyst {
    * 2.10.* builds.  See SI-6240 for more details.
    */
   protected[catalyst] object ScalaReflectionLock
+
+  protected[catalyst] type Logging = com.typesafe.scalalogging.slf4j.Logging
 }
