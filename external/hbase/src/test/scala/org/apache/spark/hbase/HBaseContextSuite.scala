@@ -41,42 +41,24 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
   val tableName = "t1"
   val columnFamily = "c"
 
-    val config = new Configuration
-    config.set("hbase.defaults.for.version.skip", "true")
-    config.set("hbase.defaults.for.version", "foo")
+  val htu = HBaseTestingUtility.createLocalHTU()
 
 
-
-
-
-
-    val htu = HBaseTestingUtility.createLocalHTU(config)
-    htu.getConfiguration().setBoolean("hbase.defaults.for.version.skip", true)
-    htu.getConfiguration().set("hbase.defaults.for.version", "foo")
-
-    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
-
-    println("1")
-    htu.cleanupTestDir()
-    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
-    println("2")
-    println("starting miniclusterFooBar")
-    htu.startMiniZKCluster();
-    println("hbase.defaults.for.version:" + htu.getConfiguration().get("hbase.defaults.for.version"))
-    htu.getConfiguration().setBoolean("hbase.defaults.for.version.skip", true)
-    htu.getConfiguration().set("hbase.defaults.for.version", "foo")
-    htu.startMiniHBaseCluster(1, 1);
-    println(" - minicluster started")
-    try {
-      htu.deleteTable(Bytes.toBytes(tableName))
-    } catch {
-      case e: Exception => {
-        println(" - no table " + tableName + " found")
-      }
+  htu.cleanupTestDir()
+  println("starting miniclusterFooBar")
+  htu.startMiniZKCluster();
+  htu.startMiniHBaseCluster(1, 1);
+  println(" - minicluster started")
+  try {
+    htu.deleteTable(Bytes.toBytes(tableName))
+  } catch {
+    case e: Exception => {
+      println(" - no table " + tableName + " found")
     }
-    println(" - creating table " + tableName)
-    htu.createTable(Bytes.toBytes(tableName), Bytes.toBytes(columnFamily))
-    println(" - created table")
+  }
+  println(" - creating table " + tableName)
+  htu.createTable(Bytes.toBytes(tableName), Bytes.toBytes(columnFamily))
+  println(" - created table")
 
   override def beforeAll() {
     
