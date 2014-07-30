@@ -289,6 +289,10 @@ def _parse_datatype_list(datatype_list_string):
     return datatype_list
 
 
+_all_primitive_types = dict((k, v) for k, v in globals().iteritems()
+    if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
+
+
 def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
 
@@ -296,27 +300,7 @@ def _parse_datatype_string(datatype_string):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.__repr__())
     ...     python_datatype = _parse_datatype_string(scala_datatype.toString())
     ...     return datatype == python_datatype
-    >>> check_datatype(StringType())
-    True
-    >>> check_datatype(BinaryType())
-    True
-    >>> check_datatype(BooleanType())
-    True
-    >>> check_datatype(TimestampType())
-    True
-    >>> check_datatype(DecimalType())
-    True
-    >>> check_datatype(DoubleType())
-    True
-    >>> check_datatype(FloatType())
-    True
-    >>> check_datatype(ByteType())
-    True
-    >>> check_datatype(IntegerType())
-    True
-    >>> check_datatype(LongType())
-    True
-    >>> check_datatype(ShortType())
+    >>> all(check_datatype(cls()) for cls in _all_primitive_types.values())
     True
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -357,28 +341,8 @@ def _parse_datatype_string(datatype_string):
         left_bracket_index = len(datatype_string)
     type_or_field = datatype_string[:left_bracket_index]
     rest_part = datatype_string[left_bracket_index+1:len(datatype_string)-1].strip()
-    if type_or_field == "StringType":
-        return StringType()
-    elif type_or_field == "BinaryType":
-        return BinaryType()
-    elif type_or_field == "BooleanType":
-        return BooleanType()
-    elif type_or_field == "TimestampType":
-        return TimestampType()
-    elif type_or_field == "DecimalType":
-        return DecimalType()
-    elif type_or_field == "DoubleType":
-        return DoubleType()
-    elif type_or_field == "FloatType":
-        return FloatType()
-    elif type_or_field == "ByteType":
-        return ByteType()
-    elif type_or_field == "IntegerType":
-        return IntegerType()
-    elif type_or_field == "LongType":
-        return LongType()
-    elif type_or_field == "ShortType":
-        return ShortType()
+    if type_or_field in _all_primitive_types:
+        return _all_primitive_types[type_or_field]()
     elif type_or_field == "ArrayType":
         last_comma_index = rest_part.rfind(",")
         containsNull = True
