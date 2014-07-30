@@ -161,7 +161,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
-    // Offer a host with NOPREF as the constraint,
+    // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
     var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
