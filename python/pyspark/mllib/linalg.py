@@ -255,4 +255,6 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
+    import sys
+    sys.path.pop(0)
     _test()

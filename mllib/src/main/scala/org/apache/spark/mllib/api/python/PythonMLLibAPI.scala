@@ -463,7 +463,7 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.uniformRDD(jsc.sc, size, numPartitions, seed)
-      .map(serializeDouble).toJavaRDD()
+      .map(serializeDouble)
   }
 
   /**
@@ -474,7 +474,7 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.normalRDD(jsc.sc, size, numPartitions, seed)
-      .map(serializeDouble).toJavaRDD()
+      .map(serializeDouble)
   }
 
   /**
@@ -486,7 +486,7 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.poissonRDD(jsc.sc, mean, size, numPartitions, seed)
-      .map(serializeDouble).toJavaRDD()
+      .map(serializeDouble)
   }
 
   /**
@@ -498,7 +498,7 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.uniformVectorRDD(jsc.sc, numRows, numCols, numPartitions, seed)
-      .map(serializeDoubleVector).toJavaRDD()
+      .map(serializeDoubleVector)
   }
 
   /**
@@ -510,7 +510,7 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.normalVectorRDD(jsc.sc, numRows, numCols, numPartitions, seed)
-      .map(serializeDoubleVector).toJavaRDD()
+      .map(serializeDoubleVector)
   }
 
   /**
@@ -523,6 +523,6 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       seed: Long): JavaRDD[Array[Byte]] = {
     RandomRDDGenerators.poissonVectorRDD(jsc.sc, mean, numRows, numCols, numPartitions, seed)
-      .map(serializeDoubleVector).toJavaRDD()
+      .map(serializeDoubleVector)
   }
 }
