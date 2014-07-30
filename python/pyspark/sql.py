@@ -21,6 +21,7 @@ import types
 import array
 import itertools
 from operator import itemgetter
+from collections import namedtuple
 
 from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
@@ -30,6 +31,7 @@ from py4j.protocol import Py4JError
 __all__ = ["SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext", "SchemaRDD", "Row"]
 
 
+# FIXME: these will be updated to use new API
 def _extend_tree(lines):
     parts = []
 
@@ -61,31 +63,46 @@ def parse_tree_schema(tree):
     parts = _extend_tree(lines)
     return _parse_tree(parts)
 
-def _create_object(cls, v):
-    return cls(v) if v is not None else v
 
-_cached_cls = {}
+_cached_namedtuples = {}
 def _restore_object(fields, obj):
-    cls = _cached_cls.get(fields)
+    """ Restore namedtuple object during unpickling. """
+    cls = _cached_namedtuples.get(fields)
     if cls is None:
         cls = namedtuple("Row", fields)
-        _cached_cls[fields] = cls
+        _cached_namedtuples[fields] = cls
     return cls(*obj)
 
-def create_getter(schema, i):
-    cls = create_cls(schema)
-    def getter(self):
-        return _create_object(cls, self[i])
-    return getter
+def _create_object(cls, v):
+    """ Create an customized object with class `cls`. """
+    return cls(v) if v is not None else v
 
-def create_cls(schema):
+def _create_getter(schema, i):
+    """ Create a getter for item `i` with schema """
+    # TODO: cache created class
+    cls = _create_cls(schema)
+    if cls:
+        def getter(self):
+            return _create_object(cls, self[i])
+        return getter
+    return itemgetter(i)
+
+def _create_cls(schema):
+    """
+    Create an class by schama 
+
+    The created class is similar to namedtuple, but can have nested schema.
+    """
     # this can not be in global
     from operator import itemgetter
 
+    # TODO: update to new DataType
     if isinstance(schema, list):
         if not schema:
-            return list
-        cls = create_cls(schema[0])
+            return
+        cls = _create_cls(schema[0])
+        if not cls:
+            return
         class List(list):
             def __getitem__(self, i):
                 return _create_object(cls, list.__getitem__(self, i))
@@ -95,26 +112,29 @@ def create_cls(schema):
 
     elif isinstance(schema, dict):
         if not schema:
-            return dict
-        vcls = create_cls(schema['value'])
+            return
+        vcls = _create_cls(schema['value'])
+        if not vcls:
+            return
         class Dict(dict):
             def __getitem__(self, k):
-                return create(vcls, dict.__getitem__(self, k))
+                return _create_object(vcls, dict.__getitem__(self, k))
+        return Dict
 
     # builtin types
     elif not isinstance(schema, tuple):
-        return schema
+        return
 
 
     class Row(tuple):
-
+        """ Row in SchemaRDD """
         _fields = tuple(n for n, _ in schema)
 
         for __i,__x in enumerate(schema):
             if isinstance(__x, tuple):
                 __name, _type = __x
                 if _type and isinstance(_type, (tuple,list)):
-                    locals()[__name] = property(create_getter(_type,__i))
+                    locals()[__name] = property(_create_getter(_type,__i))
                 else:
                     locals()[__name] = property(itemgetter(__i))
                 del __name, _type
@@ -374,23 +394,23 @@ class LocalHiveContext(HiveContext):
     An in-process metadata data is created with data stored in ./metadata.
     Warehouse data is stored in in ./warehouse.
 
-    ## disable these tests tempory
-    ## >>> import os
-    ## >>> hiveCtx = LocalHiveContext(sc)
-    ## >>> try:
-    ## ...     supress = hiveCtx.hql("DROP TABLE src")
-    ## ... except Exception:
-    ## ...     pass
-    ## >>> kv1 = os.path.join(os.environ["SPARK_HOME"], 'examples/src/main/resources/kv1.txt')
-    ## >>> supress = hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    ## >>> supress = hiveCtx.hql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src" % kv1)
-    ## >>> results = hiveCtx.hql("FROM src SELECT value").map(lambda r: int(r.value.split('_')[1]))
-    ## >>> num = results.count()
-    ## >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    ## >>> num
-    ## 500
-    ## >>> reduce_sum
-    ## 130091
+    disable these tests tempory
+    >>> import os
+    >>> hiveCtx = LocalHiveContext(sc)
+    >>> try:
+    ...     supress = hiveCtx.hql("DROP TABLE src")
+    ... except Exception:
+    ...     pass
+    >>> kv1 = os.path.join(os.environ["SPARK_HOME"], 'examples/src/main/resources/kv1.txt')
+    >>> supress = hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    >>> supress = hiveCtx.hql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src" % kv1)
+    >>> results = hiveCtx.hql("FROM src SELECT value").map(lambda r: int(r.value.split('_')[1]))
+    >>> num = results.count()
+    >>> reduce_sum = results.reduce(lambda x, y: x + y)
+    >>> num
+    500
+    >>> reduce_sum
+    130091
     """
 
     def _get_hive_ctx(self):
@@ -514,18 +534,33 @@ class SchemaRDD(RDD):
         return self._jschema_rdd.count()
 
     def collect(self):
+        """
+        Return a list that contains all of the rows in this RDD.
+
+        Each object in the list is on Row, the fields can be accessed as
+        attributes.
+        """
         rows = RDD.collect(self)
         schema = parse_tree_schema(self._jschema_rdd.schemaString())
-        cls = create_cls(schema)
+        cls = _create_cls(schema)
         return map(cls, rows)
 
     # convert Row in JavaSchemaRDD into namedtuple, let access fields easier
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+        Return a new RDD by applying a function to each partition of this RDD,
+        while tracking the index of the original partition.
+
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
+        >>> def f(splitIndex, iterator): yield splitIndex
+        >>> rdd.mapPartitionsWithIndex(f).sum()
+        6
+        """
         rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
 
         schema = parse_tree_schema(self._jschema_rdd.schemaString())
         def applySchema(_, it):
-            cls = create_cls(schema)
+            cls = _create_cls(schema)
             return itertools.imap(cls, it)
         
         objrdd = rdd.mapPartitionsWithIndex(applySchema, preservesPartitioning)
