@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+Generator methods for creating RDDs comprised of i.i.d. samples from
+some distribution.
+"""
+
 from random import getrandbits
 
 from pyspark.rdd import RDD

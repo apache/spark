@@ -16,7 +16,7 @@
 #
 
 """
-Python package for mllib.random
+Python package for random data generation.
 """
 
 import RandomRDDGenerators
