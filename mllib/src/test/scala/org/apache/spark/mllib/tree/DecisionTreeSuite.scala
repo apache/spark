@@ -20,8 +20,7 @@ package org.apache.spark.mllib.tree
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.Filter
-import org.apache.spark.mllib.tree.model.Split
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Filter, Split}
 import org.apache.spark.mllib.tree.configuration.{FeatureType, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
@@ -30,6 +29,18 @@ import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.regression.LabeledPoint
 
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
+
+  def validateClassifier(
+      model: DecisionTreeModel,
+      input: Seq[LabeledPoint],
+      requiredAccuracy: Double) {
+    val predictions = input.map { x => model.predict(x.features) }
+    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
+      prediction != expected.label
+    }
+    val accuracy = (input.length - numOffPredictions).toDouble / input.length
+    assert(accuracy >= requiredAccuracy)
+  }
 
   test("split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -602,12 +613,44 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.featureType === Categorical)
   }
 
+  test("stump with categorical variables for multiclass classification, with just enough bins") {
+    val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
+    val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
+    assert(strategy.isMulticlassClassification)
+
+    val model = DecisionTree.train(input, strategy)
+    validateClassifier(model, arr, 1.0)
+    assert(model.numNodes === 3)
+    assert(model.depth === 1)
+
+    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
+    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+      Array[List[Filter]](), splits, bins, 10)
+
+    assert(bestSplits.length === 1)
+    val bestSplit = bestSplits(0)._1
+    assert(bestSplit.feature === 0)
+    assert(bestSplit.categories.length === 1)
+    assert(bestSplit.categories.contains(1))
+    assert(bestSplit.featureType === Categorical)
+    val gain = bestSplits(0)._2
+    assert(gain.leftImpurity == 0)
+    assert(gain.rightImpurity == 0)
+  }
+
   test("stump with continuous variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val input = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
       numClassesForClassification = 3)
     assert(strategy.isMulticlassClassification)
+
+    val model = DecisionTree.train(input, strategy)
+    validateClassifier(model, arr, 0.9)
+
     val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
     val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
       Array[List[Filter]](), splits, bins, 10)
@@ -628,6 +671,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
       numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3))
     assert(strategy.isMulticlassClassification)
+
+    val model = DecisionTree.train(input, strategy)
+    validateClassifier(model, arr, 0.9)
+
     val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
     val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
       Array[List[Filter]](), splits, bins, 10)

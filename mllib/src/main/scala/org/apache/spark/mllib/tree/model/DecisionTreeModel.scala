@@ -50,4 +50,32 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
+
+  /**
+   * Get number of nodes in tree, including leaf nodes.
+   */
+  def numNodes: Int = {
+    topNode.numNodesRecursive
+  }
+
+  /**
+   * Get depth of tree.
+   * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
+   */
+  def depth: Int = {
+    topNode.depthRecursive
+  }
+
+  /**
+   * Print full model.
+   */
+  override def toString: String = algo match {
+    case Classification =>
+      s"DecisionTreeModel classifier\n" + topNode.toStringRecursive(2)
+    case Regression =>
+      s"DecisionTreeModel regressor\n" + topNode.toStringRecursive(2)
+    case _ => throw new IllegalArgumentException(
+      s"DecisionTreeModel given unknown algo parameter: $algo.")
+  }
+
 }
