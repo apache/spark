@@ -1252,7 +1252,7 @@ abstract class RDD[T: ClassTag](
    * Private API for changing an RDD's ClassTag.
    * Used for internal Java <-> Scala API compatibility.
    */
-  private[spark] def retag(classTag: ClassTag[T]): RDD[T] = {
+  private[spark] def retag(implicit classTag: ClassTag[T]): RDD[T] = {
     val oldRDD = this
     new RDD[T](sc, Seq(new OneToOneDependency(this)))(classTag) {
       override protected def getPartitions: Array[Partition] = oldRDD.getPartitions
