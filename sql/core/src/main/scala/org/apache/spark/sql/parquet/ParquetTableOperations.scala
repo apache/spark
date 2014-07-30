@@ -167,7 +167,7 @@ case class InsertIntoParquetTable(
 
     val writeSupport =
       if (child.output.map(_.dataType).forall(_.isPrimitive)) {
-        logger.debug("Initializing MutableRowWriteSupport")
+        log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
         classOf[org.apache.spark.sql.parquet.RowWriteSupport]

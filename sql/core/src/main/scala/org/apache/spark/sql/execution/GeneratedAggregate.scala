@@ -130,11 +130,11 @@ case class GeneratedAggregate(
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
       val newAggregationBuffer = newProjection(initialValues, child.output)
-      logger.info(s"Initial values: ${initialValues.mkString(",")}")
+      log.info(s"Initial values: ${initialValues.mkString(",")}")
 
       // A projection that computes the group given an input tuple.
       val groupProjection = newProjection(groupingExpressions, child.output)
-      logger.info(s"Grouping Projection: ${groupingExpressions.mkString(",")}")
+      log.info(s"Grouping Projection: ${groupingExpressions.mkString(",")}")
 
       // A projection that is used to update the aggregate values for a group given a new tuple.
       // This projection should be targeted at the current values for the group and then applied
@@ -142,14 +142,14 @@ case class GeneratedAggregate(
       val updateExpressions = computeFunctions.flatMap(_.update)
       val updateSchema = computeFunctions.flatMap(_.schema) ++ child.output
       val updateProjection = newMutableProjection(updateExpressions, updateSchema)()
-      logger.info(s"Update Expressions: ${updateExpressions.mkString(",")}")
+      log.info(s"Update Expressions: ${updateExpressions.mkString(",")}")
 
       // A projection that produces the final result, given a computation.
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
           (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
-      logger.info(s"Result Projection: ${resultExpressions.mkString(",")}")
+      log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
       val joinedRow = new JoinedRow
 
