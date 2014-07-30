@@ -204,7 +204,7 @@ class EdgePartition[
     if (size > 0) {
       builder.add(currSrcId, currDstId, currAttr)
     }
-    builder.toEdgePartition.withVertices(vertices).withActiveSet(activeSet)
+    builder.toEdgePartitionWithoutSort.withVertices(vertices).withActiveSet(activeSet)
   }
 
   /**
@@ -238,7 +238,7 @@ class EdgePartition[
       }
       i += 1
     }
-    builder.toEdgePartition.withVertices(vertices).withActiveSet(activeSet)
+    builder.toEdgePartitionWithoutSort.withVertices(vertices).withActiveSet(activeSet)
   }
 
   /**
