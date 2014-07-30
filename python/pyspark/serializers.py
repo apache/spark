@@ -75,6 +75,7 @@ class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
+    NULL = -4
 
 
 class Serializer(object):
@@ -336,6 +337,8 @@ class UTF8Deserializer(Serializer):
 
     def loads(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.NULL:
+            return None
         return stream.read(length).decode('utf8')
 
     def load_stream(self, stream):

@@ -22,6 +22,7 @@ import java.net._
 import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -273,9 +274,10 @@ private object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
+  val NULL = -4
 }
 
-private[spark] object PythonRDD extends Logging {
+private[spark] object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
   /**
@@ -315,42 +317,51 @@ private[spark] object PythonRDD extends Logging {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
+  @tailrec
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
     // The right way to implement this would be to use TypeTags to get the full
     // type of T.  Since I don't want to introduce breaking changes throughout the
     // entire Spark API, I have to use this hacky approach:
+    def writeBytes(bytes: Array[Byte]) {
+      if (bytes == null) {
+        dataOut.writeInt(SpecialLengths.NULL)
+      } else {
+        dataOut.writeInt(bytes.length)
+        dataOut.write(bytes)
+      }
+    }
     if (iter.hasNext) {
       val first = iter.next()
       val newIter = Seq(first).iterator ++ iter
       first match {
         case arr: Array[Byte] =>
-          newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { bytes =>
-            dataOut.writeInt(bytes.length)
-            dataOut.write(bytes)
-          }
+          newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { writeBytes(_) }
         case string: String =>
-          newIter.asInstanceOf[Iterator[String]].foreach { str =>
-            writeUTF(str, dataOut)
-          }
+          newIter.asInstanceOf[Iterator[String]].foreach { writeUTF(_, dataOut) }
         case pair: Tuple2[_, _] =>
           pair._1 match {
             case bytePair: Array[Byte] =>
-              newIter.asInstanceOf[Iterator[Tuple2[Array[Byte], Array[Byte]]]].foreach { pair =>
-                dataOut.writeInt(pair._1.length)
-                dataOut.write(pair._1)
-                dataOut.writeInt(pair._2.length)
-                dataOut.write(pair._2)
+              newIter.asInstanceOf[Iterator[Tuple2[Array[Byte], Array[Byte]]]].foreach {
+                case (k, v) =>
+                  writeBytes(k)
+                  writeBytes(v)
               }
             case stringPair: String =>
-              newIter.asInstanceOf[Iterator[Tuple2[String, String]]].foreach { pair =>
-                writeUTF(pair._1, dataOut)
-                writeUTF(pair._2, dataOut)
+              newIter.asInstanceOf[Iterator[Tuple2[String, String]]].foreach {
+                case (k, v) =>
+                  writeUTF(k, dataOut)
+                  writeUTF(v, dataOut)
               }
             case other =>
               throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
           }
         case other =>
-          throw new SparkException("Unexpected element type " + first.getClass)
+          if (other == null) {
+            dataOut.writeInt(SpecialLengths.NULL)
+            writeIteratorToStream(iter, dataOut)
+          } else {
+            throw new SparkException("Unexpected element type " + first.getClass)
+          }
       }
     }
   }
@@ -520,9 +531,13 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    if (str == null) {
+      dataOut.writeInt(SpecialLengths.NULL)
+    } else {
+      val bytes = str.getBytes(UTF8)
+      dataOut.writeInt(bytes.length)
+      dataOut.write(bytes)
+    }
   }
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
