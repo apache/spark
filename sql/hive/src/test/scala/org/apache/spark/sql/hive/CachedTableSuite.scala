@@ -44,6 +44,10 @@ class CachedTableSuite extends HiveComparisonTest {
     }
   }
 
+  test("DROP nonexistant table") {
+    hql("DROP TABLE IF EXISTS nonexistantTable")
+  }
+
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
       case _ : InMemoryRelation => // Found evidence of caching

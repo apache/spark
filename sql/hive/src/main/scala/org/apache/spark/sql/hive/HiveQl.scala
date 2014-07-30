@@ -44,7 +44,7 @@ private[hive] case class SourceCommand(filePath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
-private[hive] case class DropTable(tableName: String) extends Command
+private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -380,8 +380,10 @@ private[hive] object HiveQl {
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Special drop table that also uncaches.
     case Token("TOK_DROPTABLE",
-           Token("TOK_TABNAME",
-              Token(tableName, Nil) :: Nil) :: Nil) => DropTable(tableName)
+           Token("TOK_TABNAME", tableNameParts) ::
+           ifExists) =>
+      val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
+      DropTable(tableName, ifExists.nonEmpty)
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>

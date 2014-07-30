@@ -28,14 +28,15 @@ import org.apache.spark.sql.hive.HiveContext
  * Drops a table from the metastore and removes it if it is cached.
  */
 @DeveloperApi
-case class DropTable(tableName: String) extends LeafNode with Command {
+case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with Command {
 
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   def output = Seq.empty
 
   override protected[sql] lazy val sideEffectResult: Seq[Any] = {
-    hiveContext.runSqlHive(s"DROP TABLE $tableName")
+    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
     Seq.empty
   }
