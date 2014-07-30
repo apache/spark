@@ -68,9 +68,9 @@ class LogisticGradient extends Gradient {
     val gradient = brzData * gradientMultiplier
     val loss =
       if (label > 0) {
-        math.log(1 + math.exp(margin))
+        math.log1p(math.exp(margin)) // log1p is log(1+p) but more accurate for small p
       } else {
-        math.log(1 + math.exp(margin)) - margin
+        math.log1p(math.exp(margin)) - margin
       }
 
     (Vectors.fromBreeze(gradient), loss)
@@ -89,9 +89,9 @@ class LogisticGradient extends Gradient {
     brzAxpy(gradientMultiplier, brzData, cumGradient.toBreeze)
 
     if (label > 0) {
-      math.log(1 + math.exp(margin))
+      math.log1p(math.exp(margin))
     } else {
-      math.log(1 + math.exp(margin)) - margin
+      math.log1p(math.exp(margin)) - margin
     }
   }
 }
