@@ -31,7 +31,11 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
     val requestedFirst = (requestedPage - 1) * pageSize
 
-    val allApps = parent.getApplicationList()
+    val requestedIncludeIncomplete = Option(request.getParameter("includeIncomplete")).getOrElse("false").toBoolean
+
+    val allApps = parent.getApplicationList().filter( app =>
+      requestedIncludeIncomplete || !app.incomplete
+    )
     val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
     val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
 
@@ -47,13 +51,20 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
           <ul class="unstyled">
             { providerConfig.map(e => <li><strong>{e._1}:</strong> {e._2}</li>) }
           </ul>
+          <a href={createPageLink(actualPage, !requestedIncludeIncomplete)}>
+            {if (requestedIncludeIncomplete) {"Hide incomplete apps" } else { "Include incomplete apps" }}
+          </a>
           {
             if (allApps.size > 0) {
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
                 <span style="float: right">
-                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
-                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
+                  {if (actualPage > 1)
+                    <a href={createPageLink(actualPage - 1, requestedIncludeIncomplete)}>&lt;</a>
+                  }
+                  {if (actualPage < pageCount)
+                    <a href={createPageLink(actualPage + 1, requestedIncludeIncomplete)}>&gt;</a>
+                  }
                 </span>
               </h4> ++
               appTable
@@ -77,8 +88,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
     val startTime = UIUtils.formatDate(info.startTime)
-    val endTime = UIUtils.formatDate(info.endTime)
-    val duration = UIUtils.formatDuration(info.endTime - info.startTime)
+    val endTime = if(!info.incomplete) UIUtils.formatDate(info.endTime) else "-"
+    val duration = if(!info.incomplete) UIUtils.formatDuration(info.endTime - info.startTime) else "-"
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{info.name}</a></td>
@@ -88,5 +99,12 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <td>{info.sparkUser}</td>
       <td>{lastUpdated}</td>
     </tr>
+  }
+
+  private def createPageLink(linkPage: Int, includeIncomplete: Boolean): String = {
+    "/?" + Array(
+      "page=" + linkPage,
+      "includeIncomplete=" + includeIncomplete
+    ).mkString("&")
   }
 }
