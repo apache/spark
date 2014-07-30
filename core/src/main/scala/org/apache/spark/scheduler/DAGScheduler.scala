@@ -115,6 +115,10 @@ class DAGScheduler(
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
 
+  // A closure serializer that we reuse.
+  // This is only safe because DAGScheduler runs in a single thread.
+  private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+
   private[scheduler] var eventProcessActor: ActorRef = _
 
   private def initializeEventProcessActor() {
@@ -722,9 +726,9 @@ class DAGScheduler(
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
-          Utils.serializeTaskClosure((stage.rdd, stage.shuffleDep.get) : AnyRef)
+          closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
         } else {
-          Utils.serializeTaskClosure((stage.rdd, stage.resultOfJob.get.func) : AnyRef)
+          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
@@ -765,7 +769,7 @@ class DAGScheduler(
       // We've already serialized RDDs and closures in taskBinary, but here we check for all other
       // objects such as Partition.
       try {
-        SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
+        closureSerializer.serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>
           abortStage(stage, "Task not serializable: " + e.toString)

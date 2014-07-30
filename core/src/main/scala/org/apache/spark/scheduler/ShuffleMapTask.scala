@@ -33,13 +33,14 @@ import org.apache.spark.shuffle.ShuffleWriter
 * See [[org.apache.spark.scheduler.Task]] for more information.
 *
  * @param stageId id of the stage this task belongs to
- * @param taskBinary broadcast version of of the RDD and the ShuffleDependency
+ * @param taskBinary broadcast version of of the RDD and the ShuffleDependency. Once deserialized,
+ *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
-    taskBinary: Broadcast[Array[Byte]],  // (RDD[_], ShuffleDependency[_, _, _])
+    taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation])
   extends Task[MapStatus](stageId, partition.index) with Logging {
