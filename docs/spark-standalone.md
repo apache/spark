@@ -242,8 +242,8 @@ To run an interactive Spark shell against the cluster, run the following command
 
     ./bin/spark-shell --master spark://IP:PORT
 
-Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script will
-automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
+Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script
+will automatically set master according to `spark.master` in `spark-defaults.conf`.
 
 You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
