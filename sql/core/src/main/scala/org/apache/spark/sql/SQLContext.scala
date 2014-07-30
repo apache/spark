@@ -24,15 +24,6 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.ScalaReflection
-=======
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
@@ -40,8 +31,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types._
->>>>>>> upstream/master
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -477,6 +466,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Map[String, _]],
       schema: StructType): SchemaRDD = {
+    // TODO: We should have a better implementation once we do not turn a Python side record
+    // to a Map.
     import scala.collection.JavaConversions._
     import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
