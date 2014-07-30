@@ -53,11 +53,15 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 case class ParquetTableScan(
     // note: output cannot be transient, see
     // https://issues.apache.org/jira/browse/SPARK-1367
-    output: Seq[Attribute],
+    attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])(
     @transient val sqlContext: SQLContext)
   extends LeafNode {
+
+  // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
+  // by exprId.
+  val output = attributes.map(a => relation.output.find(o => o.exprId == a.exprId).get)
 
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
@@ -113,7 +117,6 @@ case class ParquetTableScan(
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sqlContext)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
-      this
     }
   }
 
