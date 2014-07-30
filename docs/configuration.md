@@ -620,6 +620,62 @@ Apart from these, the following properties are also available, and may be useful
     between nodes leading to flooding the network with those.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.fileclient.connect.timeout</code></td>
+  <td>60000</td>
+  <td>
+    The maximum allowed time in milliseconds for FileClient to connect to FileServer.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileclient.send.timeout</code></td>
+  <td>60</td>
+  <td>
+    The maximum allowed wait time in milliseconds for FileClient to send a request to FileServer after the connection has been established.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileclient.watermark.high</code></td>
+  <td>512</td>
+  <td>
+    The high watermark for FileClient in kbytes. If the number of bytes queued in the write buffer exceeds this value, Netty <code> Channel.isWritable() </code> will start to return false.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileclient.watermark.low</code></td>
+  <td>128</td>
+  <td>
+    The low watermark for FileClient in kbytes. Once the number of bytes queued in the write buffer exceeded the high water mark and then dropped down below this value, Netty <code>Channel.isWritable()</code> will start to return true again.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileserver.watermark.high</code></td>
+  <td>1024</td>
+  <td>
+    The high watermark for FileServer in kbytes. If the number of bytes queued in the write buffer exceeds this value, Netty <code> Channel.isWritable() </code> will start to return false.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileserver.watermark.low</code></td>
+  <td>256</td>
+  <td>
+    The low watermark for FileServer in kbytes. Once the number of bytes queued in the write buffer exceeded the high water mark and then dropped down below this value, Netty <code>Channel.isWritable()</code> will start to return true again.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileserver.receivebuf</code></td>
+  <td>1536</td>
+  <td>
+    Set SO_RCVBUF of the FileSever socket. It specifies the size of the buffer the kernel allocates to hold the data arriving into the given socket during the time between it arrives over the network and when it is read by the program that owns this socket. With TCP, if data arrives and you are not reading it, the buffer will fill up, and the sender will be told to slow down.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.fileserver.backlog</code></td>
+  <td>100</td>
+  <td>
+    Set SO_BACKLOG of the FileServer socket. It indicates the maximum queue length for incoming connection indications (a request to connect) is set to the backlog parameter. If a connection indication arrives when the queue is full, the connection is refused.
+  </td>
+</tr>
 </table>
 
 #### Scheduling

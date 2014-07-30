@@ -20,12 +20,14 @@ package org.apache.spark.network.netty;
 import java.util.concurrent.TimeUnit;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
+import org.apache.spark.SparkConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,11 +40,14 @@ class FileClient {
   private Bootstrap bootstrap = null;
   private EventLoopGroup group = null;
   private final int connectTimeout;
-  private final int sendTimeout = 60; // 1 min
+  private final int sendTimeout;
+  private final SparkConf conf;
 
-  FileClient(FileClientHandler handler, int connectTimeout) {
+  FileClient(FileClientHandler handler, SparkConf conf) {
     this.handler = handler;
-    this.connectTimeout = connectTimeout;
+    this.connectTimeout = conf.getInt("spark.shuffle.fileclient.connect.timeout", 60000);
+    this.sendTimeout = conf.getInt("spark.shuffle.fileclient.send.timeout", 60);
+    this.conf = conf;
   }
 
   public void init() {
@@ -53,6 +58,9 @@ class FileClient {
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
+      .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, conf.getInt("spark.shuffle.fileclient.watermark.high", 32) * 1024)
+      .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, conf.getInt("spark.shuffle.fileclient.watermark.low", 8) * 1024)
+      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
       .handler(new FileClientChannelInitializer(handler));
   }
 

@@ -44,10 +44,13 @@ abstract class FileClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
     }
     // get file
     if(in.readableBytes() >= currentHeader.fileLen()) {
-      handle(ctx, in, currentHeader);
-      handlerCalled = true;
-      currentHeader = null;
-      ctx.close();
+      try {
+        handle(ctx, in, currentHeader);
+      } finally {
+        handlerCalled = true;
+        currentHeader = null;
+        ctx.close();
+      }
     }
   }
 
