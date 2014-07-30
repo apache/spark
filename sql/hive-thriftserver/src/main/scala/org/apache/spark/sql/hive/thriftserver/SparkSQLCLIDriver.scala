@@ -190,12 +190,12 @@ private[hive] object SparkSQLCLIDriver {
         reader.setHistory(new History(new File(historyFile)))
       } else {
         System.err.println("WARNING: Directory for Hive history file: " + historyDirectory +
-                           " does not exist.   History will not be available during this session.")
+          " does not exist.   History will not be available during this session.")
       }
     } catch {
       case e: Exception =>
         System.err.println("WARNING: Encountered an error while trying to initialize Hive's " +
-                           "history file.  History will not be available during this session.")
+          "history file.  History will not be available during this session.")
         System.err.println(e.getMessage)
     }
 
@@ -288,26 +288,26 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             out.println(cmd)
           }
 
-          ret = driver.run(cmd).getResponseCode
-          if (ret != 0) {
-            driver.close()
-            return ret
-          }
-
-          val res = new JArrayList[String]()
-
-          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
-            // Print the column names.
-            Option(driver.getSchema.getFieldSchemas).map { fields =>
-              out.println(fields.map(_.getName).mkString("\t"))
-            }
-          }
-
           try {
-            while (!out.checkError() && driver.getResults(res)) {
-              res.foreach(out.println)
-              res.clear()
-            }
+            ret = driver.run(cmd).getResponseCode
+            if (ret != 0) {
+              driver.close()
+              　return ret
+              　}
+
+            　val res = new JArrayList[String]()
+
+            　if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+            　// Print the column names.
+            　Option(driver.getSchema.getFieldSchemas).map { fields =>
+              　out.println(fields.map(_.getName).mkString("\t"))
+              　}
+            　}
+
+          while (!out.checkError() && driver.getResults(res)) {
+            res.foreach(out.println)
+            res.clear()
+          }
           } catch {
             case e:IOException =>
               console.printError(
@@ -315,6 +315,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                    |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
                  """.stripMargin)
               ret = 1
+            case e:Exception =>
+              console.printError(
+                s"Failed with exception ${e.getClass.getName}: ${e.getMessage}")
+              ret = 1
+
           }
 
           val cret = driver.close()
@@ -341,4 +346,3 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   }
 }
-
