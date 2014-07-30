@@ -19,6 +19,9 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
+import org.apache.spark.broadcast.Broadcast
+
+import scala.collection.mutable
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps
@@ -52,9 +55,8 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     }
   }
 
-
   test("cleanup RDD") {
-    val rdd = newRDD.persist()
+    val rdd = newRDD().persist()
     val collected = rdd.collect().toList
     val tester = new CleanerTester(sc, rddIds = Seq(rdd.id))
 
@@ -67,7 +69,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   }
 
   test("cleanup shuffle") {
-    val (rdd, shuffleDeps) = newRDDWithShuffleDependencies
+    val (rdd, shuffleDeps) = newRDDWithShuffleDependencies()
     val collected = rdd.collect().toList
     val tester = new CleanerTester(sc, shuffleIds = shuffleDeps.map(_.shuffleId))
 
@@ -80,7 +82,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   }
 
   test("cleanup broadcast") {
-    val broadcast = newBroadcast
+    val broadcast = newBroadcast()
     val tester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
 
     // Explicit cleanup
@@ -89,7 +91,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   }
 
   test("automatically cleanup RDD") {
-    var rdd = newRDD.persist()
+    var rdd = newRDD().persist()
     rdd.count()
 
     // Test that GC does not cause RDD cleanup due to a strong reference
@@ -107,7 +109,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   }
 
   test("automatically cleanup shuffle") {
-    var rdd = newShuffleRDD
+    var rdd = newShuffleRDD()
     rdd.count()
 
     // Test that GC does not cause shuffle cleanup due to a strong reference
@@ -125,7 +127,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   }
 
   test("automatically cleanup broadcast") {
-    var broadcast = newBroadcast
+    var broadcast = newBroadcast()
 
     // Test that GC does not cause broadcast cleanup due to a strong reference
     val preGCTester =  new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
@@ -144,11 +146,11 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   test("automatically cleanup RDD + shuffle + broadcast") {
     val numRdds = 100
     val numBroadcasts = 4 // Broadcasts are more costly
-    val rddBuffer = (1 to numRdds).map(i => randomRdd).toBuffer
-    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast).toBuffer
+    val rddBuffer = (1 to numRdds).map(i => randomRdd()).toBuffer
+    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
-    val broadcastIds = 0L until numBroadcasts
+    val broadcastIds = broadcastBuffer.map(_.id)
 
     val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
@@ -162,6 +164,13 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     rddBuffer.clear()
     runGC()
     postGCTester.assertCleanup()
+
+    // Make sure the broadcasted task closure no longer exists after GC.
+    val taskClosureBroadcastId = broadcastIds.max + 1
+    assert(sc.env.blockManager.master.getMatchingBlockIds({
+      case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
+      case _ => false
+    }, askSlaves = true).isEmpty)
   }
 
   test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
@@ -175,11 +184,11 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
     val numRdds = 10
     val numBroadcasts = 4 // Broadcasts are more costly
-    val rddBuffer = (1 to numRdds).map(i => randomRdd).toBuffer
-    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast).toBuffer
+    val rddBuffer = (1 to numRdds).map(i => randomRdd()).toBuffer
+    val broadcastBuffer = (1 to numBroadcasts).map(i => randomBroadcast()).toBuffer
     val rddIds = sc.persistentRdds.keys.toSeq
     val shuffleIds = 0 until sc.newShuffleId
-    val broadcastIds = 0L until numBroadcasts
+    val broadcastIds = broadcastBuffer.map(_.id)
 
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
@@ -193,21 +202,29 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     rddBuffer.clear()
     runGC()
     postGCTester.assertCleanup()
+
+    // Make sure the broadcasted task closure no longer exists after GC.
+    val taskClosureBroadcastId = broadcastIds.max + 1
+    assert(sc.env.blockManager.master.getMatchingBlockIds({
+      case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
+      case _ => false
+    }, askSlaves = true).isEmpty)
   }
 
   //------ Helper functions ------
 
-  def newRDD = sc.makeRDD(1 to 10)
-  def newPairRDD = newRDD.map(_ -> 1)
-  def newShuffleRDD = newPairRDD.reduceByKey(_ + _)
-  def newBroadcast = sc.broadcast(1 to 100)
-  def newRDDWithShuffleDependencies: (RDD[_], Seq[ShuffleDependency[_, _, _]]) = {
+  private def newRDD() = sc.makeRDD(1 to 10)
+  private def newPairRDD() = newRDD().map(_ -> 1)
+  private def newShuffleRDD() = newPairRDD().reduceByKey(_ + _)
+  private def newBroadcast() = sc.broadcast(1 to 100)
+
+  private def newRDDWithShuffleDependencies(): (RDD[_], Seq[ShuffleDependency[_, _, _]]) = {
     def getAllDependencies(rdd: RDD[_]): Seq[Dependency[_]] = {
       rdd.dependencies ++ rdd.dependencies.flatMap { dep =>
         getAllDependencies(dep.rdd)
       }
     }
-    val rdd = newShuffleRDD
+    val rdd = newShuffleRDD()
 
     // Get all the shuffle dependencies
     val shuffleDeps = getAllDependencies(rdd)
@@ -216,34 +233,34 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     (rdd, shuffleDeps)
   }
 
-  def randomRdd = {
+  private def randomRdd() = {
     val rdd: RDD[_] = Random.nextInt(3) match {
-      case 0 => newRDD
-      case 1 => newShuffleRDD
-      case 2 => newPairRDD.join(newPairRDD)
+      case 0 => newRDD()
+      case 1 => newShuffleRDD()
+      case 2 => newPairRDD.join(newPairRDD())
     }
     if (Random.nextBoolean()) rdd.persist()
     rdd.count()
     rdd
   }
 
-  def randomBroadcast = {
+  private def randomBroadcast() = {
     sc.broadcast(Random.nextInt(Int.MaxValue))
   }
 
   /** Run GC and make sure it actually has run */
-  def runGC() {
+  private def runGC() {
     val weakRef = new WeakReference(new Object())
     val startTime = System.currentTimeMillis
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
     // Wait until a weak reference object has been GCed
-    while(System.currentTimeMillis - startTime < 10000 && weakRef.get != null) {
+    while (System.currentTimeMillis - startTime < 10000 && weakRef.get != null) {
       System.gc()
       Thread.sleep(200)
     }
   }
 
-  def cleaner = sc.cleaner.get
+  private def cleaner = sc.cleaner.get
 }
 
 
