@@ -1253,13 +1253,7 @@ abstract class RDD[T: ClassTag](
    * Used for internal Java <-> Scala API compatibility.
    */
   private[spark] def retag(implicit classTag: ClassTag[T]): RDD[T] = {
-    val oldRDD = this
-    new RDD[T](sc, Seq(new OneToOneDependency(this)))(classTag) {
-      override protected def getPartitions: Array[Partition] = oldRDD.getPartitions
-      override def compute(split: Partition, context: TaskContext): Iterator[T] =
-        oldRDD.compute(split, context)
-      @transient override val partitioner = oldRDD.partitioner
-    }
+    this.mapPartitions(identity, preservesPartitioning = true)(classTag)
   }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
