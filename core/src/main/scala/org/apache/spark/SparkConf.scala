@@ -40,6 +40,8 @@ import scala.collection.mutable.HashMap
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
+  import SparkConf._
+
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
@@ -198,7 +200,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      *
      *   E.g. spark.akka.option.x.y.x = "value"
      */
-    getAll.filter {case (k, v) => k.startsWith("akka.")}
+    getAll.filter { case (k, _) => isAkkaConf(k) }
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)
@@ -290,5 +292,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def toDebugString: String = {
     settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+  }
+}
+
+private[spark] object SparkConf {
+  /**
+   * Return whether the given config is an akka config (e.g. akka.actor.provider).
+   * Note that this does not include spark-specific akka configs (e.g. spark.akka.timeout).
+   */
+  def isAkkaConf(name: String): Boolean = name.startsWith("akka.")
+
+  /**
+   * Return whether the given config should be passed to an executor on start-up.
+   *
+   * Certain akka and authentication configs are required of the executor when it connects to
+   * the scheduler, while the rest of the spark configs can be inherited from the driver later.
+   */
+  def isExecutorStartupConf(name: String): Boolean = {
+    isAkkaConf(name) || name.startsWith("spark.akka") || name.startsWith("spark.auth")
   }
 }

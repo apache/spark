@@ -47,7 +47,6 @@ object CommandUtils extends Logging {
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
-    val extraOpts = command.extraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq())
 
     // Exists for backwards compatibility with older Spark versions
     val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString)
@@ -62,7 +61,7 @@ object CommandUtils extends Logging {
         val joined = command.libraryPathEntries.mkString(File.pathSeparator)
         Seq(s"-Djava.library.path=$joined")
       } else {
-         Seq()
+        Seq()
       }
 
     val permGenOpt = Seq("-XX:MaxPermSize=128m")
@@ -71,11 +70,11 @@ object CommandUtils extends Logging {
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
-      extraEnvironment=command.environment)
+      extraEnvironment = command.environment)
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      permGenOpt ++ libraryOpts ++ extraOpts ++ workerLocalOpts ++ memoryOpts
+      permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
