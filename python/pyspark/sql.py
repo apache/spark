@@ -189,6 +189,56 @@ class SQLContext:
         jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         return SchemaRDD(jschema_rdd, self)
 
+    def csvFile(self, path, delimiter = ",", quote = "\"", header = False):
+        """
+        Loads a CSV file (according to RFC 4180) and returns the result as a L{SchemaRDD}.
+        header flag specified if first line of each file should be treated as header.
+
+        NOTE: If there are new line characters inside quoted fields this method may fail to
+        parse correctly, because the two lines may be in different partitions. Use
+        L{SQLContext#csvRDD} to parse such files.
+
+        >>> import tempfile, shutil
+        >>> csvFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(csvFile)
+        >>> ofn = open(csvFile, 'w')
+        >>> for csvStr in csvStrings:
+        ...   print>>ofn, csvStr
+        >>> ofn.close()
+        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ", ", header = True)
+        >>> sqlCtx.registerRDDAsTable(csv, "csvTable")
+        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable WHERE Make = 'Ford'")
+        >>> csvRes.collect()
+        [{u'Year': u'1997'}]
+        """
+        jschema_rdd = self._ssql_ctx.csvFile(path, delimiter, quote, header)
+        return SchemaRDD(jschema_rdd, self)
+
+    def csvRDD(self, rdd, delimiter = ",", quote = "\"", header = False):
+        """
+        Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+        L{SchemaRDD}.
+
+        NOTE: If there are new line characters inside quoted fields, use wholeTextFile to
+        read each file into a single partition.
+
+        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ", ", header = True)
+        >>> sqlCtx.registerRDDAsTable(csvrdd, "csvTable2")
+        >>> csvRes = sqlCtx.sql("SELECT count(*) FROM csvTable2")
+        >>> csvRes.collect() == [{"c0": 3}]
+        True
+        """
+        def func(split, iterator):
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
+        keyed = PipelinedRDD(rdd, func)
+        keyed._bypass_serializer = True
+        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
+        jschema_rdd = self._ssql_ctx.csvRDD(jrdd.rdd(), delimiter, quote, header)
+        return SchemaRDD(jschema_rdd, self)
+
     def sql(self, sqlQuery):
         """Return a L{SchemaRDD} representing the result of the given query.
 
@@ -507,6 +557,12 @@ def _test():
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
+    csvStrings = ['Year, Make, Model, Description',
+                  '"1997", "Ford", "E350", ',
+                  '2000, Mercury, "Cougar", "Really ""Good"" car"',
+                  '2007, Honda, "Civic", ']
+    globs['csvStrings'] = csvStrings
+    globs['csv'] = sc.parallelize(csvStrings)
     globs['nestedRdd1'] = sc.parallelize([
         {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
         {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])

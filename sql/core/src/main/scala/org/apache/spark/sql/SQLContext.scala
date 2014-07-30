@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.csv._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 import org.apache.spark.sql.json._
@@ -128,6 +129,100 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
     new SchemaRDD(this, JsonRDD.inferSchema(self, json, samplingRatio))
+
+  /**
+   * Loads a CSV file (according to RFC 4180) and returns the result as a [[SchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields this method may fail to
+   * parse correctly, because the two lines may be in different partitions. Use
+   * [[SQLContext#csvRDD]] to parse such files.
+   *
+   * @param path path to input file
+   * @param schema StructType object to specify schema (field names and types). This will
+   *               override field names if header is used
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character or string (default is '"')
+   * @param header Optional flag to indicate first line of each file is the header
+   *               (default is false)
+   */
+  def csvFile(
+      path: String,
+      schema: StructType,
+      delimiter: String,
+      quote: Char,
+      header: Boolean): SchemaRDD = {
+    val csv = sparkContext.textFile(path)
+    csvRDD(csv, schema, delimiter, quote, header)
+  }
+
+  /**
+   * Loads a CSV file (according to RFC 4180) and returns the result as a [[SchemaRDD]].
+   * It infers the schema based on the first record.
+   *
+   * NOTE: If there are new line characters inside quoted fields this method may fail to
+   * parse correctly, because the two lines may be in different partitions. Use
+   * [[SQLContext#csvRDD]] to parse such files.
+   *
+   * @param path path to input file
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character or string (default is '"')
+   * @param header Optional flag to indicate first line of each file is the header
+   *               (default is false)
+   */
+  def csvFile(
+      path: String,
+      delimiter: String = ",",
+      quote: Char = '"',
+      header: Boolean = false): SchemaRDD = {
+    val csv = sparkContext.textFile(path)
+    csvRDD(csv, delimiter, quote, header)
+  }
+
+
+  /**
+   * Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+   * [[SchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields, use
+   * [[SparkContext#wholeTextFiles]] to read each file into a single partition.
+   *
+   * @param csv input RDD
+   * @param schema StructType object to specify schema (field names and types). This will
+   *               override field names if header is used
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character of strig (default is '"')
+   * @param header Optional flag to indicate first line of each file is the hader
+   *               (default is false)
+   */
+  def csvRDD(
+      csv: RDD[String],
+      schema: StructType,
+      delimiter: String,
+      quote: Char,
+      header: Boolean): SchemaRDD = {
+    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, Some(schema), header))
+  }
+
+  /**
+   * Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+   * [[SchemaRDD]]. It infers the schema based on the first record.
+   *
+   * NOTE: If there are new line characters inside quoted fields, use
+   * [[SparkContext#wholeTextFiles]] to read each file into a single partition.
+   *
+   * @param csv input RDD
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character of strig (default is '"')
+   * @param header Optional flag to indicate first line of each file is the hader
+   *               (default is false)
+   */
+  def csvRDD(
+      csv: RDD[String],
+      delimiter: String = ",",
+      quote: Char = '"',
+      header: Boolean = false): SchemaRDD = {
+    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, None, header))
+  }
 
   /**
    * :: Experimental ::
