@@ -1258,6 +1258,7 @@ abstract class RDD[T: ClassTag](
       override protected def getPartitions: Array[Partition] = oldRDD.getPartitions
       override def compute(split: Partition, context: TaskContext): Iterator[T] =
         oldRDD.compute(split, context)
+      @transient override val partitioner = oldRDD.partitioner
     }
   }
 
