@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
@@ -30,11 +29,9 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
 import org.apache.spark.SerializableWritable
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row, GenericMutableRow, Literal, Cast}
-import org.apache.spark.sql.catalyst.types.DataType
 
 /**
  * A trait for subclasses that handle table scans.
@@ -64,13 +61,6 @@ class HadoopTableReader(
 
   // TODO: set aws s3 credentials.
 
-  private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
-
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
-
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
@@ -97,7 +87,7 @@ class HadoopTableReader(
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
     val tableDesc = relation.tableDesc
-    val broadcastedHiveConf = _broadcastedHiveConf
+    val hiveconfWrapper = new SerializableWritable(sc.hiveconf)
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
@@ -110,9 +100,8 @@ class HadoopTableReader(
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new GenericMutableRow(attrsWithIndex.length)
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHiveConf.value.value
       val deserializer = deserializerClass.newInstance()
-      deserializer.initialize(hconf, tableDesc.getProperties)
+      deserializer.initialize(hiveconfWrapper.value, tableDesc.getProperties)
 
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)
     }
@@ -161,8 +150,8 @@ class HadoopTableReader(
       }
 
       // Create local references so that the outer object isn't serialized.
+      val hiveconfWrapper = new SerializableWritable(sc.hiveconf)
       val tableDesc = relation.tableDesc
-      val broadcastedHiveConf = _broadcastedHiveConf
       val localDeserializer = partDeserializer
       val mutableRow = new GenericMutableRow(attributes.length)
 
@@ -185,9 +174,8 @@ class HadoopTableReader(
 
       val hivePartitionRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
       hivePartitionRDD.mapPartitions { iter =>
-        val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
-        deserializer.initialize(hconf, partProps)
+        deserializer.initialize(hiveconfWrapper.value, partProps)
 
         // fill the non partition key attributes 
         HadoopTableReader.fillObject(iter, deserializer, attrs, mutableRow)
@@ -229,12 +217,12 @@ class HadoopTableReader(
 
     val rdd = new HadoopRDD(
       sc.sparkContext,
-      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
-      Some(initializeJobConfFunc),
+      sc.hiveconf,
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD)
+      _minSplitsPerRDD,
+      Some(initializeJobConfFunc))
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
