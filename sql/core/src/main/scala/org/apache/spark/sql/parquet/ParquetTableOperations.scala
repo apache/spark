@@ -61,7 +61,11 @@ case class ParquetTableScan(
 
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
   // by exprId.
-  val output = attributes.map(a => relation.output.find(o => o.exprId == a.exprId).get)
+  val output = attributes.map { a =>
+    relation.output
+      .find(o => o.exprId == a.exprId)
+      .getOrElse(sys.error(s"Invalid parquet attribute $a in ${relation.output.mkString(",")}"))
+  }
 
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
