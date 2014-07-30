@@ -543,7 +543,7 @@ class SparkContext(config: SparkConf) extends Logging {
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
-    // Add necessary security credentials to the JobConf before broadcasting it.
+    // Add necessary security credentials to the JobConf.
     SparkHadoopUtil.get.addCredentials(conf)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
   }
@@ -562,7 +562,6 @@ class SparkContext(config: SparkConf) extends Logging {
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
-    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
