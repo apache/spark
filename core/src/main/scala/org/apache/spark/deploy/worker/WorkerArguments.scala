@@ -33,6 +33,7 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
   var workDir: String = null
+  var propertiesFile: String = null
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {
@@ -55,6 +56,7 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
 
   parse(args.toList)
+  propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultConfigFile)
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
@@ -87,7 +89,11 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       webUiPort = value
       parse(tail)
 
-    case ("--help" | "-h") :: tail =>
+    case ("--properties-file") :: value :: tail =>
+      propertiesFile = value
+      parse(tail)
+
+    case ("--help") :: tail =>
       printUsageAndExit(0)
 
     case value :: tail =>
@@ -122,7 +128,9 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
       "  -h HOST, --host HOST     Hostname to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
-      "  --webui-port PORT        Port for web UI (default: 8081)")
+      "  --webui-port PORT        Port for web UI (default: 8081)\n" +
+      "  --properties-file FILE   Path to a file from which to load extra properties. If not \n" +
+      "                           specified, this will look for conf/spark-defaults.conf.")
     System.exit(exitCode)
   }
 

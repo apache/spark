@@ -52,7 +52,7 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
+      val (workerSystem, _) = Worker.startSystemAndActor(conf, localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, null, Some(workerNum))
       workerActorSystems += workerSystem
     }

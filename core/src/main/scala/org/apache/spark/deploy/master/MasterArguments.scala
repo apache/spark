@@ -27,6 +27,7 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
+  var propertiesFile: String = null
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_MASTER_HOST") != null) {
@@ -43,6 +44,10 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   }
 
   parse(args.toList)
+
+  // Use common defaults file, if not specified by user
+  propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultConfigFile)
+  Option(propertiesFile).foreach(f => conf.loadPropertiesFromFile(f))
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
@@ -63,7 +68,11 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
       webUiPort = value
       parse(tail)
 
-    case ("--help" | "-h") :: tail =>
+    case ("--properties-file") :: value :: tail =>
+      propertiesFile = value
+      parse(tail)
+
+    case ("--help") :: tail =>
       printUsageAndExit(0)
 
     case Nil => {}
@@ -83,7 +92,9 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
       "  -i HOST, --ip HOST     Hostname to listen on (deprecated, please use --host or -h) \n" +
       "  -h HOST, --host HOST   Hostname to listen on\n" +
       "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
-      "  --webui-port PORT      Port for web UI (default: 8080)")
+      "  --webui-port PORT      Port for web UI (default: 8080)\n" +
+      "  --properties-file FILE Path to a file from which to load extra properties. If not \n" +
+      "                         specified, this will look for conf/spark-defaults.conf.")
     System.exit(exitCode)
   }
 }

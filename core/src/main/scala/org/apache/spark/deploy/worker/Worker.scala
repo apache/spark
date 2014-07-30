@@ -375,12 +375,14 @@ private[spark] object Worker extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir)
+    Option(args.propertiesFile).foreach(t => conf.loadPropertiesFromFile(t))
+    val (actorSystem, _) = startSystemAndActor(conf, args.host, args.port,
+      args.webUiPort, args.cores, args.memory, args.masters, args.workDir)
     actorSystem.awaitTermination()
   }
 
   def startSystemAndActor(
+      conf: SparkConf,
       host: String,
       port: Int,
       webUiPort: Int,
@@ -390,7 +392,6 @@ private[spark] object Worker extends Logging {
       workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)

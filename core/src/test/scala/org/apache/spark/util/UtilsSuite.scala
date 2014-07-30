@@ -297,4 +297,9 @@ class UtilsSuite extends FunSuite {
     }
   }
 
+  test("getPropertiesFromInputStream") {
+    val in = Utils.getSparkClassLoader.getResourceAsStream("test-spark.conf")
+    val properties = Utils.getPropertiesFromInputStream(in).toMap
+    assert(properties("spark.test.streamLoad") === "true")
+  }
 }

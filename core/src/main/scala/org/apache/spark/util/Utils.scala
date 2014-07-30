@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Locale, Random, UUID}
+import java.util.{Locale, Properties,  Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
@@ -1307,6 +1307,43 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** Load properties present in the given file. */
+  def getPropertiesFromFile(filename: String): Seq[(String, String)] = {
+    val file = new File(filename)
+    require(file.exists(), s"Properties file $file does not exist")
+    require(file.isFile(), s"Properties file $file is not a normal file")
+    val inputStream = new FileInputStream(file)
+    getPropertiesFromInputStream(inputStream)
+  }
+
+  /**
+    * Load properties present in the given inputStream.
+    * @param inputStream  InputStream from where to load properties.
+    *                     Expected to contain UTF-8 data. Will be closed by this method.
+    */
+  private[spark] def getPropertiesFromInputStream(inputStream: InputStream):
+    Seq[(String, String)] = {
+    val inReader = new InputStreamReader(inputStream, "UTF-8")
+    try {
+      val properties = new Properties()
+      properties.load(inReader)
+      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
+    } catch {
+      case e: IOException =>
+        val message = s"Failed when loading Spark properties"
+        throw new SparkException(message, e)
+    } finally {
+      inReader.close()
+    }
+  }
+
+  private[spark] def getDefaultConfigFile: String = {
+    val s = File.separator
+    Seq(
+      sys.env.get("SPARK_CONF_DIR").map(t => new File(s"$t${s}spark-defaults.conf")),
+      sys.env.get("SPARK_HOME").map(t => new File(s"${t}${s}conf${s}spark-defaults.conf"))).
+      filter(_.isDefined).map(_.get).find(_.exists).map(_.getAbsolutePath).orNull
+  }
   /** Return a nice string representation of the exception, including the stack trace. */
   def exceptionString(e: Exception): String = {
     if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)

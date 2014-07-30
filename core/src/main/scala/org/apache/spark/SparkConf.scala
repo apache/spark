@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
+import java.io.File
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -33,25 +35,33 @@ import scala.collection.mutable.HashMap
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
  *
+ * The order of precedence for options is system properties > file.
+ *
  * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  *
- * @param loadDefaults whether to also load values from Java system properties
+ * @param loadDefaults whether to also load values from Java system properties, file.
+ * @param fileName load properties from file
  */
-class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean, fileName: Option[String])
+  extends Cloneable with Logging {
 
   import SparkConf._
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
-  def this() = this(true)
+  def this() = this(true, None)
+
+  /**
+   * Create a SparkConf
+   * @param loadDefaults whether to also load values from Java system properties
+   */
+  def this(loadDefaults: Boolean) = this(loadDefaults, None)
 
   private val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
-    // Load any spark.* system properties
-    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
-      settings(k) = v
-    }
+    fileName.foreach(f => loadPropertiesFromFile(f, isOverride = true))
+    loadSystemProperties()
   }
 
   /** Set a configuration variable. */
@@ -306,6 +316,27 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def toDebugString: String = {
     settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+  }
+
+  /** Load properties from file. */
+  private[spark] def loadPropertiesFromFile(fileName: String, isOverride: Boolean = false) {
+    val file = new File(fileName)
+    if (file.isFile()) {
+      loadProperties(Utils.getPropertiesFromFile(file.getAbsolutePath), isOverride)
+    }
+  }
+
+  /** Load any spark.* system properties */
+  private[spark] def loadSystemProperties() {
+    loadProperties(sys.props.toSeq, true)
+  }
+
+  private def loadProperties(seq: Seq[(String, String)], isOverride: Boolean) {
+    for ((k, v) <- seq if k.startsWith("spark.")) {
+      if (isOverride || settings.get(k).isEmpty) {
+        settings(k) = v
+      }
+    }
   }
 }
 
