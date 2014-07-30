@@ -130,8 +130,8 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   /**
-   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can return
-   * the result of the attempt to store reliably.
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can
+   * return the result of the attempt to store reliably.
    */
   override def pushArrayBufferReliably(
     arrayBuffer: ArrayBuffer[_],
