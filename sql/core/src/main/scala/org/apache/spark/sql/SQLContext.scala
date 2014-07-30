@@ -503,12 +503,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
         }
         row
 
-      case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
-        val converted = c.map {
-          case (key, value) =>
-            (convert(key, keyType), convert(value, valueType))
-        }
-        JMapWrapper(converted)
+      case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
+          case (key, value) => (convert(key, keyType), convert(value, valueType))
+        }.toMap
 
       case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
         val converted = c.asInstanceOf[Array[_]].map(e => convert(e, elementType))

@@ -475,45 +475,17 @@ def _parse_datatype_string(datatype_string):
         return StructType(fields)
 
 
-# FIXME: these will be updated to use new API
-def _extend_tree(lines):
-    parts = []
-
-    def subtree(depth):
-        sub = parts
-        while depth > 1:
-            sub = sub[-1]
-            depth -= 1
-        return sub
-
-    for line in lines:
-        subtree(line.count('|')).append([line])
-
-    return parts
-
-def _parse_tree(tree):
-    if isinstance(tree[0], basestring):
-        name, _type = tree[0].split(":")
-        name = name.split(" ")[-1]
-        if len(tree) == 1:
-            return (name, _type.strip())
-        else:
-            return (name, _parse_tree(tree[1:]))
-    else:
-        return tuple(_parse_tree(sub) for sub in tree)
-
-def parse_tree_schema(tree):
-    lines = tree.split("\n")[1:-1]
-    parts = _extend_tree(lines)
-    return _parse_tree(parts)
-
 
 _cached_namedtuples = {}
+
 def _restore_object(fields, obj):
     """ Restore namedtuple object during unpickling. """
     cls = _cached_namedtuples.get(fields)
     if cls is None:
         cls = namedtuple("Row", fields)
+        def __reduce__(self):
+            return (_restore_object, (fields, tuple(self)))
+        cls.__reduce__ = __reduce__
         _cached_namedtuples[fields] = cls
     return cls(*obj)
 
@@ -521,78 +493,75 @@ def _create_object(cls, v):
     """ Create an customized object with class `cls`. """
     return cls(v) if v is not None else v
 
-def _create_getter(schema, i):
+def _create_getter(dt, i):
     """ Create a getter for item `i` with schema """
     # TODO: cache created class
-    cls = _create_cls(schema)
-    if cls:
-        def getter(self):
-            return _create_object(cls, self[i])
-        return getter
-    return itemgetter(i)
+    cls = _create_cls(dt)
+    def getter(self):
+        return _create_object(cls, self[i])
+    return getter
 
-def _create_cls(schema):
+def _has_struct(dt):
+    if isinstance(dt, StructType):
+        return True
+    elif isinstance(dt, ArrayType):
+        return _has_struct(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _has_struct(dt.valueType)
+    return False
+
+def _create_cls(dataType):
     """
-    Create an class by schama 
+    Create an class by dataType
 
     The created class is similar to namedtuple, but can have nested schema.
     """
     # this can not be in global
+    from pyspark.sql import _has_struct, _create_getter
     from operator import itemgetter
 
+
     # TODO: update to new DataType
-    if isinstance(schema, list):
-        if not schema:
-            return
-        cls = _create_cls(schema[0])
-        if not cls:
-            return
+    if isinstance(dataType, ArrayType):
+        cls = _create_cls(dataType.elementType)
         class List(list):
             def __getitem__(self, i):
                 return _create_object(cls, list.__getitem__(self, i))
+            def __repr__(self):
+                return "[%s]" % (", ".join(repr(self[i])
+                                           for i in range(len(self))))
             def __reduce__(self):
+                # the nested struct can be reduced by itself
                 return (list, (list(self),))
         return List
 
-    elif isinstance(schema, dict):
-        if not schema:
-            return
-        vcls = _create_cls(schema['value'])
-        if not vcls:
-            return
+    elif isinstance(dataType, MapType):
+        vcls = _create_cls(dataType.valueType)
         class Dict(dict):
             def __getitem__(self, k):
                 return _create_object(vcls, dict.__getitem__(self, k))
+            def __repr__(self):
+                return "{%s}" % (", ".join("%r: %r" % (k, self[k])
+                                           for k in self))
+            def __reduce__(self):
+                return (dict, (dict(self),))
         return Dict
 
-    # builtin types
-    elif not isinstance(schema, tuple):
-        return
-
+    elif not isinstance(dataType, StructType):
+        raise Exception("unexpected data type: %s" % dataType)
 
     class Row(tuple):
         """ Row in SchemaRDD """
-        _fields = tuple(n for n, _ in schema)
+        _fields = tuple(f.name for f in dataType.fields)
 
-        for __i,__x in enumerate(schema):
-            if isinstance(__x, tuple):
-                __name, _type = __x
-                if _type and isinstance(_type, (tuple,list)):
-                    locals()[__name] = property(_create_getter(_type,__i))
-                else:
-                    locals()[__name] = property(itemgetter(__i))
-                del __name, _type
+        # use local vars begins with "_"
+        for _i,_f in enumerate(dataType.fields):
+            if _has_struct(_f.dataType):
+                _getter = property(_create_getter(_f.dataType, _i))
             else:
-                locals()[__x] = property(itemgetter(__i))
-        del __i, __x
-
-        def __equals__(self, x):
-            if type(self) != type(x):
-                return False
-            for name in self._fields:
-                if getattr(self, name) != getattr(x, name):
-                    return False
-            return True
+                _getter = property(itemgetter(_i))
+            locals()[_f.name] = _getter
+        del _i, _f, _getter
 
         def __repr__(self):
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
@@ -698,9 +667,8 @@ class SQLContext:
         >>> srdd = sqlCtx.applySchema(rdd, schema)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql("SELECT * from table1")
-        >>> srdd2.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
-        ...                    {"field1" : 3, "field2": "row3"}]
-        True
+        >>> srdd2.collect()
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2'), Row(field1=3, field2=u'row3')]
         >>> from datetime import datetime
         >>> rdd = sc.parallelize([{"byte": 127, "short": -32768, "float": 1.0,
         ... "time": datetime(2010, 1, 1, 1, 1, 1), "map": {"a": 1}, "struct": {"b": 2},
@@ -716,7 +684,7 @@ class SQLContext:
         ...     StructField("null", DoubleType(), True)])
         >>> srdd = sqlCtx.applySchema(rdd, schema).map(
         ...     lambda x: (
-        ...         x.byte, x.short, x.float, x.time, x.map["a"], x.struct["b"], x.list, x.null))
+        ...         x.byte, x.short, x.float, x.time, x.map["a"], x.struct.b, x.list, x.null))
         >>> srdd.collect()[0]
         (127, -32768, 1.0, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         """
@@ -773,17 +741,16 @@ class SQLContext:
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
         >>> srdd2.collect()
         [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=Row(field7=(u'row2',))), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
 Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table2")
-        >>> srdd4.collect() == [
-        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
-        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
-        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
-        True
+        >>> srdd4.collect()
+        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
+Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -793,11 +760,8 @@ Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> sqlCtx.registerRDDAsTable(srdd5, "table3")
         >>> srdd6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, field3.field5[0] as f3 from table3")
-        >>> srdd6.collect() == [
-        ... {"f1": "row1", "f2": None, "f3": None},
-        ... {"f1": None, "f2": [10, 11], "f3": 10},
-        ... {"f1": "row3", "f2": [], "f3": None}]
-        True
+        >>> srdd6.collect()
+        [Row(f1=u'row1', f2=None, f3=None), Row(f1=None, f2=[10, 11], f3=10), Row(f1=u'row3', f2=[], f3=None)]
         """
         if schema is None:
             jschema_rdd = self._ssql_ctx.jsonFile(path)
@@ -818,17 +782,16 @@ Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
         >>> srdd2.collect()
         [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=Row(field7=(u'row2',))), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
 Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table2")
-        >>> srdd4.collect() == [
-        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
-        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
-        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
-        True
+        >>> srdd4.collect()
+        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
+Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -838,11 +801,8 @@ Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> sqlCtx.registerRDDAsTable(srdd5, "table3")
         >>> srdd6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, field3.field5[0] as f3 from table3")
-        >>> srdd6.collect() == [
-        ... {"f1": "row1", "f2": None, "f3": None},
-        ... {"f1": None, "f2": [10, 11], "f3": 10},
-        ... {"f1": "row3", "f2": [], "f3": None}]
-        True
+        >>> srdd6.collect()
+        [Row(f1=u'row1', f2=None, f3=None), Row(f1=None, f2=[10, 11], f3=10), Row(f1=u'row3', f2=[], f3=None)]
         """
         def func(iterator):
             for x in iterator:
@@ -1080,8 +1040,7 @@ class SchemaRDD(RDD):
         attributes.
         """
         rows = RDD.collect(self)
-        schema = parse_tree_schema(self._jschema_rdd.schemaString())
-        cls = _create_cls(schema)
+        cls = _create_cls(self.schema())
         return map(cls, rows)
 
     # convert Row in JavaSchemaRDD into namedtuple, let access fields easier
@@ -1097,11 +1056,13 @@ class SchemaRDD(RDD):
         """
         rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
 
-        schema = parse_tree_schema(self._jschema_rdd.schemaString())
+        schema = self.schema()
+        import pickle
+        pickle.loads(pickle.dumps(schema))
         def applySchema(_, it):
             cls = _create_cls(schema)
             return itertools.imap(cls, it)
-        
+
         objrdd = rdd.mapPartitionsWithIndex(applySchema, preservesPartitioning)
         return objrdd.mapPartitionsWithIndex(f, preservesPartitioning)
 
@@ -1171,6 +1132,9 @@ def _test():
     import doctest
     from array import array
     from pyspark.context import SparkContext
+    # let doctest run in pyspark.sql, so DataTypes can be picklable
+    import pyspark.sql
+    from pyspark.sql import SQLContext
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
@@ -1195,7 +1159,8 @@ def _test():
     globs['nestedRdd2'] = sc.parallelize([
         {"f1": [[1, 2], [2, 3]], "f2": [1, 2]},
         {"f1": [[2, 3], [3, 4]], "f2": [2, 3]}])
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(pyspark.sql,
+                                                  globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
