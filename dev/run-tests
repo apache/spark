@@ -21,6 +21,18 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd "$FWDIR"
 
+if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
+  if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
+    export SBT_MAVEN_PROFILES="-Dhadoop.version=1.0.4"
+  elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
+    export SBT_MAVEN_PROFILES="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
+  elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
+    export SBT_MAVEN_PROFILES="-Pyarn -Dhadoop.version=2.2.0"
+  elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
+    export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+  fi
+fi
+
 if [ -z "$SBT_MAVEN_PROFILES" ]; then
   export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
 fi
