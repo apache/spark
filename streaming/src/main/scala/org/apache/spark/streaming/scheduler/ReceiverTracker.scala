@@ -28,13 +28,8 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
 import org.apache.spark.util.AkkaUtils
 
-/** Information about receiver */
-case class ReceiverInfo(streamId: Int, typ: String, location: String) {
-  override def toString = s"$typ-$streamId"
-}
-
 /** Information about blocks received by the receiver */
-case class ReceivedBlockInfo(
+private[streaming] case class ReceivedBlockInfo(
     streamId: Int,
     blockId: StreamBlockId,
     numRecords: Long,
@@ -69,7 +64,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
   val receiverInputStreams = ssc.graph.getReceiverInputStreams()
   val receiverInputStreamMap = Map(receiverInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverLauncher()
-  val receiverInfo = new HashMap[Int, ActorRef] with SynchronizedMap[Int, ActorRef]
+  val receiverInfo = new HashMap[Int, ReceiverInfo] with SynchronizedMap[Int, ReceiverInfo]
   val receivedBlockInfo = new HashMap[Int, SynchronizedQueue[ReceivedBlockInfo]]
     with SynchronizedMap[Int, SynchronizedQueue[ReceivedBlockInfo]]
   val timeout = AkkaUtils.askTimeout(ssc.conf)
@@ -129,17 +124,23 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     if (!receiverInputStreamMap.contains(streamId)) {
       throw new Exception("Register received for unexpected id " + streamId)
     }
-    receiverInfo += ((streamId, receiverActor))
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(
-      ReceiverInfo(streamId, typ, host)
-    ))
+    receiverInfo(streamId) = ReceiverInfo(
+      streamId, s"${typ}-${streamId}", receiverActor, true, host)
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
 
   /** Deregister a receiver */
   def deregisterReceiver(streamId: Int, message: String, error: String) {
-    receiverInfo -= streamId
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(streamId, message, error))
+    val newReceiverInfo = receiverInfo.get(streamId) match {
+      case Some(oldInfo) =>
+        oldInfo.copy(actor = null, active = false, lastErrorMessage = message, lastError = error)
+      case None =>
+        logWarning("No prior receiver info")
+        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
+    }
+    receiverInfo(streamId) = newReceiverInfo
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
@@ -157,7 +158,15 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
 
   /** Report error sent by a receiver */
   def reportError(streamId: Int, message: String, error: String) {
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverError(streamId, message, error))
+    val newReceiverInfo = receiverInfo.get(streamId) match {
+      case Some(oldInfo) =>
+        oldInfo.copy(lastErrorMessage = message, lastError = error)
+      case None =>
+        logWarning("No prior receiver info")
+        ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
+    }
+    receiverInfo(streamId) = newReceiverInfo
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverError(receiverInfo(streamId)))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
@@ -240,8 +249,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
         if (hasLocationPreferences) {
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        }
-        else {
+        } else {
           ssc.sc.makeRDD(receivers, receivers.size)
         }
 
@@ -271,7 +279,8 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     /** Stops the receivers. */
     private def stopReceivers() {
       // Signal the receivers to stop
-      receiverInfo.values.foreach(_ ! StopReceiver)
+      receiverInfo.values.flatMap { info => Option(info.actor)}
+                         .foreach { _ ! StopReceiver }
       logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
     }
   }

@@ -27,10 +27,12 @@ import org.apache.spark.annotation.DeveloperApi
 class TaskInfo(
     val taskId: Long,
     val index: Int,
+    val attempt: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
-    val taskLocality: TaskLocality.TaskLocality) {
+    val taskLocality: TaskLocality.TaskLocality,
+    val speculative: Boolean) {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -46,8 +48,6 @@ class TaskInfo(
   var finishTime: Long = 0
 
   var failed = false
-
-  var serializedSize: Int = 0
 
   private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
@@ -83,6 +83,8 @@ class TaskInfo(
       "UNKNOWN"
     }
   }
+
+  def id: String = s"$index.$attempt"
 
   def duration: Long = {
     if (!finished) {

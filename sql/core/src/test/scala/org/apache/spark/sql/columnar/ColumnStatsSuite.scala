@@ -22,14 +22,15 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.types._
 
 class ColumnStatsSuite extends FunSuite {
-  testColumnStats(classOf[BooleanColumnStats], BOOLEAN)
-  testColumnStats(classOf[ByteColumnStats],    BYTE)
-  testColumnStats(classOf[ShortColumnStats],   SHORT)
-  testColumnStats(classOf[IntColumnStats],     INT)
-  testColumnStats(classOf[LongColumnStats],    LONG)
-  testColumnStats(classOf[FloatColumnStats],   FLOAT)
-  testColumnStats(classOf[DoubleColumnStats],  DOUBLE)
-  testColumnStats(classOf[StringColumnStats],  STRING)
+  testColumnStats(classOf[BooleanColumnStats],   BOOLEAN)
+  testColumnStats(classOf[ByteColumnStats],      BYTE)
+  testColumnStats(classOf[ShortColumnStats],     SHORT)
+  testColumnStats(classOf[IntColumnStats],       INT)
+  testColumnStats(classOf[LongColumnStats],      LONG)
+  testColumnStats(classOf[FloatColumnStats],     FLOAT)
+  testColumnStats(classOf[DoubleColumnStats],    DOUBLE)
+  testColumnStats(classOf[StringColumnStats],    STRING)
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP)
 
   def testColumnStats[T <: NativeType, U <: NativeColumnStats[T]](
       columnStatsClass: Class[U],
@@ -39,7 +40,7 @@ class ColumnStatsSuite extends FunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      expectResult(columnStats.initialBounds, "Wrong initial bounds") {
+      assertResult(columnStats.initialBounds, "Wrong initial bounds") {
         (columnStats.lowerBound, columnStats.upperBound)
       }
     }
@@ -54,8 +55,8 @@ class ColumnStatsSuite extends FunSuite {
       val values = rows.map(_.head.asInstanceOf[T#JvmType])
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
 
-      expectResult(values.min(ordering), "Wrong lower bound")(columnStats.lowerBound)
-      expectResult(values.max(ordering), "Wrong upper bound")(columnStats.upperBound)
+      assertResult(values.min(ordering), "Wrong lower bound")(columnStats.lowerBound)
+      assertResult(values.max(ordering), "Wrong upper bound")(columnStats.upperBound)
     }
   }
 }

@@ -17,28 +17,26 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 
+/**
+  * Usage: BroadcastTest [slices] [numElem] [broadcastAlgo] [blockSize]
+  */
 object BroadcastTest {
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: BroadcastTest <master> [slices] [numElem] [broadcastAlgo]" +
-        " [blockSize]")
-      System.exit(1)
-    }
 
-    val bcName = if (args.length > 3) args(3) else "Http"
-    val blockSize = if (args.length > 4) args(4) else "4096"
+    val bcName = if (args.length > 2) args(2) else "Http"
+    val blockSize = if (args.length > 3) args(3) else "4096"
 
     System.setProperty("spark.broadcast.factory", "org.apache.spark.broadcast." + bcName +
       "BroadcastFactory")
     System.setProperty("spark.broadcast.blockSize", blockSize)
+    val sparkConf = new SparkConf().setAppName("Broadcast Test")
 
-    val sc = new SparkContext(args(0), "Broadcast Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+    val sc = new SparkContext(sparkConf)
 
-    val slices = if (args.length > 1) args(1).toInt else 2
-    val num = if (args.length > 2) args(2).toInt else 1000000
+    val slices = if (args.length > 0) args(0).toInt else 2
+    val num = if (args.length > 1) args(1).toInt else 1000000
 
     val arr1 = new Array[Int](num)
     for (i <- 0 until arr1.length) {

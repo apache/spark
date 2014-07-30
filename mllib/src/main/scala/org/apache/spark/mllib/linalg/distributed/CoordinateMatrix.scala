@@ -25,11 +25,13 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
+ * :: Experimental ::
  * Represents an entry in an distributed matrix.
  * @param i row index
  * @param j column index
  * @param value value of the entry
  */
+@Experimental
 case class MatrixEntry(i: Long, j: Long, value: Double)
 
 /**

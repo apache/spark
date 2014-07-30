@@ -35,20 +35,16 @@ import org.apache.spark.mllib.linalg.Vectors
  */
 object TallSkinnyPCA {
   def main(args: Array[String]) {
-    if (args.length != 2) {
-      System.err.println("Usage: TallSkinnyPCA <master> <file>")
+    if (args.length != 1) {
+      System.err.println("Usage: TallSkinnyPCA <input>")
       System.exit(1)
     }
 
-    val conf = new SparkConf()
-      .setMaster(args(0))
-      .setAppName("TallSkinnyPCA")
-      .setSparkHome(System.getenv("SPARK_HOME"))
-      .setJars(SparkContext.jarOfClass(this.getClass).toSeq)
+    val conf = new SparkConf().setAppName("TallSkinnyPCA")
     val sc = new SparkContext(conf)
 
     // Load and parse the data file.
-    val rows = sc.textFile(args(1)).map { line =>
+    val rows = sc.textFile(args(0)).map { line =>
       val values = line.split(' ').map(_.toDouble)
       Vectors.dense(values)
     }

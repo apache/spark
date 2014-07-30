@@ -89,7 +89,7 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
     extends CallbackHandler {
 
     private val userName: String =
-      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes())
+      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes("utf-8"))
 
     override def handle(callbacks: Array[Callback]) {
       logDebug("In the sasl server callback handler")
@@ -101,7 +101,7 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
         case pc: PasswordCallback => {
           logDebug("handle: SASL server callback: setting userPassword")
           val password: Array[Char] =
-            SparkSaslServer.encodePassword(securityMgr.getSecretKey().getBytes())
+            SparkSaslServer.encodePassword(securityMgr.getSecretKey().getBytes("utf-8"))
           pc.setPassword(password)
         }
         case rc: RealmCallback => {
@@ -159,7 +159,7 @@ private[spark] object SparkSaslServer {
    * @return Base64-encoded string
    */
   def encodeIdentifier(identifier: Array[Byte]): String = {
-    new String(Base64.encodeBase64(identifier))
+    new String(Base64.encodeBase64(identifier), "utf-8")
   }
 
   /**
@@ -168,7 +168,7 @@ private[spark] object SparkSaslServer {
    * @return password as a char array.
    */
   def encodePassword(password: Array[Byte]): Array[Char] = {
-    new String(Base64.encodeBase64(password)).toCharArray()
+    new String(Base64.encodeBase64(password), "utf-8").toCharArray()
   }
 }
 

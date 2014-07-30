@@ -21,6 +21,8 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
+export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+
 # Remove work directory
 rm -rf ./work
 
@@ -63,23 +65,19 @@ echo "========================================================================="
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.
 if [ -n "$_RUN_SQL_TESTS" ]; then
-  echo -e "q\n" | SPARK_HIVE=true sbt/sbt clean assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  echo -e "q\n" | SBT_MAVEN_PROFILES="$SBT_MAVEN_PROFILES -Phive -Phive-thriftserver" sbt/sbt clean package \
+    assembly/assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 else
-  echo -e "q\n" | sbt/sbt clean assembly test | \
+  echo -e "q\n" | sbt/sbt clean package assembly/assembly test | \
     grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 fi
 
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
-if [ -z "$PYSPARK_PYTHON" ]; then
-  export PYSPARK_PYTHON=/usr/local/bin/python2.7
-fi
 ./python/run-tests
 
 echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
-./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
-echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
+dev/mima

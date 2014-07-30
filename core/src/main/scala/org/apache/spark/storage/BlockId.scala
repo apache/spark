@@ -19,14 +19,18 @@ package org.apache.spark.storage
 
 import java.util.UUID
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * Identifies a particular Block of data, usually associated with a single file.
  * A Block can be uniquely identified by its filename, but each type of Block has a different
  * set of keys which produce its unique name.
  *
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
-private[spark] sealed abstract class BlockId {
+@DeveloperApi
+sealed abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
   def name: String
 
@@ -44,24 +48,29 @@ private[spark] sealed abstract class BlockId {
   }
 }
 
-private[spark] case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
+@DeveloperApi
+case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   def name = "rdd_" + rddId + "_" + splitIndex
 }
 
-private[spark] case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
+@DeveloperApi
+case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
   extends BlockId {
   def name = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
-private[spark] case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
+@DeveloperApi
+case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   def name = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }
 
-private[spark] case class TaskResultBlockId(taskId: Long) extends BlockId {
+@DeveloperApi
+case class TaskResultBlockId(taskId: Long) extends BlockId {
   def name = "taskresult_" + taskId
 }
 
-private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
+@DeveloperApi
+case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   def name = "input-" + streamId + "-" + uniqueId
 }
 
@@ -75,7 +84,8 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   def name = "test_" + id
 }
 
-private[spark] object BlockId {
+@DeveloperApi
+object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r

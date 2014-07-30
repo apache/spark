@@ -18,20 +18,19 @@
 package org.apache.spark.examples
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 
+/**
+  * Usage: MultiBroadcastTest [slices] [numElem]
+  */
 object MultiBroadcastTest {
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: MultiBroadcastTest <master> [<slices>] [numElem]")
-      System.exit(1)
-    }
 
-    val sc = new SparkContext(args(0), "Multi-Broadcast Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+    val sparkConf = new SparkConf().setAppName("Multi-Broadcast Test")
+    val sc = new SparkContext(sparkConf)
 
-    val slices = if (args.length > 1) args(1).toInt else 2
-    val num = if (args.length > 2) args(2).toInt else 1000000
+    val slices = if (args.length > 0) args(0).toInt else 2
+    val num = if (args.length > 1) args(1).toInt else 1000000
 
     val arr1 = new Array[Int](num)
     for (i <- 0 until arr1.length) {

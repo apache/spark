@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
 
-import scala.math
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
@@ -44,22 +44,23 @@ import org.apache.spark.util.Utils
  *  copies of the broadcast data (one per executor) as done by the
  *  [[org.apache.spark.broadcast.HttpBroadcast]].
  */
-private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class TorrentBroadcast[T: ClassTag](
+    @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def getValue = value_
+  override protected def getValue() = value_
 
-  val broadcastId = BroadcastBlockId(id)
+  private val broadcastId = BroadcastBlockId(id)
 
   TorrentBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(
       broadcastId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
   }
 
-  @transient var arrayOfBlocks: Array[TorrentBlock] = null
-  @transient var totalBlocks = -1
-  @transient var totalBytes = -1
-  @transient var hasBlocks = 0
+  @transient private var arrayOfBlocks: Array[TorrentBlock] = null
+  @transient private var totalBlocks = -1
+  @transient private var totalBytes = -1
+  @transient private var hasBlocks = 0
 
   if (!isLocal) {
     sendBroadcast()
@@ -68,7 +69,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   /**
    * Remove all persisted state associated with this Torrent broadcast on the executors.
    */
-  def doUnpersist(blocking: Boolean) {
+  override protected def doUnpersist(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
@@ -76,11 +77,11 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
    * Remove all persisted state associated with this Torrent broadcast on the executors
    * and driver.
    */
-  def doDestroy(blocking: Boolean) {
+  override protected def doDestroy(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
-  def sendBroadcast() {
+  private def sendBroadcast() {
     val tInfo = TorrentBroadcast.blockifyObject(value_)
     totalBlocks = tInfo.totalBlocks
     totalBytes = tInfo.totalBytes
@@ -157,7 +158,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     hasBlocks = 0
   }
 
-  def receiveBroadcast(): Boolean = {
+  private def receiveBroadcast(): Boolean = {
     // Receive meta-info about the size of broadcast data,
     // the number of chunks it is divided into, etc.
     val metaId = BroadcastBlockId(id, "meta")
@@ -209,7 +210,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
 
 }
 
-private[spark] object TorrentBroadcast extends Logging {
+private[broadcast] object TorrentBroadcast extends Logging {
   private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
   private var initialized = false
   private var conf: SparkConf = null
@@ -270,17 +271,19 @@ private[spark] object TorrentBroadcast extends Logging {
    * Remove all persisted blocks associated with this torrent broadcast on the executors.
    * If removeFromDriver is true, also remove these persisted blocks on the driver.
    */
-  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = synchronized {
-    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = {
+    synchronized {
+      SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+    }
   }
 }
 
-private[spark] case class TorrentBlock(
+private[broadcast] case class TorrentBlock(
     blockID: Int,
     byteArray: Array[Byte])
   extends Serializable
 
-private[spark] case class TorrentInfo(
+private[broadcast] case class TorrentInfo(
     @transient arrayOfBlocks: Array[TorrentBlock],
     totalBlocks: Int,
     totalBytes: Int)

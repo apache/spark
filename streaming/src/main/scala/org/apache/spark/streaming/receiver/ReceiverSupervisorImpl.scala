@@ -79,6 +79,8 @@ private[streaming] class ReceiverSupervisorImpl(
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
       }
+
+      def ref = self
     }), "Receiver-" + streamId + "-" + System.currentTimeMillis())
 
   /** Unique block ids if one wants to add blocks directly */
@@ -108,8 +110,7 @@ private[streaming] class ReceiverSupervisorImpl(
     ) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
-    blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]],
-      storageLevel, tellMaster = true)
+    blockManager.putArray(blockId, arrayBuffer.toArray[Any], storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
   }
@@ -122,7 +123,7 @@ private[streaming] class ReceiverSupervisorImpl(
     ) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
-    blockManager.put(blockId, iterator, storageLevel, tellMaster = true)
+    blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, -1, optionalMetadata)
   }
@@ -154,25 +155,29 @@ private[streaming] class ReceiverSupervisorImpl(
     logWarning("Reported error " + message + " - " + error)
   }
 
-  override def onReceiverStart() {
+  override protected def onStart() {
     blockGenerator.start()
-    super.onReceiverStart()
   }
 
-  override def onReceiverStop(message: String, error: Option[Throwable]) {
-    super.onReceiverStop(message, error)
+  override protected def onStop(message: String, error: Option[Throwable]) {
     blockGenerator.stop()
+    env.actorSystem.stop(actor)
+  }
+
+  override protected def onReceiverStart() {
+    val msg = RegisterReceiver(
+      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), actor)
+    val future = trackerActor.ask(msg)(askTimeout)
+    Await.result(future, askTimeout)
+  }
+
+  override protected def onReceiverStop(message: String, error: Option[Throwable]) {
     logInfo("Deregistering receiver " + streamId)
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     val future = trackerActor.ask(
       DeregisterReceiver(streamId, message, errorString))(askTimeout)
     Await.result(future, askTimeout)
     logInfo("Stopped receiver " + streamId)
-  }
-
-  override def stop(message: String, error: Option[Throwable]) {
-    super.stop(message, error)
-    env.actorSystem.stop(actor)
   }
 
   /** Generate new block ID */

@@ -28,8 +28,13 @@ import akka.actor.SupervisorStrategy.{Escalate, Restart}
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.StorageLevel
 import java.nio.ByteBuffer
+import org.apache.spark.annotation.DeveloperApi
 
-/** A helper with set of defaults for supervisor strategy */
+/**
+ * :: DeveloperApi ::
+ * A helper with set of defaults for supervisor strategy
+ */
+@DeveloperApi
 object ActorSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
@@ -40,6 +45,7 @@ object ActorSupervisorStrategy {
 }
 
 /**
+ * :: DeveloperApi ::
  * A receiver trait to be mixed in with your Actor to gain access to
  * the API for pushing received data into Spark Streaming for being processed.
  *
@@ -61,13 +67,14 @@ object ActorSupervisorStrategy {
  *       to ensure the type safety, i.e parametrized type of push block and InputDStream
  *       should be same.
  */
-trait ActorHelper {
+@DeveloperApi
+trait ActorHelper extends Logging{
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    println("Storing iterator")
+    logDebug("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -77,6 +84,7 @@ trait ActorHelper {
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
+    logDebug("Storing Bytes")
     context.parent ! ByteBufferData(bytes)
   }
 
@@ -86,16 +94,18 @@ trait ActorHelper {
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    println("Storing item")
+    logDebug("Storing item")
     context.parent ! SingleItemData(item)
   }
 }
 
 /**
+ * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
  * [[org.apache.spark.streaming.receiver.ActorHelper]].
  */
+@DeveloperApi
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
   numberOfHiccups: Int,
@@ -148,15 +158,16 @@ private[streaming] class ActorReceiver[T: ClassTag](
     def receive = {
 
       case IteratorData(iterator) =>
-        println("received iterator")
+        logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
 
       case SingleItemData(msg) =>
-        println("received single")
+        logDebug("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
 
       case ByteBufferData(bytes) =>
+        logDebug("received bytes")
         store(bytes)
 
       case props: Props =>
@@ -188,4 +199,3 @@ private[streaming] class ActorReceiver[T: ClassTag](
     supervisor ! PoisonPill
   }
 }
-

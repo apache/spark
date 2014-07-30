@@ -34,13 +34,19 @@ import org.apache.spark._
 import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{EmptyRDD, RDD}
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  */
 class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
+  /**
+   * Create a JavaSparkContext that loads settings from system properties (for instance, when
+   * launching with ./bin/spark-submit).
+   */
+  def this() = this(new SparkContext())
+
   /**
    * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
    */
@@ -106,6 +112,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   def startTime: java.lang.Long = sc.startTime
 
+  /** The version of Spark on which this application is running. */
+  def version: String = sc.version
+
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
@@ -125,6 +134,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     implicit val ctag: ClassTag[T] = fakeClassTag
     sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
   }
+
+  /** Get an RDD that has no partitions or elements. */
+  def emptyRDD[T]: JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    JavaRDD.fromRDD(new EmptyRDD[T](sc))
+  }
+
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T]): JavaRDD[T] =
@@ -447,7 +463,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)
+  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
   def stop() {

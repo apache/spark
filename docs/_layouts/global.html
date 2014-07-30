@@ -9,6 +9,11 @@
         <title>{{ page.title }} - Spark {{site.SPARK_VERSION_SHORT}} Documentation</title>
         <meta name="description" content="">
 
+        {% if page.redirect %}
+          <meta http-equiv="refresh" content="0; url={{page.redirect}}">
+          <link rel="canonical" href="{{page.redirect}}" />
+        {% endif %}
+
         <link rel="stylesheet" href="css/bootstrap.min.css">
         <style>
             body {
@@ -61,15 +66,13 @@
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Programming Guides<b class="caret"></b></a>
                             <ul class="dropdown-menu">
                                 <li><a href="quick-start.html">Quick Start</a></li>
-                                <li><a href="scala-programming-guide.html">Spark in Scala</a></li>
-                                <li><a href="java-programming-guide.html">Spark in Java</a></li>
-                                <li><a href="python-programming-guide.html">Spark in Python</a></li>
+                                <li><a href="programming-guide.html">Spark Programming Guide</a></li>
                                 <li class="divider"></li>
                                 <li><a href="streaming-programming-guide.html">Spark Streaming</a></li>
                                 <li><a href="sql-programming-guide.html">Spark SQL</a></li>
                                 <li><a href="mllib-guide.html">MLlib (Machine Learning)</a></li>
-                                <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>
                                 <li><a href="graphx-programming-guide.html">GraphX (Graph Processing)</a></li>
+                                <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>
                             </ul>
                         </li>
 
@@ -86,6 +89,8 @@
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Deploying<b class="caret"></b></a>
                             <ul class="dropdown-menu">
                                 <li><a href="cluster-overview.html">Overview</a></li>
+                                <li><a href="submitting-applications.html">Submitting Applications</a></li>
+                                <li class="divider"></li>
                                 <li><a href="ec2-scripts.html">Amazon EC2</a></li>
                                 <li><a href="spark-standalone.html">Standalone Mode</a></li>
                                 <li><a href="running-on-mesos.html">Mesos</a></li>
@@ -99,9 +104,10 @@
                                 <li><a href="configuration.html">Configuration</a></li>
                                 <li><a href="monitoring.html">Monitoring</a></li>
                                 <li><a href="tuning.html">Tuning Guide</a></li>
-                                <li><a href="hadoop-third-party-distributions.html">Running with CDH/HDP</a></li>
-                                <li><a href="hardware-provisioning.html">Hardware Provisioning</a></li>
                                 <li><a href="job-scheduling.html">Job Scheduling</a></li>
+                                <li><a href="security.html">Security</a></li>
+                                <li><a href="hardware-provisioning.html">Hardware Provisioning</a></li>
+                                <li><a href="hadoop-third-party-distributions.html">3<sup>rd</sup>-Party Hadoop Distros</a></li>
                                 <li class="divider"></li>
                                 <li><a href="building-with-maven.html">Building Spark with Maven</a></li>
                                 <li><a href="https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark">Contributing to Spark</a></li>
@@ -114,7 +120,11 @@
         </div>
 
         <div class="container" id="content">
-          <h1 class="title">{{ page.title }}</h1>
+          {% if page.displayTitle %}
+            <h1 class="title">{{ page.displayTitle }}</h1>
+          {% else %}
+            <h1 class="title">{{ page.title }}</h1>
+          {% endif %}
 
           {{ content }}
 
@@ -126,21 +136,31 @@
 
         <!-- MathJax Section -->
         <script type="text/x-mathjax-config">
-              MathJax.Hub.Config({
+            MathJax.Hub.Config({
                 TeX: { equationNumbers: { autoNumber: "AMS" } }
-              });
-            </script>
-        <script type="text/javascript"
-         src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+            });
+        </script>
         <script>
-          MathJax.Hub.Config({
-            tex2jax: {
-              inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
-              displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
-              processEscapes: true,
-              skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-            }
-          });
+            // Note that we load MathJax this way to work with local file (file://), HTTP and HTTPS.
+            // We could use "//cdn.mathjax...", but that won't support "file://".
+            (function(d, script) {
+                script = d.createElement('script');
+                script.type = 'text/javascript';
+                script.async = true;
+                script.onload = function(){
+                    MathJax.Hub.Config({
+                        tex2jax: {
+                            inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+                            displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
+                            processEscapes: true,
+                            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+                        }
+                    });
+                };
+                script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
+                    'cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+                d.getElementsByTagName('head')[0].appendChild(script);
+            }(document));
         </script>
     </body>
 </html>

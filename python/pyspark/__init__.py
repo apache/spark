@@ -49,13 +49,6 @@ Hive:
       Main entry point for accessing data stored in Apache Hive..
 """
 
-
-
-import sys
-import os
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1-src.zip"))
-
-
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.sql import SQLContext
@@ -66,4 +59,5 @@ from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 
 
-__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD", "SparkFiles", "StorageLevel", "Row"]
+__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD",
+           "SparkFiles", "StorageLevel", "Row"]

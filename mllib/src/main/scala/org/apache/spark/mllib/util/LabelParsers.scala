@@ -18,16 +18,23 @@
 package org.apache.spark.mllib.util
 
 /** Trait for label parsers. */
-trait LabelParser extends Serializable {
+private trait LabelParser extends Serializable {
   /** Parses a string label into a double label. */
   def parse(labelString: String): Double
+}
+
+/** Factory methods for label parsers. */
+private object LabelParser {
+  def getInstance(multiclass: Boolean): LabelParser = {
+    if (multiclass) MulticlassLabelParser else BinaryLabelParser
+  }
 }
 
 /**
  * Label parser for binary labels, which outputs 1.0 (positive) if the value is greater than 0.5,
  * or 0.0 (negative) otherwise. So it works with +1/-1 labeling and +1/0 labeling.
  */
-object BinaryLabelParser extends LabelParser {
+private object BinaryLabelParser extends LabelParser {
   /** Gets the default instance of BinaryLabelParser. */
   def getInstance(): LabelParser = this
 
@@ -41,7 +48,7 @@ object BinaryLabelParser extends LabelParser {
 /**
  * Label parser for multiclass labels, which converts the input label to double.
  */
-object MulticlassLabelParser extends LabelParser {
+private object MulticlassLabelParser extends LabelParser {
   /** Gets the default instance of MulticlassLabelParser. */
   def getInstance(): LabelParser = this
 

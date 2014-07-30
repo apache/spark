@@ -20,7 +20,7 @@ package org.apache.spark
 import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.SparkContext._
@@ -31,7 +31,7 @@ class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
   with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"

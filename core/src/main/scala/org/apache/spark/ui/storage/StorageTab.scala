@@ -19,9 +19,10 @@ package org.apache.spark.ui.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ui._
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
+import org.apache.spark.storage._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage") {
@@ -35,11 +36,11 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
 }
 
 /**
- * A SparkListener that prepares information to be displayed on the BlockManagerUI
+ * :: DeveloperApi ::
+ * A SparkListener that prepares information to be displayed on the BlockManagerUI.
  */
-private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
-  extends SparkListener {
-
+@DeveloperApi
+class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   private val _rddInfoMap = mutable.Map[Int, RDDInfo]()
 
   def storageStatusList = storageStatusListener.storageStatusList
@@ -48,9 +49,10 @@ private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
   def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
 
   /** Update each RDD's info to reflect any updates to the RDD's storage status */
-  private def updateRDDInfo() {
+  private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty) {
     val rddInfos = _rddInfoMap.values.toSeq
-    val updatedRddInfos = StorageUtils.rddInfoFromStorageStatus(storageStatusList, rddInfos)
+    val updatedRddInfos =
+      StorageUtils.rddInfoFromStorageStatus(storageStatusList, rddInfos, updatedBlocks)
     updatedRddInfos.foreach { info => _rddInfoMap(info.id) = info }
   }
 
@@ -61,7 +63,7 @@ private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val metrics = taskEnd.taskMetrics
     if (metrics != null && metrics.updatedBlocks.isDefined) {
-      updateRDDInfo()
+      updateRDDInfo(metrics.updatedBlocks.get)
     }
   }
 
@@ -76,6 +78,6 @@ private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
   }
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
-    updateRDDInfo()
+    _rddInfoMap.remove(unpersistRDD.rddId)
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.deploy
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class ClientSuite extends FunSuite with ShouldMatchers {
+class ClientSuite extends FunSuite with Matchers {
   test("correctly validates driver jar URL's") {
     ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
     ClientArguments.isValidJarUrl("file://some/path/to/a/jarFile.jar") should be (true)

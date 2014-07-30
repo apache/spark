@@ -32,7 +32,6 @@ object SparkStreamingExample {
       case None => new SparkConf().setAppName("Simple Streaming App")
     }
     val ssc = new StreamingContext(conf, Seconds(1))
-    SparkContext.jarOfClass(this.getClass).foreach(ssc.sparkContext.addJar)
     val seen = ListBuffer[RDD[Int]]()
 
     val rdd1 = ssc.sparkContext.makeRDD(1 to 100, 10)

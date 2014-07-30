@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.net.{Authenticator, PasswordAuthentication}
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -139,17 +137,18 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   private val sparkSecretLookupKey = "sparkCookie"
 
   private val authOn = sparkConf.getBoolean("spark.authenticate", false)
-  private val uiAclsOn = sparkConf.getBoolean("spark.ui.acls.enable", false)
+  private var uiAclsOn = sparkConf.getBoolean("spark.ui.acls.enable", false)
 
+  private var viewAcls: Set[String] = _
   // always add the current user and SPARK_USER to the viewAcls
-  private val aclUsers = ArrayBuffer[String](System.getProperty("user.name", ""),
+  private val defaultAclUsers = Seq[String](System.getProperty("user.name", ""),
     Option(System.getenv("SPARK_USER")).getOrElse(""))
-  aclUsers ++= sparkConf.get("spark.ui.view.acls", "").split(',')
-  private val viewAcls = aclUsers.map(_.trim()).filter(!_.isEmpty).toSet
+  setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
 
   private val secretKey = generateSecretKey()
-  logInfo("SecurityManager, is authentication enabled: " + authOn +
-    " are ui acls enabled: " + uiAclsOn + " users with view permissions: " + viewAcls.toString())
+  logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
+    "; ui acls " + (if (uiAclsOn) "enabled" else "disabled") +
+    "; users with view permissions: " + viewAcls.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
@@ -168,6 +167,20 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
         }
       }
     )
+  }
+
+  private[spark] def setViewAcls(defaultUsers: Seq[String], allowedUsers: String) {
+    viewAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet 
+    logInfo("Changing view acls to: " + viewAcls.mkString(","))
+  }
+
+  private[spark] def setViewAcls(defaultUser: String, allowedUsers: String) {
+    setViewAcls(Seq[String](defaultUser), allowedUsers)
+  }
+
+  private[spark] def setUIAcls(aclSetting: Boolean) { 
+    uiAclsOn = aclSetting 
+    logInfo("Changing acls enabled to: " + uiAclsOn)
   }
 
   /**
@@ -222,6 +235,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
    * @return true is the user has permission, otherwise false
    */
   def checkUIViewPermissions(user: String): Boolean = {
+    logDebug("user=" + user + " uiAclsEnabled=" + uiAclsEnabled() + " viewAcls=" + 
+      viewAcls.mkString(","))
     if (uiAclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
   }
 
