@@ -264,13 +264,13 @@ class ReplSuite extends FunSuite {
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.createSchemaRDD
         |case class TestCaseClass(value: Int)
-        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toSchemaRDD.collect
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2632 importing a method") {
+  test("SPARK-2632 importing a method from non serializable class and not using it.") {
     val output = runInterpreter("local",
     """
       |class TestClass() { def testMethod = 3 }
