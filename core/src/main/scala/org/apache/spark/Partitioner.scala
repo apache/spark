@@ -113,8 +113,13 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private var rangeBounds: Array[K] = {
-    if (partitions <= 1) {
+  private var valRB: Array[K] = Array()
+  private var haveRB: Boolean = false
+
+  private def rangeBounds: Array[K] = {
+    if (haveRB) return valRB
+
+    valRB = if (partitions <= 1) {
       Array.empty
     } else {
       // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
@@ -152,6 +157,9 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         RangePartitioner.determineBounds(candidates, partitions)
       }
     }
+
+    haveRB = true
+    valRB
   }
 
   def numPartitions = rangeBounds.length + 1
@@ -234,7 +242,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         val ser = sfactory.newInstance()
         Utils.deserializeViaNestedStream(in, ser) { ds =>
           implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
-          rangeBounds = ds.readObject[Array[K]]()
+          valRB = ds.readObject[Array[K]]()
+          haveRB = true
         }
     }
   }
