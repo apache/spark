@@ -202,7 +202,7 @@ package object dsl {
       // Protobuf terminology
       def required = a.withNullability(false)
 
-      def at(ordinal: Int) = BoundReference(ordinal, a)
+      def at(ordinal: Int) = BoundReference(ordinal, a.dataType, a.nullable)
     }
   }
 

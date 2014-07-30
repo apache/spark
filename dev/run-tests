@@ -21,7 +21,10 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
-export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+if [ -z "$SBT_MAVEN_PROFILES" ]; then
+  export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+fi
+echo "SBT_MAVEN_PROFILES=\"$SBT_MAVEN_PROFILES\""
 
 # Remove work directory
 rm -rf ./work
@@ -37,7 +40,7 @@ JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*
 # Partial solution for SPARK-1455. Only run Hive tests if there are sql changes.
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
-  diffs=`git diff --dirstat master | awk '{ print $2; }' | grep "^sql/"`
+  diffs=`git diff --name-only master | grep "^sql/"`
   if [ -n "$diffs" ]; then
     echo "Detected changes in SQL. Will run Hive test suite."
     export _RUN_SQL_TESTS=true # exported for PySpark tests
