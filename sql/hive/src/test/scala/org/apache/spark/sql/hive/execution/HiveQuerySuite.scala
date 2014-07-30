@@ -41,6 +41,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("case else null",
     """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src LIMIT 1""")
 
+  createQueryTest("having no references",
+    "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
+
   createQueryTest("boolean = number",
     """
       |SELECT
