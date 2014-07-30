@@ -45,10 +45,7 @@ trait Logging {
       initializeIfNecessary()
       var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
-      if (className.endsWith("$")) {
-        className = className.substring(0, className.length - 1)
-      }
-      log_ = LoggerFactory.getLogger(className)
+      log_ = LoggerFactory.getLogger(className.stripSuffix("$"))
     }
     log_
   }
@@ -112,11 +109,10 @@ trait Logging {
   private def initializeLogging() {
     // If Log4j 1.2 is being used, but is not initialized, load a default properties file
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
-    // This minimally distinguishes the log4j 1.2 binding, currently
+    // This distinguishes the log4j 1.2 binding, currently
     // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
     // org.apache.logging.slf4j.Log4jLoggerFactory
-    val usingLog4j12 =
-      binderClass.endsWith("Log4jLoggerFactory") && binderClass.startsWith("org.slf4j.")
+    val usingLog4j12 = "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
     val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4j12Initialized && usingLog4j12) {
       val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
