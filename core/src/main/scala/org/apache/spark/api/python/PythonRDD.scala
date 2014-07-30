@@ -550,11 +550,11 @@ private[spark] object PythonRDD extends Logging {
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
-      // TODO: Figure out why flatMap is necessay for pyspark
       iter.flatMap { row =>
         unpickle.loads(row) match {
+          // in case of objects are pickled in batch mode
           case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
-          // Incase the partition doesn't have a collection
+          // not in batch mode
           case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
         }
       }

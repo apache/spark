@@ -14,11 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.streaming.flume.sink
 
-package org.apache.spark.sql.catalyst.plans.logical
-
-abstract class BaseRelation extends LeafNode {
-  self: Product =>
-
-  def tableName: String
+private[flume] object SparkSinkUtils {
+  /**
+   * This method determines if this batch represents an error or not.
+   * @param batch - The batch to check
+   * @return - true if the batch represents an error
+   */
+  def isErrorBatch(batch: EventBatch): Boolean = {
+    !batch.getErrorMsg.toString.equals("") // If there is an error message, it is an error batch.
+  }
 }
