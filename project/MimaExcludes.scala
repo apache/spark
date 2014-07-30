@@ -91,11 +91,21 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.Entry") ++
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
           Seq(
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.mllib.tree.DecisionTree"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.tree.impurity.Entropy.log2"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.mllib.tree.configuration.Algo"),
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.tree.impurity.Variance.calculate")
           )
         case v if v.startsWith("1.0") =>

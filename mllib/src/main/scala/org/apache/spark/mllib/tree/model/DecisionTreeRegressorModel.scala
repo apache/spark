@@ -15,31 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impurity
+package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Experimental
+
 
 /**
  * :: Experimental ::
- * Class for calculating variance during regression
+ * Decision tree model for regression.
+ * This model stores learned parameters.
+ * @param topNode root node
  */
 @Experimental
-private[mllib] object Variance extends RegressionImpurity {
+class DecisionTreeRegressorModel(topNode: Node) extends DecisionTreeModel(topNode) {
 
   /**
-   * :: DeveloperApi ::
-   * information calculation for regression
-   * @param count number of instances
-   * @param sum sum of labels
-   * @param sumSquares summation of squares of the labels
-   * @return  variance, or 0 if count = 0
+   * Print full model.
    */
-  @DeveloperApi
-  override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
-    if (count == 0) {
-      return 0
-    }
-    val squaredLoss = sumSquares - (sum * sum) / count
-    squaredLoss / count
+  override def toString: String = {
+    s"DecisionTreeRegressorModel\n" + topNode.toStringRecursive(2)
   }
+
 }

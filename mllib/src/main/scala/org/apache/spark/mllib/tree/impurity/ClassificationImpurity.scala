@@ -15,16 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
+package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- * Enum to select the algorithm for the decision tree
+ * Trait for calculating information gain for classification.
  */
 @Experimental
-object Algo extends Enumeration {
-  type Algo = Value
-  val Classification, Regression = Value
+private[mllib] trait ClassificationImpurity extends Serializable {
+
+  /**
+   * :: DeveloperApi ::
+   * information calculation for multiclass classification
+   * @param counts Array[Double] with counts for each label
+   * @param totalCount sum of counts for all labels
+   * @return information value, or 0 if count = 0
+   */
+  @DeveloperApi
+  def calculate(counts: Array[Double], totalCount: Double): Double
+
 }

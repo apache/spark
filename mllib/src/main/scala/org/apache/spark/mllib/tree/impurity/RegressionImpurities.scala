@@ -17,29 +17,34 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Class for calculating variance during regression
+ * Factory class for constructing a [[org.apache.spark.mllib.tree.impurity.RegressionImpurity]]
+ * type based on its name.
  */
 @Experimental
-private[mllib] object Variance extends RegressionImpurity {
+private[mllib] object RegressionImpurities {
 
   /**
-   * :: DeveloperApi ::
-   * information calculation for regression
-   * @param count number of instances
-   * @param sum sum of labels
-   * @param sumSquares summation of squares of the labels
-   * @return  variance, or 0 if count = 0
+   * Mapping used for impurity names, used for parsing impurity settings.
+   * If you add a new impurity class, add it here.
    */
-  @DeveloperApi
-  override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
-    if (count == 0) {
-      return 0
+  val nameToImpurityMap: Map[String, RegressionImpurity] = Map(
+    "variance" -> Variance)
+
+  val names: List[String] = nameToImpurityMap.keys.toList
+
+  /**
+   * Given impurity name, return type.
+   */
+  def impurity(name: String): RegressionImpurity = {
+    if (nameToImpurityMap.contains(name)) {
+      nameToImpurityMap(name)
+    } else {
+      throw new IllegalArgumentException(s"Bad impurity parameter for regression: $name")
     }
-    val squaredLoss = sumSquares - (sum * sum) / count
-    squaredLoss / count
   }
+
 }

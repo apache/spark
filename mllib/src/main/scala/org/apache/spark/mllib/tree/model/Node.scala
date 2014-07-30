@@ -26,7 +26,9 @@ import org.apache.spark.mllib.linalg.Vector
  * :: DeveloperApi ::
  * Node in a decision tree
  * @param id integer node id
- * @param predict predicted value at the node
+ * @param predict Predicted value at the node.
+ *                For classification, this is a class label in 0,1,....
+ *                For regression, this is a real value.
  * @param isLeaf whether the leaf is a node
  * @param split split to calculate left and right nodes
  * @param leftNode  left child
@@ -91,4 +93,59 @@ class Node (
       }
     }
   }
+
+  /**
+   * Recursive print function.
+   * @param indentFactor  The number of spaces to add to each level of indentation.
+   */
+  def toStringRecursive(indentFactor: Int = 0): String = {
+
+    def splitToString(split: Split, left: Boolean) : String = {
+      split.featureType match {
+        case Continuous => if (left) {
+            s"(feature ${split.feature} <= ${split.threshold})"
+          } else {
+            s"(feature ${split.feature} > ${split.threshold})"
+          }
+        case Categorical => if (left) {
+            s"(feature ${split.feature} in ${split.categories})"
+          } else {
+            s"(feature ${split.feature} not in ${split.categories})"
+          }
+      }
+    }
+    val prefix: String = " " * indentFactor
+    if (isLeaf) {
+      prefix + s"Predict: $predict\n"
+    } else {
+      prefix + s"If ${splitToString(split.get, left=true)}\n" +
+        leftNode.get.toStringRecursive(indentFactor + 1) +
+        prefix + s"Else ${splitToString(split.get, left=false)}\n" +
+        rightNode.get.toStringRecursive(indentFactor + 1)
+    }
+  }
+
+  /**
+   * Get number of nodes in tree from this node, including leaf nodes.
+   */
+  def numNodesRecursive: Int = {
+    if (isLeaf) {
+      1
+    } else {
+      1 + leftNode.get.numNodesRecursive + rightNode.get.numNodesRecursive
+    }
+  }
+
+  /**
+   * Get depth of tree from this node.
+   * E.g.: Depth 0 means this is a leaf node.
+   */
+  def depthRecursive: Int = {
+    if (isLeaf) {
+      0
+    } else {
+      1 + math.max(leftNode.get.depthRecursive, rightNode.get.depthRecursive)
+    }
+  }
+
 }
