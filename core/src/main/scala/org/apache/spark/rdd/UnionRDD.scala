@@ -58,7 +58,7 @@ private[spark] class UnionPartition[T: ClassTag](
 @DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
-    rdds: Seq[RDD[T]])
+    var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
@@ -89,4 +89,9 @@ class UnionRDD[T: ClassTag](
 
   override def getPreferredLocations(s: Partition): Seq[String] =
     s.asInstanceOf[UnionPartition[T]].preferredLocations()
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    rdds = null
+  }
 }
