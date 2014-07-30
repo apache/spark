@@ -40,7 +40,7 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.WholeTextFileInputFormat
+import org.apache.spark.input.{WholeTextFileInputFormat,ByteInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -506,6 +506,26 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[WholeTextFileInputFormat],
       classOf[String],
       classOf[String],
+      updateConf,
+      minPartitions).setName(path)
+  }
+
+  /**
+   * Get an RDD for a Hadoop-readable dataset as byte-streams for each file (useful for binary data)
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   */
+  def byteFiles(path: String, minPartitions: Int = defaultMinPartitions): RDD[(String, Array[Byte])] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new BinaryFileRDD(
+      this,
+      classOf[ByteInputFormat],
+      classOf[String],
+      classOf[Array[Byte]],
       updateConf,
       minPartitions).setName(path)
   }
