@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 object SQLConf {
+  val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
@@ -48,6 +49,9 @@ trait SQLConf {
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
+
+  /** When true tables cached using the in-memory columnar caching will be compressed. */
+  private[spark] def useCompression: Boolean = get(COMPRESS_CACHED, "false").toBoolean
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt

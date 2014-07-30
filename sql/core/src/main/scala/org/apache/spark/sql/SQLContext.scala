@@ -192,8 +192,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
         currentTable.logicalPlan
 
       case _ =>
-        val useCompression =
-          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
         InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
     }
 
