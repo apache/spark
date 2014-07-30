@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Future
 import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
@@ -269,20 +270,22 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
       errors += throwable
     }
 
-    override def pushBytes(bytes: ByteBuffer, optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
-
-    }
-
-    /** Store a iterator of received data as a data block into Spark's memory. */
-    override def pushIterator(iterator: Iterator[_], optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
-
+    /** Store the bytes of received data as a data block into Spark's memory. */
+    override def pushBytesReliably(bytes: ByteBuffer, optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
+      Future.successful(true)
     }
 
     /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
-    override def pushArrayBuffer(arrayBuffer: ArrayBuffer[_], optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
+    override def pushArrayBufferReliably(arrayBuffer: ArrayBuffer[_], optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
+      Future.successful(true)
+    }
+
+    /** Store a iterator of received data as a data block into Spark's memory. */
+    override def pushIteratorReliably(iterator: Iterator[_], optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
+      Future.successful(true)
     }
   }
 

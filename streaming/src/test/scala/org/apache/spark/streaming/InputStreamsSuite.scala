@@ -41,6 +41,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 import org.apache.spark.rdd.RDD
 
+import scala.concurrent.ExecutionContext
+
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("socket input stream") {
@@ -458,20 +460,23 @@ object MultiThreadTestReceiver {
 class CallbackReceiver(val limit: Int)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
 
+  lazy implicit val executionContext = ExecutionContext
+    .fromExecutorService(Executors.newSingleThreadExecutor())
   lazy val executor = Executors.newSingleThreadExecutor()
 
   override def onStart(): Unit = {
     executor.submit(new Runnable {
       override def run(): Unit = {
         val arrayBuffer = ArrayBuffer.range(1, limit + 1)
-        storeReliably(arrayBuffer, Option(() => {
-          store(arrayBuffer.sum)
-        }))
+        storeReliably(arrayBuffer).onSuccess {
+          case true => store(arrayBuffer.sum)
+        }
       }
     })
   }
 
   override def onStop(): Unit = {
     executor.shutdownNow()
+    executionContext.shutdownNow()
   }
 }

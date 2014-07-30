@@ -71,31 +71,11 @@ private[streaming] abstract class ReceiverSupervisor(
       optionalBlockId: Option[StreamBlockId]
     )
 
-  /** Store the bytes of received data as a data block into Spark's memory,
-   *  and call the callback when the data has been successfully pushed.
-   */
-  def pushBytes(
-      bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId],
-      optionalCallback: Option[() => Unit]
-    )
-
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    )
-
-  /** Store a iterator of received data as a data block into Spark's memory,
-   *  and call the callback when the data has been successfully pushed.
-   */
-  def pushIterator(
-      iterator: Iterator[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId],
-      optionalCallback: Option[() => Unit]
     )
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
@@ -105,15 +85,26 @@ private[streaming] abstract class ReceiverSupervisor(
       optionalBlockId: Option[StreamBlockId]
     )
 
-  /** Store an ArrayBuffer of received data as a data block into Spark's memory, and
-   *  call the callback when the data has been successfully pushed.
-   */
-  def pushArrayBuffer(
+  /** Store the bytes of received data as a data block into Spark's memory. */
+  def pushBytesReliably(
+    bytes: ByteBuffer,
+    optionalMetadata: Option[Any],
+    optionalBlockId: Option[StreamBlockId]
+    ): Future[Boolean]
+
+  /** Store a iterator of received data as a data block into Spark's memory. */
+  def pushIteratorReliably(
+    iterator: Iterator[_],
+    optionalMetadata: Option[Any],
+    optionalBlockId: Option[StreamBlockId]
+    ): Future[Boolean]
+
+  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
+  def pushArrayBufferReliably(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId],
-      optionalCallback: Option[() => Unit]
-    )
+      optionalBlockId: Option[StreamBlockId]
+    ): Future[Boolean]
 
   /** Report errors. */
   def reportError(message: String, throwable: Throwable)
