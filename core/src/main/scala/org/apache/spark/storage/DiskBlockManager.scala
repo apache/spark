@@ -35,11 +35,13 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
  *
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
-private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootDirs: String)
+private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, rootDirs: String)
   extends PathResolver with Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
+
+  private val subDirsPerLocalDir =
+    shuffleBlockManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
@@ -60,12 +62,14 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * Otherwise, we assume the Block is mapped to the whole file identified by the BlockId.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    val env = SparkEnv.get
+    val env = SparkEnv.get  // NOTE: can be null in unit tests
     if (blockId.isShuffle && env != null && env.shuffleManager.isInstanceOf[SortShuffleManager]) {
-      val sortShuffleManager = SparkEnv.get.shuffleManager.asInstanceOf[SortShuffleManager]
+      // For sort-based shuffle, let it figure out its blocks
+      val sortShuffleManager = env.shuffleManager.asInstanceOf[SortShuffleManager]
       sortShuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId], this)
-    } else if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
-      shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
+    } else if (blockId.isShuffle && shuffleBlockManager.consolidateShuffleFiles) {
+      // For hash-based shuffle with consolidated files, ShuffleBlockManager takes care of this
+      shuffleBlockManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val file = getFile(blockId.name)
       new FileSegment(file, 0, file.length())

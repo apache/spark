@@ -84,6 +84,14 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+
+  // Size of object batches when reading/writing from serializers.
+  //
+  // Objects are written in batches, with each batch using its own serialization stream. This
+  // cuts down on the size of reference-tracking maps constructed when deserializing a stream.
+  //
+  // NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
+  // grow internal data structures by growing + copying every time the number of objects doubles.
   private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
 
   private def getPartition(key: K): Int = {
@@ -93,8 +101,8 @@ private[spark] class ExternalSorter[K, V, C](
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
-  var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
-  var buffer = new SizeTrackingPairBuffer[(Int, K), C]
+  private var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
+  private var buffer = new SizeTrackingPairBuffer[(Int, K), C]
 
   // Number of pairs read from input since last spill; note that we count them even if a value is
   // merged with a previous key in case we're doing something like groupBy where the result grows
@@ -118,11 +126,11 @@ private[spark] class ExternalSorter[K, V, C](
   // How much of the shared memory pool this collection has claimed
   private var myMemoryThreshold = 0L
 
-  // A comparator for keys K that orders them within a partition to allow partial aggregation.
+  // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
   // user. (A partial ordering means that equal keys have comparator.compare(k, k) = 0, but some
   // non-equal keys also have this, so we need to do a later pass to find truly equal keys).
-  // Note that we ignore this if no aggregator is given.
+  // Note that we ignore this if no aggregator and no ordering are given.
   private val keyComparator: Comparator[K] = ordering.getOrElse(new Comparator[K] {
     override def compare(a: K, b: K): Int = {
       val h1 = if (a == null) 0 else a.hashCode()
@@ -194,6 +202,11 @@ private[spark] class ExternalSorter[K, V, C](
     }
   }
 
+  /**
+   * Spill the current in-memory collection to disk if needed.
+   *
+   * @param usingMap whether we're using a map or buffer as our current in-memory collection
+   */
   private def maybeSpill(usingMap: Boolean): Unit = {
     if (!spillingEnabled) {
       return
@@ -201,11 +214,12 @@ private[spark] class ExternalSorter[K, V, C](
 
     val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
 
+    // TODO: factor this out of both here and ExternalAppendOnlyMap
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold)
     {
       // TODO: This logic doesn't work if there are two external collections being used in the same
-      // task (e.g. to read shuffle output and write it out into another shuffle).
+      // task (e.g. to read shuffle output and write it out into another shuffle) [SPARK-2711]
 
       val currentSize = collection.estimateSize()
       var shouldSpill = false
@@ -243,8 +257,9 @@ private[spark] class ExternalSorter[K, V, C](
     val memorySize = collection.estimateSize()
 
     spillCount += 1
-    logWarning("Spilling in-memory batch of %d MB to disk (%d spill%s so far)"
-      .format(memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+    val threadId = Thread.currentThread().getId
+    logInfo("Thread %d spilling in-memory batch of %d MB to disk (%d spill%s so far)"
+      .format(threadId, memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize)
     var objectsWritten = 0   // Objects written since the last flush
@@ -261,6 +276,7 @@ private[spark] class ExternalSorter[K, V, C](
       val bytesWritten = writer.bytesWritten
       batchSizes.append(bytesWritten)
       _diskBytesSpilled += bytesWritten
+      objectsWritten = 0
     }
 
     try {
@@ -277,7 +293,6 @@ private[spark] class ExternalSorter[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          objectsWritten = 0
           writer.close()
           writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize)
         }
@@ -350,9 +365,10 @@ private[spark] class ExternalSorter[K, V, C](
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
     val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
+      // Use the reverse of comparator.compare because PriorityQueue dequeues the max
       override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
     })
-    heap.enqueue(bufferedIters: _*)
+    heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
       override def hasNext: Boolean = !heap.isEmpty
 
@@ -429,42 +445,21 @@ private[spark] class ExternalSorter[K, V, C](
         }
       }.flatMap(i => i)
     } else {
-      // We have a total ordering. This means we can merge objects one by one as we read them
-      // from the iterators, without buffering all the ones that are "equal" to a given key.
-      // We do so with code similar to mergeSort, except our Iterator.next combines together all
-      // the elements with the given key.
-      val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
-      type Iter = BufferedIterator[Product2[K, C]]
-      val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
-        override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
-      })
-      heap.enqueue(bufferedIters: _*)
+      // We have a total ordering, so the objects with the same key are sequential.
       new Iterator[Product2[K, C]] {
-        override def hasNext: Boolean = !heap.isEmpty
+        val sorted = mergeSort(iterators, comparator).buffered
+
+        override def hasNext: Boolean = sorted.hasNext
 
         override def next(): Product2[K, C] = {
           if (!hasNext) {
             throw new NoSuchElementException
           }
-          val firstBuf = heap.dequeue()
-          val firstPair = firstBuf.next()
-          val k = firstPair._1
-          var c = firstPair._2
-          if (firstBuf.hasNext) {
-            heap.enqueue(firstBuf)
-          }
-          var shouldStop = false
-          while (!heap.isEmpty && !shouldStop) {
-            shouldStop = true  // Stop unless we find another element with the same key
-            val newBuf = heap.dequeue()
-            while (newBuf.hasNext && newBuf.head._1 == k) {
-              val elem = newBuf.next()
-              c = mergeCombiners(c, elem._2)
-              shouldStop = false
-            }
-            if (newBuf.hasNext) {
-              heap.enqueue(newBuf)
-            }
+          val elem = sorted.next()
+          val k = elem._1
+          var c = elem._2
+          while (sorted.hasNext && sorted.head._1 == k) {
+            c = mergeCombiners(c, sorted.head._2)
           }
           (k, c)
         }
@@ -635,7 +630,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   /**
    * Given a stream of ((partition, key), combiner) pairs *assumed to be sorted by partition ID*,
-   * group together the pairs for each for each partition into a sub-iterator.
+   * group together the pairs for each partition into a sub-iterator.
    *
    * @param data an iterator of elements, assumed to already be sorted by partition ID
    */

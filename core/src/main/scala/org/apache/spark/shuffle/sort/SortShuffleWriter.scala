@@ -37,7 +37,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   private val numPartitions = dep.partitioner.numPartitions
 
   private val blockManager = SparkEnv.get.blockManager
-  private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
+  private val ser = Serializer.getSerializer(dep.serializer.orNull)
 
   private val conf = SparkEnv.get.conf
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
@@ -45,11 +45,16 @@ private[spark] class SortShuffleWriter[K, V, C](
   private var sorter: ExternalSorter[K, V, _] = null
   private var outputFile: File = null
 
+  // Are we in the process of stopping? Because map tasks can call stop() with success = true
+  // and then call stop() with success = false if they get an exception, we want to make sure
+  // we don't try deleting files, etc twice.
   private var stopping = false
+
   private var mapStatus: MapStatus = null
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+    // Get an iterator with the elements for each partition ID
     val partitions: Iterator[(Int, Iterator[Product2[K, _]])] = {
       if (dep.mapSideCombine) {
         if (!dep.aggregator.isDefined) {
@@ -97,7 +102,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         totalTime += writer.timeWriting()
         totalBytes += segment.length
       } else {
-        // Don't create a new writer to avoid writing any headers and things like that
+        // The partition is empty; don't create a new writer to avoid writing headers, etc
         offsets(id + 1) = offsets(id)
       }
     }
@@ -106,8 +111,8 @@ private[spark] class SortShuffleWriter[K, V, C](
     shuffleMetrics.shuffleBytesWritten = totalBytes
     shuffleMetrics.shuffleWriteTime = totalTime
     context.taskMetrics.shuffleWriteMetrics = Some(shuffleMetrics)
-    context.taskMetrics.memoryBytesSpilled = sorter.memoryBytesSpilled
-    context.taskMetrics.diskBytesSpilled = sorter.diskBytesSpilled
+    context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
+    context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
 
     // Write an index file with the offsets of each block, plus a final offset at the end for the
     // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
@@ -153,6 +158,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       // Clean up our sorter, which may have its own intermediate files
       if (sorter != null) {
         sorter.stop()
+        sorter = null
       }
     }
   }

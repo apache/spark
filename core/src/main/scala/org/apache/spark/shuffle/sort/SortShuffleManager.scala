@@ -65,14 +65,14 @@ private[spark] class SortShuffleManager extends ShuffleManager {
   def getBlockLocation(blockId: ShuffleBlockId, diskManager: DiskBlockManager): FileSegment = {
     // The block is actually going to be a range of a single map output file for this map, so
     // figure out the ID of the consolidated file, then the offset within that from our index
-    val realId = ShuffleBlockId(blockId.shuffleId, blockId.mapId, 0)
-    val indexFile = diskManager.getFile(realId.name + ".index")
+    val consolidatedId = blockId.copy(reduceId = 0)
+    val indexFile = diskManager.getFile(consolidatedId.name + ".index")
     val in = new DataInputStream(new FileInputStream(indexFile))
     try {
       in.skip(blockId.reduceId * 8)
       val offset = in.readLong()
       val nextOffset = in.readLong()
-      new FileSegment(diskManager.getFile(realId), offset, nextOffset - offset)
+      new FileSegment(diskManager.getFile(consolidatedId), offset, nextOffset - offset)
     } finally {
       in.close()
     }

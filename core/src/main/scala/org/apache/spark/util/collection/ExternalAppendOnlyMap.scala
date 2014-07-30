@@ -110,7 +110,6 @@ class ExternalAppendOnlyMap[K, V, C](
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
-  private val threadId = Thread.currentThread().getId
 
   /**
    * Insert the given key and value into the map.
@@ -148,6 +147,7 @@ class ExternalAppendOnlyMap[K, V, C](
         // Atomically check whether there is sufficient memory in the global pool for
         // this map to grow and, if possible, allocate the required amount
         shuffleMemoryMap.synchronized {
+          val threadId = Thread.currentThread().getId
           val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
           val availableMemory = maxMemoryThreshold -
             (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
@@ -187,7 +187,8 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private def spill(mapSize: Long): Unit = {
     spillCount += 1
-    logWarning("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
+    val threadId = Thread.currentThread().getId
+    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
       .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)

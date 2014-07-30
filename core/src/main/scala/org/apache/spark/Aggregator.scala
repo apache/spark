@@ -56,9 +56,12 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       combiners.insertAll(iter)
-      // TODO: Make this non optional in a future release
-      Option(context).foreach(c => c.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled)
-      Option(context).foreach(c => c.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled)
+      // Update task metrics if context is not null
+      // TODO: Make context non optional in a future release
+      Option(context).foreach { c =>
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
+      }
       combiners.iterator
     }
   }
@@ -87,9 +90,12 @@ case class Aggregator[K, V, C] (
         val pair = iter.next()
         combiners.insert(pair._1, pair._2)
       }
-      // TODO: Make this non optional in a future release
-      Option(context).foreach(c => c.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled)
-      Option(context).foreach(c => c.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled)
+      // Update task metrics if context is not null
+      // TODO: Make context non-optional in a future release
+      Option(context).foreach { c =>
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
+      }
       combiners.iterator
     }
   }
