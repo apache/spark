@@ -335,14 +335,16 @@ def _parse_datatype_string(datatype_string):
     >>> check_datatype(complex_maptype)
     True
     """
-    left_bracket_index = datatype_string.find("(")
-    if left_bracket_index == -1:
+    index = datatype_string.find("(")
+    if index == -1:
         # It is a primitive type.
-        left_bracket_index = len(datatype_string)
-    type_or_field = datatype_string[:left_bracket_index]
-    rest_part = datatype_string[left_bracket_index+1:len(datatype_string)-1].strip()
+        index = len(datatype_string)
+    type_or_field = datatype_string[:index]
+    rest_part = datatype_string[index+1:len(datatype_string)-1].strip()
+
     if type_or_field in _all_primitive_types:
         return _all_primitive_types[type_or_field]()
+
     elif type_or_field == "ArrayType":
         last_comma_index = rest_part.rfind(",")
         containsNull = True
@@ -350,6 +352,7 @@ def _parse_datatype_string(datatype_string):
             containsNull = False
         elementType = _parse_datatype_string(rest_part[:last_comma_index].strip())
         return ArrayType(elementType, containsNull)
+
     elif type_or_field == "MapType":
         last_comma_index = rest_part.rfind(",")
         valueContainsNull = True
@@ -357,6 +360,7 @@ def _parse_datatype_string(datatype_string):
             valueContainsNull = False
         keyType, valueType = _parse_datatype_list(rest_part[:last_comma_index].strip())
         return MapType(keyType, valueType, valueContainsNull)
+
     elif type_or_field == "StructField":
         first_comma_index = rest_part.find(",")
         name = rest_part[:first_comma_index].strip()
@@ -367,6 +371,7 @@ def _parse_datatype_string(datatype_string):
         dataType = _parse_datatype_string(
             rest_part[first_comma_index+1:last_comma_index].strip())
         return StructField(name, dataType, nullable)
+
     elif type_or_field == "StructType":
         # rest_part should be in the format like
         # List(StructField(field1,IntegerType,false)).
@@ -378,13 +383,13 @@ def _parse_datatype_string(datatype_string):
 
 _cached_namedtuples = {}
 
-def _restore_object(fields, obj):
+def _restore_object(name, fields, obj):
     """ Restore namedtuple object during unpickling. """
     cls = _cached_namedtuples.get(fields)
     if cls is None:
-        cls = namedtuple("Row", fields)
+        cls = namedtuple(name, fields)
         def __reduce__(self):
-            return (_restore_object, (fields, tuple(self)))
+            return (_restore_object, (name, fields, tuple(self)))
         cls.__reduce__ = __reduce__
         _cached_namedtuples[fields] = cls
     return cls(*obj)
@@ -395,13 +400,13 @@ def _create_object(cls, v):
 
 def _create_getter(dt, i):
     """ Create a getter for item `i` with schema """
-    # TODO: cache created class
     cls = _create_cls(dt)
     def getter(self):
         return _create_object(cls, self[i])
     return getter
 
 def _has_struct(dt):
+    """Return whether `dt` is or has StructType in it"""
     if isinstance(dt, StructType):
         return True
     elif isinstance(dt, ArrayType):
@@ -416,22 +421,20 @@ def _create_cls(dataType):
 
     The created class is similar to namedtuple, but can have nested schema.
     """
-    # this can not be in global
-    from pyspark.sql import _has_struct, _create_getter
     from operator import itemgetter
 
-
-    # TODO: update to new DataType
     if isinstance(dataType, ArrayType):
         cls = _create_cls(dataType.elementType)
         class List(list):
             def __getitem__(self, i):
+                # create object with datetype
                 return _create_object(cls, list.__getitem__(self, i))
             def __repr__(self):
+                # call collect __repr__ for nested objects
                 return "[%s]" % (", ".join(repr(self[i])
                                            for i in range(len(self))))
             def __reduce__(self):
-                # the nested struct can be reduced by itself
+                # pickle as dict, the nested struct can be reduced by itself
                 return (list, (list(self),))
         return List
 
@@ -439,11 +442,14 @@ def _create_cls(dataType):
         vcls = _create_cls(dataType.valueType)
         class Dict(dict):
             def __getitem__(self, k):
+                # create object with datetype
                 return _create_object(vcls, dict.__getitem__(self, k))
             def __repr__(self):
+                # call collect __repr__ for nested objects
                 return "{%s}" % (", ".join("%r: %r" % (k, self[k])
                                            for k in self))
             def __reduce__(self):
+                # pickle as dict, the nested struct can be reduced by itself
                 return (dict, (dict(self),))
         return Dict
 
@@ -454,24 +460,24 @@ def _create_cls(dataType):
         """ Row in SchemaRDD """
         _fields = tuple(f.name for f in dataType.fields)
 
+        # create property for fast access
         # use local vars begins with "_"
         for _i,_f in enumerate(dataType.fields):
             if _has_struct(_f.dataType):
-                _getter = property(_create_getter(_f.dataType, _i))
+                # delay creating object until accessing it
+                _getter = _create_getter(_f.dataType, _i)
             else:
-                _getter = property(itemgetter(_i))
-            locals()[_f.name] = _getter
+                _getter = itemgetter(_i)
+            locals()[_f.name] = property(_getter)
         del _i, _f, _getter
 
         def __repr__(self):
+            # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
                     for n in self._fields))
-
-        def __str__(self):
-            return repr(self)
-
         def __reduce__(self):
-            return (_restore_object, (self._fields, tuple(self)))
+            # pickle as namedtuple
+            return (_restore_object, ("Row", self._fields, tuple(self)))
 
     return Row
 
