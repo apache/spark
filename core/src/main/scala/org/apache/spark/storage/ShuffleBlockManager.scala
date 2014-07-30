@@ -256,16 +256,16 @@ object ShuffleBlockManager {
     def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
       mapIdToIndex(mapId) = numBlocks
       for (i <- 0 until offsets.length) {
-        assert (blockOffsetsByReducer(i).size == numBlocks)
-        assert (offsets(i) >= 0)
-        assert (blockOffsetsByReducer(i).size <= 0 ||
+        assert(blockOffsetsByReducer(i).size == numBlocks)
+        assert(offsets(i) >= 0)
+        assert(blockOffsetsByReducer(i).size <= 0 ||
           blockOffsetsByReducer(i)(blockOffsetsByReducer(i).size - 1) +
             blockLengthsByReducer(i)(blockLengthsByReducer(i).size - 1) == offsets(i),
           "Failed for " + i + ", blockOffsetsByReducer = " + blockOffsetsByReducer(i) +
             ", blockLengthsByReducer = " + blockLengthsByReducer(i))
         blockOffsetsByReducer(i) += offsets(i)
         blockLengthsByReducer(i) += lengths(i)
-        assert (files(i).length() == lengths(i) + offsets(i) || Utils.inShutdown(),
+        assert(files(i).length() == lengths(i) + offsets(i) || Utils.inShutdown(),
           "file = " + files(i).getAbsolutePath + ", offset = " + offsets(i) +
             ", length = " + lengths(i) + ", file len = " + files(i).length())
       }
@@ -282,9 +282,9 @@ object ShuffleBlockManager {
         val offset = blockOffsets(index)
         val length = blockLengths(index)
 
-        assert (offset >= 0)
+        assert(offset >= 0)
         assert(length >= 0)
-        assert (blockOffsets.size <= index + 1 || blockOffsets(index + 1) == offset + length,
+        assert(blockOffsets.size <= index + 1 || blockOffsets(index + 1) == offset + length,
           "Failed for reducerId = " + reducerId + " index = " + index + ", offset = " + offset +
             ", length = " + length + ", file exists = " + file.exists() +
             ", blockOffsetsByReducer = " + blockOffsetsByReducer(reducerId) +

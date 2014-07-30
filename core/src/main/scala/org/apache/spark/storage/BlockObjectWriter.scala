@@ -139,8 +139,8 @@ private[spark] class DiskBlockObjectWriter(
 
     if (closed) throw new IOException("Already closed")
 
-    assert (! initialized)
-    assert (! wasOpenedOnce)
+    assert(! initialized)
+    assert(! wasOpenedOnce)
     var exists = false
     try {
       exists = file.exists()
@@ -204,7 +204,7 @@ private[spark] class DiskBlockObjectWriter(
 
   private def updateCloseState() {
 
-    if (ts ne null) _timeWriting += ts.timeWriting
+    if (null != ts) _timeWriting += ts.timeWriting
 
     bs = null
     channel = null
@@ -219,7 +219,7 @@ private[spark] class DiskBlockObjectWriter(
 
     // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
     //       serializer stream and the lower level stream.
-    if (objOut ne null) {
+    if (null != objOut) {
       objOut.flush()
       bs.flush()
     }
@@ -229,7 +229,7 @@ private[spark] class DiskBlockObjectWriter(
 
     if (null != objOut) {
       val truncatePos = if (needRevert) initialPosition else -1L
-      assert (! this.closed)
+      assert(! this.closed)
 
       // In case syncWrites is true or we need to truncate
       var cleanlyClosed = false
@@ -256,7 +256,7 @@ private[spark] class DiskBlockObjectWriter(
         _timeWriting += System.nanoTime() - start
 
         // fos MUST have been closed.
-        assert((channel eq null) || !channel.isOpen)
+        assert(null == channel || !channel.isOpen)
         cleanlyClosed = true
 
       } finally {
@@ -270,7 +270,7 @@ private[spark] class DiskBlockObjectWriter(
           // simply release fd and allow exception to bubble up.
           // If (b) and file length >= initialPosition, then truncate file and ignore exception
           // else,cause exception to bubble up since we cant recover
-          assert (fos ne null)
+          assert(null != fos)
           try { fos.close() } catch { case ioEx: IOException => /* best case attempt, ignore */ }
         }
 
@@ -317,7 +317,7 @@ private[spark] class DiskBlockObjectWriter(
     // this prevents unwanted assertion failures and exception elsewhere.
     if (lastValidPosition < initialPosition) {
       // This is invoked so that assertions within bytes written are validated.
-      assert (bytesWritten >= 0)
+      assert(bytesWritten >= 0)
       lastValidPosition = initialPosition
     }
   }
@@ -325,35 +325,35 @@ private[spark] class DiskBlockObjectWriter(
   override def commitAndClose() {
     if (initialized) {
       // opened, file still open
-      assert (wasOpenedOnce)
+      assert(wasOpenedOnce)
       // Note, set cleanCloseAttempted even before we finish the close : so that a revert on this
       // in case close fails can truncate to previous state !
       cleanCloseAttempted = true
       closeAll(needFlush = true, needRevert = false)
 
       val prevPos = lastValidPosition
-      assert (prevPos == initialPosition)
-      assert (null == fos)
+      assert(prevPos == initialPosition)
+      assert(null == fos)
 
       lastValidPosition = file.length()
       validateBytesWritten()
       // review: remove ?
-      assert (bytesWritten >= 0, "bytesWritten = " + bytesWritten +
+      assert(bytesWritten >= 0, "bytesWritten = " + bytesWritten +
         ", initial pos = " + initialPosition + ", last valid pos = " + lastValidPosition)
 
     } else if (cleanCloseAttempted) {
       // opened and closed cleanly
-      assert (closed)
-      assert (wasOpenedOnce)
+      assert(closed)
+      assert(wasOpenedOnce)
       // size should be lastValidPosition, or file deleted due to shutdown.
-      assert (lastValidPosition == file.length() || Utils.inShutdown,
+      assert(lastValidPosition == file.length() || Utils.inShutdown,
         "lastValidPosition = " + lastValidPosition  +
           ", file len = " + file.length() + ", exists = " + file.exists())
 
     } else {
       // reverted or never opened.
       this.closed = true
-      assert (initialPosition == file.length() || (0 == initialPosition && ! initiallyExists) ||
+      assert(initialPosition == file.length() || (0 == initialPosition && ! initiallyExists) ||
           Utils.inShutdown, "initialPosition = " + initialPosition +
           ", file len = " + file.length() + ", exists = " + file.exists())
       assert(lastValidPosition == initialPosition)
@@ -366,15 +366,15 @@ private[spark] class DiskBlockObjectWriter(
       // Discard current writes. We do this by truncating the file to the last valid position.
       closeAll(needFlush = true, needRevert = true)
       validateBytesWritten()
-      assert (bytesWritten == 0, "bytesWritten = " + bytesWritten +
+      assert(bytesWritten == 0, "bytesWritten = " + bytesWritten +
         ", initial pos = " + initialPosition + ", last valid pos = " + lastValidPosition)
-      assert (initialPosition == file.length() || Utils.inShutdown,
+      assert(initialPosition == file.length() || Utils.inShutdown,
         "initialPosition = " + initialPosition +
           ", file len = " + file.length() + ", exists = " + file.exists())
     } else if (cleanCloseAttempted) {
       // Already opened and closed : truncate to last location (or delete
       // if created in this instance)
-      assert (closed)
+      assert(closed)
       cleanCloseAttempted = false
 
       // truncate to initialPosition
@@ -390,12 +390,12 @@ private[spark] class DiskBlockObjectWriter(
       lastValidPosition = initialPosition
 
 
-      assert (file.length() == initialPosition || Utils.inShutdown,
+      assert(file.length() == initialPosition || Utils.inShutdown,
         "initialPosition = " + initialPosition +
           ", file len = " + file.length() + ", exists = " + file.exists())
     } else {
       this.closed = true
-      assert (initialPosition == file.length() || (0 == initialPosition && ! initiallyExists) ||
+      assert(initialPosition == file.length() || (0 == initialPosition && ! initiallyExists) ||
           Utils.inShutdown,
         "initialPosition = " + initialPosition +
           ", file len = " + file.length() + ", exists = " + file.exists())
@@ -411,9 +411,9 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
-    assert (! initialized)
-    assert (fos eq null)
-    assert (wasOpenedOnce || 0 == bytesWritten,
+    assert(! initialized)
+    assert(null == fos)
+    assert(wasOpenedOnce || 0 == bytesWritten,
       "wasOpenedOnce = " + wasOpenedOnce + ", initialPosition = " + initialPosition +
         ", bytesWritten = " + bytesWritten + ", file len = " + file.length())
 
@@ -433,7 +433,7 @@ private[spark] class DiskBlockObjectWriter(
       ", in shutdown = " + Utils.inShutdown())
 
     // TODO: Comment this out when we are done validating : can be expensive due to file.length()
-    assert (file.length() >= lastValidPosition || Utils.inShutdown(),
+    assert(file.length() >= lastValidPosition || Utils.inShutdown(),
       "exists = " + file.exists() + ", file len = " + file.length() +
           ", bytesWritten = " + retval + ", lastValidPosition = " + lastValidPosition +
           ", initialPosition = " + initialPosition + ", in shutdown = " + Utils.inShutdown())
@@ -454,7 +454,7 @@ object DiskBlockObjectWriter{
         fos.getChannel.truncate(truncatePos)
       }
     } finally {
-      if (fos ne null) {
+      if (null != fos) {
         fos.close()
       }
     }

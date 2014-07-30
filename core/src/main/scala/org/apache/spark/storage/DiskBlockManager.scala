@@ -160,7 +160,6 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
       override def run(): Unit = Utils.logUncaughtExceptions {
         logDebug("Shutdown hook called")
-        // Utils.setShutdownStarted()
         DiskBlockManager.this.stop()
       }
     })

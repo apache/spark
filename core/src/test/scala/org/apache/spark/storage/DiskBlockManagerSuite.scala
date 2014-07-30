@@ -125,9 +125,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   private def checkSegments(segment1: FileSegment, segment2: FileSegment) {
-    assert (segment1.file.getCanonicalPath === segment2.file.getCanonicalPath)
-    assert (segment1.offset === segment2.offset)
-    assert (segment1.length === segment2.length)
+    assert(segment1.file.getCanonicalPath === segment2.file.getCanonicalPath)
+    assert(segment1.offset === segment2.offset)
+    assert(segment1.length === segment2.length)
   }
 
   test("consolidated shuffle can write to shuffle group without messing existing offsets/lengths") {

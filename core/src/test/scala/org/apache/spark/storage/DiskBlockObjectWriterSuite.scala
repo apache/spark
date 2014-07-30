@@ -51,7 +51,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     val (file, bow) = createWriter()
     bow.write("test")
     bow.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow.commitAndClose()
 
@@ -66,7 +66,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     val (file, bow) = createWriter()
     bow.write("test")
     bow.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow.revertPartialWritesAndClose()
 
@@ -88,7 +88,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
       BUFFER_SIZE, (out: OutputStream) => out, true)
 
     bow.write("test")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
     bow.commitAndClose()
     Utils.deleteRecursively(dir)
   }
@@ -97,10 +97,10 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     val (file, bow) = createWriter()
     bow.write("test")
     bow.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow.revertPartialWritesAndClose()
-    assert (! file.exists())
+    assert(! file.exists())
     // file.delete()
   }
 
@@ -109,7 +109,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
 
     bow1.write("test")
     bow1.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow1.commitAndClose()
     val length = file.length()
@@ -120,11 +120,11 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     bow2.write("test3")
     bow2.write("test4")
 
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow2.revertPartialWritesAndClose()
-    assert (file.exists())
-    assert (length == file.length())
+    assert(file.exists())
+    assert(length == file.length())
     file.delete()
   }
 
@@ -133,18 +133,18 @@ class DiskBlockObjectWriterSuite extends FunSuite {
 
     bow.write("test")
     bow.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow.commitAndClose()
     val length = file.length()
 
-    assert (file.exists() && file.isFile)
-    assert (length > 0)
+    assert(file.exists() && file.isFile)
+    assert(length > 0)
 
     // Now revert the file, after it has been closed : should delete the file
     // since it did not exist earlier.
     bow.revertPartialWritesAndClose()
-    assert (! file.exists())
+    assert(! file.exists())
     file.delete()
   }
 
@@ -153,7 +153,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
 
     bow1.write("test")
     bow1.write("test1")
-    assert (file.exists() && file.isFile)
+    assert(file.exists() && file.isFile)
 
     bow1.commitAndClose()
     val length = file.length()
@@ -166,13 +166,13 @@ class DiskBlockObjectWriterSuite extends FunSuite {
 
     bow2.commitAndClose()
 
-    assert (file.exists() && file.isFile)
-    assert (file.length() > length)
+    assert(file.exists() && file.isFile)
+    assert(file.length() > length)
 
     // Now revert it : should get reverted back to previous state - after bow1
     bow2.revertPartialWritesAndClose()
-    assert (file.exists())
-    assert (length == file.length())
+    assert(file.exists())
+    assert(length == file.length())
     file.delete()
   }
 
@@ -190,7 +190,7 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     }
     bow.revertPartialWritesAndClose()
     // must not have deleted the file : since we never opened it.
-    assert (file.exists())
+    assert(file.exists())
     file.delete()
   }
 
@@ -234,9 +234,9 @@ class DiskBlockObjectWriterSuite extends FunSuite {
       bow.commitAndClose()
     }
 
-    assert (afterWrite)
+    assert(afterWrite)
     bow.revertPartialWritesAndClose()
-    assert (! file.exists())
+    assert(! file.exists())
   }
 
   test("If exception is thrown while revert, must still revert successfully") {
@@ -284,8 +284,8 @@ class DiskBlockObjectWriterSuite extends FunSuite {
     // bow1.write("test4")
     bow2.revertPartialWritesAndClose()
 
-    assert (file.exists())
-    assert (file.length() == length)
+    assert(file.exists())
+    assert(file.length() == length)
     file.delete()
   }
 }

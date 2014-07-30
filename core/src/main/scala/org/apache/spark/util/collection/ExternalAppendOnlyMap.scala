@@ -171,7 +171,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val bytesWritten = w.bytesWritten
       batchSizes.append(bytesWritten)
       totalBytesWritten += bytesWritten
-      assert (file.length() == totalBytesWritten)
+      assert(file.length() == totalBytesWritten)
       _diskBytesSpilled += bytesWritten
       objectsWritten = 0
     }
@@ -199,10 +199,10 @@ class ExternalAppendOnlyMap[K, V, C](
       success = true
     } finally {
       if (success) {
-        assert (writer eq null)
-        assert (file.length() == totalBytesWritten)
+        assert(null == writer)
+        assert(file.length() == totalBytesWritten)
       } else {
-        if (writer ne null) writer.revertPartialWritesAndClose()
+        if (null != writer) writer.revertPartialWritesAndClose()
         if (file.exists()) file.delete()
       }
     }
@@ -369,10 +369,10 @@ class ExternalAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
 
-    assert (! batchSizes.isEmpty)
-    assert (! batchSizes.exists(_ <= 0))
+    assert(! batchSizes.isEmpty)
+    assert(! batchSizes.exists(_ <= 0))
     private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)
-    assert (file.length() == batchOffsets(batchOffsets.length - 1))
+    assert(file.length() == batchOffsets(batchOffsets.length - 1))
 
     private var batchIndex = 0
     private var fileStream: FileInputStream = null
@@ -388,7 +388,7 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def nextBatchStream(): DeserializationStream = {
       if (batchIndex + 1 < batchOffsets.length) {
-        assert (file.length() == batchOffsets(batchOffsets.length - 1))
+        assert(file.length() == batchOffsets(batchOffsets.length - 1))
         if (null != deserializeStream) {
           deserializeStream.close()
           fileStream.close()
@@ -398,12 +398,12 @@ class ExternalAppendOnlyMap[K, V, C](
         val start = batchOffsets(batchIndex)
         fileStream = new FileInputStream(file)
         fileStream.getChannel.position(start)
-        assert (start == fileStream.getChannel.position())
+        assert(start == fileStream.getChannel.position())
         batchIndex += 1
 
         val end = batchOffsets(batchIndex)
 
-        assert (end >= start, "start = " + start + ", end = " + end +
+        assert(end >= start, "start = " + start + ", end = " + end +
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val strm = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
@@ -465,13 +465,13 @@ class ExternalAppendOnlyMap[K, V, C](
       deserializeStream = null
       fileStream = null
 
-      if (dstrm ne null) {
+      if (null != dstrm) {
         try {
           dstrm.close()
         } catch {
           case ioEx: IOException => {
             // best case attempt - atleast free the handles
-            if (fstrm ne null) {
+            if (null != fstrm) {
               try { fstrm.close() } catch {case ioEx: IOException => }
             }
             throw ioEx

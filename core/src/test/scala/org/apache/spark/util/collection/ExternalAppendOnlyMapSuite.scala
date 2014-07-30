@@ -218,9 +218,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val rddSimple = sc.parallelize(0 until 100000).map(i => (i, i))
     val resultSimple: Array[(Int, Int)] = rddSimple.reduceByKey(math.max).collect()
     assert(resultSimple.length === 100000)
-    assert (resultSimple.map(_._1).toSet.size === 100000)
-    assert (resultSimple.map(_._1).min === 0)
-    assert (resultSimple.map(_._1).max === 99999)
+    assert(resultSimple.map(_._1).toSet.size === 100000)
+    assert(resultSimple.map(_._1).min === 0)
+    assert(resultSimple.map(_._1).max === 99999)
 
     // reduceByKey - should spill ~8 times
     val rddA = sc.parallelize(0 until 100000).map(i => (i/2, i))

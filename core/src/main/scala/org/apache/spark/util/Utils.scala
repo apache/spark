@@ -274,8 +274,6 @@ private[spark] object Utils extends Logging {
     // Add a shutdown hook to delete the temp dir when the JVM exits
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
       override def run() {
-        // Attempt to delete if some patch which is parent of this is not already registered.
-        // Utils.setShutdownStarted()
         if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
       }
     })
@@ -958,34 +956,6 @@ private[spark] object Utils extends Logging {
     }
     false
   }
-  /*
-  @volatile private var shutdownStarted = false
-  private[spark] def setShutdownStarted() {
-    shutdownStarted = true
-  }
-
-  def inShutdown(): Boolean = {
-    if (shutdownStarted) return true
-    doShutdownCheck()
-    shutdownStarted
-  }
-
-  private[spark] def doShutdownCheck() {
-    var shutdown = false
-    try {
-      val hook = new Thread {
-        override def run() {}
-      }
-      Runtime.getRuntime.addShutdownHook(hook)
-      Runtime.getRuntime.removeShutdownHook(hook)
-    } catch {
-      case ise: IllegalStateException =>
-        shutdown = true
-    } finally {
-      shutdownStarted = shutdown
-    }
-  }
-  */
 
   def isSpace(c: Char): Boolean = {
     " \t\r\n".indexOf(c) != -1
@@ -1063,7 +1033,7 @@ private[spark] object Utils extends Logging {
   def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?
-    if (obj eq null) return 0
+    if (null == obj) return 0
 
     val hash = obj.hashCode
     // math.abs fails for Int.MinValue

@@ -175,7 +175,6 @@ private[spark] class AppClient(
 
     def markDead(reason: String) {
       if (!alreadyDead) {
-        // Utils.setShutdownStarted()
         listener.dead(reason)
         alreadyDead = true
       }
