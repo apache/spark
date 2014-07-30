@@ -49,6 +49,12 @@ Hive:
       Main entry point for accessing data stored in Apache Hive..
 """
 
+
+import sys
+s = sys.path.pop(0)
+import random
+sys.path.insert(0, s)
+
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.sql import SQLContext
