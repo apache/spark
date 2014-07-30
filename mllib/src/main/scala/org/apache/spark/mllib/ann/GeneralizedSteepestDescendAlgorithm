@@ -29,12 +29,10 @@ import breeze.linalg.{SparseVector => BSV}
 
 /**
  * :: DeveloperApi ::
- * GeneralizedLinearModel (GLM) represents a model trained using
- * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
- * an intercept.
+ * GeneralizedSteepestDescendModel represents a model trained using
+ * GeneralizedSteepestDescendAlgorithm.
  *
  * @param weights Weights computed for every feature.
- * @param intercept Intercept computed for this model.
  */
 @DeveloperApi
 abstract class GeneralizedSteepestDescendModel(val weights: Vector )
@@ -110,7 +108,7 @@ abstract class GeneralizedSteepestDescendModel(val weights: Vector )
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
-   * @return Double prediction from the trained model
+   * @return Vector prediction from the trained model
    *
    * Returns the complete vector.
    */
