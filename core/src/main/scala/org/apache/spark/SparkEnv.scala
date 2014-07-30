@@ -65,7 +65,8 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val conf: SparkConf) extends Logging {
+    val conf: SparkConf,
+    val isDriver: Boolean = false) extends Logging {
 
   // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
   // All accesses should be manually synchronized
@@ -78,14 +79,16 @@ class SparkEnv (
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   private[spark] def stop() {
-    pythonWorkers.foreach { case(key, worker) => worker.stop() }
-    Option(httpFileServer).foreach(_.stop())
-    mapOutputTracker.stop()
-    shuffleManager.stop()
-    broadcastManager.stop()
+    if(isDriver) {
+      pythonWorkers.foreach { case(key, worker) => worker.stop() }
+      Option(httpFileServer).foreach(_.stop())
+      mapOutputTracker.stop()
+      shuffleManager.stop()
+      broadcastManager.stop()
+      blockManager.master.stop()
+      metricsSystem.stop()
+    }
     blockManager.stop()
-    blockManager.master.stop()
-    metricsSystem.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -278,7 +281,8 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
-      conf)
+      conf,
+      isDriver)
   }
 
   /**
