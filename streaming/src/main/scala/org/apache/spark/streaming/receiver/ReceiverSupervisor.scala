@@ -85,26 +85,35 @@ private[streaming] abstract class ReceiverSupervisor(
       optionalBlockId: Option[StreamBlockId]
     )
 
-  /** Store the bytes of received data as a data block into Spark's memory. */
+  /**
+   * Store the bytes of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
+   */
   def pushBytesReliably(
     bytes: ByteBuffer,
     optionalMetadata: Option[Any],
     optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean]
+    ): Future[StoreResult]
 
-  /** Store a iterator of received data as a data block into Spark's memory. */
+  /**
+   * Store a iterator of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
+   */
   def pushIteratorReliably(
     iterator: Iterator[_],
     optionalMetadata: Option[Any],
     optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean]
+    ): Future[StoreResult]
 
-  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
+   */
   def pushArrayBufferReliably(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean]
+    ): Future[StoreResult]
 
   /** Report errors. */
   def reportError(message: String, throwable: Throwable)

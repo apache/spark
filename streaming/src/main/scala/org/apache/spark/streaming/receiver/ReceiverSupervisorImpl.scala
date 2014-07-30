@@ -130,50 +130,60 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   /**
-   * Store an ArrayBuffer of received data as a data block into Spark's memory. Once the
-   * ArrayBuffer is pushed, the callback is called.
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
    */
   override def pushArrayBufferReliably(
     arrayBuffer: ArrayBuffer[_],
     optionalMetadata: Option[Any],
     optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean] = {
+    ): Future[StoreResult] = {
     pushDataReliably(arrayBuffer, optionalMetadata, optionalBlockId)
   }
 
   /**
-   * Store a iterator of received data as a data block into Spark's memory. Once the iterator is
-   * pushed, the callback is called.
+   * Store a iterator of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
    */
   override def pushIteratorReliably(
     iterator: Iterator[_],
     optionalMetadata: Option[Any],
     optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean] = {
+    ): Future[StoreResult] = {
     pushDataReliably(iterator, optionalMetadata, optionalBlockId)
   }
 
   /**
-   * Store the bytes of received data as a data block into Spark's memory. Once the data block
-   * is pushed, call the callback.
+   * Store the bytes of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
    */
   override def pushBytesReliably(
       bytes: ByteBuffer,
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean] = {
+    ): Future[StoreResult] = {
     pushDataReliably(bytes, optionalMetadata, optionalBlockId)
   }
 
+  /**
+   * Store the data reliably as a data block into Spark's memory. The data can be a
+   * [[ByteBuffer]], [[ArrayBuffer]] or an [[Iterator]]. Once the data is pushed,
+   * this method stores the data reliably but asynchronously. The result of the attempt to
+   * successfully store the data can be retrieved from the future returned from this method.
+   */
   private def pushDataReliably(
       data: Any,
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    ): Future[Boolean] = {
+    ): Future[StoreResult] = {
     val blockId = pushData(data, optionalMetadata, optionalBlockId)
     completePushReliably(blockId)
   }
 
+  /**
+   * Store the data reliably as a data block into Spark's memory. The data can be a
+   * [[ByteBuffer]], [[ArrayBuffer]] or an [[Iterator]].
+   */
   private def pushData(
       data: Any,
       optionalMetadata: Option[Any],
@@ -234,12 +244,12 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo("Stopped receiver " + streamId)
   }
 
-  private def completePushReliably(blockId: StreamBlockId): Future[Boolean] = {
-    val successPromise = Promise[Boolean]()
+  private def completePushReliably(blockId: StreamBlockId): Future[StoreResult] = {
+    val successPromise = Promise[StoreResult]()
     // Right now, this method is a no-op, but once we have BlockManagerMaster replicated/stored
     // to some storage system, we'd have to asynchronously instruct the BMM to persist the
     // added block, wait for a response and mark success only when that is successfully done.
-    successPromise.success(true)
+    successPromise.success(new StoreResult(true, None))
     successPromise.future
   }
 

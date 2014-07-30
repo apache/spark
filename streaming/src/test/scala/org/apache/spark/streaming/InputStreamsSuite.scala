@@ -38,7 +38,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
+import org.apache.spark.streaming.receiver.{StoreResult, ActorHelper, Receiver}
 import org.apache.spark.rdd.RDD
 
 import scala.concurrent.ExecutionContext
@@ -468,8 +468,12 @@ class CallbackReceiver(val limit: Int)
     executor.submit(new Runnable {
       override def run(): Unit = {
         val arrayBuffer = ArrayBuffer.range(1, limit + 1)
+        import org.scalatest.Assertions._
         storeReliably(arrayBuffer).onSuccess {
-          case true => store(arrayBuffer.sum)
+          case s: StoreResult =>
+            assert(s.success === true)
+            assert(s.error === None)
+            store(arrayBuffer.sum)
         }
       }
     })

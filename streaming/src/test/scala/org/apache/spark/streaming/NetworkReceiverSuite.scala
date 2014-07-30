@@ -25,7 +25,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver, ReceiverSupervisor}
+import org.apache.spark.streaming.receiver._
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
@@ -272,20 +272,20 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
 
     /** Store the bytes of received data as a data block into Spark's memory. */
     override def pushBytesReliably(bytes: ByteBuffer, optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
-      Future.successful(true)
+      optionalBlockId: Option[StreamBlockId]): Future[StoreResult] = {
+      Future.successful(new StoreResult(true, None))
     }
 
     /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
     override def pushArrayBufferReliably(arrayBuffer: ArrayBuffer[_], optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
-      Future.successful(true)
+      optionalBlockId: Option[StreamBlockId]): Future[StoreResult] = {
+      Future.successful(new StoreResult(true, None))
     }
 
     /** Store a iterator of received data as a data block into Spark's memory. */
     override def pushIteratorReliably(iterator: Iterator[_], optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]): Future[Boolean] = {
-      Future.successful(true)
+      optionalBlockId: Option[StreamBlockId]): Future[StoreResult] = {
+      Future.successful(new StoreResult(true, None))
     }
   }
 
