@@ -111,8 +111,10 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
 
       var content = ("Index" -> info.index) ~
         ("ID" -> info.taskId) ~
-        ("Attempt" -> {if (info.speculative) s"${info.attempt} (speculative)"
-                     else info.attempt.toString}) ~
+        ("Attempt" -> UIUtils.wrapHtmlCellWithCustomKey(
+          {if (info.speculative) s"${info.attempt} (speculative)"
+                     else info.attempt.toString},
+          info.attempt.toString)) ~
         ("Status" -> {info.status}) ~
         ("Locality Level" -> {info.taskLocality.toString}) ~
         ("Executor" -> {info.host}) ~

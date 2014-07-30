@@ -288,11 +288,11 @@ private[spark] object UIUtils extends Logging {
       // if none of the headers have "\n" in them
       if (headers.forall(!_.contains("\n"))) {
         // represent header as simple text
-        headers.map(h => <th width={colWidthAttr}>{h}</th>)
+        headers.map(h => <th class="sorttable_numeric" width={colWidthAttr}>{h}</th>)
       } else {
         // represent header text as list while respecting "\n"
         headers.map { case h =>
-          <th width={colWidthAttr}>
+          <th class="sorttable_numeric" width={colWidthAttr}>
             <ul class ="unstyled">
               { h.split("\n").map { case t => <li> {t} </li> } }
             </ul>
@@ -309,7 +309,7 @@ private[spark] object UIUtils extends Logging {
 
   /** create an HTML cell with a sorttable custom key */
   def wrapHtmlCellWithCustomKey(content: String, customKey: String) : String = {
-    "<td sorttable_customkey=" + customKey + ">" + content + "</td>"
+    "<td sorttable_customkey='" + customKey + "'>" + content + "</td>"
   }
 
   /** Returns an HTML containing Javascript that fills the table with that tableId using

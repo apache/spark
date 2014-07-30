@@ -48,7 +48,7 @@ Spark.UI = (function ($) {
                     })
                     tbl_row += "<td>" + tbl_longentry + "</td>";
                 } else if (v.toString().indexOf("</td>") != -1){
-                  tbl_row += "" + v + "";
+                  tbl_row += v;
                 } else {
                   tbl_row += "<td>" + v + "</td>";
                 }
