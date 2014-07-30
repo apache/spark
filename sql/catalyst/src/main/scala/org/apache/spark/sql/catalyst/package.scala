@@ -15,26 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.types.DataType
-
-case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
-  extends Expression {
-
-  type EvaluatedType = Any
-
-  def references = children.flatMap(_.references).toSet
-  def nullable = true
-
-  override def eval(input: Row): Any = {
-    children.size match {
-      case 0 => function.asInstanceOf[() => Any]()
-      case 1 => function.asInstanceOf[(Any) => Any](children(0).eval(input))
-      case 2 =>
-        function.asInstanceOf[(Any, Any) => Any](
-          children(0).eval(input),
-          children(1).eval(input))
-    }
-  }
+package object catalyst {
+  /**
+   * A JVM-global lock that should be used to prevent thread safety issues when using things in
+   * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
+   * 2.10.* builds.  See SI-6240 for more details.
+   */
+  protected[catalyst] object ScalaReflectionLock
 }

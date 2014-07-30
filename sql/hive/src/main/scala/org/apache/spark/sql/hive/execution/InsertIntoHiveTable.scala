@@ -131,7 +131,7 @@ case class InsertIntoHiveTable(
       conf,
       SparkHiveHadoopWriter.createPathFromString(fileSinkConf.getDirName, conf))
 
-    logger.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
+    log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
 
     val writer = new SparkHiveHadoopWriter(conf, fileSinkConf)
     writer.preSetup()

@@ -67,7 +67,7 @@ case class ScriptTransformation(
         }
       }
       readerThread.start()
-      val outputProjection = new Projection(input)
+      val outputProjection = new InterpretedProjection(input, child.output)
       iter
         .map(outputProjection)
         // TODO: Use SerDe

@@ -167,6 +167,9 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Catalyst macro settings */
+  enable(Catalyst.settings)(catalyst)
+
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
@@ -189,10 +192,13 @@ object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
 }
 
-object SQL {
-
+object Catalyst {
   lazy val settings = Seq(
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full))
+}
 
+object SQL {
+  lazy val settings = Seq(
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
@@ -207,7 +213,6 @@ object SQL {
         |import org.apache.spark.sql.test.TestSQLContext._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
-
 }
 
 object Hive {

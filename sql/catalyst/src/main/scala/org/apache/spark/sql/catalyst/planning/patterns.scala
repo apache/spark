@@ -105,6 +105,77 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
+ * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
+ * operates on the data in each partition performing partial aggregation for each group.  The second
+ * occurs after the shuffle and completes the aggregation.
+ *
+ * This pattern will only match if all aggregate expressions can be computed partially and will
+ * return the rewritten aggregation expressions for both phases.
+ *
+ * The returned values for this match are as follows:
+ *  - Grouping attributes for the final aggregation.
+ *  - Aggregates for the final aggregation.
+ *  - Grouping expressions for the partial aggregation.
+ *  - Partial aggregate expressions.
+ *  - Input to the aggregation.
+ */
+object PartialAggregation {
+  type ReturnType =
+    (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+      // Collect all aggregate expressions.
+      val allAggregates =
+        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+      // Collect all aggregate expressions that can be computed partially.
+      val partialAggregates =
+        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+
+      // Only do partial aggregation if supported by all aggregate expressions.
+      if (allAggregates.size == partialAggregates.size) {
+        // Create a map of expressions to their partial evaluations for all aggregate expressions.
+        val partialEvaluations: Map[Long, SplitEvaluation] =
+          partialAggregates.map(a => (a.id, a.asPartial)).toMap
+
+        // We need to pass all grouping expressions though so the grouping can happen a second
+        // time. However some of them might be unnamed so we alias them allowing them to be
+        // referenced in the second aggregation.
+        val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
+          case n: NamedExpression => (n, n)
+          case other => (other, Alias(other, "PartialGroup")())
+        }.toMap
+
+        // Replace aggregations with a new expression that computes the result from the already
+        // computed partial evaluations and grouping values.
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+          case e: Expression if partialEvaluations.contains(e.id) =>
+            partialEvaluations(e.id).finalEvaluation
+          case e: Expression if namedGroupingExpressions.contains(e) =>
+            namedGroupingExpressions(e).toAttribute
+        }).asInstanceOf[Seq[NamedExpression]]
+
+        val partialComputation =
+          (namedGroupingExpressions.values ++
+            partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
+
+        val namedGroupingAttributes = namedGroupingExpressions.values.map(_.toAttribute).toSeq
+
+        Some(
+          (namedGroupingAttributes,
+           rewrittenAggregateExpressions,
+           groupingExpressions,
+           partialComputation,
+           child))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
+
+/**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {

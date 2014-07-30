@@ -23,16 +23,13 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
 
 /**
- * A JVM-global lock that should be used to prevent thread safety issues when using things in
- * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
- * 2.10.* builds.  See SI-6240 for more details.
+ * Utility functions for working with DataTypes.
  */
-protected[catalyst] object ScalaReflectionLock
-
 object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "StringType" ^^^ StringType |
@@ -99,6 +96,13 @@ abstract class DataType {
 
 case object NullType extends DataType
 
+object NativeType {
+  def all = Seq(
+    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+
+  def unapply(dt: DataType): Boolean = all.contains(dt)
+}
+
 trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
@@ -147,6 +151,10 @@ abstract class NumericType extends NativeType with PrimitiveType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
   val numeric: Numeric[JvmType]
+}
+
+object NumericType {
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */

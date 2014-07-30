@@ -112,7 +112,7 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
 
   override lazy val statistics: Statistics =
-    throw new UnsupportedOperationException("default leaf nodes don't have meaningful Statistics")
+    throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
 
   // Leaf nodes by definition cannot reference any input attributes.
   override def references = Set.empty

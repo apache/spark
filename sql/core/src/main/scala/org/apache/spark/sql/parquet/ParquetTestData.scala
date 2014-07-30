@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.spark.sql.test.TestSQLContext
 
 import parquet.example.data.{GroupWriter, Group}
 import parquet.example.data.simple.SimpleGroup
@@ -103,7 +104,7 @@ private[sql] object ParquetTestData {
   val testDir = Utils.createTempDir()
   val testFilterDir = Utils.createTempDir()
 
-  lazy val testData = new ParquetRelation(testDir.toURI.toString)
+  lazy val testData = new ParquetRelation(testDir.toURI.toString, None, TestSQLContext)
 
   val testNestedSchema1 =
     // based on blogpost example, source:
@@ -202,8 +203,10 @@ private[sql] object ParquetTestData {
   val testNestedDir3 = Utils.createTempDir()
   val testNestedDir4 = Utils.createTempDir()
 
-  lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
-  lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
+  lazy val testNestedData1 =
+    new ParquetRelation(testNestedDir1.toURI.toString, None, TestSQLContext)
+  lazy val testNestedData2 =
+    new ParquetRelation(testNestedDir2.toURI.toString, None, TestSQLContext)
 
   def writeFile() = {
     testDir.delete()

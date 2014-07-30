@@ -231,7 +231,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveTableScans,
       DataSinks,
       Scripts,
-      PartialAggregation,
+      HashAggregation,
       LeftSemiJoin,
       HashJoin,
       BasicOperators,
