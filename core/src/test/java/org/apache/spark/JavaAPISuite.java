@@ -29,6 +29,7 @@ import scala.Tuple4;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -118,8 +119,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> intersections = s1.intersection(s2);
     Assert.assertEquals(3, intersections.count());
 
-    List<Integer> list = new ArrayList<Integer>();
-    JavaRDD<Integer> empty = sc.parallelize(list);
+    JavaRDD<Integer> empty = sc.emptyRDD();
     JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
     Assert.assertEquals(0, emptyIntersection.count());
 
@@ -182,6 +182,12 @@ public class JavaAPISuite implements Serializable {
     sortedPairs = sortedRDD.collect();
     Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+  }
+
+  @Test
+  public void emptyRDD() {
+    JavaRDD<String> rdd = sc.emptyRDD();
+    Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
   }
 
   @Test
@@ -1202,5 +1208,41 @@ public class JavaAPISuite implements Serializable {
         });
     pairRDD.collect();  // Works fine
     pairRDD.collectAsMap();  // Used to crash with ClassCastException
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void sampleByKey() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+      new PairFunction<Integer, Integer, Integer>() {
+        @Override
+        public Tuple2<Integer, Integer> call(Integer i) {
+          return new Tuple2<Integer, Integer>(i % 2, 1);
+        }
+      });
+    Map<Integer, Object> fractions = Maps.newHashMap();
+    fractions.put(0, 0.5);
+    fractions.put(1, 1.0);
+    JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
+    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Assert.assertTrue(wrCounts.size() == 2);
+    Assert.assertTrue(wrCounts.get(0) > 0);
+    Assert.assertTrue(wrCounts.get(1) > 0);
+    JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
+    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Assert.assertTrue(worCounts.size() == 2);
+    Assert.assertTrue(worCounts.get(0) > 0);
+    Assert.assertTrue(worCounts.get(1) > 0);
+    JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKey(true, fractions, true, 1L);
+    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Assert.assertTrue(wrExactCounts.size() == 2);
+    Assert.assertTrue(wrExactCounts.get(0) == 2);
+    Assert.assertTrue(wrExactCounts.get(1) == 4);
+    JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKey(false, fractions, true, 1L);
+    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Assert.assertTrue(worExactCounts.size() == 2);
+    Assert.assertTrue(worExactCounts.get(0) == 2);
+    Assert.assertTrue(worExactCounts.get(1) == 4);
   }
 }

@@ -35,7 +35,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   override def beforeAll() {
     // write test data
-    ParquetTestData.writeFile
+    ParquetTestData.writeFile()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
   }

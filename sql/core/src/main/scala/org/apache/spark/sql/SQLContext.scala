@@ -24,14 +24,14 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -86,7 +86,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
@@ -127,7 +127,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
+    new SchemaRDD(this, JsonRDD.inferSchema(self, json, samplingRatio))
 
   /**
    * :: Experimental ::
@@ -170,11 +170,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    val name = tableName
-    val newPlan = rdd.logicalPlan transform {
-      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
-    }
-    catalog.registerTable(None, tableName, newPlan)
+    catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
   /**
@@ -212,7 +208,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
+        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
       case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
@@ -352,8 +348,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case c: java.lang.Long => LongType
       case c: java.lang.Double => DoubleType
       case c: java.lang.Boolean => BooleanType
+      case c: java.math.BigDecimal => DecimalType
+      case c: java.sql.Timestamp => TimestampType
+      case c: java.util.Calendar => TimestampType
       case c: java.util.List[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
         MapType(typeFor(key), typeFor(value))
@@ -362,16 +360,48 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ArrayType(typeFor(elem))
       case c => throw new Exception(s"Object of type $c cannot be used")
     }
-    val schema = rdd.first().map { case (fieldName, obj) =>
+    val firstRow = rdd.first()
+    val schema = firstRow.map { case (fieldName, obj) =>
       AttributeReference(fieldName, typeFor(obj), true)()
     }.toSeq
 
-    val rowRdd = rdd.mapPartitions { iter =>
+    def needTransform(obj: Any): Boolean = obj match {
+      case c: java.util.List[_] => true
+      case c: java.util.Map[_, _] => true
+      case c if c.getClass.isArray => true
+      case c: java.util.Calendar => true
+      case c => false
+    }
+
+    // convert JList, JArray into Seq, convert JMap into Map
+    // convert Calendar into Timestamp
+    def transform(obj: Any): Any = obj match {
+      case c: java.util.List[_] => c.map(transform).toSeq
+      case c: java.util.Map[_, _] => c.map {
+        case (key, value) => (key, transform(value))
+      }.toMap
+      case c if c.getClass.isArray =>
+        c.asInstanceOf[Array[_]].map(transform).toSeq
+      case c: java.util.Calendar =>
+        new java.sql.Timestamp(c.getTime().getTime())
+      case c => c
+    }
+
+    val need = firstRow.exists {case (key, value) => needTransform(value)}
+    val transformed = if (need) {
+      rdd.mapPartitions { iter =>
+        iter.map {
+          m => m.map {case (key, value) => (key, transform(value))}
+        }
+      }
+    } else rdd
+
+    val rowRdd = transformed.mapPartitions { iter =>
       iter.map { map =>
         new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
       }
     }
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(self))
   }
 
 }

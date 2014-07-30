@@ -165,11 +165,17 @@ class TestAddFile(PySparkTestCase):
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this job fails due to `userlibrary` not being on the Python path:
+        # disable logging in log4j temporarily
+        log4j = self.sc._jvm.org.apache.log4j
+        old_level = log4j.LogManager.getRootLogger().getLevel()
+        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
         def func(x):
             from userlibrary import UserClass
             return UserClass().hello()
         self.assertRaises(Exception,
                           self.sc.parallelize(range(2)).map(func).first)
+        log4j.LogManager.getRootLogger().setLevel(old_level)
+
         # Add the file, so the job should now succeed:
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
@@ -209,6 +215,12 @@ class TestAddFile(PySparkTestCase):
 
 class TestRDDFunctions(PySparkTestCase):
 
+    def test_failed_sparkcontext_creation(self):
+        # Regression test for SPARK-1550
+        self.sc.stop()
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
+        self.sc = SparkContext("local")
+
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"
@@ -225,6 +237,15 @@ class TestRDDFunctions(PySparkTestCase):
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
         result = cart.map(lambda (x, y): x + y).collect()
+
+    def test_transforming_pickle_file(self):
+        # Regression test for SPARK-2601
+        data = self.sc.parallelize(["Hello", "World!"])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsPickleFile(tempFile.name)
+        pickled_file = self.sc.pickleFile(tempFile.name)
+        pickled_file.map(lambda x: x).collect()
 
     def test_cartesian_on_textfile(self):
         # Regression test for
@@ -262,6 +283,12 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual(set([1]), sets[1])
         self.assertEqual(set([2]), sets[3])
         self.assertEqual(set([1, 3]), sets[5])
+
+    def test_itemgetter(self):
+        rdd = self.sc.parallelize([range(10)])
+        from operator import itemgetter
+        self.assertEqual([1], rdd.map(itemgetter(1)).collect())
+        self.assertEqual([(2, 3)], rdd.map(itemgetter(2, 3)).collect())
 
 
 class TestIO(PySparkTestCase):

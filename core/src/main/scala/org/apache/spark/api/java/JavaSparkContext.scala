@@ -34,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{EmptyRDD, RDD}
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -112,6 +112,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   def startTime: java.lang.Long = sc.startTime
 
+  /** The version of Spark on which this application is running. */
+  def version: String = sc.version
+
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
@@ -131,6 +134,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     implicit val ctag: ClassTag[T] = fakeClassTag
     sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
   }
+
+  /** Get an RDD that has no partitions or elements. */
+  def emptyRDD[T]: JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    JavaRDD.fromRDD(new EmptyRDD[T](sc))
+  }
+
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T]): JavaRDD[T] =

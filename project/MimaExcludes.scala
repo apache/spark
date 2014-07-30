@@ -31,7 +31,6 @@ import com.typesafe.tools.mima.core._
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
  */
 object MimaExcludes {
-
     def excludes(version: String) =
       version match {
         case v if v.startsWith("1.1") =>
@@ -61,6 +60,15 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.Entry")
+          ) ++
+          Seq(
+            // Renamed putValues -> putArray + putIterator
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.MemoryStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.DiskStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.TachyonStore.putValues")
           ) ++
           Seq(
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")

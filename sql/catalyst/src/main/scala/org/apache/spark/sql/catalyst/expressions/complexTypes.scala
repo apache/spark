@@ -61,7 +61,6 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
           }
         } else {
           val baseValue = value.asInstanceOf[Map[Any, _]]
-          val key = ordinal.eval(input)
           baseValue.get(key).orNull
         }
       }

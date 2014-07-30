@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Logging, Row}
+import org.apache.spark.sql.{Logging, Row, SQLContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 
 /**
@@ -66,8 +66,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
  * linking.
  */
 @DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "SparkLogicalPlan")
-  extends BaseRelation with MultiInstanceRelation {
+case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQLContext)
+  extends LogicalPlan with MultiInstanceRelation {
 
   def output = alreadyPlanned.output
   override def references = Set.empty
@@ -78,9 +78,15 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "Spar
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
         case _ => sys.error("Multiple instance of the same relation detected.")
-      }, tableName)
-      .asInstanceOf[this.type]
+      })(sqlContext).asInstanceOf[this.type]
   }
+
+  @transient override lazy val statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
+  )
+
 }
 
 private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
