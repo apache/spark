@@ -1079,7 +1079,7 @@ class RDD(object):
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
         self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, batched, path,
-                    outputFormatClass, keyClass, valueClass, keyConverter, valueConverter, jconf)
+            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter, jconf)
 
     def saveAsHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
         """
@@ -1099,7 +1099,8 @@ class RDD(object):
                                                     keyConverter, valueConverter, False)
 
     def saveAsHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
-                keyConverter=None, valueConverter=None, conf=None, compressionCodecClass=None):
+                         keyConverter=None, valueConverter=None, conf=None,
+                         compressionCodecClass=None):
         """
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
         system, using the old Hadoop OutputFormat API (mapred package). Key and value types
@@ -1123,8 +1124,8 @@ class RDD(object):
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched,
-            path, outputFormatClass, keyClass, valueClass, keyConverter, valueConverter,
+        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched, path,
+            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter,
             jconf, compressionCodecClass)
 
     def saveAsSequenceFile(self, path, compressionCodecClass=None):

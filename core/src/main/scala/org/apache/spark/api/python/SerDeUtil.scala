@@ -93,26 +93,25 @@ private[python] object SerDeUtil extends Logging {
     }
     pyRDD.mapPartitions { iter =>
       val unpickle = new Unpickler
-      val unpickled = if (batchSerialized) {
-        iter.flatMap { batch =>
-          unpickle.loads(batch) match {
-            case objs: java.util.List[_] => collectionAsScalaIterable(objs)
-            case other => throw new SparkException(
-              s"Unexpected type ${other.getClass.getName} for batch serialized Python RDD")
+      val unpickled =
+        if (batchSerialized) {
+          iter.flatMap { batch =>
+            unpickle.loads(batch) match {
+              case objs: java.util.List[_] => collectionAsScalaIterable(objs)
+              case other => throw new SparkException(
+                s"Unexpected type ${other.getClass.getName} for batch serialized Python RDD")
+            }
           }
+        } else {
+          iter.map(unpickle.loads(_))
         }
-      } else {
-        iter.map(unpickle.loads(_))
-      }
       unpickled.map {
-        // we only accept pickled (K, V)
         case obj if isPair(obj) =>
+          // we only accept (K, V)
           val arr = obj.asInstanceOf[Array[_]]
-          // arr has only 2 elements K and V
           (arr.head.asInstanceOf[K], arr.last.asInstanceOf[V])
-        case other =>
-          throw new SparkException(
-            s"RDD element of type ${other.getClass.getName} cannot be used")
+        case other => throw new SparkException(
+          s"RDD element of type ${other.getClass.getName} cannot be used")
       }
     }
   }

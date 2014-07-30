@@ -704,7 +704,7 @@ class TestOutputFormat(PySparkTestCase):
 
     def test_malformed_RDD(self):
         basepath = self.tempdir.name
-        # non-batch-serialized RDD of type RDD[[(K, V)]] should be rejected
+        # non-batch-serialized RDD[[(K, V)]] should be rejected
         data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
         rdd = self.sc.parallelize(data, numSlices=len(data))
         self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
