@@ -111,12 +111,7 @@ class DoubleType(object):
 class FloatType(object):
     """Spark SQL FloatType
 
-    For now, please use L{DoubleType} instead of using L{FloatType}.
-    Because query evaluation is done in Scala, java.lang.Double will be be used
-    for Python float numbers. Because the underlying JVM type of FloatType is
-    java.lang.Float (in Java) and Float (in scala), and we are trying to cast the type,
-    there will be a java.lang.ClassCastException
-    if FloatType (Python) is used.
+    The data type representing single precision floating-point values.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -128,12 +123,7 @@ class FloatType(object):
 class ByteType(object):
     """Spark SQL ByteType
 
-    For now, please use L{IntegerType} instead of using L{ByteType}.
-    Because query evaluation is done in Scala, java.lang.Integer will be be used
-    for Python int numbers. Because the underlying JVM type of ByteType is
-    java.lang.Byte (in Java) and Byte (in scala), and we are trying to cast the type,
-    there will be a java.lang.ClassCastException
-    if ByteType (Python) is used.
+    The data type representing int values with 1 singed byte.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -170,12 +160,7 @@ class LongType(object):
 class ShortType(object):
     """Spark SQL ShortType
 
-    For now, please use L{IntegerType} instead of using L{ShortType}.
-    Because query evaluation is done in Scala, java.lang.Integer will be be used
-    for Python int numbers. Because the underlying JVM type of ShortType is
-    java.lang.Short (in Java) and Short (in scala), and we are trying to cast the type,
-    there will be a java.lang.ClassCastException
-    if ShortType (Python) is used.
+    The data type representing int values with 2 signed bytes.
 
     """
     __metaclass__ = PrimitiveTypeSingleton
@@ -198,7 +183,6 @@ class ArrayType(object):
 
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains None values.
-        :return:
 
         >>> ArrayType(StringType) == ArrayType(StringType, False)
         True
@@ -238,7 +222,6 @@ class MapType(object):
         :param keyType: the data type of keys.
         :param valueType: the data type of values.
         :param valueContainsNull: indicates whether values contains null values.
-        :return:
 
         >>> MapType(StringType, IntegerType) == MapType(StringType, IntegerType, True)
         True
@@ -279,7 +262,6 @@ class StructField(object):
         :param name: the name of this field.
         :param dataType: the data type of this field.
         :param nullable: indicates whether values of this field can be null.
-        :return:
 
         >>> StructField("f1", StringType, True) == StructField("f1", StringType, True)
         True
@@ -314,8 +296,6 @@ class StructType(object):
     """
     def __init__(self, fields):
         """Creates a StructType
-        :param fields:
-        :return:
 
         >>> struct1 = StructType([StructField("f1", StringType, True)])
         >>> struct2 = StructType([StructField("f1", StringType, True)])
@@ -342,11 +322,7 @@ class StructType(object):
 
 
 def _parse_datatype_list(datatype_list_string):
-    """Parses a list of comma separated data types.
-
-    :param datatype_list_string:
-    :return:
-    """
+    """Parses a list of comma separated data types."""
     index = 0
     datatype_list = []
     start = 0
@@ -371,9 +347,6 @@ def _parse_datatype_list(datatype_list_string):
 
 def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
-
-    :param datatype_string:
-    :return:
 
     >>> def check_datatype(datatype):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.__repr__())
@@ -582,9 +555,6 @@ class SQLContext:
 
     def applySchema(self, rdd, schema):
         """Applies the given schema to the given RDD of L{dict}s.
-        :param rdd:
-        :param schema:
-        :return:
 
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
@@ -594,9 +564,27 @@ class SQLContext:
         >>> srdd2.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
         ...                    {"field1" : 3, "field2": "row3"}]
         True
+        >>> from datetime import datetime
+        >>> rdd = sc.parallelize([{"byte": 127, "short": -32768, "float": 1.0,
+        ... "time": datetime(2010, 1, 1, 1, 1, 1), "map": {"a": 1}, "struct": {"b": 2},
+        ... "list": [1, 2, 3]}])
+        >>> schema = StructType([
+        ...     StructField("byte", ByteType(), False),
+        ...     StructField("short", ShortType(), False),
+        ...     StructField("float", FloatType(), False),
+        ...     StructField("time", TimestampType(), False),
+        ...     StructField("map", MapType(StringType(), IntegerType(), False), False),
+        ...     StructField("struct", StructType([StructField("b", ShortType(), False)]), False),
+        ...     StructField("list", ArrayType(ByteType(), False), False),
+        ...     StructField("null", DoubleType(), True)])
+        >>> srdd = sqlCtx.applySchema(rdd, schema).map(
+        ...     lambda x: (
+        ...         x.byte, x.short, x.float, x.time, x.map["a"], x.struct["b"], x.list, x.null))
+        >>> srdd.collect()[0]
+        (127, -32768, 1.0, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         """
         jrdd = self._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchema(jrdd.rdd(), schema.__repr__())
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.__repr__())
         return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):

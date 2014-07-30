@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList, Set => JSet}
+import java.util.{Map => JMap, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -380,6 +380,8 @@ class SchemaRDD(
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    import scala.collection.Map
+
     def toJava(obj: Any, dataType: DataType): Any = dataType match {
       case struct: StructType => rowToMap(obj.asInstanceOf[Row], struct)
       case array: ArrayType => obj match {
