@@ -68,7 +68,7 @@ class LinearRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }

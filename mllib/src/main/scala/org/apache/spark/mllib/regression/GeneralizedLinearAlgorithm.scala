@@ -97,7 +97,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Create a model given the weights and intercept
    */
-  protected def createModel(weights: Vector, intercept: Double): M
+  def createModel(weights: Vector, intercept: Double): M
 
   /**
    * Set if the algorithm should add an intercept. Default false.
