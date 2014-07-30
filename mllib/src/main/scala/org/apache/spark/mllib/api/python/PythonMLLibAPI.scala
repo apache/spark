@@ -19,6 +19,8 @@ package org.apache.spark.mllib.api.python
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
@@ -26,8 +28,14 @@ import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -453,4 +461,75 @@ class PythonMLLibAPI extends Serializable {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
+
+  /**
+   * Java stub for Python mllib DecisionTree.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   * @param dataBytesJRDD  Training data
+   * @param categoricalFeaturesInfoJMap  Categorical features info, as Java map
+   */
+  def trainDecisionTreeModel(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      algoStr: String,
+      numClasses: Int,
+      categoricalFeaturesInfoJMap: java.util.Map[Int,Int],
+      impurityStr: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
+
+    val data = dataBytesJRDD.rdd.map(deserializeLabeledPoint)
+
+    val algo: Algo = algoStr match {
+      case "classification" => Classification
+      case "regression" => Regression
+      case _ => throw new IllegalArgumentException(s"Bad algoStr parameter: $algoStr")
+    }
+    val impurity: Impurity = impurityStr match {
+      case "gini" => Gini
+      case "entropy" => Entropy
+      case "variance" => Variance
+      case _ => throw new IllegalArgumentException(s"Bad impurityStr parameter: $impurityStr")
+    }
+
+    val strategy = new Strategy(
+      algo = algo,
+      impurity = impurity,
+      maxDepth = maxDepth,
+      numClassesForClassification = numClasses,
+      maxBins = maxBins,
+      categoricalFeaturesInfo = categoricalFeaturesInfoJMap.toMap)
+
+    DecisionTree.train(data, strategy)
+  }
+
+  /**
+   * Predict the label of the given data point.
+   * This is a Java stub for python DecisionTreeModel.predict()
+   *
+   * @param featuresBytes Serialized feature vector for data point
+   * @return predicted label
+   */
+  def predictDecisionTreeModel(
+      model: DecisionTreeModel,
+      featuresBytes: Array[Byte]): Double = {
+    val features: Vector = deserializeDoubleVector(featuresBytes)
+    model.predict(features)
+  }
+
+  /**
+   * Predict the labels of the given data points.
+   * This is a Java stub for python DecisionTreeModel.predict()
+   *
+   * @param dataJRDD A JavaRDD with serialized feature vectors
+   * @return JavaRDD of serialized predictions
+   */
+  def predictDecisionTreeModel(
+      model: DecisionTreeModel,
+      dataJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
+    val data = dataJRDD.rdd.map(xBytes => deserializeDoubleVector(xBytes))
+    model.predict(data).map(Utils.serialize(_))
+  }
+
 }
