@@ -23,20 +23,20 @@ cd "$FWDIR"
 
 if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
   if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
-    export SBT_MAVEN_PROFILES="-Dhadoop.version=1.0.4"
+    export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=1.0.4"
   elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
-    export SBT_MAVEN_PROFILES="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
+    export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
   elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
-    export SBT_MAVEN_PROFILES="-Pyarn -Dhadoop.version=2.2.0"
+    export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Dhadoop.version=2.2.0"
   elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
-    export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+    export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
   fi
 fi
 
-if [ -z "$SBT_MAVEN_PROFILES" ]; then
-  export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+if [ -z "$SBT_MAVEN_PROFILES_ARGS" ]; then
+  export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
 fi
-echo "SBT_MAVEN_PROFILES=\"$SBT_MAVEN_PROFILES\""
+echo "SBT_MAVEN_PROFILES_ARGS=\"$SBT_MAVEN_PROFILES_ARGS\""
 
 # Remove work directory
 rm -rf ./work
@@ -76,16 +76,15 @@ dev/scalastyle
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
+
+if [ -n "$_RUN_SQL_TESTS" ]; then
+  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+fi
 # echo "q" is needed because sbt on encountering a build file with failure 
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.
-if [ -n "$_RUN_SQL_TESTS" ]; then
-  echo -e "q\n" | SBT_MAVEN_PROFILES="$SBT_MAVEN_PROFILES -Phive -Phive-thriftserver" sbt/sbt clean package \
-    assembly/assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-else
-  echo -e "q\n" | sbt/sbt clean package assembly/assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-fi
+echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS clean package assembly/assembly test | \
+  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo "========================================================================="
 echo "Running PySpark tests"
