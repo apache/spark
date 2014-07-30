@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -445,5 +443,67 @@ class SQLQuerySuite extends QueryTest {
       Seq(Seq(s"$nonexistentKey=<undefined>"))
     )
     clear()
+  }
+
+  test("apply schema") {
+    val schema1 = StructType(
+      StructField("f1", IntegerType, false) ::
+      StructField("f2", StringType, false) ::
+      StructField("f3", BooleanType, false) ::
+      StructField("f4", IntegerType, true) :: Nil)
+
+    val rowRDD1 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
+    }
+
+    val schemaRDD1 = applySchema(rowRDD1, schema1)
+    schemaRDD1.registerAsTable("applySchema1")
+    checkAnswer(
+      sql("SELECT * FROM applySchema1"),
+      (1, "A1", true, null) ::
+      (2, "B2", false, null) ::
+      (3, "C3", true, null) ::
+      (4, "D4", true, 2147483644) :: Nil)
+
+    checkAnswer(
+      sql("SELECT f1, f4 FROM applySchema1"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
+
+    val schema2 = StructType(
+      StructField("f1", StructType(
+        StructField("f11", IntegerType, false) ::
+        StructField("f12", BooleanType, false) :: Nil), false) ::
+      StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+
+    val rowRDD2 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
+    }
+
+    val schemaRDD2 = applySchema(rowRDD2, schema2)
+    schemaRDD2.registerAsTable("applySchema2")
+    checkAnswer(
+      sql("SELECT * FROM applySchema2"),
+      (Seq(1, true), Map("A1" -> null)) ::
+      (Seq(2, false), Map("B2" -> null)) ::
+      (Seq(3, true), Map("C3" -> null)) ::
+      (Seq(4, true), Map("D4" -> 2147483644)) :: Nil)
+
+    checkAnswer(
+      sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
   }
 }

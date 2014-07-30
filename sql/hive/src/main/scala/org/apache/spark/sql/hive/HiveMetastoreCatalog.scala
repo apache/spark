@@ -200,7 +200,9 @@ object HiveMetastoreTypes extends RegexParsers {
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
   protected lazy val arrayType: Parser[DataType] =
-    "array" ~> "<" ~> dataType <~ ">" ^^ ArrayType
+    "array" ~> "<" ~> dataType <~ ">" ^^ {
+      case tpe => ArrayType(tpe)
+    }
 
   protected lazy val mapType: Parser[DataType] =
     "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
@@ -229,10 +231,10 @@ object HiveMetastoreTypes extends RegexParsers {
   }
 
   def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType) => s"array<${toMetastoreType(elementType)}>"
+    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
     case StructType(fields) =>
       s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType) =>
+    case MapType(keyType, valueType, _) =>
       s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
     case StringType => "string"
     case FloatType => "float"

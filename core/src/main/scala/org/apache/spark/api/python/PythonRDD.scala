@@ -544,7 +544,8 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Convert an RDD of serialized Python dictionaries to Scala Maps
+   * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
+   * It is only used by pyspark.sql.
    * TODO: Support more Python types.
    */
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {

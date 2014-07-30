@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.api.java
 
+import scala.annotation.varargs
+import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
+import scala.collection.JavaConversions
+import scala.math.BigDecimal
+
 import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
 
 /**
@@ -29,7 +34,7 @@ class Row(private[spark] val row: ScalaRow) extends Serializable {
 
   /** Returns the value of column `i`. */
   def get(i: Int): Any =
-    row(i)
+    Row.toJavaValue(row(i))
 
   /** Returns true if value at column `i` is NULL. */
   def isNullAt(i: Int) = get(i) == null
@@ -89,5 +94,57 @@ class Row(private[spark] val row: ScalaRow) extends Serializable {
    */
   def getString(i: Int): String =
     row.getString(i)
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[Row]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: Row =>
+      (that canEqual this) &&
+        row == that.row
+    case _ => false
+  }
+
+  override def hashCode(): Int = row.hashCode()
 }
 
+object Row {
+
+  private def toJavaValue(value: Any): Any = value match {
+    // For values of this ScalaRow, we will do the conversion when
+    // they are actually accessed.
+    case row: ScalaRow => new Row(row)
+    case map: scala.collection.Map[_, _] =>
+      JavaConversions.mapAsJavaMap(
+        map.map {
+          case (key, value) => (toJavaValue(key), toJavaValue(value))
+        }
+      )
+    case seq: scala.collection.Seq[_] =>
+      JavaConversions.seqAsJavaList(seq.map(toJavaValue))
+    case decimal: BigDecimal => decimal.underlying()
+    case other => other
+  }
+
+  // TODO: Consolidate the toScalaValue at here with the scalafy in JsonRDD?
+  private def toScalaValue(value: Any): Any = value match {
+    // Values of this row have been converted to Scala values.
+    case row: Row => row.row
+    case map: java.util.Map[_, _] =>
+      JMapWrapper(map).map {
+        case (key, value) => (toScalaValue(key), toScalaValue(value))
+      }
+    case list: java.util.List[_] =>
+      JListWrapper(list).map(toScalaValue)
+    case decimal: java.math.BigDecimal => BigDecimal(decimal)
+    case other => other
+  }
+
+  /**
+   * Creates a Row with the given values.
+   */
+  @varargs def create(values: Any*): Row = {
+    // Right now, we cannot use @varargs to annotate the constructor of
+    // org.apache.spark.sql.api.java.Row. See https://issues.scala-lang.org/browse/SI-8383.
+    new Row(ScalaRow(values.map(toScalaValue):_*))
+  }
+}

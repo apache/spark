@@ -152,8 +152,9 @@ private[hive] trait HiveInspectors {
   }
 
   def toInspector(dataType: DataType): ObjectInspector = dataType match {
-    case ArrayType(tpe) => ObjectInspectorFactory.getStandardListObjectInspector(toInspector(tpe))
-    case MapType(keyType, valueType) =>
+    case ArrayType(tpe, _) =>
+      ObjectInspectorFactory.getStandardListObjectInspector(toInspector(tpe))
+    case MapType(keyType, valueType, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
         toInspector(keyType), toInspector(valueType))
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
