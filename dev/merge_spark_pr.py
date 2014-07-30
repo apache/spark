@@ -38,15 +38,15 @@ except ImportError:
     JIRA_IMPORTED = False
 
 # Location of your Spark git development area
-SPARK_HOME = os.environ.get("SPARK_HOME", "/home/patrick/Documents/spark")
+SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 # Remote name which points to the Gihub site
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 # ASF JIRA username
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "1234")
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
@@ -334,9 +334,13 @@ while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
     merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
 if JIRA_IMPORTED:
-    continue_maybe("Would you like to update an associated JIRA?")
-    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
-    resolve_jira(title, merged_refs, jira_comment)
+    if JIRA_USERNAME and JIRA_PASSWORD:
+        continue_maybe("Would you like to update an associated JIRA?")
+        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
+        resolve_jira(title, merged_refs, jira_comment)
+    else:
+        print "JIRA_USERNAME and JIRA_PASSWORD not set"
+        print "Exiting without trying to close the associated JIRA."
 else:
     print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
     print "Exiting without trying to close the associated JIRA."
