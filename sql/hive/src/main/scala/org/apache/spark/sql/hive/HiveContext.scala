@@ -47,6 +47,43 @@ import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
  */
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+  // aaaaaaaaaaaaaaaaaaaaa
+
   lazy val metastorePath = new File("metastore").getCanonicalPath
   lazy val warehousePath: String = new File("warehouse").getCanonicalPath
 
