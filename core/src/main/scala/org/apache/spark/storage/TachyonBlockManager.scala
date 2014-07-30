@@ -23,8 +23,7 @@ import java.util.{Date, Random}
 import tachyon.client.TachyonFS
 import tachyon.client.TachyonFile
 
-import org.apache.spark.Logging
-import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.{Logging, SparkInternalExitCode}
 import org.apache.spark.util.Utils
 
 
@@ -44,7 +43,7 @@ private[spark] class TachyonBlockManager(
 
   if (client == null) {
     logError("Failed to connect to the Tachyon as the master address is not configured")
-    System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_INITIALIZE)
+    System.exit(SparkInternalExitCode.TACHYON_STORE_FAILED_TO_INITIALIZE)
   }
 
   private val MAX_DIR_CREATION_ATTEMPTS = 10
@@ -126,7 +125,7 @@ private[spark] class TachyonBlockManager(
       if (!foundLocalDir) {
         logError("Failed " + MAX_DIR_CREATION_ATTEMPTS + " attempts to create tachyon dir in " +
           rootDir)
-        System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_CREATE_DIR)
+        System.exit(SparkInternalExitCode.TACHYON_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created tachyon directory at " + tachyonDir)
       tachyonDir

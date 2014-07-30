@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.SparkInternalExitCode
 
 /**
  * Represents an explanation for a executor or whole slave failing or exiting.
@@ -29,7 +29,7 @@ class ExecutorLossReason(val message: String) {
 
 private[spark]
 case class ExecutorExited(val exitCode: Int)
-  extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
+  extends ExecutorLossReason(SparkInternalExitCode.explainExitCode(exitCode)) {
 }
 
 private[spark]

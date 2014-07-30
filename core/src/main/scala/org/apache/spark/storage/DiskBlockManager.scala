@@ -21,8 +21,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
-import org.apache.spark.Logging
-import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.{Logging, SparkInternalExitCode}
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
 
@@ -46,7 +45,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   val localDirs: Array[File] = createLocalDirs()
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
-    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+    System.exit(SparkInternalExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null

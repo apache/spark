@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkInternalExitCode}
 import org.apache.spark.util.Utils
 
 /**
@@ -36,14 +36,14 @@ private[spark] object ExecutorUncaughtExceptionHandler
       // (If we do, we will deadlock.)
       if (!Utils.inShutdown()) {
         if (exception.isInstanceOf[OutOfMemoryError]) {
-          System.exit(ExecutorExitCode.OOM)
+          System.exit(SparkInternalExitCode.OOM)
         } else {
-          System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+          System.exit(SparkInternalExitCode.UNCAUGHT_EXCEPTION)
         }
       }
     } catch {
-      case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-      case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
+      case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkInternalExitCode.OOM)
+      case t: Throwable => Runtime.getRuntime.halt(SparkInternalExitCode.UNCAUGHT_EXCEPTION_TWICE)
     }
   }
 
