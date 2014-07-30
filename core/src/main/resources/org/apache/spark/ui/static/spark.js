@@ -32,7 +32,10 @@ Spark.UI = (function ($) {
 
     // define a function that fills a table with the rows given
     // from a JSON data input: [{row1},{row2},...]
-    // if an entry in a row is an array it will further expand it with <span>
+    // If an entry in a row is an array it will further expand it with <span>
+    // If an entry contains </td> then we use it directly in the table as cell
+    // without wrapping in with <td>. This is a hack to allow to pass attributes
+    // to the cells directly in the JSON
     var fillTable = function (data, tableId) {
         var tbl_body = "";
         $.each(data, function() {
@@ -44,6 +47,8 @@ Spark.UI = (function ($) {
                         tbl_longentry += "<span>" + l + "<br/></span>";
                     })
                     tbl_row += "<td>" + tbl_longentry + "</td>";
+                } else if (v.toString().indexOf("</td>") != -1){
+                  tbl_row += "" + v + "";
                 } else {
                   tbl_row += "<td>" + v + "</td>";
                 }

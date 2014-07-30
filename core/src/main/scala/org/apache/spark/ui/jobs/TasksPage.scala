@@ -109,29 +109,39 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
       val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
       val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      var content = ("Index" -> {info.index}) ~
-        ("ID" -> {info.taskId}) ~
+      var content = ("Index" -> info.index) ~
+        ("ID" -> info.taskId) ~
         ("Attempt" -> {if (info.speculative) s"${info.attempt} (speculative)"
                      else info.attempt.toString}) ~
         ("Status" -> {info.status}) ~
         ("Locality Level" -> {info.taskLocality.toString}) ~
         ("Executor" -> {info.host}) ~
         ("Launch Time" -> {UIUtils.formatDate(new Date(info.launchTime))}) ~
-        ("Duration" -> {formatDuration}) ~
-        ("GC Time" -> {if (gcTime > 0) { UIUtils.formatDuration(gcTime)} else "" })
+        ("Duration" -> UIUtils.wrapHtmlCellWithCustomKey(formatDuration, duration.toString)) ~
+        ("GC Time" -> {if (gcTime > 0) {
+          UIUtils.wrapHtmlCellWithCustomKey(UIUtils.formatDuration(gcTime), gcTime.toString)
+          } else "" })
       if (hasInput) {
-        content ~= ("Input" ->  {inputReadable})
+        content ~= ("Input" -> UIUtils.wrapHtmlCellWithCustomKey(inputReadable,
+          inputSortable))
       }
       if (hasShuffleRead) {
-        content ~= ("Shuffle Read" -> {shuffleReadReadable})
+        content ~= ("Shuffle Read" ->
+          UIUtils.wrapHtmlCellWithCustomKey(shuffleReadReadable, shuffleReadSortable))
       }
       if (hasShuffleWrite) {
-        content ~= ("Write Time" -> {writeTimeReadable}) ~
-          ("Shuffle Write" -> {shuffleWriteReadable})
+        content ~= ("Write Time" ->
+          UIUtils.wrapHtmlCellWithCustomKey(writeTimeReadable, writeTimeSortable)) ~
+          ("Shuffle Write" ->
+            UIUtils.wrapHtmlCellWithCustomKey(shuffleWriteReadable, shuffleWriteSortable))
       }
       if (hasBytesSpilled) {
-        content ~= ("Shuffle Spill (Memory)" -> {memoryBytesSpilledReadable}) ~
-          ("Shuffle Spill (Disk)" -> {diskBytesSpilledReadable})
+        content ~= ("Shuffle Spill (Memory)" ->
+          UIUtils.wrapHtmlCellWithCustomKey(memoryBytesSpilledReadable,
+            memoryBytesSpilledSortable)) ~
+          ("Shuffle Spill (Disk)" ->
+            UIUtils.wrapHtmlCellWithCustomKey(diskBytesSpilledReadable,
+              diskBytesSpilledSortable))
       }
       content ~= ("Errors" -> {errorMessage.map { e => "<pre>" + e + "</pre>" }.getOrElse("")})
 
@@ -139,4 +149,3 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
     }
   }
 }
-
