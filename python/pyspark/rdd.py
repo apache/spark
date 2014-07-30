@@ -1049,9 +1049,9 @@ class RDD(object):
         @param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickled = self._toPickleSerialization()
-        batched = isinstance(pickled._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickled._jrdd, batched, jconf,
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
                                                     keyConverter, valueConverter, True)
 
     def saveAsNewAPIHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
@@ -1076,9 +1076,9 @@ class RDD(object):
         @param conf: Hadoop job configuration, passed in as a dict (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickled = self._toPickleSerialization()
-        batched = isinstance(pickled._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickled._jrdd, batched, path,
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, batched, path,
                     outputFormatClass, keyClass, valueClass, keyConverter, valueConverter, jconf)
 
     def saveAsHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
@@ -1093,9 +1093,9 @@ class RDD(object):
         @param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickled = self._toPickleSerialization()
-        batched = isinstance(pickled._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickled._jrdd, batched, jconf,
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
                                                     keyConverter, valueConverter, False)
 
     def saveAsHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
@@ -1121,9 +1121,9 @@ class RDD(object):
         @param compressionCodecClass: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickled = self._toPickleSerialization()
-        batched = isinstance(pickled._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickled._jrdd, batched,
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched,
             path, outputFormatClass, keyClass, valueClass, keyConverter, valueConverter,
             jconf, compressionCodecClass)
 
@@ -1138,9 +1138,9 @@ class RDD(object):
         @param path: path to sequence file
         @param compressionCodecClass: (None by default)
         """
-        pickled = self._toPickleSerialization()
-        batched = isinstance(pickled._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsSequenceFile(pickled._jrdd, batched,
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsSequenceFile(pickledRDD._jrdd, batched,
                                                    path, compressionCodecClass)
 
     def saveAsPickleFile(self, path, batchSize=10):
