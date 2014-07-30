@@ -19,7 +19,7 @@
 
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+cd "$FWDIR"
 
 if [ -z "$SBT_MAVEN_PROFILES" ]; then
   export SBT_MAVEN_PROFILES="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
