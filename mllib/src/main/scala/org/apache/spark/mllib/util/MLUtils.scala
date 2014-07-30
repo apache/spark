@@ -100,7 +100,7 @@ object MLUtils {
 
   // Convenient methods for `loadLibSVMFile`.
 
-  @deprecated("use method without multiclass argument, which no longer has effect")
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
@@ -119,7 +119,7 @@ object MLUtils {
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
 
-  @deprecated("use method without multiclass argument, which no longer has effect")
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
@@ -127,7 +127,7 @@ object MLUtils {
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures)
 
-  @deprecated("use method without multiclass argument, which no longer has effect")
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,

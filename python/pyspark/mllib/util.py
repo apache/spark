@@ -32,7 +32,7 @@ class MLUtils:
     @deprecated
     @staticmethod
     def _parse_libsvm_line(line, multiclass):
-        return  _parse_libsvm_line(line)
+        return _parse_libsvm_line(line)
 
     @staticmethod
     def _parse_libsvm_line(line):
