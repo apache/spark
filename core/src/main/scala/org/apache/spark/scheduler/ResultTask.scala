@@ -32,7 +32,8 @@ import org.apache.spark.rdd.RDD
  *
  * @param stageId id of the stage this task belongs to
  * @param taskBinary broadcasted version of the serialized RDD and the function to apply on each
- *                   partition of the given RDD.
+ *                   partition of the given RDD. Once deserialized, the type should be
+ *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
@@ -40,7 +41,7 @@ import org.apache.spark.rdd.RDD
  */
 private[spark] class ResultTask[T, U](
     stageId: Int,
-    taskBinary: Broadcast[Array[Byte]],  // (RDD[T], (TaskContext, Iterator[T]) => U)
+    taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient locs: Seq[TaskLocation],
     val outputId: Int)

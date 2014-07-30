@@ -164,6 +164,13 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     rddBuffer.clear()
     runGC()
     postGCTester.assertCleanup()
+
+    // Make sure the broadcasted task closure no longer exists after GC.
+    val taskClosureBroadcastId = broadcastIds.max + 1
+    assert(sc.env.blockManager.master.getMatchingBlockIds({
+      case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
+      case _ => false
+    }, askSlaves = true).isEmpty)
   }
 
   test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
@@ -195,6 +202,13 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     rddBuffer.clear()
     runGC()
     postGCTester.assertCleanup()
+
+    // Make sure the broadcasted task closure no longer exists after GC.
+    val taskClosureBroadcastId = broadcastIds.max + 1
+    assert(sc.env.blockManager.master.getMatchingBlockIds({
+      case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
+      case _ => false
+    }, askSlaves = true).isEmpty)
   }
 
   //------ Helper functions ------
