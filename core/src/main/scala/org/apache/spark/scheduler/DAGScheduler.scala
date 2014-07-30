@@ -275,6 +275,7 @@ class DAGScheduler(
   private def getParentStages(rdd: RDD[_], jobId: Int): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
@@ -301,6 +302,7 @@ class DAGScheduler(
   private def getParentShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
     val parents = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
@@ -330,6 +332,7 @@ class DAGScheduler(
   private def getMissingParentStages(stage: Stage): List[Stage] = {
     val missing = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
@@ -1146,6 +1149,7 @@ class DAGScheduler(
     }
     val visitedRdds = new HashSet[RDD[_]]
     val visitedStages = new HashSet[Stage]
+    // We are manually maintaining a stack here to prevent StackOverflowError caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
