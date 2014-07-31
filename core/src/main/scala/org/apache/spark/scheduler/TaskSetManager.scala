@@ -114,7 +114,7 @@ private[spark] class TaskSetManager(
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
-  private var hasNodeLocalOnlyTasks = true
+  private var hasNodeLocalOnlyTasks = false
 
   // Set of pending tasks for each rack -- similar to the above.
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
@@ -416,7 +416,7 @@ private[spark] class TaskSetManager(
 
       var allowedLocality = maxLocality
 
-      if (maxLocality != TaskLocality.NO_PREF) {// } || hasNodeLocalOnlyTasks) {
+      if (maxLocality != TaskLocality.NO_PREF || hasNodeLocalOnlyTasks) {
         allowedLocality = getAllowedLocalityLevel(curTime)
         if (allowedLocality > maxLocality) {
           // We're not allowed to search for farther-away tasks
