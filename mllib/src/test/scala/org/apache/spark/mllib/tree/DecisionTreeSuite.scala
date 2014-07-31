@@ -625,6 +625,24 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(model.depth === 1)
   }
 
+  test("stump with 2 continuous variables for binary classification") {
+    val arr = new Array[LabeledPoint](4)
+    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
+    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 2)
+
+    val model = DecisionTree.train(input, strategy)
+    validateClassifier(model, arr, 1.0)
+    assert(model.numNodes === 3)
+    assert(model.depth === 1)
+    assert(model.topNode.split.get.feature === 1)
+  }
+
   test("stump with categorical variables for multiclass classification, with just enough bins") {
     val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
