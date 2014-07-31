@@ -50,9 +50,8 @@ object DecisionTreeRunner {
 
   case class Params(
       input: String = null,
-      dataFormat: String = null,
+      dataFormat: String = "libsvm",
       algo: Algo = Classification,
-      numClassesForClassification: Int = 2,
       maxDepth: Int = 4,
       impurity: ImpurityType = Gini,
       maxBins: Int = 100,
@@ -79,14 +78,13 @@ object DecisionTreeRunner {
       opt[Double]("fracTest")
         .text(s"fraction of data to hold out for testing, default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
+      opt[String]("<dataFormat>")
+        .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
+        .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
         .text("input paths to labeled examples in dense format (label,f0 f1 f2 ...)")
         .required()
         .action((x, c) => c.copy(input = x))
-      arg[String]("<dataFormat>")
-        .text("data format: dense/libsvm")
-        .required()
-        .action((x, c) => c.copy(dataFormat = x))
       checkConfig { params =>
         if (params.fracTest < 0 || params.fracTest > 1) {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
@@ -118,36 +116,38 @@ object DecisionTreeRunner {
     // Load training data and cache it.
     val origExamples = params.dataFormat match {
       case "dense" => MLUtils.loadLabeledPoints(sc, params.input).cache()
-      case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input, multiclass = true).cache()
+      case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input).cache()
     }
     // For classification, re-index classes if needed.
     val (examples, numClasses) = params.algo match {
       case Classification => {
         // classCounts: class --> # examples in class
-        val classCounts = origExamples.map(_.label).countByValue
+        val classCounts = origExamples.map(_.label).countByValue()
+        val sortedClasses = classCounts.keys.toList.sorted
         val numClasses = classCounts.size
-        // classIndex: class --> index in 0,...,numClasses-1
-        val classIndex = {
-          if (classCounts.keySet != Set[Double](0.0, 1.0)) {
-            classCounts.keys.toList.sorted.zipWithIndex.toMap
+        // classIndexMap: class --> index in 0,...,numClasses-1
+        val classIndexMap = {
+          if (classCounts.keySet != Set(0.0, 1.0)) {
+            sortedClasses.zipWithIndex.toMap
           } else {
             Map[Double, Int]()
           }
         }
         val examples = {
-          if (classIndex.isEmpty) {
+          if (classIndexMap.isEmpty) {
             origExamples
           } else {
-            origExamples.map(lp => LabeledPoint(classIndex(lp.label), lp.features))
+            origExamples.map(lp => LabeledPoint(classIndexMap(lp.label), lp.features))
           }
         }
+        val numExamples = examples.count()
         println(s"numClasses = $numClasses.")
         println(s"Per-class example fractions, counts:")
         println(s"Class\tFrac\tCount")
-        classCounts.keys.toList.sorted.foreach(c => {
-          val frac = classCounts(c) / (0.0 + examples.count())
+        sortedClasses.foreach { c => {
+          val frac = classCounts(c) / (0.0 + numExamples)
           println(s"$c\t$frac\t${classCounts(c)}")
-        })
+        }}
         (examples, numClasses)
       }
       case Regression => {

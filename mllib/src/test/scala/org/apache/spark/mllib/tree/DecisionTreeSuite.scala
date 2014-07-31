@@ -34,7 +34,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       model: DecisionTreeModel,
       input: Seq[LabeledPoint],
       requiredAccuracy: Double) {
-    val predictions = input.map { x => model.predict(x.features) }
+    val predictions = input.map(x => model.predict(x.features))
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
     }
@@ -247,7 +247,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   test("extract categories from a number for multiclass classification") {
     val l = DecisionTree.extractMultiClassCategories(13, 10)
     assert(l.length === 3)
-    assert(List(3.0, 2.0, 0.0).toSeq == l.toSeq)
+    assert(List(3.0, 2.0, 0.0).toSeq === l.toSeq)
   }
 
   test("split and bin calculations for unordered categorical variables with multiclass " +
@@ -424,7 +424,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val stats = bestSplits(0)._2
     assert(stats.gain > 0)
     assert(stats.predict === 1)
-    assert(stats.prob == 0.6)
+    assert(stats.prob === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -450,7 +450,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = bestSplits(0)._2
     assert(stats.gain > 0)
-    assert(stats.predict == 0.6)
+    assert(stats.predict === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -667,8 +667,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.categories.contains(1))
     assert(bestSplit.featureType === Categorical)
     val gain = bestSplits(0)._2
-    assert(gain.leftImpurity == 0)
-    assert(gain.rightImpurity == 0)
+    assert(gain.leftImpurity === 0)
+    assert(gain.rightImpurity === 0)
   }
 
   test("stump with continuous variables for multiclass classification") {
