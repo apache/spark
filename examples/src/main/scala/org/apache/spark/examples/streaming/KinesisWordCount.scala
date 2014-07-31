@@ -68,7 +68,7 @@ import com.amazonaws.services.kinesis.model.PutRecordRequest
  * Example:
  *    $ export AWS_ACCESS_KEY_ID=<your-access-key>
  *    $ export AWS_SECRET_KEY=<your-secret-key>
- *    $ $SPARK_HOME/extras/kinesis-asl/bin/run-kinesis-example \
+ *    $ $SPARK_HOME/bin/run-example \
  *        org.apache.spark.examples.streaming.KinesisWordCount mySparkStream \
  *        https://kinesis.us-east-1.amazonaws.com
  *
@@ -260,7 +260,7 @@ object KinesisWordCount extends Logging {
  * Example:
  *    $ export AWS_ACCESS_KEY_ID=<your-access-key>
  *    $ export AWS_SECRET_KEY=<your-secret-key>
- *    $ $SPARK_HOME/extras/kinesis-asl/bin/run-kinesis-example \
+ *    $ $SPARK_HOME/bin/run-example \
  *         org.apache.spark.examples.streaming.KinesisWordCountProducer mySparkStream \
  *         https://kinesis.us-east-1.amazonaws.com 10 5
  */

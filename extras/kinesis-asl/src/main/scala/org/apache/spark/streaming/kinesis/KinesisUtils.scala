@@ -56,7 +56,7 @@ object KinesisUtils extends Logging {
       checkpointIntervalMillis: Long,
       initialPositionInStream: InitialPositionInStream): ReceiverInputDStream[Array[Byte]] = {
     ssc.receiverStream(new KinesisReceiver(appName, stream, endpoint, checkpointIntervalMillis, 
-        initialPositionInStream	))
+        initialPositionInStream))
   }
 
   /**

@@ -36,7 +36,7 @@ import com.amazonaws.services.kinesis.model.Record
  * @param Kinesis receiver
  * @param workerId for logging purposes
  * @param checkpointState represents the checkpoint state including the next time a 
- * 		checkpoint is needed.  it's injected here for mocking purposes.
+ *   checkpoint is needed.  it's injected here for mocking purposes.
  */
 private[kinesis] class KinesisRecordProcessor(
     receiver: KinesisReceiver,
