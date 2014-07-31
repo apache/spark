@@ -43,7 +43,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   /**
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return DecisionTreeModel which can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
@@ -206,7 +206,7 @@ object DecisionTree extends Serializable with Logging {
    * @param strategy The configuration parameters for the tree algorithm which specify the type
    *                 of algorithm (classification, regression, etc.), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
-   * @return DecisionTreeModel which can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).train(input)
@@ -225,7 +225,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @return DecisionTreeModel which can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -250,7 +250,7 @@ object DecisionTree extends Serializable with Logging {
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClassesForClassification number of classes for classification. Default value of 2.
-   * @return DecisionTreeModel which can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -284,7 +284,7 @@ object DecisionTree extends Serializable with Logging {
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return DecisionTreeModel which can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],

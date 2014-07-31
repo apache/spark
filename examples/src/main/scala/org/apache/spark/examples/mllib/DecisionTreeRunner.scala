@@ -144,18 +144,16 @@ object DecisionTreeRunner {
         println(s"numClasses = $numClasses.")
         println(s"Per-class example fractions, counts:")
         println(s"Class\tFrac\tCount")
-        sortedClasses.foreach { c => {
+        sortedClasses.foreach { c =>
           val frac = classCounts(c) / numExamples.toDouble
           println(s"$c\t$frac\t${classCounts(c)}")
-        }}
+        }
         (examples, numClasses)
       }
-      case Regression => {
+      case Regression =>
         (origExamples, 0)
-      }
-      case _ => {
+      case _ =>
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
-      }
     }
 
     // Split into training, test.
