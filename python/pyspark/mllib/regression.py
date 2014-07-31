@@ -109,33 +109,31 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     """
 
-class RegularizerType(object):
-    L2 = 0
-    L1 = 1
-    NONE = 2
-
 class LinearRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0, regType=None,
               intercept=False, miniBatchFraction=1.0, initialWeights=None):
-        """Train a linear regression model on the given data."""
+        """Train a linear regression model on the given data. The 'regType' parameter can take
+           one from the following string values: "L1Updater" for invoking the lasso regularizer,
+           "SquaredUpdater" for invoking the ridge regularizer or "NONE" for not using a
+           regularizer at all. The user can determine the regularizer parameter by setting the
+           appropriate value to variable 'regParam' (by default is set to 1.0)."""
         sc = data.context
         if regType is None:
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().NONE(),
-                intercept, miniBatchFraction, i)
-        elif regType == RegularizerType.L2:
+                d._jrdd, iterations, step, regParam, "NONE", intercept, miniBatchFraction, i)
+        elif regType == "SquaredUpdater":
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().L2(),
-                intercept, miniBatchFraction, i)
-        elif regType == RegularizerType.L1:
+                d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
+        elif regType == "L1Updater":
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().L1(),
-                intercept, miniBatchFraction, i)
-        elif regType == RegularizerType.NONE:
+                d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
+        elif regType == "NONE":
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, sc._jvm.PythonMLLibAPI().RegularizerType().NONE(),
-                intercept, miniBatchFraction, i)
+                d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
+        else:
+            raise ValueError("Invalid value for 'regType' parameter. Can only be initialized " +
+                             "using the following string values [L1Updater, SquaredUpdater, NONE].")
         return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 class LassoModel(LinearRegressionModelBase):
