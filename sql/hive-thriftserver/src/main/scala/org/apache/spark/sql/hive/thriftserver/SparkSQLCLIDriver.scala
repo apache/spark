@@ -190,12 +190,12 @@ private[hive] object SparkSQLCLIDriver {
         reader.setHistory(new History(new File(historyFile)))
       } else {
         System.err.println("WARNING: Directory for Hive history file: " + historyDirectory +
-          " does not exist.   History will not be available during this session.")
+                           " does not exist.   History will not be available during this session.")
       }
     } catch {
       case e: Exception =>
         System.err.println("WARNING: Encountered an error while trying to initialize Hive's " +
-          "history file.  History will not be available during this session.")
+                           "history file.  History will not be available during this session.")
         System.err.println(e.getMessage)
     }
 
