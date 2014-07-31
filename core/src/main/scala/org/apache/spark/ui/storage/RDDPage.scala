@@ -45,9 +45,9 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
+    val filteredStorageStatusList = StorageUtils.filterByRDD(storageStatusList, rddId)
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
+    val blockLocations = StorageUtils.getBlockLocations(filteredStorageStatusList)
     val blocks = blockStatuses.map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
