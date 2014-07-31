@@ -51,15 +51,14 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
 case class ParquetTableScan(
-    // note: output cannot be transient, see
-    // https://issues.apache.org/jira/browse/SPARK-1367
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])
   extends LeafNode {
 
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
-  // by exprId.
+  // by exprId. note: output cannot be transient, see
+  // https://issues.apache.org/jira/browse/SPARK-1367
   val output = attributes.map { a =>
     relation.output
       .find(o => o.exprId == a.exprId)
