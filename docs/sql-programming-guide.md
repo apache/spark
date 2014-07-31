@@ -770,7 +770,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
-# Cache tables
+# Cached tables
 
 Spark SQL can cache tables using an in-memory columnar format by calling `cacheTable("tableName")`.
 Then Spark SQL will scan only required columns and will automatically select best compression,
