@@ -122,13 +122,7 @@ class LinearRegressionWithSGD(object):
         if regType is None:
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
                 d._jrdd, iterations, step, regParam, "NONE", intercept, miniBatchFraction, i)
-        elif regType == "SquaredUpdater":
-            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
-        elif regType == "L1Updater":
-            train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
-        elif regType == "NONE":
+        elif regType == "SquaredUpdater" or regType == "L1Updater" or regType == "NONE":
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
                 d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
         else:
