@@ -824,8 +824,8 @@ object DecisionTree extends Serializable with Logging {
         case Classification =>
           val leftCounts: Array[Double] = leftNodeAgg(featureIndex)(splitIndex)
           val rightCounts: Array[Double] = rightNodeAgg(featureIndex)(splitIndex)
-          var leftTotalCount = leftCounts.sum
-          var rightTotalCount = rightCounts.sum
+          val leftTotalCount = leftCounts.sum
+          val rightTotalCount = rightCounts.sum
 
           val impurity = {
             if (level > 0) {
@@ -849,8 +849,10 @@ object DecisionTree extends Serializable with Logging {
           }
 
           // Sum of count for each label
-          val leftRightCounts: Array[Double] = leftCounts.zip(rightCounts).map {
-              case (leftCount, rightCount) => leftCount + rightCount }
+          val leftRightCounts: Array[Double] =
+            leftCounts.zip(rightCounts).map { case (leftCount, rightCount) =>
+              leftCount + rightCount
+            }
 
           def indexOfLargestArrayElement(array: Array[Double]): Int = {
             val result = array.foldLeft(-1, Double.MinValue, 0) {

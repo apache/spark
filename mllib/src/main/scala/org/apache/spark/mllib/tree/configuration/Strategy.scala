@@ -52,7 +52,9 @@ class Strategy (
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     val maxMemoryInMB: Int = 128) extends Serializable {
 
-  require(numClassesForClassification >= 2)
+  if (algo == Classification) {
+    require(numClassesForClassification >= 2)
+  }
   val isMulticlassClassification = numClassesForClassification > 2
   val isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
