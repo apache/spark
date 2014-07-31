@@ -284,6 +284,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
+  def getMapStatuses(shuffleId: Int): Option[Array[MapStatus]] = {
+    mapStatuses.get(shuffleId)
+  }
+
   def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1

@@ -1152,6 +1152,18 @@ class DAGScheduler(
             return locs
           }
         }
+      case s: ShuffleDependency[_, _, _] =>
+        val mapStatuses = mapOutputTracker.getMapStatuses(s.shuffleId)
+        mapStatuses.map { status =>
+          // Get the map output locations for this reducer
+          val sortedLocs = status.map { status =>
+            (MapOutputTracker.decompressSize(status.compressedSizes(partition)), status.location)
+          }.sortBy(_._1)
+          // Select up to five locations as preferred locations for the reducer
+          return sortedLocs.takeRight(5).map(_._2).map {
+            loc => TaskLocation(loc.host, loc.executorId)
+          }
+        }
       case _ =>
     }
     Nil
