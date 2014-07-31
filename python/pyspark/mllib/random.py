@@ -19,8 +19,6 @@
 Python package for random data generation.
 """
 
-from os import urandom
-from binascii import hexlify
 
 from pyspark.rdd import RDD
 from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
@@ -53,7 +51,6 @@ class RandomRDDGenerators:
         >>> parts == sc.defaultParallelism
         True
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
         uniform =  RDD(jrdd, sc, NoOpSerializer())
         return uniform.map(lambda bytes: _deserialize_double(bytearray(bytes)))
@@ -78,7 +75,6 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - 1.0) < 0.1
         True
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
         normal =  RDD(jrdd, sc, NoOpSerializer())
         return normal.map(lambda bytes: _deserialize_double(bytearray(bytes)))
@@ -101,7 +97,6 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - sqrt(mean)) < 0.5
         True
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
         poisson =  RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double(bytearray(bytes)))
@@ -121,7 +116,6 @@ class RandomRDDGenerators:
         >>> RandomRDDGenerators.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI() \
             .uniformVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
         uniform =  RDD(jrdd, sc, NoOpSerializer())
@@ -142,7 +136,6 @@ class RandomRDDGenerators:
         >>> abs(mat.std() - 1.0) < 0.1
         True
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI() \
             .normalVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
         normal =  RDD(jrdd, sc, NoOpSerializer())
@@ -166,43 +159,10 @@ class RandomRDDGenerators:
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        numPartitions, seed = RandomRDDGenerators._getDefaultArgs(sc, numPartitions, seed)
         jrdd = sc._jvm.PythonMLLibAPI() \
             .poissonVectorRDD(sc._jsc, mean, numRows, numCols, numPartitions, seed)
         poisson =  RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
-
-    @staticmethod
-    def _getDefaultArgs(sc, numPartitions, seed):
-        """
-        Use sc.defaultParallelism for numPartitions and
-        a randomly generated long for seed if either has a value of C{None}
-
-        >>> RandomRDDGenerators._getDefaultArgs(sc, 3, 2)
-        (3, 2)
-        >>> RandomRDDGenerators._getDefaultArgs(sc, None, 2) == (sc.defaultParallelism, 2)
-        True
-        >>> from math import pow
-        >>> RandomRDDGenerators._getDefaultArgs(sc, None, None)[1] < pow(2, 63)
-        True
-        """
-        if not numPartitions:
-            numPartitions = sc.defaultParallelism
-        if not seed:
-            seed = RandomRDDGenerators._nextLong()
-        return numPartitions, seed
-
-    @staticmethod
-    def _nextLong():
-        """
-        Returns a random long to be used as RNG seed in the Java APIs.
-
-        Note: only 63 random bits are used here since Long.MAX_VALUE = 2 ^ 63 - 1
-        """
-        k = 63
-        numbytes = (k + 7) // 8
-        x = long(hexlify(urandom(numbytes)), 16)
-        return long(x >> (numbytes * 8 - k))
 
 
 def _test():
