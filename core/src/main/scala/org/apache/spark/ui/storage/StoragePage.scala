@@ -90,11 +90,11 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     ("Storage Level" -> {rdd.storageLevel.description}) ~
     ("Cached Partitions" -> {rdd.numCachedPartitions}) ~
     ("Fraction Cached" -> {"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}) ~
-    ("Size in Memory" -> UIUtils.wrapHtmlCellWithCustomKey(Utils.bytesToString(rdd.memSize),
+    ("Size in Memory" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.memSize),
       rdd.memSize.toString)) ~
-    ("Size in Tachyon" -> UIUtils.wrapHtmlCellWithCustomKey(Utils.bytesToString(rdd.tachyonSize),
+    ("Size in Tachyon" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.tachyonSize),
       rdd.tachyonSize.toString)) ~
-    ("Size on Disk" -> UIUtils.wrapHtmlCellWithCustomKey(Utils.bytesToString(rdd.diskSize),
+    ("Size on Disk" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.diskSize),
       rdd.diskSize.toString))
   }
 }

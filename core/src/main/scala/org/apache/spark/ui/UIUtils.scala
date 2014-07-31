@@ -307,9 +307,9 @@ private[spark] object UIUtils extends Logging {
     </table>
   }
 
-  /** create an HTML cell with a sorttable custom key */
-  def wrapHtmlCellWithCustomKey(content: String, customKey: String) : String = {
-    "<td sorttable_customkey='" + customKey + "'>" + content + "</td>"
+  /** create a JSON object representing a cell with a sorttable custom key */
+  def cellWithSorttableCustomKey(content: String, customKey: String): JValue = {
+    ("value" -> content) ~ ("sorttable_customkey" -> customKey)
   }
 
   /** Returns an HTML containing Javascript that fills the table with that tableId using

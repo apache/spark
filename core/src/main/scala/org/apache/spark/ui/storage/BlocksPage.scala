@@ -71,9 +71,9 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
     val (id, block, locations) = row
     ("Block Name" -> id.name) ~
     ("Storage Level"-> block.storageLevel.description) ~
-    ("Size in Memory"-> UIUtils.wrapHtmlCellWithCustomKey(Utils.bytesToString(block.memSize),
+    ("Size in Memory"-> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(block.memSize),
       block.memSize.toString)) ~
-    ("Size on Disk"-> UIUtils.wrapHtmlCellWithCustomKey(Utils.bytesToString(block.diskSize),
+    ("Size on Disk"-> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(block.diskSize),
       block.diskSize.toString)) ~
     ("Executors"-> locations)
   }

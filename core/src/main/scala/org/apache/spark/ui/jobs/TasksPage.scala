@@ -111,7 +111,7 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
 
       var content = ("Index" -> info.index) ~
         ("ID" -> info.taskId) ~
-        ("Attempt" -> UIUtils.wrapHtmlCellWithCustomKey(
+        ("Attempt" -> UIUtils.cellWithSorttableCustomKey(
           {if (info.speculative) s"${info.attempt} (speculative)"
                      else info.attempt.toString},
           info.attempt.toString)) ~
@@ -119,30 +119,30 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
         ("Locality Level" -> {info.taskLocality.toString}) ~
         ("Executor" -> {info.host}) ~
         ("Launch Time" -> {UIUtils.formatDate(new Date(info.launchTime))}) ~
-        ("Duration" -> UIUtils.wrapHtmlCellWithCustomKey(formatDuration, duration.toString)) ~
+        ("Duration" -> UIUtils.cellWithSorttableCustomKey(formatDuration, duration.toString)) ~
         ("GC Time" -> {if (gcTime > 0) {
-          UIUtils.wrapHtmlCellWithCustomKey(UIUtils.formatDuration(gcTime), gcTime.toString)
-          } else "" })
+          UIUtils.cellWithSorttableCustomKey(UIUtils.formatDuration(gcTime), gcTime.toString)
+          } else JNothing })
       if (hasInput) {
-        content ~= ("Input" -> UIUtils.wrapHtmlCellWithCustomKey(inputReadable,
+        content ~= ("Input" -> UIUtils.cellWithSorttableCustomKey(inputReadable,
           inputSortable))
       }
       if (hasShuffleRead) {
         content ~= ("Shuffle Read" ->
-          UIUtils.wrapHtmlCellWithCustomKey(shuffleReadReadable, shuffleReadSortable))
+          UIUtils.cellWithSorttableCustomKey(shuffleReadReadable, shuffleReadSortable))
       }
       if (hasShuffleWrite) {
         content ~= ("Write Time" ->
-          UIUtils.wrapHtmlCellWithCustomKey(writeTimeReadable, writeTimeSortable)) ~
+          UIUtils.cellWithSorttableCustomKey(writeTimeReadable, writeTimeSortable)) ~
           ("Shuffle Write" ->
-            UIUtils.wrapHtmlCellWithCustomKey(shuffleWriteReadable, shuffleWriteSortable))
+            UIUtils.cellWithSorttableCustomKey(shuffleWriteReadable, shuffleWriteSortable))
       }
       if (hasBytesSpilled) {
         content ~= ("Shuffle Spill (Memory)" ->
-          UIUtils.wrapHtmlCellWithCustomKey(memoryBytesSpilledReadable,
+          UIUtils.cellWithSorttableCustomKey(memoryBytesSpilledReadable,
             memoryBytesSpilledSortable)) ~
           ("Shuffle Spill (Disk)" ->
-            UIUtils.wrapHtmlCellWithCustomKey(diskBytesSpilledReadable,
+            UIUtils.cellWithSorttableCustomKey(diskBytesSpilledReadable,
               diskBytesSpilledSortable))
       }
       content ~= ("Errors" -> {errorMessage.map { e => "<pre>" + e + "</pre>" }.getOrElse("")})

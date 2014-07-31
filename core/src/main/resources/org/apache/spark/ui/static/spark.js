@@ -32,29 +32,42 @@ Spark.UI = (function ($) {
 
     // define a function that fills a table with the rows given
     // from a JSON data input: [{row1},{row2},...]
-    // If an entry in a row is an array it will further expand it with <span>
-    // If an entry contains </td> then we use it directly in the table as cell
-    // without wrapping in with <td>. This is a hack to allow to pass attributes
-    // to the cells directly in the JSON
+    //  - If a value of an entry in a row is an array it will further expand it with <span>
+    //  - If a value is a subobject with the syntax {value: nnn, attr: something}
+    // then the cell will contain that value and the list of given attributes
+    //  - If an entry contains </td> then we use it directly in the table as cell
+    // without wrapping in with <td>
+    //
+    // example: [{x: 1}, {y: {value: 2, att: high}}]
+    //          -> "<tr><td>1</td></tr><tr><td att='high'>2</td></tr>"
+    //
     var fillTable = function (data, tableId) {
         var tbl_body = "";
-        $.each(data, function() {
-            var tbl_row = "";
-            $.each(this, function(k, v) {
+            $.each(data, function() {
+              var tbl_row = "";
+              $.each(this, function(k, v) {
                 if (v instanceof Array) {
-                    tbl_longentry = "";
-                    $.each(this, function(i, l) {
-                        tbl_longentry += "<span>" + l + "<br/></span>";
-                    })
-                    tbl_row += "<td>" + tbl_longentry + "</td>";
+                  tbl_longentry = "";
+                  $.each(this, function(i, l) {
+                    tbl_longentry += "<span>" + l + "<br/></span>";
+                  })
+                  tbl_row += "<td>" + tbl_longentry + "</td>";
+                } else if ((typeof v == "object") && (v != null)) {
+                  options = ""
+                  for (var key in v) {
+                    if ( v.hasOwnProperty(key) && (key != 'value')) {
+                      options += " " + key + "='" + v[key] +"'"
+                    }
+                  }
+                  tbl_row += "<td" + options + ">" + v['value'] + "</td>";
                 } else if (v.toString().indexOf("</td>") != -1){
                   tbl_row += v;
                 } else {
                   tbl_row += "<td>" + v + "</td>";
                 }
-            });
-            tbl_body += "<tr>" + tbl_row + "</tr>";
-        })
+              });
+              tbl_body += "<tr>" + tbl_row + "</tr>";
+            })
         $("#" + tableId + " tbody").html(tbl_body);
     };
 
