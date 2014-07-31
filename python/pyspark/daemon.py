@@ -15,31 +15,22 @@
 # limitations under the License.
 #
 
+import numbers
 import os
 import signal
 import select
 import socket
 import sys
 import traceback
-import multiprocessing
-from ctypes import c_bool
 from errno import EINTR, ECHILD
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN
 from pyspark.worker import main as worker_main
 from pyspark.serializers import write_int
 
-exit_flag = multiprocessing.Value(c_bool, False)
-
-
-def should_exit():
-    global exit_flag
-    return exit_flag.value
-
 
 def compute_real_exit_code(exit_code):
     # SystemExit's code can be integer or string, but os._exit only accepts integers
-    import numbers
     if isinstance(exit_code, numbers.Integral):
         return exit_code
     else:
@@ -108,8 +99,9 @@ def manager():
     def handle_sigchld(*args):
         try:
             pid, status = os.waitpid(0, os.WNOHANG)
-            if status != 0 and not should_exit():
-                raise RuntimeError("worker crashed: %s, %s" % (pid, status))
+            if status != 0:
+                msg = "worker %s crashed abruptly with exit status %s" % (pid, status)
+                print >> sys.stderr, msg
         except EnvironmentError as err:
             if err.errno not in (ECHILD, EINTR):
                 raise
@@ -118,7 +110,7 @@ def manager():
     # Initialization complete
     sys.stdout.close()
     try:
-        while not should_exit():
+        while True:
             try:
                 ready_fds = select.select([0, listen_sock], [], [])[0]
             except select.error as ex:
@@ -140,13 +132,11 @@ def manager():
                         traceback.print_exc()
                         os._exit(1)
                     else:
-                        assert should_exit()
                         os._exit(0)
                 else:
                     sock.close()
     finally:
         signal.signal(SIGTERM, SIG_DFL)
-        exit_flag.value = True
         # Send SIGHUP to notify workers of shutdown
         os.kill(0, SIGHUP)
 
