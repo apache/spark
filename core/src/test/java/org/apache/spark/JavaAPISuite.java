@@ -1245,4 +1245,21 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(worExactCounts.get(0) == 2);
     Assert.assertTrue(worExactCounts.get(1) == 4);
   }
+
+  private static class SomeCustomClass implements Serializable {
+    public SomeCustomClass() {
+      // Intentionally left blank
+    }
+  }
+
+  @Test
+  public void collectUnderlyingScalaRDD() {
+    List<SomeCustomClass> data = new ArrayList<SomeCustomClass>();
+    for (int i = 0; i < 100; i++) {
+      data.add(new SomeCustomClass());
+    }
+    JavaRDD<SomeCustomClass> rdd = sc.parallelize(data);
+    SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
+    Assert.assertEquals(data.size(), collected.length);
+  }
 }

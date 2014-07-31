@@ -109,7 +109,7 @@ trait ClientBase extends Logging {
     if (amMem > maxMem) {
 
       val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
-        .format(args.amMemory, maxMem)
+        .format(amMem, maxMem)
       logError(errorMessage)
       throw new IllegalArgumentException(errorMessage)
     }
