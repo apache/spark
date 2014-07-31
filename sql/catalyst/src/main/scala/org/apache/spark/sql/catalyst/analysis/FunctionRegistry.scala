@@ -24,6 +24,8 @@ import scala.collection.mutable
 trait FunctionRegistry {
   type FunctionBuilder = Seq[Expression] => Expression
 
+  def registerFunction(name: String, builder: FunctionBuilder): Unit
+
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
@@ -57,6 +59,8 @@ class SimpleFunctionRegistry extends FunctionRegistry {
  * functions are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
+  def registerFunction(name: String, builder: FunctionBuilder) = ???
+
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }

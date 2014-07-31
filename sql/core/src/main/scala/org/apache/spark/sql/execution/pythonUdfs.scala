@@ -51,52 +51,6 @@ private[spark] case class PythonUDF(
   def nullable: Boolean = true
   def references: Set[Attribute] = children.flatMap(_.references).toSet
 
-  def batchEval(input: RDD[Row]): RDD[Row] = {
-    val parent = input.mapPartitions { iter =>
-      val pickle = new Pickler
-      val currentRow = MutableProjection(children)
-      iter.map { inputRow =>
-        val toBePickled = currentRow(inputRow)
-        log.debug(s"toBePickled: $toBePickled")
-        if(children.length == 1) {
-          pickle.dumps(toBePickled.toArray)
-        } else {
-          pickle.dumps(Array(toBePickled.toArray))
-        }
-      }
-    }.asInstanceOf[RDD[Any]]
-
-    val pyRDD = new PythonRDD(
-      parent,
-      command,
-      envVars,
-      pythonIncludes,
-      false,
-      pythonExec,
-      Seq[Broadcast[Array[Byte]]](),
-      accumulator
-    ).mapPartitions { iter =>
-      val pickle = new Unpickler
-      iter.flatMap { pickedResult =>
-        val res = pickle.loads(pickedResult)
-        log.debug(s"pickleOutput: $res")
-        res.asInstanceOf[java.util.ArrayList[Any]]
-      }
-    }.mapPartitions { iter =>
-      val row = new GenericMutableRow(1)
-      iter.map { result =>
-        row(0) = dataType match {
-          case StringType => result.toString
-          case other => result
-        }
-        log.debug(s"resultRow: $row")
-        row: Row
-      }
-    }
-
-    pyRDD
-  }
-
   override def eval(input: Row) = sys.error("PythonUDFs can not be directly evaluated.")
 }
 
@@ -175,7 +129,49 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
     // TODO: Clean up after ourselves?
     val childResults = child.execute().map(_.copy()).cache()
 
-    childResults.zip(udf.batchEval(childResults)).mapPartitions { iter =>
+    val parent = childResults.mapPartitions { iter =>
+      val pickle = new Pickler
+      val currentRow = newMutableProjection(udf.children, child.output)()
+      iter.map { inputRow =>
+        val toBePickled = currentRow(inputRow)
+        log.debug(s"toBePickled: $toBePickled")
+        if(children.length == 1) {
+          pickle.dumps(toBePickled.toArray)
+        } else {
+          pickle.dumps(Array(toBePickled.toArray))
+        }
+      }
+    }.asInstanceOf[RDD[Any]]
+
+    val pyRDD = new PythonRDD(
+      parent,
+      udf.command,
+      udf.envVars,
+      udf.pythonIncludes,
+      false,
+      udf.pythonExec,
+      Seq[Broadcast[Array[Byte]]](),
+      udf.accumulator
+    ).mapPartitions { iter =>
+      val pickle = new Unpickler
+      iter.flatMap { pickedResult =>
+        val res = pickle.loads(pickedResult)
+        log.debug(s"pickleOutput: $res")
+        res.asInstanceOf[java.util.ArrayList[Any]]
+      }
+    }.mapPartitions { iter =>
+      val row = new GenericMutableRow(1)
+      iter.map { result =>
+        row(0) = udf.dataType match {
+          case StringType => result.toString
+          case other => result
+        }
+        log.debug(s"resultRow: $row")
+        row: Row
+      }
+    }
+
+    childResults.zip(pyRDD).mapPartitions { iter =>
       val joinedRow = new JoinedRow()
       iter.map {
         case (row, udfResult) =>
