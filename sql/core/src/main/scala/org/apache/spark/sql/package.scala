@@ -32,7 +32,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 package object sql {
 
-  protected[sql] type Logging = com.typesafe.scalalogging.slf4j.Logging
+  protected[sql] type Logging = com.typesafe.scalalogging.slf4j.LazyLogging
 
   /**
    * :: DeveloperApi ::
