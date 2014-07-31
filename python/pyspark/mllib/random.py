@@ -38,7 +38,8 @@ class RandomRDDGenerators:
 
         To transform the distribution in the generated RDD from U[0.0, 1.0]
         to U[a, b], use
-        C{RandomRDDGenerators.uniformRDD(sc, n, p, seed).map(lambda v: a + (b - a) * v)}
+        C{RandomRDDGenerators.uniformRDD(sc, n, p, seed)\
+          .map(lambda v: a + (b - a) * v)}
 
         >>> x = RandomRDDGenerators.uniformRDD(sc, 100).collect()
         >>> len(x)
@@ -63,11 +64,11 @@ class RandomRDDGenerators:
 
         To transform the distribution in the generated RDD from standard normal
         to some other normal N(mean, sigma), use
-        C{RandomRDDGenerators.normal(sc, n, p, seed).map(lambda v: mean + sigma * v)}
+        C{RandomRDDGenerators.normal(sc, n, p, seed)\
+          .map(lambda v: mean + sigma * v)}
 
-        >>> x = RandomRDDGenerators.normalRDD(sc, 1000, seed=1L).collect()
-        >>> from pyspark.statcounter import StatCounter
-        >>> stats = StatCounter(x)
+        >>> x = RandomRDDGenerators.normalRDD(sc, 1000, seed=1L)
+        >>> stats = x.stats()
         >>> stats.count()
         1000L
         >>> abs(stats.mean() - 0.0) < 0.1
@@ -86,9 +87,8 @@ class RandomRDDGenerators:
         distribution with the input mean.
 
         >>> mean = 100.0
-        >>> x = RandomRDDGenerators.poissonRDD(sc, mean, 1000, seed=1L).collect()
-        >>> from pyspark.statcounter import StatCounter
-        >>> stats = StatCounter(x)
+        >>> x = RandomRDDGenerators.poissonRDD(sc, mean, 1000, seed=1L)
+        >>> stats = x.stats()
         >>> stats.count()
         1000L
         >>> abs(stats.mean() - mean) < 0.5

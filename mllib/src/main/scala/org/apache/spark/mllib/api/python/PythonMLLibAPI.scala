@@ -457,12 +457,13 @@ class PythonMLLibAPI extends Serializable {
   }
 
   // Used by the *RDD methods to get default seed if not passed in from pyspark
-  private def getSeed(seed: java.lang.Long): Long = {
+  private def getSeedOrDefault(seed: java.lang.Long): Long = {
     if (seed == null) Utils.random.nextLong else seed
   }
 
   // Used by *RDD methods to get default numPartitions if not passed in from pyspark
-  private def getNumParts(numPartitions: java.lang.Integer, jsc: JavaSparkContext): Int = {
+  private def getNumPartitionsOrDefault(numPartitions: java.lang.Integer,
+      jsc: JavaSparkContext): Int = {
     if (numPartitions == null) {
       jsc.sc.defaultParallelism
     } else {
@@ -480,8 +481,8 @@ class PythonMLLibAPI extends Serializable {
       size: Long,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.uniformRDD(jsc.sc, size, parts, s).map(serializeDouble)
   }
 
@@ -492,8 +493,8 @@ class PythonMLLibAPI extends Serializable {
       size: Long,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.normalRDD(jsc.sc, size, parts, s).map(serializeDouble)
   }
 
@@ -505,8 +506,8 @@ class PythonMLLibAPI extends Serializable {
       size: Long,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.poissonRDD(jsc.sc, mean, size, parts, s).map(serializeDouble)
   }
 
@@ -518,8 +519,8 @@ class PythonMLLibAPI extends Serializable {
       numCols: Int,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.uniformVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
   }
 
@@ -531,8 +532,8 @@ class PythonMLLibAPI extends Serializable {
       numCols: Int,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.normalVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
   }
 
@@ -545,8 +546,8 @@ class PythonMLLibAPI extends Serializable {
       numCols: Int,
       numPartitions: java.lang.Integer,
       seed: java.lang.Long): JavaRDD[Array[Byte]] = {
-    val parts = getNumParts(numPartitions, jsc)
-    val s = getSeed(seed)
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s).map(serializeDoubleVector)
   }
 }
