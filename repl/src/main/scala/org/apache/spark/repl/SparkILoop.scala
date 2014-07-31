@@ -557,29 +557,27 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     if (isReplPower) powerCommands else Nil
   )*/
 
-  val replayQuestionMessage =
+  private val replayQuestionMessage =
     """|That entry seems to have slain the compiler.  Shall I replay
        |your session? I can re-run each line except the last one.
        |[y/n]
     """.trim.stripMargin
 
-  private val crashRecovery: PartialFunction[Throwable, Boolean] = {
-    case ex: Throwable =>
-      echo(intp.global.throwableAsString(ex))
+  private def crashRecovery(ex: Throwable): Boolean = {
+    echo(ex.toString)
+    ex match {
+      case _: NoSuchMethodError | _: NoClassDefFoundError =>
+        echo("\nUnrecoverable error.")
+        throw ex
+      case _  =>
+        def fn(): Boolean =
+          try in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
+          catch { case _: RuntimeException => false }
 
-      ex match {
-        case _: NoSuchMethodError | _: NoClassDefFoundError =>
-          echo("\nUnrecoverable error.")
-          throw ex
-        case _  =>
-          def fn(): Boolean =
-            try in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
-            catch { case _: RuntimeException => false }
-
-          if (fn()) replay()
-          else echo("\nAbandoning crashed session.")
-      }
-      true
+        if (fn()) replay()
+        else echo("\nAbandoning crashed session.")
+    }
+    true
   }
 
   /** The main read-eval-print loop for the repl.  It calls
@@ -605,7 +603,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       }
     }
     def innerLoop() {
-      if ( try processLine(readOneLine()) catch crashRecovery )
+      val shouldContinue = try {
+        processLine(readOneLine())
+      } catch {case t: Throwable => crashRecovery(t)}
+      if (shouldContinue)
         innerLoop()
     }
     innerLoop()
