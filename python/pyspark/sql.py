@@ -241,7 +241,7 @@ class StructField(DataType):
 class StructType(DataType):
     """Spark SQL StructType
 
-    The data type representing namedtuple values.
+    The data type representing rows.
     A StructType object comprises a list of L{StructField}s.
 
     """
@@ -458,11 +458,11 @@ def _create_cls(dataType):
 
     class Row(tuple):
         """ Row in SchemaRDD """
-        _fields = tuple(f.name for f in dataType.fields)
+        _FIELDS = tuple(f.name for f in dataType.fields)
 
         # create property for fast access
         # use local vars begins with "_"
-        for _i,_f in enumerate(dataType.fields):
+        for _i, _f in enumerate(dataType.fields):
             if _has_struct(_f.dataType):
                 # delay creating object until accessing it
                 _getter = _create_getter(_f.dataType, _i)
@@ -474,10 +474,10 @@ def _create_cls(dataType):
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                    for n in self._fields))
+                    for n in self._FIELDS))
         def __reduce__(self):
             # pickle as namedtuple
-            return (_restore_object, ("Row", self._fields, tuple(self)))
+            return (_restore_object, ("Row", self._FIELDS, tuple(self)))
 
     return Row
 
@@ -645,18 +645,20 @@ class SQLContext:
         >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
-        >>> srdd2.collect()
-        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
-Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
+        >>> for r in srdd2.collect():
+        ...     print r
+        Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
+        Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')])
+        Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
         >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table2")
-        >>> srdd4.collect()
-        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
-Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
+        >>> for r in srdd4.collect():
+        ...    print r
+        Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
+        Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')])
+        Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -686,18 +688,20 @@ Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
-        >>> srdd2.collect()
-        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
-Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
+        >>> for r in srdd2.collect():
+        ...     print r
+        Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
+        Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')])
+        Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
         >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table2")
-        >>> srdd4.collect()
-        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
-Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')]), \
-Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
+        >>> for r in srdd4.collect():
+        ...     print r
+        Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
+        Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=[Row(field7=u'row2')])
+        Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -795,7 +799,6 @@ class LocalHiveContext(HiveContext):
     An in-process metadata data is created with data stored in ./metadata.
     Warehouse data is stored in in ./warehouse.
 
-    disable these tests tempory
     >>> import os
     >>> hiveCtx = LocalHiveContext(sc)
     >>> try:
@@ -841,6 +844,10 @@ class SchemaRDD(RDD):
     implementation is an RDD composed of Java objects. Instead it is
     converted to a PythonRDD in the JVM, on which Python operations can
     be done.
+
+    This class receives raw tuples from Java but assigns a class to it in
+    all its data-collection methods (mapPartitionsWithIndex, collect, take,
+    etc) so that PySpark sees them as Row objects with named fields.
     """
 
     def __init__(self, jschema_rdd, sql_ctx):
@@ -949,7 +956,8 @@ class SchemaRDD(RDD):
         cls = _create_cls(self.schema())
         return map(cls, rows)
 
-    # convert Row in JavaSchemaRDD into namedtuple, let access fields easier
+    # Convert each object in the RDD to a Row with the right class
+    # for this SchemaRDD, so that fields can be accessed as attributes.
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
         """
         Return a new RDD by applying a function to each partition of this RDD,
