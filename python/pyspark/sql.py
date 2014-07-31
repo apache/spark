@@ -21,6 +21,8 @@ import types
 import array
 import itertools
 import warnings
+import decimal
+import datetime
 from operator import itemgetter
 import warnings
 
@@ -39,11 +41,11 @@ __all__ = [
 class DataType(object):
     """Spark SQL DataType"""
 
-    def __repr__(self):
+    def __str__(self):
         return self.__class__.__name__
 
     def __hash__(self):
-        return hash(repr(self))
+        return hash(str(self))
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and
@@ -175,8 +177,8 @@ class ArrayType(DataType):
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def __repr__(self):
-        return "ArrayType(%r,%s)" % (self.elementType,
+    def __str__(self):
+        return "ArrayType(%s,%s)" % (self.elementType,
                str(self.containsNull).lower())
 
 
@@ -208,8 +210,8 @@ class MapType(DataType):
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
 
-    def __repr__(self):
-        return "MapType(%r,%r,%s)" % (self.keyType, self.valueType,
+    def __str__(self):
+        return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
                str(self.valueContainsNull).lower())
 
 
@@ -238,8 +240,8 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
 
-    def __repr__(self):
-        return "StructField(%s,%r,%s)" % (self.name, self.dataType,
+    def __str__(self):
+        return "StructField(%s,%s,%s)" % (self.name, self.dataType,
                str(self.nullable).lower())
 
 
@@ -265,9 +267,9 @@ class StructType(DataType):
         """
         self.fields = fields
 
-    def __repr__(self):
+    def __str__(self):
         return ("StructType(List(%s))" %
-                    ",".join(repr(field) for field in self.fields))
+                    ",".join(str(field) for field in self.fields))
 
 
 def _parse_datatype_list(datatype_list_string):
@@ -302,7 +304,7 @@ def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
 
     >>> def check_datatype(datatype):
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.__repr__())
+    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(str(datatype))
     ...     python_datatype = _parse_datatype_string(scala_datatype.toString())
     ...     return datatype == python_datatype
     >>> all(check_datatype(cls()) for cls in _all_primitive_types.values())
@@ -384,6 +386,112 @@ def _parse_datatype_string(datatype_string):
         fields = _parse_datatype_list(field_list_string)
         return StructType(fields)
 
+
+# Mapping Python types to Spark SQL DateType
+_type_mappings = {
+    bool: BooleanType,
+    int: IntegerType,
+    long: LongType,
+    float: DoubleType,
+    str: StringType,
+    unicode: StringType,
+    decimal.Decimal: DecimalType,
+    datetime.datetime: TimestampType,
+    datetime.date: TimestampType,
+    datetime.time: TimestampType,
+}
+
+def _inferType(obj):
+    """Infer the DataType from obj"""
+    if obj is None:
+        raise ValueError("Can not infer type for None")
+
+    dataType = _type_mappings.get(type(obj))
+    if dataType is not None:
+        return dataType()
+
+    if isinstance(obj, dict):
+        if not obj:
+            raise ValueError("Can not infer type for empty dict")
+        key, value = obj.iteritems().next()
+        return MapType(_inferType(key), _inferType(value), True)
+    elif isinstance(obj, (list, array.array)):
+        if not obj:
+            raise ValueError("Can not infer type for empty list/array")
+        return ArrayType(_inferType(obj[0]), True)
+    else:
+        try:
+            return _inferSchema(obj)
+        except ValueError:
+            raise ValueError("not supported type: %s" % type(obj))
+
+def _inferSchema(row):
+    """Infer the schema from dict/namedtuple/object"""
+    if isinstance(row, dict):
+        items = sorted(row.items())
+    elif isinstance(row, tuple):
+        if hasattr(row, "_fields"): # namedtuple
+            items = zip(row._fields, tuple(row))
+        elif all(isinstance(x, tuple) and len(x) == 2
+                 for x in row):
+            items = row
+    elif hasattr(row, "__dict__"): # object
+        items = sorted(row.__dict__.items())
+    else:
+        raise ValueError("Can not infer schema for type: %s" % type(row))
+
+    fields = [StructField(k, _inferType(v), True) for k, v in items]
+    return StructType(fields)
+
+def _create_converter(obj, dataType):
+    """Create an converter to drop the names of fields in obj """
+    if not _has_struct(dataType):
+        return lambda x: x
+
+    elif isinstance(dataType, ArrayType):
+        conv = _create_converter(obj[0], dataType.elementType)
+        return lambda row: map(conv, row)
+
+    elif isinstance(dataType, MapType):
+        value = obj.values()[0]
+        conv = _create_converter(value, dataType.valueType)
+        return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+
+    # dataType must be StructType
+    names = [f.name for f in dataType.fields]
+
+    if isinstance(obj, dict):
+        conv = lambda o: tuple(o.get(n) for n in names)
+
+    elif isinstance(obj, tuple):
+        if hasattr(obj, "_fields"): # namedtuple
+            conv = tuple
+        elif all(isinstance(x, tuple) and len(x) == 2
+                 for x in obj):
+            conv = lambda o: tuple(v for k, v in o)
+
+    elif hasattr(obj, "__dict__"): # object
+        conv = lambda o: [o.__dict__.get(n, None) for n in names]
+
+    nested = any(_has_struct(f.dataType) for f in dataType.fields)
+    if not nested:
+        return conv
+
+    row = conv(obj)
+    convs = [_create_converter(v, f.dataType)
+             for v, f in zip(row, dataType.fields)]
+    def nested_conv(row):
+        return tuple(f(v) for f, v in zip(convs, conv(row)))
+    return nested_conv
+
+def _dropSchema(rows, schema):
+    """Drop all the names of fields, becoming tuples"""
+    iterator = iter(rows)
+    row = iterator.next()
+    converter = _create_converter(row, schema)
+    yield converter(row)
+    for i in iterator:
+        yield converter(i)
 
 
 _cached_cls = {}
@@ -532,7 +640,7 @@ class SQLContext:
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._pythonToJavaMap = self._jvm.PythonRDD.pythonToJavaMap
+        self._pythonToJava = self._jvm.PythonRDD.pythonToJava
 
         if sqlContext:
             self._scala_SQLContext = sqlContext
@@ -563,20 +671,24 @@ class SQLContext:
         >>> from array import array
         >>> srdd = sqlCtx.inferSchema(nestedRdd1)
         >>> srdd.collect()
-        [Row(f2={u'row1': 1.0}, f1=[1, 2]), Row(f2={u'row2': 2.0}, f1=[2, 3])]
+        [Row(f1=[1, 2], f2={u'row1': 1.0}), Row(f1=[2, 3], f2={u'row2': 2.0})]
 
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
         >>> srdd.collect()
-        [Row(f2=[1, 2], f1=[[1, 2], [2, 3]]), Row(f2=[2, 3], f1=[[2, 3], [3, 4]])]
+        [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), Row(f1=[[2, 3], [3, 4]], f2=[2, 3])]
         """
         if (rdd.__class__ is SchemaRDD):
             raise ValueError("Cannot apply schema to %s" % SchemaRDD.__name__)
-        elif not isinstance(rdd.first(), dict):
-            raise ValueError("Only RDDs with dictionaries can be converted to %s: %s" %
-                             (SchemaRDD.__name__, rdd.first()))
 
-        jrdd = self._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.inferSchema(jrdd.rdd())
+        first = rdd.first()
+        if not first:
+            raise ValueError("The first row in RDD is empty, can not infer schema")
+
+        schema = _inferSchema(first)
+        rdd = rdd.mapPartitions(lambda rows: _dropSchema(rows, schema))
+
+        jrdd = self._pythonToJava(rdd._jrdd)
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
         return SchemaRDD(srdd, self)
 
     def applySchema(self, rdd, schema):
@@ -584,15 +696,14 @@ class SQLContext:
 
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
-        >>> srdd = sqlCtx.applySchema(rdd, schema)
+        >>> srdd = sqlCtx.applySchema(rdd2, schema)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql("SELECT * from table1")
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2'), Row(field1=3, field2=u'row3')]
         >>> from datetime import datetime
-        >>> rdd = sc.parallelize([{"byte": 127, "short": -32768, "float": 1.0,
-        ... "time": datetime(2010, 1, 1, 1, 1, 1), "map": {"a": 1}, "struct": {"b": 2},
-        ... "list": [1, 2, 3]}])
+        >>> rdd = sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
+        ... {"a": 1}, {"b": 2}, [1, 2, 3], None)])
         >>> schema = StructType([
         ...     StructField("byte", ByteType(), False),
         ...     StructField("short", ShortType(), False),
@@ -608,8 +719,8 @@ class SQLContext:
         >>> srdd.collect()[0]
         (127, -32768, 1.0, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         """
-        jrdd = self._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.__repr__())
+        jrdd = self._pythonToJava(rdd._jrdd)
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
         return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
@@ -688,7 +799,7 @@ class SQLContext:
         if schema is None:
             jschema_rdd = self._ssql_ctx.jsonFile(path)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.__repr__())
+            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
             jschema_rdd = self._ssql_ctx.jsonFile(path, scala_datatype)
         return SchemaRDD(jschema_rdd, self)
 
@@ -739,7 +850,7 @@ class SQLContext:
         if schema is None:
             jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.__repr__())
+            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
             jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return SchemaRDD(jschema_rdd, self)
 
@@ -1078,6 +1189,7 @@ def _test():
          {"field1": 2, "field2": "row2"},
          {"field1": 3, "field2": "row3"}]
     )
+    globs['rdd2'] = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]}, "field6":[{"field7": "row2"}]}',

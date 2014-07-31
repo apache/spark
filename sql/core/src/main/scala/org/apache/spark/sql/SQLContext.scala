@@ -413,7 +413,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Peek at the first row of the RDD and infer its schema.
-   * It is only used by PySpark.
+   * This function is outdated, PySpark does not use it anymore
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     import scala.collection.JavaConversions._
@@ -437,7 +437,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case (fieldName, obj) => StructField(fieldName, typeOfObject(obj), true)
     }.toSeq
 
-    applySchemaToPythonRDD(rdd, StructType(fields))
+    val arrayRdd = rdd.map {
+      m => fields.map { field => m.getOrElse(field.name, null) }.toArray
+    }
+    applySchemaToPythonRDD(arrayRdd, StructType(fields))
   }
 
   /**
@@ -454,7 +457,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
    */
   private[sql] def applySchemaToPythonRDD(
-      rdd: RDD[Map[String, _]],
+      rdd: RDD[Array[Any]],
       schemaString: String): SchemaRDD = {
     val schema = parseDataType(schemaString).asInstanceOf[StructType]
     applySchemaToPythonRDD(rdd, schema)
@@ -464,10 +467,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
    */
   private[sql] def applySchemaToPythonRDD(
-      rdd: RDD[Map[String, _]],
+      rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
-    // TODO: We should have a better implementation once we do not turn a Python side record
-    // to a Map.
     import scala.collection.JavaConversions._
     import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
@@ -520,26 +521,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
-      rdd.map(m => m.map { case (key, value) => (key, convert(value, schema(key).dataType)) })
+      rdd.map(m => m.zip(schema.fields).map {
+        case (value, field) => convert(value, field.dataType)
+      })
     } else {
       rdd
     }
 
     val rowRdd = convertedRdd.mapPartitions { iter =>
-      val row = new GenericMutableRow(schema.fields.length)
-      val fieldsWithIndex = schema.fields.zipWithIndex
-      iter.map { m =>
-        // We cannot use m.values because the order of values returned by m.values may not
-        // match fields order.
-        fieldsWithIndex.foreach {
-          case (field, i) =>
-            val value =
-              m.get(field.name).flatMap(v => Option(v)).map(v => convert(v, field.dataType)).orNull
-            row.update(i, value)
-        }
-
-        row: Row
-      }
+      iter.map { m => new GenericRow(m): Row}
     }
 
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
