@@ -33,7 +33,7 @@ application's UI after the application has finished.
 
 If Spark is run on Mesos or YARN, it is still possible to reconstruct the UI of a finished
 application through Spark's history server, provided that the application's event logs exist.
-You can start a the history server by executing:
+You can start the history server by executing:
 
     ./sbin/start-history-server.sh
 
@@ -106,7 +106,7 @@ follows:
     <td>
       Indicates whether the history server should use kerberos to login. This is useful
       if the history server is accessing HDFS files on a secure Hadoop cluster. If this is 
-      true it looks uses the configs <code>spark.history.kerberos.principal</code> and
+      true, it uses the configs <code>spark.history.kerberos.principal</code> and
       <code>spark.history.kerberos.keytab</code>. 
     </td>
   </tr>
