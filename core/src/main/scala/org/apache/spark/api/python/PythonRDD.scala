@@ -731,19 +731,30 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
+  /** 
+   * We try to reuse a single Socket to transfer accumulator updates, as they are all added
+   * by the DAGScheduler's single-threaded actor anyway.
+   */ 
+  @transient var socket: Socket = _
+
+  def openSocket(): Socket = synchronized {
+    if (socket == null || socket.isClosed) {
+      socket = new Socket(serverHost, serverPort)
+    }
+    socket
+  }
+
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
   override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])
-      : JList[Array[Byte]] = {
+      : JList[Array[Byte]] = synchronized {
     if (serverHost == null) {
       // This happens on the worker node, where we just want to remember all the updates
       val1.addAll(val2)
       val1
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
-      val socket = new Socket(serverHost, serverPort)
-      // SPARK-2282: Immediately reuse closed sockets because we create one per task.
-      socket.setReuseAddress(true)
+      val socket = openSocket()
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)
@@ -757,7 +768,6 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
       if (byteRead == -1) {
         throw new SparkException("EOF reached before Python server acknowledged")
       }
-      socket.close()
       null
     }
   }
