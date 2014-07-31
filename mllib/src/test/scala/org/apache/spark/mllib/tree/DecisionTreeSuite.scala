@@ -61,7 +61,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
-      maxDepth = 3,
+      maxDepth = 2,
       numClassesForClassification = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
@@ -141,7 +141,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
-      maxDepth = 3,
+      maxDepth = 2,
       numClassesForClassification = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
@@ -258,7 +258,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
-      maxDepth = 3,
+      maxDepth = 2,
       numClassesForClassification = 100,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
@@ -352,7 +352,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
-      maxDepth = 3,
+      maxDepth = 2,
       numClassesForClassification = 100,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
@@ -408,7 +408,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       numClassesForClassification = 2,
-      maxDepth = 3,
+      maxDepth = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
@@ -435,7 +435,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Regression,
       Variance,
-      maxDepth = 3,
+      maxDepth = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
@@ -594,7 +594,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   test("stump with categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
     assert(strategy.isMulticlassClassification)
     val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
@@ -616,7 +616,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     arr(2) = new LabeledPoint(1.0, Vectors.dense(2.0))
     arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 2)
 
     val model = DecisionTree.train(input, strategy)
@@ -633,7 +633,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     arr(3) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0))))
 
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 2)
 
     val model = DecisionTree.train(input, strategy)
@@ -647,7 +647,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
     assert(strategy.isMulticlassClassification)
 
@@ -674,7 +674,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   test("stump with continuous variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 3)
     assert(strategy.isMulticlassClassification)
 
@@ -698,7 +698,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   test("stump with continuous + categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3))
     assert(strategy.isMulticlassClassification)
 
@@ -721,7 +721,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   test("stump with categorical variables for ordered multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
       numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     assert(strategy.isMulticlassClassification)
     val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)

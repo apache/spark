@@ -27,7 +27,8 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * Stores all the configuration options for tree construction
  * @param algo classification or regression
  * @param impurity criterion used for information gain calculation
- * @param maxDepth maximum depth of the tree
+ * @param maxDepth Maximum depth of the tree.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param numClassesForClassification number of classes for classification. Default value is 2
  *                                    leads to binary classification
  * @param maxBins maximum number of bins used for splitting features
