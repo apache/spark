@@ -293,21 +293,20 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             if (ret != 0) {
               driver.close()
               　return ret
-              　}
+            }
+            val res = new JArrayList[String]()
 
-            　val res = new JArrayList[String]()
-
-            　if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+            if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
             　// Print the column names.
             　Option(driver.getSchema.getFieldSchemas).map { fields =>
               　out.println(fields.map(_.getName).mkString("\t"))
-              　}
             　}
+          　}
 
-          while (!out.checkError() && driver.getResults(res)) {
-            res.foreach(out.println)
-            res.clear()
-          }
+            while (!out.checkError() && driver.getResults(res)) {
+              res.foreach(out.println)
+              res.clear()
+            }
           } catch {
             case e:IOException =>
               console.printError(
