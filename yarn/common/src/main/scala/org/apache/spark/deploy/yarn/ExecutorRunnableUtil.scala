@@ -72,6 +72,8 @@ trait ExecutorRunnableUtil extends Logging {
 
     sparkConf.getAkkaConf.
       foreach { case (k, v) => javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\"" }
+      
+    JAVA_OPTS += "-Dspark.executor.cores" + "=" + "\\\"" + executorCores + "\\\""  
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
