@@ -31,16 +31,22 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
+    double[][] locations = {{-180.0,-90.0},{180.0,90.0}};
+//    double[][] locations = (double[][])Arrays.<Double[]>asList(
+//        (double[])Arrays.<Double>asList(-180.0, -90.0).toArray(),
+//        (double[])Arrays.<Double>asList(180.0, 90.0).toArray()).toArray();
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
     JavaDStream<Status> test1 = TwitterUtils.createStream(ssc);
     JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, filters);
-    JavaDStream<Status> test3 = TwitterUtils.createStream(
-      ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, auth);
-    JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
-    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
-      auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test3 = TwitterUtils.createStream(ssc, filters, locations);
+    JavaDStream<Status> test4 = TwitterUtils.createStream(
+      ssc, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth);
+    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc, auth, filters);
+    JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, auth, filters, locations);
+    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc,
+      auth, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

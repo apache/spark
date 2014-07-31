@@ -33,15 +33,17 @@ object TwitterUtils {
    *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    *        twitter4j.oauth.accessTokenSecret
    * @param filters Set of filter strings to get only those tweets that match them
+   * @param locations TODO
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       ssc: StreamingContext,
       twitterAuth: Option[Authorization],
       filters: Seq[String] = Nil,
+      locations: Seq[Seq[Double]] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[Status] = {
-    new TwitterInputDStream(ssc, twitterAuth, filters, storageLevel)
+    new TwitterInputDStream(ssc, twitterAuth, filters, locations, storageLevel)
   }
 
   /**
@@ -75,16 +77,38 @@ object TwitterUtils {
    * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
    * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    * twitter4j.oauth.accessTokenSecret.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param jssc      JavaStreamingContext object
+   * @param filters   Set of filter strings to get only those tweets that match them
+   * @param locations TODO
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      filters: Array[String],
+      locations: Array[Array[Double]]
+    ): JavaReceiverInputDStream[Status] = {
+    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
+    createStream(jssc.ssc, None, filters, locations.map(_.toList))
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   * twitter4j.oauth.accessTokenSecret.
    * @param jssc         JavaStreamingContext object
    * @param filters      Set of filter strings to get only those tweets that match them
+   * @param locations    TODO
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
       filters: Array[String],
+      locations: Array[Array[Double]],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, filters, storageLevel)
+    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
+    createStream(jssc.ssc, None, filters, locations.map(_.toList), storageLevel)
   }
 
   /**
@@ -115,17 +139,39 @@ object TwitterUtils {
 
   /**
    * Create a input stream that returns tweets received from Twitter.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param jssc        JavaStreamingContext object
+   * @param twitterAuth Twitter4J Authorization
+   * @param filters     Set of filter strings to get only those tweets that match them
+   * @param locations   TODO
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      twitterAuth: Authorization,
+      filters: Array[String],
+      locations: Array[Array[Double]]
+    ): JavaReceiverInputDStream[Status] = {
+    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
+    createStream(jssc.ssc, Some(twitterAuth), filters, locations.map(_.toList))
+  }
+
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
    * @param jssc         JavaStreamingContext object
    * @param twitterAuth  Twitter4J Authorization object
    * @param filters      Set of filter strings to get only those tweets that match them
+   * @param locations    TODO
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
       filters: Array[String],
+      locations: Array[Array[Double]],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), filters, storageLevel)
+    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
+    createStream(jssc.ssc, Some(twitterAuth), filters, locations.map(_.toList), storageLevel)
   }
 }

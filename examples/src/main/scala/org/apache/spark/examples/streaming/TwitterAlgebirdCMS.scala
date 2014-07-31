@@ -64,7 +64,7 @@ object TwitterAlgebirdCMS {
     val filters = args
     val sparkConf = new SparkConf().setAppName("TwitterAlgebirdCMS")
     val ssc = new StreamingContext(sparkConf, Seconds(10))
-    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER_2)
+    val stream = TwitterUtils.createStream(ssc, None, filters, Nil, StorageLevel.MEMORY_ONLY_SER_2)
 
     val users = stream.map(status => status.getUser.getId)
 
