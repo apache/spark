@@ -17,14 +17,41 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter, FullOuter, Inner}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter, FullOuter, Inner, LeftSemi}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
-class JoinSuite extends QueryTest {
+class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   // Ensures tables are loaded.
   TestData
+
+  var left: UnresolvedRelation = _
+  var right: UnresolvedRelation = _
+
+  override def beforeEach() {
+    super.beforeEach()
+    left = UnresolvedRelation(None, "left", None)
+    right = UnresolvedRelation(None, "right", None)
+  }
+
+  override def afterEach() {
+    super.afterEach()
+
+    TestSQLContext.catalog.unregisterTable(None, "left")
+    TestSQLContext.catalog.unregisterTable(None, "right")
+  }
+  
+  def check(run: () => Unit) {
+    // TODO hack the logical statistics for cost based optimization.
+    run()
+  }
 
   test("equi-join is hash-join") {
     val x = testData2.as('x)
@@ -32,6 +59,56 @@ class JoinSuite extends QueryTest {
     val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
+  }
+
+  test("join operator selection") {
+    def assertJoin(sqlString: String, c: Class[_]): Any = {
+      val rdd = sql(sqlString)
+      val physical = rdd.queryExecution.sparkPlan
+      val operators = physical.collect {
+        case j: ShuffledHashJoin => j
+        case j: HashOuterJoin => j
+        case j: LeftSemiJoinHash => j
+        case j: BroadcastHashJoin => j
+        case j: LeftSemiJoinBNL => j
+        case j: CartesianProduct => j
+        case j: BroadcastNestedLoopJoin => j
+      }
+
+      assert(operators.size === 1)
+      if (operators(0).getClass() != c) {
+        fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
+      }
+    }
+
+    val cases1 = Seq(
+      ("SELECT * FROM testData left semi join testData2 ON key = a", classOf[LeftSemiJoinHash]),
+      ("SELECT * FROM testData left semi join testData2", classOf[LeftSemiJoinBNL]),
+      ("SELECT * FROM testData join testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData join testData2 where key=2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData left join testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData right join testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData full outer join testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData left join testData2 where key=2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData right join testData2 where key=2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData full outer join testData2 where key=2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData join testData2 where key>a", classOf[CartesianProduct]),
+      ("SELECT * FROM testData full outer join testData2 where key>a", classOf[CartesianProduct]),
+      ("SELECT * FROM testData join testData2 ON key = a", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a and key=2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a where key=2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData left join testData2 ON key = a", classOf[HashOuterJoin]),
+      ("SELECT * FROM testData right join testData2 ON key = a where key=2", 
+        classOf[HashOuterJoin]),
+      ("SELECT * FROM testData right join testData2 ON key = a and key=2", 
+        classOf[HashOuterJoin]),
+      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a and key=2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a where key=2", classOf[ShuffledHashJoin])
+    // TODO add BroadcastNestedLoopJoin
+    )
+    cases1.foreach { c => assertJoin(c._1, c._2) }
   }
 
   test("multiple-key equi-join is hash-join") {
@@ -106,38 +183,131 @@ class JoinSuite extends QueryTest {
   }
 
   test("left outer join") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
-      (1, "A", 1, "a") ::
-      (2, "B", 2, "b") ::
-      (3, "C", 3, "c") ::
-      (4, "D", 4, "d") ::
-      (5, "E", null, null) ::
-      (6, "F", null, null) :: Nil)
+    lowerCaseData.registerAsTable("right")
+    upperCaseData.registerAsTable("left")
+    def run() {
+      checkAnswer(
+        left.join(right, LeftOuter, Some('n === 'N)),
+        (1, "A", 1, "a") ::
+        (2, "B", 2, "b") ::
+        (3, "C", 3, "c") ::
+        (4, "D", 4, "d") ::
+        (5, "E", null, null) ::
+        (6, "F", null, null) :: Nil)
+  
+      checkAnswer(
+        left.join(right, LeftOuter, Some('n === 'N && 'n > 1)),
+        (1, "A", null, null) ::
+        (2, "B", 2, "b") ::
+        (3, "C", 3, "c") ::
+        (4, "D", 4, "d") ::
+        (5, "E", null, null) ::
+        (6, "F", null, null) :: Nil)
+  
+      checkAnswer(
+        left.join(right, LeftOuter, Some('n === 'N && 'N > 1)),
+        (1, "A", null, null) ::
+        (2, "B", 2, "b") ::
+        (3, "C", 3, "c") ::
+        (4, "D", 4, "d") ::
+        (5, "E", null, null) ::
+        (6, "F", null, null) :: Nil)
+  
+      checkAnswer(
+        left.join(right, LeftOuter, Some('n === 'N && 'l > 'L)),
+        (1, "A", 1, "a") ::
+        (2, "B", 2, "b") ::
+        (3, "C", 3, "c") ::
+        (4, "D", 4, "d") ::
+        (5, "E", null, null) ::
+        (6, "F", null, null) :: Nil)
+    }
+
+    check(run)
   }
 
   test("right outer join") {
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
-      (1, "a", 1, "A") ::
-      (2, "b", 2, "B") ::
-      (3, "c", 3, "C") ::
-      (4, "d", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
+    lowerCaseData.registerAsTable("left")
+    upperCaseData.registerAsTable("right")
+
+    val left = UnresolvedRelation(None, "left", None)
+    val right = UnresolvedRelation(None, "right", None)
+
+    def run() {
+      checkAnswer(
+        left.join(right, RightOuter, Some('n === 'N)),
+        (1, "a", 1, "A") ::
+        (2, "b", 2, "B") ::
+        (3, "c", 3, "C") ::
+        (4, "d", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, RightOuter, Some('n === 'N && 'n > 1)),
+        (null, null, 1, "A") ::
+        (2, "b", 2, "B") ::
+        (3, "c", 3, "C") ::
+        (4, "d", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, RightOuter, Some('n === 'N && 'N > 1)),
+        (null, null, 1, "A") ::
+        (2, "b", 2, "B") ::
+        (3, "c", 3, "C") ::
+        (4, "d", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, RightOuter, Some('n === 'N && 'l > 'L)),
+        (1, "a", 1, "A") ::
+        (2, "b", 2, "B") ::
+        (3, "c", 3, "C") ::
+        (4, "d", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+    }
+
+    check(run)
   }
 
   test("full outer join") {
-    val left = upperCaseData.where('N <= 4).as('left)
-    val right = upperCaseData.where('N >= 3).as('right)
+    upperCaseData.where('N <= 4).registerAsTable("left")
+    upperCaseData.where('N >= 3).registerAsTable("right")
 
-    checkAnswer(
-      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
-      (1, "A", null, null) ::
-      (2, "B", null, null) ::
-      (3, "C", 3, "C") ::
-      (4, "D", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
+    def run() {
+      checkAnswer(
+        left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
+        (1, "A", null, null) ::
+        (2, "B", null, null) ::
+        (3, "C", 3, "C") ::
+        (4, "D", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+  
+      checkAnswer(
+        left.join(right, FullOuter, 
+            Some(("left.N".attr === "right.N".attr) && ("left.N".attr !== 3))),
+        (1, "A", null, null) ::
+        (2, "B", null, null) ::
+        (3, "C", null, null) ::
+        (null, null, 3, "C") ::
+        (4, "D", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+  
+      checkAnswer(
+        left.join(right, FullOuter, 
+            Some(("left.N".attr === "right.N".attr) && ("right.N".attr !== 3))),
+        (1, "A", null, null) ::
+        (2, "B", null, null) ::
+        (3, "C", null, null) ::
+        (null, null, 3, "C") ::
+        (4, "D", 4, "D") ::
+        (null, null, 5, "E") ::
+        (null, null, 6, "F") :: Nil)
+    }
+
+    check(run)
   }
 }
