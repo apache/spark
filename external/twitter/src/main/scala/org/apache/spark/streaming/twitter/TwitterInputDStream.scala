@@ -87,9 +87,14 @@ class TwitterReceiver(
         }
       })
 
-      val query = new FilterQuery
-      if (filters.size > 0) {
-        query.track(filters.toArray)
+      if ((filters.size > 0) || (locations.size > 0)) {
+        val query = new FilterQuery
+        if (filters.size > 0) {
+          query.track(filters.toArray)
+        }
+        if (locations.size > 0) {
+          query.locations(locations.map(_.toArray).toArray)
+        }
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()
