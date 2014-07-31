@@ -78,11 +78,11 @@ trait BinaryRepeatableIteratorNode extends BinaryNode {
       (if (!key.anyNull) rightIter else BinaryJoinNode.EMPTY_NULL_LIST).collect {
         case r if (boundCondition(joinedRow.withRight(r))) => {
           matched = true
-          joinedRow
+          joinedRow.copy
         }
       } ++ BinaryJoinNode.SINGLE_NULL_LIST.collect {
         case dummy if (!matched) => {
-          joinedRow.withRight(rightNullRow)
+          joinedRow.withRight(rightNullRow).copy
         }
       }
     }
@@ -107,11 +107,11 @@ trait BinaryRepeatableIteratorNode extends BinaryNode {
       (if (!key.anyNull) leftIter else BinaryJoinNode.EMPTY_NULL_LIST).collect { 
         case l if (boundCondition(joinedRow.withLeft(l))) => {
           matched = true
-          joinedRow
+          joinedRow.copy
         }
       } ++ BinaryJoinNode.SINGLE_NULL_LIST.collect {
         case dummy if (!matched) => {
-          joinedRow.withLeft(leftNullRow)
+          joinedRow.withLeft(leftNullRow).copy
         }
       }
     }
@@ -128,23 +128,23 @@ trait BinaryRepeatableIteratorNode extends BinaryNode {
           case (r, idx) if (boundCondition(joinedRow.withRight(r)))=> {
               matched = true
               rightMatchedSet.add(idx)
-              joinedRow
+              joinedRow.copy
             }
         } ++ BinaryJoinNode.SINGLE_NULL_LIST.collect {
           case dummy if (!matched) => {
-            joinedRow.withRight(rightNullRow)
+            joinedRow.withRight(rightNullRow).copy
           } 
         }
       } ++ rightIter.zipWithIndex.collect {
         case (r, idx) if (!rightMatchedSet.contains(idx)) => {
-          joinedRow(leftNullRow, r)
+          joinedRow(leftNullRow, r).copy
         }
       }
     } else {
       leftIter.iterator.map[Row] { l =>
-        joinedRow(l, rightNullRow)
+        joinedRow(l, rightNullRow).copy
       } ++ rightIter.iterator.map[Row] { r =>
-        joinedRow(leftNullRow, r)
+        joinedRow(leftNullRow, r).copy
       }
     }
   }
