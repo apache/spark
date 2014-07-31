@@ -25,12 +25,22 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Storage information for each BlockManager.
+ * Storage information for each BlockManager. This class assumes BlockId and BlockStatus are
+ * immutable, such that the consumers of this class will not mutate the source of the information.
  */
 @DeveloperApi
 class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private val _blocks = new mutable.HashMap[BlockId, BlockStatus]
   private val _rddIds = new mutable.HashSet[Int]
+
+  /**
+   * Instantiate a StorageStatus with the given initial blocks. This essentially makes a copy of
+   * the original blocks map such that the fate of this storage status is not tied to the source.
+   */
+  def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
+    this(bmid, maxMem)
+    initialBlocks.foreach { case (blockId, blockStatus) => addBlock(blockId, blockStatus) }
+  }
 
   /** Return the blocks stored in this block manager as a mapping from ID to status. */
   def blocks: Map[BlockId, BlockStatus] = _blocks
@@ -174,9 +184,10 @@ private[spark] object StorageUtils {
     storageStatuses
       .filter(_.rddIds.contains(rddId))
       .map { status =>
-        val newStatus = new StorageStatus(status.blockManagerId, status.maxMem)
-        status.rddBlocks(rddId).foreach { case (bid, bstatus) => newStatus.addBlock(bid, bstatus) }
-        newStatus
+        new StorageStatus(
+          status.blockManagerId,
+          status.maxMem,
+          status.rddBlocks(rddId).asInstanceOf[Map[BlockId, BlockStatus]])
       }.toArray
   }
 }
