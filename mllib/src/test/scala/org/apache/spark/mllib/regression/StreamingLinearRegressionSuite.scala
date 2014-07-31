@@ -26,11 +26,10 @@ import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.{MLStreamingUtils, LinearDataGenerator, LocalSparkContext}
-import org.apache.spark.SparkConf
-import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
+import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-class StreamingLinearRegressionSuite extends FunSuite {
+class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
 
   // Assert that two values are equal within tolerance epsilon
   def assertEqual(v1: Double, v2: Double, epsilon: Double) {
@@ -51,10 +50,10 @@ class StreamingLinearRegressionSuite extends FunSuite {
   // Test if we can accurately learn Y = 10*X1 + 10*X2 on streaming data
   test("streaming linear regression parameter accuracy") {
 
-    val conf = new SparkConf().setMaster("local").setAppName("streaming test")
     val testDir = Files.createTempDir()
     val numBatches = 10
-    val ssc = new StreamingContext(conf, Seconds(1))
+    val batchDuration = Milliseconds(1000)
+    val ssc = new StreamingContext(sc, batchDuration)
     val data = MLStreamingUtils.loadLabeledPointsFromText(ssc, testDir.toString)
     val model = StreamingLinearRegressionWithSGD.start(numFeatures=2, numIterations=50)
 
@@ -63,16 +62,14 @@ class StreamingLinearRegressionSuite extends FunSuite {
     ssc.start()
 
     // write data to a file stream
-    Thread.sleep(5000)
     for (i <- 0 until numBatches) {
       val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
       Files.write(samples.map(x => x.toString).mkString("\n"), file, Charset.forName("UTF-8"))
-      Thread.sleep(Milliseconds(1000).milliseconds)
+      Thread.sleep(batchDuration.milliseconds)
     }
-    Thread.sleep(Milliseconds(5000).milliseconds)
 
-    ssc.stop()
+    ssc.stop(stopSparkContext=false)
 
     System.clearProperty("spark.driver.port")
     Utils.deleteRecursively(testDir)
@@ -90,9 +87,9 @@ class StreamingLinearRegressionSuite extends FunSuite {
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
   test("streaming linear regression parameter convergence") {
 
-    val conf = new SparkConf().setMaster("local").setAppName("streaming test")
     val testDir = Files.createTempDir()
-    val ssc = new StreamingContext(conf, Seconds(2))
+    val batchDuration = Milliseconds(2000)
+    val ssc = new StreamingContext(sc, batchDuration)
     val numBatches = 5
     val data = MLStreamingUtils.loadLabeledPointsFromText(ssc, testDir.toString)
     val model = StreamingLinearRegressionWithSGD.start(numFeatures=1, numIterations=50)
@@ -103,17 +100,17 @@ class StreamingLinearRegressionSuite extends FunSuite {
 
     // write data to a file stream
     val history = new ArrayBuffer[Double](numBatches)
-    Thread.sleep(5000)
     for (i <- 0 until numBatches) {
       val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
       Files.write(samples.map(x => x.toString).mkString("\n"), file, Charset.forName("UTF-8"))
-      Thread.sleep(Milliseconds(6000).milliseconds)
+      Thread.sleep(batchDuration.milliseconds)
+      // wait an extra few seconds to make sure the update finishes before new data arrive
+      Thread.sleep(4000)
       history.append(math.abs(model.latest().weights(0) - 10.0))
     }
-    Thread.sleep(Milliseconds(5000).milliseconds)
 
-    ssc.stop()
+    ssc.stop(stopSparkContext=false)
 
     System.clearProperty("spark.driver.port")
     Utils.deleteRecursively(testDir)
