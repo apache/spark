@@ -348,7 +348,6 @@ case class BroadcastNestedLoopJoin(
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))
 
-  // TODO: low-hanging fruits for performance? (Reduce branching / pattern matches?)
   def execute() = {
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
@@ -409,19 +408,22 @@ case class BroadcastNestedLoopJoin(
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
     /** Rows from broadcasted joined with nulls. */
-    val broadcastRowsWithNulls: Seq[Row] =
-      broadcastedRelation.value.zipWithIndex.filter { case (row, i) =>
-        // keep all rows in the broadcast relation that are not matched before
-        !allIncludedBroadcastTuples.contains(i)
-      }.map { case (row, _) =>
-        // TODO: Use projection.
-        val jr = (joinType, buildSide) match {
-          case (RightOuter | FullOuter, BuildRight) => new JoinedRow(leftNulls, row)
-          case (LeftOuter | FullOuter, BuildLeft) => new JoinedRow(row, rightNulls)
-          case _ => null
+    val broadcastRowsWithNulls: Seq[Row] = {
+      val arrBuf: collection.mutable.ArrayBuffer[Row] = collection.mutable.ArrayBuffer()
+      var i = 0
+      val rel = broadcastedRelation.value
+      while (i < rel.length) {
+        if (!allIncludedBroadcastTuples.contains(i)) {
+          (joinType, buildSide) match {
+            case (RightOuter | FullOuter, BuildRight) => arrBuf += new JoinedRow(leftNulls, rel(i))
+            case (LeftOuter | FullOuter, BuildLeft) => arrBuf += new JoinedRow(rel(i), rightNulls)
+            case _ =>
+          }
         }
-        jr
-      }.filter(_ != null)
+        i += 1
+      }
+      arrBuf.toSeq
+    }
 
     // TODO: Breaks lineage.
     sparkContext.union(
