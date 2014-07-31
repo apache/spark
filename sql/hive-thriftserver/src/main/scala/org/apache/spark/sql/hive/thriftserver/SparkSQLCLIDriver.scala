@@ -344,3 +344,4 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   }
 }
+
