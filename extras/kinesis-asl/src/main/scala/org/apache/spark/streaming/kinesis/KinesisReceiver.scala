@@ -41,29 +41,23 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  * Instances of this class will get shipped to the Spark Streaming Workers 
  *   to run within a Spark Executor.
  *
- * @param appName Kinesis Application Name.  Kinesis apps are mapped to Kinesis streams 
- *   by the Kinesis Client Library.  If you change the app name or stream name, 
- *   the KCL will throw errors.
+ * @param appName unique name for your Kinesis app.  Multiple instances of the app pull from
+ *   the same stream.  The Kinesis Client Library coordinates all load-balancing and 
+ *   failure-recovery.
  * @param stream Kinesis stream name
- * @param endpoint url of Kinesis service
- * @param checkpointIntervalMillis for Kinesis checkpointing (not Spark checkpointing).
- *   See the Kinesis Spark Streaming documentation for more details on the different types 
- *     of checkpoints.
- * @param initialPositionInStream in the absence of Kinesis checkpoint info, this is the worker's initial 
- *   starting position in the stream.
- *   The values are either the beginning of the stream per Kinesis' limit of 24 hours 
- *   (InitialPositionInStream.TRIM_HORIZON) or the tip of the stream 
- *   (InitialPositionInStream.LATEST).
- * @param persistence strategy for RDDs and DStreams.
+ * @param endpoint url of Kinesis service (ie. https://kinesis.us-east-1.amazonaws.com)
+ *   Available endpoints:  http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region
+ * @param checkpointIntervalMillis interval (millis) for Kinesis checkpointing
+ * @param initialPositionInStream in the absence of a Kinesis checkpoint info, this is the 
+ *   worker's initial starting position in the stream.
  */
 private[kinesis] class KinesisReceiver(
     appName: String,
     stream: String,
     endpoint: String,
     checkpointIntervalMillis: Long,
-    initialPositionInStream: InitialPositionInStream,
-    storageLevel: StorageLevel)
-  extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
+    initialPositionInStream: InitialPositionInStream)
+  extends Receiver[Array[Byte]](StorageLevel.MEMORY_AND_DISK_2) with Logging { receiver =>
 
   /**
    * The following vars are built in the onStart() method which executes in the Spark Worker after

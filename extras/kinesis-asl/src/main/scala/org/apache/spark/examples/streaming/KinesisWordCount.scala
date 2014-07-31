@@ -159,15 +159,13 @@ object KinesisWordCount extends Logging {
      *   them all. 
      */
     var allStreams: DStream[Array[Byte]] = KinesisUtils.createStream(ssc, appName, stream, 
-        endpoint, checkpointInterval.milliseconds, InitialPositionInStream.LATEST,
-        StorageLevel.MEMORY_AND_DISK_2)
+        endpoint, checkpointInterval.milliseconds, InitialPositionInStream.LATEST)
     /** Set the checkpoint interval */
     allStreams.checkpoint(checkpointInterval)
     for (i <- 1 until numStreams) {
       /** Create a new Receiver/DStream for each stream shard */
       val dStream = KinesisUtils.createStream(ssc, appName, stream, endpoint, 
-          checkpointInterval.milliseconds,
-          InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
+          checkpointInterval.milliseconds, InitialPositionInStream.LATEST)
       /** Set the Spark checkpoint interval */
       dStream.checkpoint(checkpointInterval)
 

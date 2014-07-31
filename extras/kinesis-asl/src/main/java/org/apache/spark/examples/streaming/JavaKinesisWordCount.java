@@ -165,14 +165,14 @@ public final class JavaKinesisWordCount {
         /** Create the same number of Kinesis Receivers/DStreams as stream shards, then union them all */
         JavaDStream<byte[]> allStreams = KinesisUtils
                 .createStream(jssc, appName, stream, endpoint, checkpointInterval.milliseconds(), 
-                                    InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());
+                                    InitialPositionInStream.LATEST);
         /** Set the checkpoint interval */
         allStreams.checkpoint(checkpointInterval);
         for (int i = 1; i < numStreams; i++) {
             /** Create a new Receiver/DStream for each stream shard */
             JavaDStream<byte[]> dStream = KinesisUtils
                     .createStream(jssc, appName, stream, endpoint, checkpointInterval.milliseconds(), 
-                                        InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());            
+                                        InitialPositionInStream.LATEST);
             /** Set the Spark checkpoint interval */
             dStream.checkpoint(checkpointInterval);
 
