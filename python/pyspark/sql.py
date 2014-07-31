@@ -20,6 +20,7 @@ import sys
 import types
 import array
 import itertools
+import warnings
 from operator import itemgetter
 from collections import namedtuple
 
@@ -415,13 +416,30 @@ def _has_struct(dt):
         return _has_struct(dt.valueType)
     return False
 
+
+def _create_properties(fields):
+    """Create properties according to fields"""
+    ps = {}
+    for i, f in enumerate(fields):
+        name = f.name
+        if name.startswith("__") and name.endswith("__"):
+            warnings.warn("field name %s can not be accessed in Python,"
+                          "use position to access instead" % name)
+            continue
+        if _has_struct(f.dataType):
+            # delay creating object until accessing it
+            getter = _create_getter(f.dataType, i)
+        else:
+            getter = itemgetter(i)
+        ps[name] = property(getter)
+    return ps
+
 def _create_cls(dataType):
     """
     Create an class by dataType
 
     The created class is similar to namedtuple, but can have nested schema.
     """
-    from operator import itemgetter
 
     if isinstance(dataType, ArrayType):
         cls = _create_cls(dataType.elementType)
@@ -456,28 +474,22 @@ def _create_cls(dataType):
     elif not isinstance(dataType, StructType):
         raise Exception("unexpected data type: %s" % dataType)
 
+
+
     class Row(tuple):
         """ Row in SchemaRDD """
-        _FIELDS = tuple(f.name for f in dataType.fields)
+        __FIELDS__ = tuple(f.name for f in dataType.fields)
 
         # create property for fast access
-        # use local vars begins with "_"
-        for _i, _f in enumerate(dataType.fields):
-            if _has_struct(_f.dataType):
-                # delay creating object until accessing it
-                _getter = _create_getter(_f.dataType, _i)
-            else:
-                _getter = itemgetter(_i)
-            locals()[_f.name] = property(_getter)
-        del _i, _f, _getter
+        locals().update(_create_properties(dataType.fields))
 
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                    for n in self._FIELDS))
+                    for n in self.__FIELDS__))
         def __reduce__(self):
             # pickle as namedtuple
-            return (_restore_object, ("Row", self._FIELDS, tuple(self)))
+            return (_restore_object, ("Row", self.__FIELDS__, tuple(self)))
 
     return Row
 
