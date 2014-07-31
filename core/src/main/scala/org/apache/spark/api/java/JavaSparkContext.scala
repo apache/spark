@@ -215,9 +215,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.wholeTextFiles(path, minPartitions))
 
   /**
-   * Read a directory of binary files from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI as a byte array. Each file is read as a single record and returned in a
-   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * Read a directory of binary files from HDFS, a local file system (available on all nodes),
+   * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
+   * record and returned in a key-value pair, where the key is the path of each file,
+   * the value is the content of each file.
    *
    * <p> For example, if you have the following files:
    * {{{
@@ -227,7 +228,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * Do
+   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
@@ -241,13 +243,14 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions): JavaPairRDD[String,DataInputStream] =
-    new JavaPairRDD(sc.dataStreamFiles(path,minPartitions))
+  def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  JavaPairRDD[String,DataInputStream] = new JavaPairRDD(sc.dataStreamFiles(path,minPartitions))
 
   /**
-   * Read a directory of files as DataInputStreams from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI as a byte array. Each file is read as a single record and returned in a
-   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * Read a directory of files as DataInputStream from HDFS,
+   * a local file system (available on all nodes), or any Hadoop-supported file system URI
+   * as a byte array. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each.
    *
    * <p> For example, if you have the following files:
    * {{{
@@ -257,7 +260,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, DataInputStream> rdd = sparkContext.binaryFiles("hdfs://a-hdfs-path")`,
+   * Do
+   * `JavaPairRDD<String,DataInputStream> rdd = sparkContext.binaryFiles("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
@@ -271,8 +275,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions): JavaPairRDD[String,Array[Byte]] =
-    new JavaPairRDD(sc.binaryFiles(path,minPartitions))
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  JavaPairRDD[String,Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any

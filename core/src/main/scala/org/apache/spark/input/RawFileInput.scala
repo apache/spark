@@ -31,7 +31,8 @@ import java.io.DataInputStream
 
 
 /**
- *  A general format for reading whole files in as streams, byte arrays, or other functions to be added
+ *  A general format for reading whole files in as streams, byte arrays,
+ *  or other functions to be added
  */
 abstract class StreamFileInputFormat[T]
   extends CombineFileInputFormat[String,T]  {
@@ -49,12 +50,14 @@ abstract class StreamFileInputFormat[T]
     super.setMaxSplitSize(maxSplitSize)
   }
 
-  def createRecordReader(split: InputSplit, taContext: TaskAttemptContext): RecordReader[String,T]
+  def createRecordReader(split: InputSplit, taContext: TaskAttemptContext):
+    RecordReader[String,T]
 
 }
 
 /**
- * An abstract class of [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] to reading files out as streams
+ * An abstract class of [[org.apache.hadoop.mapreduce.RecordReader RecordReader]]
+ * to reading files out as streams
  */
 abstract class StreamBasedRecordReader[T](
                                       split: CombineFileSplit,
@@ -111,17 +114,20 @@ class StreamRecordReader(
 }
 
 /**
- * A class for extracting the information from the file using the BinaryRecordReader (as Byte array)
+ * A class for extracting the information from the file using the
+ * BinaryRecordReader (as Byte array)
  */
 class StreamInputFormat extends StreamFileInputFormat[DataInputStream] {
   override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
   {
-    new CombineFileRecordReader[String,DataInputStream](split.asInstanceOf[CombineFileSplit],taContext,classOf[StreamRecordReader])
+    new CombineFileRecordReader[String,DataInputStream](
+      split.asInstanceOf[CombineFileSplit],taContext,classOf[StreamRecordReader]
+    )
   }
 }
 
 /**
- * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole binary file
+ * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single binary file
  * out in a key-value pair, where the key is the file path and the value is the entire content of
  * the file as a byte array
  */
@@ -150,12 +156,14 @@ class ByteRecordReader(
 }
 
 /**
- * A class for extracting the information from the file using the BinaryRecordReader (as Byte array)
+ * A class for reading the file using the BinaryRecordReader (as Byte array)
  */
 class ByteInputFormat extends StreamFileInputFormat[Array[Byte]] {
   override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
   {
-    new CombineFileRecordReader[String,Array[Byte]](split.asInstanceOf[CombineFileSplit],taContext,classOf[ByteRecordReader])
+    new CombineFileRecordReader[String,Array[Byte]](
+      split.asInstanceOf[CombineFileSplit],taContext,classOf[ByteRecordReader]
+    )
   }
 }
 

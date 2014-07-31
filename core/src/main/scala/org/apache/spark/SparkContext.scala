@@ -289,7 +289,7 @@ class SparkContext(config: SparkConf) extends Logging {
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
-  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v => 
+  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
     executorEnvs("SPARK_PREPEND_CLASSES") = v
   }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
@@ -511,13 +511,15 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset as byte-streams for each file (useful for binary data)
+   * Get an RDD for a Hadoop-readable dataset as byte-streams for each file
+   * (useful for binary data)
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    *
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    */
-  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions): RDD[(String, Array[Byte])] = {
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, Array[Byte])] = {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -531,15 +533,18 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset as DataInputStreams for each file (useful for binary data)
-   * Care must be taken to close the files afterwards
+   * Get an RDD for a Hadoop-readable dataset as DataInputStreams for each file
+   * (useful for binary data)
+   *
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    *
+   * @note Care must be taken to close the files afterwards
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    */
   @DeveloperApi
-  def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions): RDD[(String, DataInputStream)] = {
+  def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, DataInputStream)] = {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -1250,7 +1255,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively 
    * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt> 
    * if not.
-   * 
+   *
    * @param f the closure to clean
    * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability
    * @throws <tt>SparkException<tt> if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
