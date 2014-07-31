@@ -259,7 +259,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val expectedLogDir = logDirPath.toString
-    assert(eventLogger.logDir.startsWith(expectedLogDir))
+    assert(eventLogger.logDir.contains(expectedLogDir))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)

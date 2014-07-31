@@ -45,7 +45,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            { providerConfig.map(e => <li><strong>{e._1}:</strong> {e._2}</li>) }
+            {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
           {
             if (allApps.size > 0) {
