@@ -114,7 +114,6 @@ private[spark] class TaskSetManager(
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
-  //private[scheduler] val nodeLocalTasks = new HashMap[String, HashSet[Int]]
   private var hasNodeLocalOnlyTasks = true
 
   // Set of pending tasks for each rack -- similar to the above.
@@ -466,13 +465,6 @@ private[spark] class TaskSetManager(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
-          /*if (taskLocality <= TaskLocality.NODE_LOCAL) {
-            for (preferedLocality <- tasks(index).preferredLocations) {
-              if (nodeLocalTasks.contains(preferedLocality.host)) {
-                nodeLocalTasks(preferedLocality.host) -= index
-              }
-            }
-          }*/
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
         }
         case _ =>
