@@ -15,27 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.util.collection
 
-import org.scalatest.FunSuite
-
-class LabelParsersSuite extends FunSuite {
-  test("binary label parser") {
-    for (parser <- Seq(BinaryLabelParser, BinaryLabelParser.getInstance())) {
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("0") === 0.0)
-      assert(parser.parse("-1") === 0.0)
-    }
-  }
-
-  test("multiclass label parser") {
-    for (parser <- Seq(MulticlassLabelParser, MulticlassLabelParser.getInstance())) {
-      assert(parser.parse("0") == 0.0)
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("2") === 2.0)
-      assert(parser.parse("3") === 3.0)
-    }
-  }
+/**
+ * A dummy class that always returns the same hash code, to easily test hash collisions
+ */
+case class FixedHashObject(v: Int, h: Int) extends Serializable {
+  override def hashCode(): Int = h
 }

@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.pythonconverters
+package org.apache.spark
 
-import org.apache.spark.api.python.Converter
-import org.apache.hadoop.hbase.client.Result
-import org.apache.hadoop.hbase.util.Bytes
+import org.scalatest.BeforeAndAfterAll
 
-/**
- * Implementation of [[org.apache.spark.api.python.Converter]] that converts a HBase Result
- * to a String
- */
-class HBaseConverter extends Converter[Any, String] {
-  override def convert(obj: Any): String = {
-    val result = obj.asInstanceOf[Result]
-    Bytes.toStringBinary(result.value())
+class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+
+  // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
+
+  override def beforeAll() {
+    System.setProperty("spark.shuffle.manager",
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
+  }
+
+  override def afterAll() {
+    System.clearProperty("spark.shuffle.manager")
   }
 }
