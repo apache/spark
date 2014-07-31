@@ -66,6 +66,42 @@ class MatrixFactorizationModel private[mllib] (
   }
 
   /**
+   * Recommends products to users.
+   *
+   * @param user the user to recommend products to
+   * @param howMany how many products to return. The number returned may be less than this.
+   * @return product ID and score tuples, sorted descending by score. The first product returned
+   *  is the one predicted to be most strongly recommended to the user. The score is an opaque
+   *  value that indicates how strongly recommended the product is.
+   */
+  def recommendProducts(user: Int, howMany: Int = 10): Array[(Int,Double)] =
+    recommend(userFeatures.lookup(user).head, productFeatures, howMany)
+
+  /**
+   * Recommends users to products. That is, this returns users who are most likely to be
+   * interested in a product.
+   *
+   * @param product the product to recommend users to
+   * @param howMany how many users to return. The number returned may be less than this.
+   * @return user ID and score tuples, sorted descending by score. The first user returned
+   *  is the one predicted to be most strongly interested in the product. The score is an opaque
+   *  value that indicates how strongly interested the user is.
+   */
+  def recommendUsers(product: Int, howMany: Int = 10): Array[(Int,Double)] =
+    recommend(productFeatures.lookup(product).head, userFeatures, howMany)
+
+  private def recommend(
+      recommendToFeatures: Array[Double],
+      recommendableFeatures: RDD[(Int,Array[Double])],
+      howMany: Int): Array[(Int,Double)] = {
+    val recommendToVector = new DoubleMatrix(recommendToFeatures)
+    val scored = recommendableFeatures.map { case (id,features) =>
+      (id, recommendToVector.dot(new DoubleMatrix(features)))
+    }
+    scored.top(howMany)(Ordering.by(_._2))
+  }
+
+  /**
    * :: DeveloperApi ::
    * Predict the rating of many users for many products.
    * This is a Java stub for python predictAll()
@@ -80,6 +116,4 @@ class MatrixFactorizationModel private[mllib] (
     predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
   }
 
-  // TODO: Figure out what other good bulk prediction methods would look like.
-  // Probably want a way to get the top users for a product or vice-versa.
 }

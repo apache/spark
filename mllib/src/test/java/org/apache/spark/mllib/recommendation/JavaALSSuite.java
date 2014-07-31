@@ -29,6 +29,8 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import org.jblas.DoubleMatrix;
+import scala.Tuple2;
+import scala.Tuple3;
 
 public class JavaALSSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -44,21 +46,27 @@ public class JavaALSSuite implements Serializable {
     sc = null;
   }
 
-  static void validatePrediction(MatrixFactorizationModel model, int users, int products, int features,
-      DoubleMatrix trueRatings, double matchThreshold, boolean implicitPrefs, DoubleMatrix truePrefs) {
+  static void validatePrediction(MatrixFactorizationModel model,
+                                 int users,
+                                 int products,
+                                 int features,
+                                 DoubleMatrix trueRatings,
+                                 double matchThreshold,
+                                 boolean implicitPrefs,
+                                 DoubleMatrix truePrefs) {
     DoubleMatrix predictedU = new DoubleMatrix(users, features);
-    List<scala.Tuple2<Object, double[]>> userFeatures = model.userFeatures().toJavaRDD().collect();
+    List<Tuple2<Object, double[]>> userFeatures = model.userFeatures().toJavaRDD().collect();
     for (int i = 0; i < features; ++i) {
-      for (scala.Tuple2<Object, double[]> userFeature : userFeatures) {
+      for (Tuple2<Object, double[]> userFeature : userFeatures) {
         predictedU.put((Integer)userFeature._1(), i, userFeature._2()[i]);
       }
     }
     DoubleMatrix predictedP = new DoubleMatrix(products, features);
 
-    List<scala.Tuple2<Object, double[]>> productFeatures =
+    List<Tuple2<Object, double[]>> productFeatures =
       model.productFeatures().toJavaRDD().collect();
     for (int i = 0; i < features; ++i) {
-      for (scala.Tuple2<Object, double[]> productFeature : productFeatures) {
+      for (Tuple2<Object, double[]> productFeature : productFeatures) {
         predictedP.put((Integer)productFeature._1(), i, productFeature._2()[i]);
       }
     }
@@ -75,7 +83,8 @@ public class JavaALSSuite implements Serializable {
         }
       }
     } else {
-      // For implicit prefs we use the confidence-weighted RMSE to test (ref Mahout's implicit ALS tests)
+      // For implicit prefs we use the confidence-weighted RMSE to test
+      // (ref Mahout's implicit ALS tests)
       double sqErr = 0.0;
       double denom = 0.0;
       for (int u = 0; u < users; ++u) {
@@ -100,7 +109,7 @@ public class JavaALSSuite implements Serializable {
     int iterations = 15;
     int users = 50;
     int products = 100;
-    scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, false, false);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
@@ -114,7 +123,7 @@ public class JavaALSSuite implements Serializable {
     int iterations = 15;
     int users = 100;
     int products = 200;
-    scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, false, false);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
@@ -131,7 +140,7 @@ public class JavaALSSuite implements Serializable {
     int iterations = 15;
     int users = 80;
     int products = 160;
-    scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, true, false);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
@@ -145,7 +154,7 @@ public class JavaALSSuite implements Serializable {
     int iterations = 15;
     int users = 100;
     int products = 200;
-    scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, true, false);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
@@ -163,12 +172,37 @@ public class JavaALSSuite implements Serializable {
     int iterations = 15;
     int users = 80;
     int products = 160;
-    scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, true, true);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
     MatrixFactorizationModel model = ALS.trainImplicit(data.rdd(), features, iterations);
     validatePrediction(model, users, products, features, testData._2(), 0.4, true, testData._3());
+  }
+
+  @Test
+  public void runRecommend() {
+    int features = 5;
+    int iterations = 10;
+    int users = 200;
+    int products = 50;
+    Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
+        users, products, features, 0.7, true, false);
+    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    MatrixFactorizationModel model = ALS.trainImplicit(data.rdd(), features, iterations);
+    validateRecommendations(model.recommendProducts(1, 10), 10);
+    validateRecommendations(model.recommendUsers(1, 20), 20);
+  }
+
+  private static void validateRecommendations(Tuple2<Object,Object>[] recommendations, int howMany) {
+    @SuppressWarnings("unchecked")
+    Tuple2<Integer,Double>[] javaRecs = (Tuple2<Integer,Double>[]) (Object[]) recommendations;
+    Assert.assertEquals(howMany, javaRecs.length);
+    for (int i = 1; i < javaRecs.length; i++) {
+      Assert.assertTrue(javaRecs[i-1]._2() > javaRecs[i]._2());
+    }
+    // Pretty safe bet!
+    Assert.assertTrue(javaRecs[0]._2() > 0.7);
   }
 
 }
