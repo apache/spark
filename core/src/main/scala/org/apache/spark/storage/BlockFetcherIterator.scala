@@ -199,22 +199,18 @@ object BlockFetcherIterator {
       // Get the local blocks while remote blocks are being fetched. Note that it's okay to do
       // these all at once because they will just memory-map some files, so they won't consume
       // any memory that might exceed our maxBytesInFlight
-      var fetchIndex = 0
-      try {
-        for (id <- localBlocksToFetch) {
-
+      for (id <- localBlocksToFetch) {
+        try {
           // getLocalFromDisk never return None but throws BlockException
           val iter = getLocalFromDisk(id, serializer).get
           // Pass 0 as size since it's not in flight
           results.put(new FetchResult(id, 0, () => iter))
-          fetchIndex += 1
           logDebug("Got local block " + id)
-        }
-      } catch {
-        case e: Exception => {
-          logError(s"Error occurred while fetching local blocks", e)
-          for (id <- localBlocksToFetch.drop(fetchIndex)) {
+        } catch {
+          case e: Exception => {
+            logError(s"Error occurred while fetching local blocks", e)
             results.put(new FetchResult(id, -1, null))
+            return
           }
         }
       }

@@ -81,14 +81,10 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     assert(iterator.next._2.isDefined, "2nd element should be defined but is not actually defined") 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 2 elements")
     // 3rd fetch should be failed
-    assert(!iterator.next._2.isDefined, "3nd element should not be defined but is actually defined") 
+    assert(!iterator.next._2.isDefined, "3rd element should not be defined but is actually defined") 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
-    // And then, all of local fetches should be failed
-    assert(!iterator.next._2.isDefined, "Rest of elements after non-defined element should not be defined " +
-      "but 4th element is actually defined") 
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 4 elements")
-    assert(!iterator.next._2.isDefined, "Rest of elements after non-defined element should not be defined " +
-      "but 5th element is actually defined") 
+    // Don't call next() after fetching non-defined element even if thare are rest of elements in the iterator.
+    // Otherwise, BasicBlockFetcherIterator hangs up.
   }
 
 
