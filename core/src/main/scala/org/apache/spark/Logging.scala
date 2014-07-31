@@ -120,7 +120,7 @@ trait Logging {
       Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
         case Some(url) =>
           PropertyConfigurator.configure(url)
-          System.out.println(s"Using Spark's default log4j profile: $defaultLogProps")
+          System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
         case None =>
           System.err.println(s"Spark was unable to load $defaultLogProps")
       }
