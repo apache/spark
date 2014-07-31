@@ -369,19 +369,16 @@ case class BroadcastNestedLoopJoin(
         while (i < broadcastedRelation.value.size) {
           // TODO: One bitset per partition instead of per row.
           val broadcastedRow = broadcastedRelation.value(i)
-          val jr = buildSide match {
-            case BuildRight => joinedRow(streamedRow, broadcastedRow)
-            case BuildLeft => joinedRow(broadcastedRow, streamedRow)
-          }
-          if (boundCondition(jr)) {
-            // Putting this branching inside this conditional: assume ++ has a
-            // much higher cost than another branch & pattern matching.
-            buildSide match {
-              case BuildRight => matchedRows += joinedRow(streamedRow, broadcastedRow).copy()
-              case BuildLeft => matchedRows += joinedRow(broadcastedRow, streamedRow).copy()
-            }
-            streamRowMatched = true
-            includedBroadcastTuples += i
+          buildSide match {
+            case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
+              matchedRows += joinedRow(streamedRow, broadcastedRow).copy()
+              streamRowMatched = true
+              includedBroadcastTuples += i
+            case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
+              matchedRows += joinedRow(broadcastedRow, streamedRow).copy()
+              streamRowMatched = true
+              includedBroadcastTuples += i
+            case _ =>
           }
           i += 1
         }
