@@ -606,7 +606,7 @@ object DecisionTree extends Serializable with Logging {
         agg: Array[Double],
         nodeIndex: Int,
         label: Double,
-        featureIndex: Int) = {
+        featureIndex: Int): Unit = {
       // Find the bin index for this feature.
       val arrShift = 1 + numFeatures * nodeIndex
       val arrIndex = arrShift + featureIndex
@@ -624,7 +624,7 @@ object DecisionTree extends Serializable with Logging {
         arr: Array[Double],
         label: Double,
         agg: Array[Double],
-        rightChildShift: Int) = {
+        rightChildShift: Int): Unit = {
       // Find the bin index for this feature.
       val arrIndex = 1 + numFeatures * nodeIndex + featureIndex
       val featureValue = arr(arrIndex).toInt
@@ -659,7 +659,7 @@ object DecisionTree extends Serializable with Logging {
      * @return Array[Double] storing aggregate calculation of size
      *         2 * numSplits * numFeatures * numNodes for classification
      */
-    def orderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]) = {
+    def orderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
@@ -691,7 +691,7 @@ object DecisionTree extends Serializable with Logging {
      * @return Array[Double] storing aggregate calculation of size
      *         2 * numClasses * numSplits * numFeatures * numNodes for classification
      */
-    def unorderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]) = {
+    def unorderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
@@ -736,7 +736,7 @@ object DecisionTree extends Serializable with Logging {
      * @return Array[Double] storing aggregate calculation of size
      *         3 * numSplits * numFeatures * numNodes for regression
      */
-    def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]) = {
+    def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
