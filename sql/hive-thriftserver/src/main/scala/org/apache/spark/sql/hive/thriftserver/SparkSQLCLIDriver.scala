@@ -308,16 +308,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
               res.clear()
             }
           } catch {
-            case e: IOException =>
+            case e: Exception =>
               console.printError(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
                  """.stripMargin)
               ret = 1
-            case e: Exception =>
-              console.printError(s"Failed with exception ${e.getClass.getName}: ${e.getMessage}")
-              ret = 1
-
           }
 
           val cret = driver.close()
