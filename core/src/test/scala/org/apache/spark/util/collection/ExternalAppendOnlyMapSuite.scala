@@ -208,11 +208,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val resultA = rddA.reduceByKey(math.max).collect()
     assert(resultA.length == 50000)
     resultA.foreach { case(k, v) =>
-      k match {
-        case 0 => assert(v == 1)
-        case 25000 => assert(v == 50001)
-        case 49999 => assert(v == 99999)
-        case _ =>
+      if (v != k * 2 + 1) {
+        fail(s"Value for ${k} was wrong: expected ${k * 2 + 1}, got ${v}")
       }
     }
 
@@ -221,11 +218,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val resultB = rddB.groupByKey().collect()
     assert(resultB.length == 25000)
     resultB.foreach { case(i, seq) =>
-      i match {
-        case 0 => assert(seq.toSet == Set[Int](0, 1, 2, 3))
-        case 12500 => assert(seq.toSet == Set[Int](50000, 50001, 50002, 50003))
-        case 24999 => assert(seq.toSet == Set[Int](99996, 99997, 99998, 99999))
-        case _ =>
+      val expected = Set(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3)
+      if (seq.toSet != expected) {
+        fail(s"Value for ${i} was wrong: expected ${expected}, got ${seq.toSet}")
       }
     }
 
@@ -239,6 +234,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
         case 0 =>
           assert(seq1.toSet == Set[Int](0))
           assert(seq2.toSet == Set[Int](0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000))
+        case 1 =>
+          assert(seq1.toSet == Set[Int](1))
+          assert(seq2.toSet == Set[Int](1, 1001, 2001, 3001, 4001, 5001, 6001, 7001, 8001, 9001))
         case 5000 =>
           assert(seq1.toSet == Set[Int](5000))
           assert(seq2.toSet == Set[Int]())
@@ -368,11 +366,4 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-}
-
-/**
- * A dummy class that always returns the same hash code, to easily test hash collisions
- */
-case class FixedHashObject(v: Int, h: Int) extends Serializable {
-  override def hashCode(): Int = h
 }

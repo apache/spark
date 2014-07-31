@@ -33,7 +33,7 @@ private[graphx]
 class RoutingTableMessageRDDFunctions(self: RDD[RoutingTableMessage]) {
   /** Copartition an `RDD[RoutingTableMessage]` with the vertex RDD with the given `partitioner`. */
   def copartitionWithVertices(partitioner: Partitioner): RDD[RoutingTableMessage] = {
-    new ShuffledRDD[VertexId, Int, Int, RoutingTableMessage](
+    new ShuffledRDD[VertexId, Int, Int](
       self, partitioner).setSerializer(new RoutingTableMessageSerializer)
   }
 }

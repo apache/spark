@@ -28,7 +28,7 @@ import org.apache.spark.rdd.{ShuffledRDD, RDD}
 private[graphx]
 class VertexRDDFunctions[VD: ClassTag](self: RDD[(VertexId, VD)]) {
   def copartitionWithVertices(partitioner: Partitioner): RDD[(VertexId, VD)] = {
-    val rdd = new ShuffledRDD[VertexId, VD, VD, (VertexId, VD)](self, partitioner)
+    val rdd = new ShuffledRDD[VertexId, VD, VD](self, partitioner)
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[VD] == ClassTag.Int) {

@@ -19,15 +19,16 @@ package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
 
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
-  // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
+  // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
 
   override def beforeAll() {
-    System.setProperty("spark.shuffle.use.netty", "true")
+    System.setProperty("spark.shuffle.manager",
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
   }
 
   override def afterAll() {
-    System.clearProperty("spark.shuffle.use.netty")
+    System.clearProperty("spark.shuffle.manager")
   }
 }

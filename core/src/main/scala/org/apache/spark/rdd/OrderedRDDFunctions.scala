@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, RangePartitioner}
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -43,10 +44,10 @@ import org.apache.spark.{Logging, RangePartitioner}
  */
 class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
-                          P <: Product2[K, V] : ClassTag](
+                          P <: Product2[K, V] : ClassTag] @DeveloperApi() (
     self: RDD[P])
-  extends Logging with Serializable {
-
+  extends Logging with Serializable
+{
   private val ordering = implicitly[Ordering[K]]
 
   /**
@@ -55,9 +56,12 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
    * order of the keys).
    */
-  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size): RDD[P] = {
+  // TODO: this currently doesn't work on P other than Tuple2!
+  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size)
+      : RDD[(K, V)] =
+  {
     val part = new RangePartitioner(numPartitions, self, ascending)
-    new ShuffledRDD[K, V, V, P](self, part)
+    new ShuffledRDD[K, V, V](self, part)
       .setKeyOrdering(if (ascending) ordering else ordering.reverse)
   }
 }

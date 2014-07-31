@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util.collection
 
-import org.scalatest.BeforeAndAfterAll
+import java.util.Comparator
 
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+/**
+ * A common interface for our size-tracking collections of key-value pairs, which are used in
+ * external operations. These all support estimating the size and obtaining a memory-efficient
+ * sorted iterator.
+ */
+// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
+private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
+  /** Estimate the collection's current memory usage in bytes. */
+  def estimateSize(): Long
 
-  // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
-
-  override def beforeAll() {
-    System.setProperty("spark.shuffle.use.netty", "true")
-  }
-
-  override def afterAll() {
-    System.clearProperty("spark.shuffle.use.netty")
-  }
+  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
+  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
 }
