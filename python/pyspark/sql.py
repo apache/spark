@@ -22,7 +22,6 @@ import array
 import itertools
 import warnings
 from operator import itemgetter
-from collections import namedtuple
 
 from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
@@ -68,6 +67,10 @@ class PrimitiveType(DataType):
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
+
+    def __eq__(self, other):
+        # because they should be the same object
+        return self is other
 
 
 class StringType(PrimitiveType):
@@ -382,18 +385,19 @@ def _parse_datatype_string(datatype_string):
 
 
 
-_cached_namedtuples = {}
+_cached_cls = {}
 
-def _restore_object(name, fields, obj):
-    """ Restore namedtuple object during unpickling. """
-    cls = _cached_namedtuples.get(fields)
+def _restore_object(fields, obj):
+    """ Restore object during unpickling. """
+    cls = _cached_cls.get(fields)
     if cls is None:
-        cls = namedtuple(name, fields)
-        def __reduce__(self):
-            return (_restore_object, (name, fields, tuple(self)))
-        cls.__reduce__ = __reduce__
-        _cached_namedtuples[fields] = cls
-    return cls(*obj)
+        # create a mock StructType, because nested StructType will
+        # be restored by itself
+        fs = [StructField(n, StringType, True) for n in fields]
+        dataType =  StructType(fs)
+        cls = _create_cls(dataType)
+        _cached_cls[fields] = cls
+    return cls(obj)
 
 def _create_object(cls, v):
     """ Create an customized object with class `cls`. """
@@ -415,7 +419,6 @@ def _has_struct(dt):
     elif isinstance(dt, MapType):
         return _has_struct(dt.valueType)
     return False
-
 
 def _create_properties(fields):
     """Create properties according to fields"""
@@ -474,8 +477,6 @@ def _create_cls(dataType):
     elif not isinstance(dataType, StructType):
         raise Exception("unexpected data type: %s" % dataType)
 
-
-
     class Row(tuple):
         """ Row in SchemaRDD """
         __FIELDS__ = tuple(f.name for f in dataType.fields)
@@ -487,9 +488,9 @@ def _create_cls(dataType):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
                     for n in self.__FIELDS__))
+
         def __reduce__(self):
-            # pickle as namedtuple
-            return (_restore_object, ("Row", self.__FIELDS__, tuple(self)))
+            return (_restore_object, (self.__FIELDS__, tuple(self)))
 
     return Row
 
