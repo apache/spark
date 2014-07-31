@@ -1062,7 +1062,7 @@ def _test():
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql
     from pyspark.sql import SQLContext
-    globs = globals().copy()
+    globs = pyspark.sql.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext('local[4]', 'PythonTest', batchSize=2)
