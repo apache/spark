@@ -55,7 +55,6 @@ object MLUtils {
    *
    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
-   * @param labelParser parser for labels
    * @param numFeatures number of features, which will be determined from the input data if a
    *                    nonpositive value is given. This is useful when the dataset is already split
    *                    into multiple files and you want to load them separately, because some
@@ -64,10 +63,9 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
-  private def loadLibSVMFile(
+  def loadLibSVMFile(
       sc: SparkContext,
       path: String,
-      labelParser: LabelParser,
       numFeatures: Int,
       minPartitions: Int): RDD[LabeledPoint] = {
     val parsed = sc.textFile(path, minPartitions)
@@ -75,7 +73,7 @@ object MLUtils {
       .filter(line => !(line.isEmpty || line.startsWith("#")))
       .map { line =>
         val items = line.split(' ')
-        val label = labelParser.parse(items.head)
+        val label = items.head.toDouble
         val (indices, values) = items.tail.map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
@@ -102,36 +100,14 @@ object MLUtils {
 
   // Convenient methods for `loadLibSVMFile`.
 
-  /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
-   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
-   * Each line represents a labeled sparse feature vector using the following format:
-   * {{{label index1:value1 index2:value2 ...}}}
-   * where the indices are one-based and in ascending order.
-   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
-   * where the feature indices are converted to zero-based.
-   *
-   * @param sc Spark context
-   * @param path file or directory path in any Hadoop-supported file system URI
-   * @param multiclass whether the input labels contain more than two classes. If false, any label
-   *                   with value greater than 0.5 will be mapped to 1.0, or 0.0 otherwise. So it
-   *                   works for both +1/-1 and 1/0 cases. If true, the double value parsed directly
-   *                   from the label string will be used as the label value.
-   * @param numFeatures number of features, which will be determined from the input data if a
-   *                    nonpositive value is given. This is useful when the dataset is already split
-   *                    into multiple files and you want to load them separately, because some
-   *                    features may not present in certain files, which leads to inconsistent
-   *                    feature dimensions.
-   * @param minPartitions min number of partitions
-   * @return labeled data stored as an RDD[LabeledPoint]
-   */
-   def loadLibSVMFile(
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
+  def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       multiclass: Boolean,
       numFeatures: Int,
       minPartitions: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, LabelParser.getInstance(multiclass), numFeatures, minPartitions)
+    loadLibSVMFile(sc, path, numFeatures, minPartitions)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
@@ -140,26 +116,30 @@ object MLUtils {
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
+      numFeatures: Int): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
+
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
+  def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
       multiclass: Boolean,
       numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, multiclass, numFeatures, sc.defaultMinPartitions)
+    loadLibSVMFile(sc, path, numFeatures)
 
-  /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the number of features
-   * determined automatically and the default number of partitions.
-   */
+  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       multiclass: Boolean): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, multiclass, -1, sc.defaultMinPartitions)
+    loadLibSVMFile(sc, path)
 
   /**
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
    * features determined automatically and the default number of partitions.
    */
   def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, multiclass = false, -1, sc.defaultMinPartitions)
+    loadLibSVMFile(sc, path, -1)
 
   /**
    * Save labeled data in LIBSVM format.
@@ -264,8 +244,8 @@ object MLUtils {
     (1 to numFolds).map { fold =>
       val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
         complement = false)
-      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
-      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
       (training, validation)
     }.toArray
   }

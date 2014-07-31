@@ -24,6 +24,7 @@ from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
+
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -56,7 +57,7 @@ def launch_gateway():
             (stdout, _) = proc.communicate()
             exit_code = proc.poll()
             error_msg = "Launching GatewayServer failed"
-            error_msg += " with exit code %d!" % exit_code if exit_code else "! "
+            error_msg += " with exit code %d! " % exit_code if exit_code else "! "
             error_msg += "(Warning: unexpected output detected.)\n\n"
             error_msg += gateway_port + stdout
             raise Exception(error_msg)

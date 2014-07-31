@@ -25,6 +25,7 @@ import parquet.schema.MessageTypeParser
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, IntegerType}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
@@ -65,7 +67,22 @@ case class AllDataTypes(
     doubleField: Double,
     shortField: Short,
     byteField: Byte,
-    booleanField: Boolean)
+    booleanField: Boolean,
+    binaryField: Array[Byte])
+
+case class AllDataTypesWithNonPrimitiveType(
+    stringField: String,
+    intField: Int,
+    longField: Long,
+    floatField: Float,
+    doubleField: Double,
+    shortField: Short,
+    byteField: Byte,
+    booleanField: Boolean,
+    binaryField: Array[Byte],
+    array: Seq[Int],
+    map: Map[Int, String],
+    data: Data)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
@@ -103,7 +120,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
     TestSQLContext.sparkContext.parallelize(range)
-      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
+        (0 to x).map(_.toByte).toArray))
       .saveAsParquetFile(tempDir)
     val result = parquetFile(tempDir).collect()
     range.foreach {
@@ -116,6 +134,34 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getShort(5) === i.toShort)
         assert(result(i).getByte(6) === i.toByte)
         assert(result(i).getBoolean(7) === (i % 2 == 0))
+        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
+    }
+  }
+
+  test("Read/Write All Types with non-primitive type") {
+    val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+    val range = (0 to 255)
+    TestSQLContext.sparkContext.parallelize(range)
+      .map(x => AllDataTypesWithNonPrimitiveType(
+        s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
+        (0 to x).map(_.toByte).toArray,
+        (0 until x), (0 until x).map(i => i -> s"$i").toMap, Data((0 until x), Nested(x, s"$x"))))
+      .saveAsParquetFile(tempDir)
+    val result = parquetFile(tempDir).collect()
+    range.foreach {
+      i =>
+        assert(result(i).getString(0) == s"$i", s"row $i String field did not match, got ${result(i).getString(0)}")
+        assert(result(i).getInt(1) === i)
+        assert(result(i).getLong(2) === i.toLong)
+        assert(result(i).getFloat(3) === i.toFloat)
+        assert(result(i).getDouble(4) === i.toDouble)
+        assert(result(i).getShort(5) === i.toShort)
+        assert(result(i).getByte(6) === i.toByte)
+        assert(result(i).getBoolean(7) === (i % 2 == 0))
+        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
+        assert(result(i)(9) === (0 until i))
+        assert(result(i)(10) === (0 until i).map(i => i -> s"$i").toMap)
+        assert(result(i)(11) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
     }
   }
 
@@ -163,10 +209,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection of simple Parquet file") {
+    SparkPlan.currentContext.set(TestSQLContext)
     val scanner = new ParquetTableScan(
       ParquetTestData.testData.output,
       ParquetTestData.testData,
-      Seq())(TestSQLContext)
+      Seq())
     val projected = scanner.pruneColumns(ParquetTypesConverter
       .convertToAttributes(MessageTypeParser
       .parseMessageType(ParquetTestData.subTestSchema)))
@@ -298,7 +345,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with Nones as parquet") {
-    val data = OptionalReflectData(null, null, null, null, null)
+    val data = OptionalReflectData(None, None, None, None, None)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")

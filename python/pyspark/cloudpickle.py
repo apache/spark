@@ -243,10 +243,10 @@ class CloudPickler(pickle.Pickler):
         # if func is lambda, def'ed at prompt, is in main, or is nested, then
         # we'll pickle the actual function object rather than simply saving a
         # reference (as is done in default pickler), via save_function_tuple.
-        if islambda(obj) or obj.func_code.co_filename == '<stdin>' or themodule == None:
+        if islambda(obj) or obj.func_code.co_filename == '<stdin>' or themodule is None:
             #Force server to import modules that have been imported in main
             modList = None
-            if themodule == None and not self.savedForceImports:
+            if themodule is None and not self.savedForceImports:
                 mainmod = sys.modules['__main__']
                 if useForcedImports and hasattr(mainmod,'___pyc_forcedImports__'):
                     modList = list(mainmod.___pyc_forcedImports__)
@@ -560,8 +560,9 @@ class CloudPickler(pickle.Pickler):
             ]
 
 
-        itemgetter_obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
-        return self.save_reduce(operator.itemgetter, (itemgetter_obj.item,))
+        obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
+        return self.save_reduce(operator.itemgetter,
+                obj.item if obj.nitems > 1 else (obj.item,))
 
     if PyObject_HEAD:
         dispatch[operator.itemgetter] = save_itemgetter

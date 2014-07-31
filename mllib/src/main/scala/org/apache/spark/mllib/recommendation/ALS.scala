@@ -252,14 +252,17 @@ class ALS private (
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          userPartitioner, rank, lambda, alpha, YtY)
+          rank, lambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          productPartitioner, rank, lambda, alpha, XtX)
+          rank, lambda, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
@@ -267,11 +270,14 @@ class ALS private (
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          userPartitioner, rank, lambda, alpha, YtY = None)
+          rank, lambda, alpha, YtY = None)
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          productPartitioner, rank, lambda, alpha, YtY = None)
+          rank, lambda, alpha, YtY = None)
         users.setName(s"users-$iter")
       }
     }
@@ -430,7 +436,7 @@ class ALS private (
       val inLinkBlock = makeInLinkBlock(numProductBlocks, ratings, productPartitioner)
       val outLinkBlock = makeOutLinkBlock(numProductBlocks, ratings, productPartitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
-    }, true)
+    }, preservesPartitioning = true)
     val inLinks = links.mapValues(_._1)
     val outLinks = links.mapValues(_._2)
     inLinks.persist(StorageLevel.MEMORY_AND_DISK)
@@ -464,7 +470,6 @@ class ALS private (
       products: RDD[(Int, Array[Array[Double]])],
       productOutLinks: RDD[(Int, OutLinkBlock)],
       userInLinks: RDD[(Int, InLinkBlock)],
-      productPartitioner: Partitioner,
       rank: Int,
       lambda: Double,
       alpha: Double,
@@ -477,7 +482,7 @@ class ALS private (
           }
         }
         toSend.zipWithIndex.map{ case (buf, idx) => (idx, (bid, buf.toArray)) }
-    }.groupByKey(productPartitioner)
+    }.groupByKey(new HashPartitioner(numUserBlocks))
      .join(userInLinks)
      .mapValues{ case (messages, inLinkBlock) =>
         updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)

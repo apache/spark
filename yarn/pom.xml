@@ -28,6 +28,9 @@
   <artifactId>yarn-parent_2.10</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project YARN Parent POM</name>
+  <properties>
+    <sbt.project.name>yarn</sbt.project.name>
+  </properties>
 
   <dependencies>
     <dependency>

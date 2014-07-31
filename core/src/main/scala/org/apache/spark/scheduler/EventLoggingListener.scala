@@ -29,7 +29,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{FileLogger, JsonProtocol}
+import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -55,13 +55,20 @@ private[spark] class EventLoggingListener(
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
-  val logDir = logBaseDir + "/" + name
+  val logDir = Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
 
   protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
     shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
+
+  /**
+   * Return only the unique application directory without the base directory.
+   */
+  def getApplicationLogDir(): String = {
+    name
+  }
 
   /**
    * Begin logging events.
@@ -208,7 +215,7 @@ private[spark] object EventLoggingListener extends Logging {
     } catch {
       case e: Exception =>
         logError("Exception in parsing logging info from directory %s".format(logDir), e)
-      EventLoggingInfo.empty
+        EventLoggingInfo.empty
     }
   }
 

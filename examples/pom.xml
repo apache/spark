@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-examples_2.10</artifactId>
+  <properties>
+    <sbt.project.name>examples</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
