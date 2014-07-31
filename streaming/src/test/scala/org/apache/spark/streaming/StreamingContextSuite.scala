@@ -60,7 +60,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   }
 
   test("from no conf + spark home") {
-    ssc = new StreamingContext(master, appName, batchDuration, sparkHome, Nil)
+    ssc = new StreamingContext(master, appName, batchDuration, sparkHome, Nil, Map(envPair))
     assert(ssc.conf.get("spark.home") === sparkHome)
   }
 
