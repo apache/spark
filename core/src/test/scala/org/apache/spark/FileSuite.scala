@@ -330,7 +330,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
       sc.hadoopFile(outDir, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
         .asInstanceOf[HadoopRDD[_, _]]
         .mapPartitionsWithInputSplit { (split, part) =>
-          List(split.asInstanceOf[FileSplit].getPath.toUri.getPath).toIterator
+          Iterator(split.asInstanceOf[FileSplit].getPath.toUri.getPath)
         }.collect()
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
@@ -344,7 +344,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
       sc.newAPIHadoopFile(outDir, classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
         .asInstanceOf[NewHadoopRDD[_, _]]
         .mapPartitionsWithInputSplit { (split, part) =>
-          List(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath).toIterator
+          Iterator(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath)
         }.collect()
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
