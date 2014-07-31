@@ -60,7 +60,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     // the max number of nodes possible given the depth of the tree
-    val maxNumNodes = math.pow(2, maxDepth).toInt - 1
+    val maxNumNodes = math.pow(2, maxDepth + 1).toInt - 1
     // Initialize an array to hold filters applied to points for each node.
     val filters = new Array[List[Filter]](maxNumNodes)
     // The filter at the top node is an empty list.
@@ -100,7 +100,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     var level = 0
     var break = false
-    while (level < maxDepth && !break) {
+    while (level <= maxDepth && !break) {
 
       logDebug("#####################################")
       logDebug("level = " + level)
@@ -152,7 +152,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val split = nodeSplitStats._1
     val stats = nodeSplitStats._2
     val nodeIndex = math.pow(2, level).toInt - 1 + index
-    val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth - 1)
+    val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth)
     val node = new Node(nodeIndex, stats.predict, isLeaf, Some(split), None, None, Some(stats))
     logDebug("Node = " + node)
     nodes(nodeIndex) = node
@@ -173,7 +173,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     while (i <= 1) {
      // Calculate the index of the node from the node level and the index at the current level.
       val nodeIndex = math.pow(2, level + 1).toInt - 1 + 2 * index + i
-      if (level < maxDepth - 1) {
+      if (level < maxDepth) {
         val impurity = if (i == 0) {
           nodeSplitStats._2.leftImpurity
         } else {
@@ -223,7 +223,8 @@ object DecisionTree extends Serializable with Logging {
    *              training data
    * @param algo algorithm, classification or regression
    * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth maxDepth maximum depth of the tree
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @return a DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -245,7 +246,8 @@ object DecisionTree extends Serializable with Logging {
    *              training data
    * @param algo algorithm, classification or regression
    * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth maxDepth maximum depth of the tree
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClassesForClassification number of classes for classification. Default value of 2.
    * @return a DecisionTreeModel that can be used for prediction
    */
@@ -270,7 +272,8 @@ object DecisionTree extends Serializable with Logging {
    *              training data for DecisionTree
    * @param algo classification or regression
    * @param impurity criterion used for information gain calculation
-   * @param maxDepth  maximum depth of the tree
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClassesForClassification number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
