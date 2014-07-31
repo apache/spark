@@ -17,7 +17,10 @@
 # limitations under the License.
 #
 
-export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
+if [ -z $SPARK_HOME ]; then  
+  export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
+fi
+
 ORIG_ARGS=("$@")
 
 while (($#)); do

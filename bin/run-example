@@ -20,7 +20,11 @@
 SCALA_VERSION=2.10
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
-export SPARK_HOME="$FWDIR"
+
+if [ -z $SPARK_HOME ]; then 
+  export SPARK_HOME="$FWDIR"
+fi
+
 EXAMPLES_DIR="$FWDIR"/examples
 
 if [ -n "$1" ]; then
