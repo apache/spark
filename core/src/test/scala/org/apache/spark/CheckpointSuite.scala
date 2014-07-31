@@ -267,13 +267,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val partitionsBeforeCheckpoint = operatedRDD.partitions
 
     // Find serialized sizes before and after the checkpoint
-    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString())
+    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
     val (rddSizeBeforeCheckpoint, partitionSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
     operatedRDD.checkpoint()
     val result = collectFunc(operatedRDD)
     operatedRDD.collect() // force re-initialization of post-checkpoint lazy variables
     val (rddSizeAfterCheckpoint, partitionSizeAfterCheckpoint) = getSerializedSizes(operatedRDD)
-    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString())
+    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
 
     // Test whether the checkpoint file has been created
     assert(collectFunc(sc.checkpointFile[U](operatedRDD.getCheckpointFile.get)) === result)
@@ -328,13 +328,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     initializeRdd(operatedRDD)
 
     // Find serialized sizes before and after the checkpoint
-    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString())
+    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
     val (rddSizeBeforeCheckpoint, partitionSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
     parentRDDs.foreach(_.checkpoint())  // checkpoint the parent RDD, not the generated one
     val result = collectFunc(operatedRDD)  // force checkpointing
     operatedRDD.collect() // force re-initialization of post-checkpoint lazy variables
     val (rddSizeAfterCheckpoint, partitionSizeAfterCheckpoint) = getSerializedSizes(operatedRDD)
-    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString())
+    logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
 
     // Test whether the data in the checkpointed RDD is same as original
     assert(collectFunc(operatedRDD) === result)

@@ -1278,29 +1278,17 @@ abstract class RDD[T: ClassTag](
     dependencies_ = null
   }
 
-  /**
-   * A description of this RDD and its recursive dependencies for debugging.
-   * 
-   * @param debugMemory If true, determine and output the actual memory in use by each RDD
-   *                    in our RDD chain.  Determining this actual memory profile can be
-   *                    rather expensive, so the default is false.
-   *                    https://issues.apache.org/jira/browse/SPARK-2316 exists to address 
-   *                    this inefficiency; when it is fixed, this could be defaulted to true,
-   *                    or the extra parameter could be eliminated.
-   */
-  @DeveloperApi
-  def toDebugString (debugMemory: Boolean = false): String = {
+  /** A description of this RDD and its recursive dependencies for debugging. */
+  def toDebugString: String = {
     // Get a debug description of an rdd without its children
     def debugSelf (rdd: RDD[_]): Seq[String] = {
       import Utils.bytesToString
 
       val persistence = storageLevel.description
-      val storageInfo = if (debugMemory) {
-        rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
-          "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
-            info.numCachedPartitions, bytesToString(info.memSize),
-            bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
-      } else Array[String]()
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize),
+          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
 
       s"$rdd [$persistence]" +: storageInfo
     }

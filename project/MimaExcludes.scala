@@ -83,14 +83,6 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures")
           ) ++
-          Seq(
-            // Ignore method signature changes to toDebugString.  It is now marked @DeveloperAPI,
-            // so no need to exclude the new signatures.
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.rdd.RDD.toDebugString"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaRDDLike.toDebugString")
-          ) ++
           MimaBuild.excludeSparkClass("mllib.linalg.distributed.ColumnStatisticsAggregator") ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
