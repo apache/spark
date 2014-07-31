@@ -73,6 +73,8 @@ trait ExecutorRunnableUtil extends Logging {
     sparkConf.getAkkaConf.
       foreach { case (k, v) => javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\"" }
 
+    JAVA_OPTS += "-Dspark.executor.cores" + "=" + "\\\"" + executorCores + "\\\""
+
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
     // The context is, default gc for server class machines end up using all cores to do gc - hence

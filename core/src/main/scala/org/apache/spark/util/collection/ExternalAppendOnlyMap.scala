@@ -135,9 +135,9 @@ class ExternalAppendOnlyMap[K, V, C](
           (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
 
         // Assume map growth factor is 2x
-        shouldSpill = availableMemory < mapSize * 2
+        shouldSpill = availableMemory < mapSize * SparkEnv.get.conf.get("spark.executor.cores").toInt
         if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = mapSize * 2
+          shuffleMemoryMap(threadId) = mapSize
         }
       }
       // Do not synchronize spills
