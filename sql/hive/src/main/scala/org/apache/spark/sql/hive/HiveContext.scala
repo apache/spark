@@ -37,7 +37,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
@@ -231,7 +230,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveTableScans,
       DataSinks,
       Scripts,
-      PartialAggregation,
+      HashAggregation,
       LeftSemiJoin,
       HashJoin,
       BasicOperators,
@@ -253,22 +252,23 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, TimestampType)
+        ShortType, DecimalType, TimestampType, BinaryType)
 
-    protected def toHiveString(a: (Any, DataType)): String = a match {
+    protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ)) =>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
+      case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -278,9 +278,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ)) =>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))

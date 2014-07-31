@@ -62,13 +62,15 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     conf.getInt("spark.core.connection.handler.threads.min", 20),
     conf.getInt("spark.core.connection.handler.threads.max", 60),
     conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-message-executor"))
 
   private val handleReadWriteExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.io.threads.min", 4),
     conf.getInt("spark.core.connection.io.threads.max", 32),
     conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-read-write-executor"))
 
   // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks :
   // which should be executed asap
@@ -76,7 +78,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     conf.getInt("spark.core.connection.connect.threads.min", 1),
     conf.getInt("spark.core.connection.connect.threads.max", 8),
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-connect-executor"))
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
