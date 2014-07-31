@@ -357,23 +357,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(CaseWhen(Seq(c2, c4, c6)).nullable === true)
     assert(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable === true)
     assert(CaseWhen(Seq(c2, c4, c3, c5)).nullable === true)
-
-    val c4_notNull = 'a.boolean.notNull.at(3)
-    val c5_notNull = 'a.boolean.notNull.at(4)
-    val c6_notNull = 'a.boolean.notNull.at(5)
-
-    assert(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c6)).nullable === true)
-
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable === true)
-
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
   }
 
   test("complex type") {
@@ -547,13 +530,6 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // 2-arg substring from nonzero position
     checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
-
-    val s_notNull = 'a.string.notNull.at(0)
-
-    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
-    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)
