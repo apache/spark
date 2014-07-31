@@ -42,6 +42,9 @@ class DataType(object):
     """Spark SQL DataType"""
 
     def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
         return self.__class__.__name__
 
     def __hash__(self):
@@ -210,7 +213,7 @@ class MapType(DataType):
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
 
-    def __str__(self):
+    def __repr__(self):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
                str(self.valueContainsNull).lower())
 
@@ -240,7 +243,7 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
 
-    def __str__(self):
+    def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
                str(self.nullable).lower())
 
@@ -267,7 +270,7 @@ class StructType(DataType):
         """
         self.fields = fields
 
-    def __str__(self):
+    def __repr__(self):
         return ("StructType(List(%s))" %
                     ",".join(str(field) for field in self.fields))
 
@@ -401,7 +404,7 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
-def _inferType(obj):
+def _infer_type(obj):
     """Infer the DataType from obj"""
     if obj is None:
         raise ValueError("Can not infer type for None")
@@ -414,18 +417,18 @@ def _inferType(obj):
         if not obj:
             raise ValueError("Can not infer type for empty dict")
         key, value = obj.iteritems().next()
-        return MapType(_inferType(key), _inferType(value), True)
+        return MapType(_infer_type(key), _infer_type(value), True)
     elif isinstance(obj, (list, array.array)):
         if not obj:
             raise ValueError("Can not infer type for empty list/array")
-        return ArrayType(_inferType(obj[0]), True)
+        return ArrayType(_infer_type(obj[0]), True)
     else:
         try:
-            return _inferSchema(obj)
+            return _infer_schema(obj)
         except ValueError:
             raise ValueError("not supported type: %s" % type(obj))
 
-def _inferSchema(row):
+def _infer_schema(row):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -440,7 +443,7 @@ def _inferSchema(row):
     else:
         raise ValueError("Can not infer schema for type: %s" % type(row))
 
-    fields = [StructField(k, _inferType(v), True) for k, v in items]
+    fields = [StructField(k, _infer_type(v), True) for k, v in items]
     return StructType(fields)
 
 def _create_converter(obj, dataType):
@@ -492,6 +495,133 @@ def _dropSchema(rows, schema):
     yield converter(row)
     for i in iterator:
         yield converter(i)
+
+
+_BRAKETS = {'(':')', '[':']', '{':'}'}
+
+def _split_schema_abstract(s):
+    """
+    split the schema abstract into fields
+
+    >>> _split_schema_abstract("a b  c")
+    ['a', 'b', 'c']
+    >>> _split_schema_abstract("a(a b)")
+    ['a(a b)']
+    >>> _split_schema_abstract("a b[] c{a b}")
+    ['a', 'b[]', 'c{a b}']
+    >>> _split_schema_abstract(" ")
+    []
+    """
+
+    r = []
+    w = ''
+    brackets = []
+    for c in s:
+        if c == ' ' and not brackets:
+            if w:
+                r.append(w)
+            w = ''
+        else:
+            w += c
+            if c in _BRAKETS:
+                brackets.append(c)
+            elif c in _BRAKETS.values():
+                if not brackets or c != _BRAKETS[brackets.pop()]:
+                    raise ValueError("unexpected " + c)
+
+    if brackets:
+        raise ValueError("brackets not closed: %s" % brackets)
+    if w:
+        r.append(w)
+    return r
+
+def _parse_field_abstract(s):
+    """
+    Parse a field in schema abstract
+
+    >>> _parse_field_abstract("a")
+    StructField(a,None,true)
+    >>> _parse_field_abstract("b(c d)")
+    StructField(b,StructType(List(StructField(c,None,true),StructField(d,None,true))),true)
+    >>> _parse_field_abstract("a[]")
+    StructField(a,ArrayType(None,true),true)
+    >>> _parse_field_abstract("a{[]}")
+    StructField(a,MapType(None,ArrayType(None,true),true),true)
+    """
+    if set(_BRAKETS.keys()) & set(s):
+        idx = min((s.index(c) for c in _BRAKETS if c in s))
+        name = s[:idx]
+        return StructField(name, _parse_schema_abstract(s[idx:]), True)
+    else:
+        return StructField(s, None, True)
+
+def _parse_schema_abstract(s):
+    """
+    parse abstract into schema
+
+    >>> _parse_schema_abstract("a b  c")
+    StructType...a...b...c...
+    >>> _parse_schema_abstract("a[b c] b{}")
+    StructType...a,ArrayType...b...c...b,MapType...
+    >>> _parse_schema_abstract("c{} d{a b}")
+    StructType...c,MapType...d,MapType...a...b...
+    >>> _parse_schema_abstract("a b(t)").fields[1]
+    StructField(b,StructType(List(StructField(t,None,true))),true)
+    """
+    s = s.strip()
+    if not s:
+        return
+
+    elif s.startswith('('):
+        return _parse_schema_abstract(s[1:-1])
+
+    elif s.startswith('['):
+        return ArrayType(_parse_schema_abstract(s[1:-1]), True)
+
+    elif s.startswith('{'):
+        return MapType(None, _parse_schema_abstract(s[1:-1]))
+
+    parts = _split_schema_abstract(s)
+    fields = [_parse_field_abstract(p) for p in parts]
+    return StructType(fields)
+
+def _infer_schema_type(obj, dataType):
+    """
+    Fill the dataType with types infered from obj
+
+    >>> schema = _parse_schema_abstract("a b c")
+    >>> row = (1, 1.0, "str")
+    >>> _infer_schema_type(row, schema)
+    StructType...IntegerType...DoubleType...StringType...
+    >>> row = [[1], {"key": (1, 2.0)}]
+    >>> schema = _parse_schema_abstract("a[] b{c d}")
+    >>> _infer_schema_type(row, schema)
+    StructType...a,ArrayType...b,MapType(StringType,StructType...c,IntegerType...
+    """
+    if dataType is None:
+        return _infer_type(obj)
+
+    if not obj:
+        raise ValueError("Can not infer type from empty value")
+
+    if isinstance(dataType, ArrayType):
+        eType = _infer_schema_type(obj[0], dataType.elementType)
+        return ArrayType(eType, True)
+
+    elif isinstance(dataType, MapType):
+        k, v = obj.iteritems().next()
+        return MapType(_infer_type(k),
+                       _infer_schema_type(v, dataType.valueType))
+
+    elif isinstance(dataType, StructType):
+        fs = dataType.fields
+        assert len(fs) == len(obj), "Obj(%s) have different length with fields(%s)" % (obj, fs)
+        fields = [StructField(f.name, _infer_schema_type(o, f.dataType), True)
+                    for o, f in zip(obj, fs)]
+        return StructType(fields)
+
+    else:
+        raise ValueError("Unexpected dataType: %s" % dataType)
 
 
 _cached_cls = {}
@@ -684,7 +814,7 @@ class SQLContext:
         if not first:
             raise ValueError("The first row in RDD is empty, can not infer schema")
 
-        schema = _inferSchema(first)
+        schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _dropSchema(rows, schema))
         return self.applySchema(rdd, schema)
 
@@ -698,6 +828,7 @@ class SQLContext:
         >>> srdd2 = sqlCtx.sql("SELECT * from table1")
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2'), Row(field1=3, field2=u'row3')]
+
         >>> from datetime import datetime
         >>> rdd = sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
         ... {"a": 1}, {"b": 2}, [1, 2, 3], None)])
@@ -715,7 +846,24 @@ class SQLContext:
         ...         x.byte, x.short, x.float, x.time, x.map["a"], x.struct.b, x.list, x.null))
         >>> srdd.collect()[0]
         (127, -32768, 1.0, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+
+        >>> rdd = sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
+        ... {"a": 1}, {"b": 2}, [1, 2, 3])])
+        >>> schema = "byte short float time map{} struct(b) list[]"
+        >>> srdd = sqlCtx.applySchema(rdd, schema)
+        >>> srdd.collect()
+        [Row(byte=127, short=-32768, float=1.0, time=..., struct=Row(b=2), list=[1, 2, 3])]
+
         """
+
+        first = rdd.first()
+        if not isinstance(first, (tuple, list)):
+            raise ValueError("Can not apply schema to type: %s" % type(first))
+
+        if isinstance(schema, basestring):
+            schema = _parse_schema_abstract(schema)
+            schema = _infer_schema_type(first, schema)
+
         batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
         jrdd = self._pythonToJava(rdd._jrdd, batched)
         srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
