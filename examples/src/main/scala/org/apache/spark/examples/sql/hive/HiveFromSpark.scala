@@ -19,7 +19,7 @@ package org.apache.spark.examples.sql.hive
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.LocalHiveContext
+import org.apache.spark.sql.hive.HiveContext
 
 object HiveFromSpark {
   case class Record(key: Int, value: String)
@@ -31,7 +31,7 @@ object HiveFromSpark {
     // A local hive context creates an instance of the Hive Metastore in process, storing the
     // the warehouse data in the current directory.  This location can be overridden by
     // specifying a second parameter to the constructor.
-    val hiveContext = new LocalHiveContext(sc)
+    val hiveContext = new HiveContext(sc)
     import hiveContext._
 
     hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")

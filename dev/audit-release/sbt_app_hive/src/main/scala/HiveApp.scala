@@ -22,7 +22,7 @@ import scala.collection.mutable.{ListBuffer, Queue}
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.hive.LocalHiveContext
+import org.apache.spark.sql.hive.HiveContext
 
 case class Person(name: String, age: Int)
 
@@ -34,7 +34,7 @@ object SparkSqlExample {
       case None => new SparkConf().setAppName("Simple Sql App")
     }
     val sc = new SparkContext(conf)
-    val hiveContext = new LocalHiveContext(sc)
+    val hiveContext = new HiveContext(sc)
 
     import hiveContext._
     hql("DROP TABLE IF EXISTS src")

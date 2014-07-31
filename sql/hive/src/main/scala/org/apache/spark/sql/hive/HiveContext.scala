@@ -42,9 +42,12 @@ import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 /**
- * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
- * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
+ * DEPRECATED: Use HiveContext instead.
  */
+@deprecated("""
+  Use HiveContext instead.  It will still create a local metastore if one is not specified.
+  However, note that the default directory is ./metastore_db, not ./metastore
+  """, "1.1")
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val metastorePath = new File("metastore").getCanonicalPath

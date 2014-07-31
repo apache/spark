@@ -487,9 +487,9 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can also experiment with the `LocalHiveContext`,
-which is similar to `HiveContext`, but creates a local copy of the `metastore` and `warehouse`
-automatically.
+not have an existing Hive deployment can still create a HiveContext.  When not configured by the
+hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
+directory.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
