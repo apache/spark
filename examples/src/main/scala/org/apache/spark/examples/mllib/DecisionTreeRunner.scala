@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 /**
  * An example runner for decision tree. Run with
  * {{{
- * ./bin/spark-example org.apache.spark.examples.mllib.DecisionTreeRunner [options]
+ * ./bin/run-example org.apache.spark.examples.mllib.DecisionTreeRunner [options]
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
