@@ -255,13 +255,13 @@ class PythonMLLibAPI extends Serializable {
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
-    lrAlg.optimizer.
-      setNumIterations(numIterations).
-      setRegParam(regParam).
-      setStepSize(stepSize)
-    if (regType == "SquaredUpdater")
+    lrAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+    if (regType == "l2")
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
-    else if (regType == "L1Updater")
+    else if (regType == "l1")
       lrAlg.optimizer.setUpdater(new L1Updater)
     trainRegressionModel(
       (data, initialWeights) =>

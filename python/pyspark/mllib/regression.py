@@ -113,21 +113,39 @@ class LinearRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0, regType=None,
               intercept=False, miniBatchFraction=1.0, initialWeights=None):
-        """Train a linear regression model on the given data. The 'regType' parameter can take
-           one from the following string values: "L1Updater" for invoking the lasso regularizer,
-           "SquaredUpdater" for invoking the ridge regularizer or "NONE" for not using a
-           regularizer at all. The user can determine the regularizer parameter by setting the
-           appropriate value to variable 'regParam' (by default is set to 1.0)."""
+        """
+        Train a linear regression model on the given data.
+
+        @param data:              The training data.
+        @param iterations:        The number of iterations (default: 100).
+        @param step:              The step parameter used in SGD
+                                  (default: 1.0).
+        @param regParam:          The regularizer parameter (default: 1.0).
+        @param regType:           The type of regularizer used for training
+                                  our model.
+                                  Allowed values: "l1" for using L1Updater,
+                                                  "l2" for using
+                                                       SquaredL2Updater,
+                                                  "none" for no regularizer.
+                                  (default: None)
+        @param intercept:         Boolean parameter which indicates the use
+                                  or not of the augmented representation for
+                                  training data (i.e. whether bias features
+                                  are activated or not).
+        @param miniBatchFraction: Fraction of data to be used for each SGD
+                                  iteration.
+        @param initialWeights:    The initial weights (default: None).
+        """
         sc = data.context
         if regType is None:
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                d._jrdd, iterations, step, regParam, "NONE", intercept, miniBatchFraction, i)
-        elif regType == "SquaredUpdater" or regType == "L1Updater" or regType == "NONE":
+                d._jrdd, iterations, step, regParam, "none", intercept, miniBatchFraction, i)
+        elif regType == "l2" or regType == "l1" or regType == "none":
             train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
                 d._jrdd, iterations, step, regParam, regType, intercept, miniBatchFraction, i)
         else:
             raise ValueError("Invalid value for 'regType' parameter. Can only be initialized " +
-                             "using the following string values [L1Updater, SquaredUpdater, NONE].")
+                             "using the following string values: [l1, l2, none].")
         return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 class LassoModel(LinearRegressionModelBase):
