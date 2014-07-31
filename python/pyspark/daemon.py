@@ -87,13 +87,17 @@ def manager():
     listen_host, listen_port = listen_sock.getsockname()
     write_int(listen_port, sys.stdout)
 
-    def shutdown():
-        global exit_flag
-        exit_flag.value = True
+    def shutdown(code):
+        signal.signal(SIGTERM, SIG_DFL)
+        # Send SIGHUP to notify workers of shutdown
+        os.kill(0, SIGHUP)
+        exit(code)
 
-    # Gracefully exit on SIGTERM, don't die on SIGHUP
-    signal.signal(SIGTERM, lambda signum, frame: shutdown())
-    signal.signal(SIGHUP, SIG_IGN)
+    def sig_term(signum, frame):
+        print >> sys.stderr, "daemon.py shutting down due to SIGTERM"
+        shutdown(1)
+    signal.signal(SIGTERM, sig_term)  # Gracefully exit on SIGTERM
+    signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
 
     # Cleanup zombie children
     def handle_sigchld(*args):
@@ -120,7 +124,8 @@ def manager():
                     raise
             if 0 in ready_fds:
                 # Spark told us to exit by closing stdin
-                shutdown()
+                print >> sys.stderr, "daemon.py shutting down because Java closed stdin"
+                shutdown(0)
             if listen_sock in ready_fds:
                 sock, addr = listen_sock.accept()
                 # Launch a worker process
@@ -136,9 +141,8 @@ def manager():
                 else:
                     sock.close()
     finally:
-        signal.signal(SIGTERM, SIG_DFL)
-        # Send SIGHUP to notify workers of shutdown
-        os.kill(0, SIGHUP)
+        print >> sys.stderr, "daemon.py shutting down due to uncaught exception"
+        shutdown(1)
 
 
 if __name__ == '__main__':
