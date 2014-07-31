@@ -34,6 +34,7 @@ import zipfile
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
 try:
@@ -47,16 +48,73 @@ except:
 SPARK_HOME = os.environ["SPARK_HOME"]
 
 
+class TestMerger(unittest.TestCase):
+
+    def setUp(self):
+        self.N = 1 << 16
+        self.l = [i for i in xrange(self.N)]
+        self.data = zip(self.l, self.l)
+        self.agg = Aggregator(lambda x: [x], 
+                lambda x, y: x.append(y) or x,
+                lambda x, y: x.extend(y) or x)
+
+    def test_in_memory(self):
+        m = InMemoryMerger(self.agg)
+        m.mergeValues(self.data)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = InMemoryMerger(self.agg)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+    def test_small_dataset(self):
+        m = ExternalMerger(self.agg, 1000)
+        m.mergeValues(self.data)
+        self.assertEqual(m.spills, 0)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 1000)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(m.spills, 0)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+    def test_medium_dataset(self):
+        m = ExternalMerger(self.agg, 10)
+        m.mergeValues(self.data)
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 10)
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data * 3))
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)) * 3)
+
+    def test_huge_dataset(self):
+        m = ExternalMerger(self.agg, 10)
+        m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
+                self.N * 10)
+        m._cleanup()
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.sc = SparkContext('local[4]', class_name , batchSize=2)
+        self.sc = SparkContext('local[4]', class_name, batchSize=2)
 
     def tearDown(self):
         self.sc.stop()
         sys.path = self._old_sys_path
+
 
 class TestCheckpoint(PySparkTestCase):
 
@@ -107,11 +165,17 @@ class TestAddFile(PySparkTestCase):
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this job fails due to `userlibrary` not being on the Python path:
+        # disable logging in log4j temporarily
+        log4j = self.sc._jvm.org.apache.log4j
+        old_level = log4j.LogManager.getRootLogger().getLevel()
+        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
         def func(x):
             from userlibrary import UserClass
             return UserClass().hello()
         self.assertRaises(Exception,
                           self.sc.parallelize(range(2)).map(func).first)
+        log4j.LogManager.getRootLogger().setLevel(old_level)
+
         # Add the file, so the job should now succeed:
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
@@ -151,6 +215,12 @@ class TestAddFile(PySparkTestCase):
 
 class TestRDDFunctions(PySparkTestCase):
 
+    def test_failed_sparkcontext_creation(self):
+        # Regression test for SPARK-1550
+        self.sc.stop()
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
+        self.sc = SparkContext("local")
+
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"
@@ -167,6 +237,15 @@ class TestRDDFunctions(PySparkTestCase):
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
         result = cart.map(lambda (x, y): x + y).collect()
+
+    def test_transforming_pickle_file(self):
+        # Regression test for SPARK-2601
+        data = self.sc.parallelize(["Hello", "World!"])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsPickleFile(tempFile.name)
+        pickled_file = self.sc.pickleFile(tempFile.name)
+        pickled_file.map(lambda x: x).collect()
 
     def test_cartesian_on_textfile(self):
         # Regression test for
@@ -190,6 +269,7 @@ class TestRDDFunctions(PySparkTestCase):
 
     def testAggregateByKey(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
+
         def seqOp(x, y):
             x.add(y)
             return x
@@ -197,17 +277,25 @@ class TestRDDFunctions(PySparkTestCase):
         def combOp(x, y):
             x |= y
             return x
-          
+
         sets = dict(data.aggregateByKey(set(), seqOp, combOp).collect())
         self.assertEqual(3, len(sets))
         self.assertEqual(set([1]), sets[1])
         self.assertEqual(set([2]), sets[3])
         self.assertEqual(set([1, 3]), sets[5])
 
+    def test_itemgetter(self):
+        rdd = self.sc.parallelize([range(10)])
+        from operator import itemgetter
+        self.assertEqual([1], rdd.map(itemgetter(1)).collect())
+        self.assertEqual([(2, 3)], rdd.map(itemgetter(2, 3)).collect())
+
+
 class TestIO(PySparkTestCase):
 
     def test_stdout_redirection(self):
         import subprocess
+
         def func(x):
             subprocess.check_call('ls', shell=True)
         self.sc.parallelize([1]).foreach(func)
@@ -479,7 +567,7 @@ class TestSparkSubmit(unittest.TestCase):
             |    return x + 1
             """)
         proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
-            stdout=subprocess.PIPE)
+                                stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)

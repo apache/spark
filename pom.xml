@@ -100,6 +100,7 @@
     <module>external/twitter</module>
     <module>external/kafka</module>
     <module>external/flume</module>
+    <module>external/flume-sink</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
@@ -254,9 +255,15 @@
         <version>3.3.2</version>
       </dependency>
       <dependency>
-	  <groupId>commons-codec</groupId>
-	    <artifactId>commons-codec</artifactId>
-	    <version>1.5</version>
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>1.5</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-math3</artifactId>
+        <version>3.3</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
@@ -959,6 +966,30 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <version>0.4.0</version>
+        <configuration>
+          <verbose>false</verbose>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <failOnWarning>false</failOnWarning>
+          <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
+          <configLocation>scalastyle-config.xml</configLocation>
+          <outputFile>scalastyle-output.xml</outputFile>
+          <outputEncoding>UTF-8</outputEncoding>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
@@ -974,9 +1005,9 @@
 
     <!-- Kinesis integration is not included by default due to ASL-licensed code -->
     <profile>
-      <id>spark-kinesis-asl</id>
+      <id>kinesis-asl</id>
       <modules>
-        <module>extras/spark-kinesis-asl</module>
+        <module>extras/kinesis-asl</module>
       </modules>
     </profile>
 
@@ -1123,6 +1154,16 @@
           <scope>provided</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>hive-thriftserver</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
     </profile>
 
   </profiles>
