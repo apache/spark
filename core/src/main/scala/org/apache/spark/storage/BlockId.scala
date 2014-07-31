@@ -69,6 +69,11 @@ case class BroadcastBlockId(broadcastId: Long, field: String = "") extends Block
 }
 
 @DeveloperApi
+case class EventBlockId(eventId: Long) extends BlockId {
+  def name = "eventblock_" + eventId
+}
+
+@DeveloperApi
 case class TaskResultBlockId(taskId: Long) extends BlockId {
   def name = "taskresult_" + taskId
 }
@@ -96,6 +101,7 @@ object BlockId {
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val EVENT = "eventblock_([0-9]+)".r
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */
@@ -110,6 +116,8 @@ object BlockId {
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>
       TaskResultBlockId(taskId.toLong)
+    case EVENT(eventId) =>
+      EventBlockId(eventId.toLong)
     case STREAM(streamId, uniqueId) =>
       StreamBlockId(streamId.toInt, uniqueId.toLong)
     case TEST(value) =>
