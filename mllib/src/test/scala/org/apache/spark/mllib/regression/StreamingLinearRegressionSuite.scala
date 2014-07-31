@@ -19,14 +19,15 @@ package org.apache.spark.mllib.regression
 
 import java.io.File
 
-import com.google.common.io.Files
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.io.FileUtils
+import com.google.common.io.Files
 import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.util.{MLStreamingUtils, LinearDataGenerator, LocalSparkContext}
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
-import org.apache.spark.mllib.util.{MLStreamingUtils, LinearDataGenerator, LocalSparkContext}
-
-import scala.collection.mutable.ArrayBuffer
 
 class StreamingLinearRegressionSuite extends FunSuite {
 

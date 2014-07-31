@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
+import org.apache.spark.Logging
 import org.apache.spark.streaming.dstream.DStream
 
 /**

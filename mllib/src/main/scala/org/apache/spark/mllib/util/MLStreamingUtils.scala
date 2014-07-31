@@ -18,9 +18,9 @@
 package org.apache.spark.mllib.util
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.regression.{LabeledPointParser, LabeledPoint}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.mllib.regression.{LabeledPointParser, LabeledPoint}
 
 /**
  * Helper methods to load streaming data for MLLib applications.
