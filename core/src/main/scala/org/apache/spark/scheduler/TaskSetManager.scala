@@ -416,7 +416,7 @@ private[spark] class TaskSetManager(
 
       var allowedLocality = maxLocality
 
-      if (maxLocality != TaskLocality.NO_PREF || hasNodeLocalOnlyTasks) {
+      if (maxLocality != TaskLocality.NO_PREF) {//} || hasNodeLocalOnlyTasks) {
         allowedLocality = getAllowedLocalityLevel(curTime)
         if (allowedLocality > maxLocality) {
           // We're not allowed to search for farther-away tasks
