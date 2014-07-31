@@ -223,7 +223,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[scala.Double], Array[Long]] = {
+  def histogram(bucketCount: Int): (Array[scala.Double], Array[Long]) = {
     val result = srdd.histogram(bucketCount)
     (result._1, result._2)
   }
