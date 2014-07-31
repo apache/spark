@@ -28,9 +28,9 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-import org.jblas.DoubleMatrix;
 import scala.Tuple2;
 import scala.Tuple3;
+import org.jblas.DoubleMatrix;
 
 public class JavaALSSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -46,14 +46,15 @@ public class JavaALSSuite implements Serializable {
     sc = null;
   }
 
-  static void validatePrediction(MatrixFactorizationModel model,
-                                 int users,
-                                 int products,
-                                 int features,
-                                 DoubleMatrix trueRatings,
-                                 double matchThreshold,
-                                 boolean implicitPrefs,
-                                 DoubleMatrix truePrefs) {
+  static void validatePrediction(
+      MatrixFactorizationModel model,
+      int users,
+      int products,
+      int features,
+      DoubleMatrix trueRatings,
+      double matchThreshold,
+      boolean implicitPrefs,
+      DoubleMatrix truePrefs) {
     DoubleMatrix predictedU = new DoubleMatrix(users, features);
     List<Tuple2<Object, double[]>> userFeatures = model.userFeatures().toJavaRDD().collect();
     for (int i = 0; i < features; ++i) {
@@ -176,7 +177,11 @@ public class JavaALSSuite implements Serializable {
         users, products, features, 0.7, true, true);
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
-    MatrixFactorizationModel model = ALS.trainImplicit(data.rdd(), features, iterations);
+    MatrixFactorizationModel model = new ALS().setRank(features)
+        .setIterations(iterations)
+        .setImplicitPrefs(true)
+        .setSeed(8675309L)
+        .run(data.rdd());
     validatePrediction(model, users, products, features, testData._2(), 0.4, true, testData._3());
   }
 
@@ -189,20 +194,21 @@ public class JavaALSSuite implements Serializable {
     Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, true, false);
     JavaRDD<Rating> data = sc.parallelize(testData._1());
-    MatrixFactorizationModel model = ALS.trainImplicit(data.rdd(), features, iterations);
+    MatrixFactorizationModel model = new ALS().setRank(features)
+        .setIterations(iterations)
+        .setImplicitPrefs(true)
+        .setSeed(8675309L)
+        .run(data.rdd());
     validateRecommendations(model.recommendProducts(1, 10), 10);
     validateRecommendations(model.recommendUsers(1, 20), 20);
   }
 
-  private static void validateRecommendations(Tuple2<Object,Object>[] recommendations, int howMany) {
-    @SuppressWarnings("unchecked")
-    Tuple2<Integer,Double>[] javaRecs = (Tuple2<Integer,Double>[]) (Object[]) recommendations;
-    Assert.assertEquals(howMany, javaRecs.length);
-    for (int i = 1; i < javaRecs.length; i++) {
-      Assert.assertTrue(javaRecs[i-1]._2() > javaRecs[i]._2());
+  private static void validateRecommendations(Rating[] recommendations, int howMany) {
+    Assert.assertEquals(howMany, recommendations.length);
+    for (int i = 1; i < recommendations.length; i++) {
+      Assert.assertTrue(recommendations[i-1].rating() >= recommendations[i].rating());
     }
-    // Pretty safe bet!
-    Assert.assertTrue(javaRecs[0]._2() > 0.7);
+    Assert.assertTrue(recommendations[0].rating() > 0.7);
   }
 
 }

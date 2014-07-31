@@ -66,39 +66,41 @@ class MatrixFactorizationModel private[mllib] (
   }
 
   /**
-   * Recommends products to users.
+   * Recommends products to a user.
    *
    * @param user the user to recommend products to
-   * @param howMany how many products to return. The number returned may be less than this.
+   * @param num how many products to return. The number returned may be less than this.
    * @return product ID and score tuples, sorted descending by score. The first product returned
    *  is the one predicted to be most strongly recommended to the user. The score is an opaque
    *  value that indicates how strongly recommended the product is.
    */
-  def recommendProducts(user: Int, howMany: Int = 10): Array[(Int,Double)] =
-    recommend(userFeatures.lookup(user).head, productFeatures, howMany)
+  def recommendProducts(user: Int, num: Int): Array[Rating] =
+    recommend(userFeatures.lookup(user).head, productFeatures, num)
+      .map(t => Rating(user, t._1, t._2))
 
   /**
-   * Recommends users to products. That is, this returns users who are most likely to be
+   * Recommends users to a product. That is, this returns users who are most likely to be
    * interested in a product.
    *
    * @param product the product to recommend users to
-   * @param howMany how many users to return. The number returned may be less than this.
+   * @param num how many users to return. The number returned may be less than this.
    * @return user ID and score tuples, sorted descending by score. The first user returned
    *  is the one predicted to be most strongly interested in the product. The score is an opaque
    *  value that indicates how strongly interested the user is.
    */
-  def recommendUsers(product: Int, howMany: Int = 10): Array[(Int,Double)] =
-    recommend(productFeatures.lookup(product).head, userFeatures, howMany)
+  def recommendUsers(product: Int, num: Int): Array[Rating] =
+    recommend(productFeatures.lookup(product).head, userFeatures, num)
+      .map(t => Rating(t._1, product, t._2))
 
   private def recommend(
       recommendToFeatures: Array[Double],
-      recommendableFeatures: RDD[(Int,Array[Double])],
-      howMany: Int): Array[(Int,Double)] = {
+      recommendableFeatures: RDD[(Int, Array[Double])],
+      num: Int): Array[(Int, Double)] = {
     val recommendToVector = new DoubleMatrix(recommendToFeatures)
     val scored = recommendableFeatures.map { case (id,features) =>
       (id, recommendToVector.dot(new DoubleMatrix(features)))
     }
-    scored.top(howMany)(Ordering.by(_._2))
+    scored.top(num)(Ordering.by(_._2))
   }
 
   /**
