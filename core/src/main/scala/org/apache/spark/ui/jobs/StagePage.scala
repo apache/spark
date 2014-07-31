@@ -105,8 +105,6 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      //val taskTable = UIUtils.listingTable(
-      //  taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
       val taskTableId = "taskTable"
       val taskTable = UIUtils.listingEmptyTable(taskHeaders, taskTableId)
 
