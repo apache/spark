@@ -1289,8 +1289,10 @@ object DecisionTree extends Serializable with Logging {
             val stride: Double = numSamples.toDouble / numBins
             logDebug("stride = " + stride)
             for (index <- 0 until numBins - 1) {
-              val sampleIndex = (index + 1) * stride.toInt
-              val split = new Split(featureIndex, featureSamples(sampleIndex), Continuous, List())
+              val sampleIndex = index * stride.toInt
+              // Set threshold halfway in between 2 samples.
+              val threshold = (featureSamples(sampleIndex) + featureSamples(sampleIndex + 1)) / 2.0
+              val split = new Split(featureIndex, threshold, Continuous, List())
               splits(featureIndex)(index) = split
             }
           } else { // Categorical feature

@@ -471,7 +471,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._1.threshold === 10)
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
@@ -494,7 +493,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._1.threshold === 10)
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
@@ -518,7 +516,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._1.threshold === 10)
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
@@ -542,7 +539,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._1.threshold === 10)
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
@@ -611,6 +607,22 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.categories.length === 1)
     assert(bestSplit.categories.contains(1))
     assert(bestSplit.featureType === Categorical)
+  }
+
+  test("stump with 1 continuous variable for binary classification, to check off-by-1 error") {
+    val arr = new Array[LabeledPoint](4)
+    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0))
+    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0))
+    arr(2) = new LabeledPoint(1.0, Vectors.dense(2.0))
+    arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 2)
+
+    val model = DecisionTree.train(input, strategy)
+    validateClassifier(model, arr, 1.0)
+    assert(model.numNodes === 3)
+    assert(model.depth === 1)
   }
 
   test("stump with categorical variables for multiclass classification, with just enough bins") {
