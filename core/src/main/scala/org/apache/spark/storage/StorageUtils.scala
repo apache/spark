@@ -121,36 +121,39 @@ private[spark] object StorageUtils {
     }
   }
 
-  /** Update the given list of RDDInfo with the given list of storage statuses. */
-  def updateRddInfo(storageStatuses: Seq[StorageStatus], rddInfos: Seq[RDDInfo]): Unit = {
-    // Mapping from a block ID -> its status
-    val blockMap = mutable.Map(storageStatuses.flatMap(_.rddBlocks): _*)
+  /**
+   * Update the given list of RDDInfo with the given list of storage statuses.
+   * This method overwrites the old values stored in the RDDInfo's.
+   */
+  def updateRddInfo(
+      rddInfos: Seq[RDDInfo],
+      storageStatuses: Seq[StorageStatus],
+      updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty): Unit = {
+    rddInfos.foreach { rddInfo =>
+      val rddId = rddInfo.id
 
-    // Mapping from RDD ID -> an array of associated BlockStatuses
-    val rddBlockMap = blockMap
-      .groupBy { case (k, _) => k.rddId }
-      .mapValues(_.values.toArray)
+      // Collect all block statuses that belong to the given RDD
+      val newBlocks = updatedBlocks
+        .collect { case (bid: RDDBlockId, bstatus) => (bid, bstatus) }
+        .filter { case (bid, _) => bid.rddId == rddId }
+      val newBlockIds = newBlocks.map { case (bid, _) => bid }.toSet
+      val oldBlocks = storageStatuses
+        .filter(_.rddIds.contains(rddId))
+        .flatMap(_.rddBlocks(rddId))
+        .filter { case (bid, _) => !newBlockIds.contains(bid) } // avoid duplicates
+      val blocks = (oldBlocks ++ newBlocks).map { case (_, bstatus) => bstatus }
+      val persistedBlocks = blocks.filter { s => s.memSize + s.diskSize + s.tachyonSize > 0 }
 
-    // Mapping from RDD ID -> the associated RDDInfo (with potentially outdated storage information)
-    val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
-
-    rddBlockMap.foreach { case (rddId, blocks) =>
-      // Add up memory, disk and Tachyon sizes
-      val persistedBlocks =
-        blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
-      val _storageLevel =
-        if (persistedBlocks.length > 0) persistedBlocks(0).storageLevel else StorageLevel.NONE
+      // Assume all blocks belonging to the same RDD have the same storage level
+      val storageLevel = blocks.headOption.map(_.storageLevel).getOrElse(StorageLevel.NONE)
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
       val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
       val tachyonSize = persistedBlocks.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
-      rddInfoMap.get(rddId).map { rddInfo =>
-        rddInfo.storageLevel = _storageLevel
-        rddInfo.numCachedPartitions = persistedBlocks.length
-        rddInfo.memSize = memSize
-        rddInfo.diskSize = diskSize
-        rddInfo.tachyonSize = tachyonSize
-        rddInfo
-      }
+      rddInfo.storageLevel = storageLevel
+      rddInfo.numCachedPartitions = persistedBlocks.length
+      rddInfo.memSize = memSize
+      rddInfo.diskSize = diskSize
+      rddInfo.tachyonSize = tachyonSize
     }
   }
 

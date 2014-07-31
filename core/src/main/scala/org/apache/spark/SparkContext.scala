@@ -841,7 +841,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @DeveloperApi
   def getRDDStorageInfo: Array[RDDInfo] = {
     val rddInfos = StorageUtils.makeRddInfo(this)
-    StorageUtils.updateRddInfo(getExecutorStorageStatus, rddInfos)
+    StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
     rddInfos.toArray
   }
 

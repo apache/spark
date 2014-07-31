@@ -182,7 +182,7 @@ class StorageSuite extends FunSuite {
   test("StorageUtils.updateRddInfo") {
     val storageStatuses = stockStorageStatuses
     val rddInfos = stockRDDInfos
-    StorageUtils.updateRddInfo(storageStatuses, rddInfos)
+    StorageUtils.updateRddInfo(rddInfos, storageStatuses)
     assert(rddInfos(0).numCachedPartitions === 5)
     assert(rddInfos(0).memSize === 5L)
     assert(rddInfos(0).diskSize === 10L)
@@ -191,50 +191,50 @@ class StorageSuite extends FunSuite {
     assert(rddInfos(1).diskSize === 6L)
   }
 
-//  test("StorageUtils.rddInfoFromStorageStatus with updated blocks") {
-//    val storageStatuses = stockStorageStatuses
-//    val rddInfos = stockRDDInfos
-//
-//    // Drop 3 blocks from RDD 0, and cache more of RDD 1
-//    val updatedBlocks1 = Seq(
-//      (RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(0, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(0, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 100L, 100L, 0L)),
-//      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 100L, 100L, 0L))
-//    )
-//    StorageUtils.rddInfoFromStorageStatus(storageStatuses, rddInfos, updatedBlocks1)
-//    assert(rddInfos(0).numCachedPartitions === 2)
-//    assert(rddInfos(0).memSize === 2L)
-//    assert(rddInfos(0).diskSize === 4L)
-//    assert(rddInfos(1).numCachedPartitions === 4)
-//    assert(rddInfos(1).memSize === 202L)
-//    assert(rddInfos(1).diskSize === 204L)
-//
-//    // Actually update storage statuses so we can chain the calls to rddInfoFromStorageStatus
-//    updatedBlocks1.foreach { case (bid, bstatus) =>
-//      val statusWithBlock = storageStatuses.find(_.blocks.contains(bid))
-//      statusWithBlock match {
-//        case Some(s) => s.updateBlock(bid, bstatus)
-//        case None => storageStatuses(0).addBlock(bid, bstatus) // arbitrarily pick the first
-//      }
-//    }
-//
-//    // Drop all of RDD 1
-//    val updatedBlocks2 = Seq(
-//      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(1, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(1, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-//      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 0L, 0L, 0L))
-//    )
-//    StorageUtils.rddInfoFromStorageStatus(storageStatuses, rddInfos, updatedBlocks2)
-//    assert(rddInfos(0).numCachedPartitions === 2)
-//    assert(rddInfos(0).memSize === 2L)
-//    assert(rddInfos(0).diskSize === 4L)
-//    assert(rddInfos(1).numCachedPartitions === 0)
-//    assert(rddInfos(1).memSize === 0L)
-//    assert(rddInfos(1).diskSize === 0L)
-//  }
+  test("StorageUtils.updateRddInfo with updated blocks") {
+    val storageStatuses = stockStorageStatuses
+    val rddInfos = stockRDDInfos
+
+    // Drop 3 blocks from RDD 0, and cache more of RDD 1
+    val updatedBlocks1 = Seq(
+      (RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(0, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(0, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 100L, 100L, 0L)),
+      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 100L, 100L, 0L))
+    )
+    StorageUtils.updateRddInfo(rddInfos, storageStatuses, updatedBlocks1)
+    assert(rddInfos(0).numCachedPartitions === 2)
+    assert(rddInfos(0).memSize === 2L)
+    assert(rddInfos(0).diskSize === 4L)
+    assert(rddInfos(1).numCachedPartitions === 4)
+    assert(rddInfos(1).memSize === 202L)
+    assert(rddInfos(1).diskSize === 204L)
+
+    // Actually update storage statuses so we can chain the calls to rddInfoFromStorageStatus
+    updatedBlocks1.foreach { case (bid, bstatus) =>
+      val statusWithBlock = storageStatuses.find(_.blocks.contains(bid))
+      statusWithBlock match {
+        case Some(s) => s.updateBlock(bid, bstatus)
+        case None => storageStatuses(0).addBlock(bid, bstatus) // arbitrarily pick the first
+      }
+    }
+
+    // Drop all of RDD 1
+    val updatedBlocks2 = Seq(
+      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(1, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(1, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
+      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 0L, 0L, 0L))
+    )
+    StorageUtils.updateRddInfo(rddInfos, storageStatuses, updatedBlocks2)
+    assert(rddInfos(0).numCachedPartitions === 2)
+    assert(rddInfos(0).memSize === 2L)
+    assert(rddInfos(0).diskSize === 4L)
+    assert(rddInfos(1).numCachedPartitions === 0)
+    assert(rddInfos(1).memSize === 0L)
+    assert(rddInfos(1).diskSize === 0L)
+  }
 
   test("StorageUtils.getBlockLocations") {
     val storageStatuses = stockStorageStatuses
