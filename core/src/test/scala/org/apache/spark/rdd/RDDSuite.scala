@@ -155,19 +155,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
       override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
-        if (shouldFail) {
-          throw new Exception("injected failure")
-        } else {
-          Array(1, 2, 3, 4).iterator
-        }
+        throw new Exception("injected failure")
       }
     }.cache()
     val thrown = intercept[Exception]{
       rdd.collect()
     }
     assert(thrown.getMessage.contains("injected failure"))
-    shouldFail = false
-    assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
   test("empty RDD") {
@@ -611,6 +605,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
     }
+  }
+
+  test("sort an empty RDD") {
+    val data = sc.emptyRDD[Int]
+    assert(data.sortBy(x => x).collect() === Array.empty)
   }
 
   test("sortByKey") {

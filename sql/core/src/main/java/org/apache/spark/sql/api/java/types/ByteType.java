@@ -15,19 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.pythonconverters
-
-import org.apache.spark.api.python.Converter
-import org.apache.hadoop.hbase.client.Result
-import org.apache.hadoop.hbase.util.Bytes
+package org.apache.spark.sql.api.java.types;
 
 /**
- * Implementation of [[org.apache.spark.api.python.Converter]] that converts a HBase Result
- * to a String
+ * The data type representing byte and Byte values.
+ *
+ * {@code ByteType} is represented by the singleton object {@link DataType#ByteType}.
  */
-class HBaseConverter extends Converter[Any, String] {
-  override def convert(obj: Any): String = {
-    val result = obj.asInstanceOf[Result]
-    Bytes.toStringBinary(result.value())
-  }
+public class ByteType extends DataType {
+  protected ByteType() {}
 }

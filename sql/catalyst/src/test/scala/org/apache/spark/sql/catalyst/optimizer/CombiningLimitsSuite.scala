@@ -27,9 +27,9 @@ class CombiningLimitsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Combine Limit", FixedPoint(2),
+      Batch("Combine Limit", FixedPoint(10),
         CombineLimits) ::
-      Batch("Constant Folding", FixedPoint(3),
+      Batch("Constant Folding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
         BooleanSimplification) :: Nil

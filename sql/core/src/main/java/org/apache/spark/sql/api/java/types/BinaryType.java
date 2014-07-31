@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark.sql.api.java.types;
 
-abstract class BaseRelation extends LeafNode {
-  self: Product =>
-
-  def tableName: String
+/**
+ * The data type representing byte[] values.
+ *
+ * {@code BinaryType} is represented by the singleton object {@link DataType#BinaryType}.
+ */
+public class BinaryType extends DataType {
+  protected BinaryType() {}
 }

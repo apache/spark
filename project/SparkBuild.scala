@@ -167,6 +167,9 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Catalyst macro settings */
+  enable(Catalyst.settings)(catalyst)
+
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
@@ -189,10 +192,16 @@ object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
 }
 
-object SQL {
-
+object Catalyst {
   lazy val settings = Seq(
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
+    // Quasiquotes break compiling scala doc...
+    // TODO: Investigate fixing this.
+    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
+}
 
+object SQL {
+  lazy val settings = Seq(
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
@@ -207,7 +216,6 @@ object SQL {
         |import org.apache.spark.sql.test.TestSQLContext._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
-
 }
 
 object Hive {
@@ -307,7 +315,7 @@ object Unidoc {
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
       ),
-      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java"),
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
     )
   )

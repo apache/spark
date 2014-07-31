@@ -150,7 +150,7 @@ else
 fi
 
 # Build uber fat JAR
-cd $FWDIR
+cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
