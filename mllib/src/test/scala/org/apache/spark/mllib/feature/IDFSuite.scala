@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.feature.text
+package org.apache.spark.mllib.feature
 
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.SparkContext._
 
 class IDFSuite extends FunSuite with LocalSparkContext {
 

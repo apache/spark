@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.feature.text
+package org.apache.spark.mllib.feature
 
 import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
@@ -27,8 +28,8 @@ import org.apache.spark.rdd.RDD
 /**
  * :: Experimental ::
  * Inverse document frequency (IDF).
- * The standard formulation is used: `idf = log(m / (d(t) + 1))`, where `m` is the total number of
- * documents and `d(t)` is the number of documents that contain term `t`.
+ * The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`, where `m` is the total
+ * number of documents and `d(t)` is the number of documents that contain term `t`.
  */
 @Experimental
 class IDF {
@@ -50,9 +51,17 @@ class IDF {
   }
 
   /**
+   * Computes the inverse document frequency.
+   * @param dataset a JavaRDD of term frequency vectors
+   */
+  def fit(dataset: JavaRDD[Vector]): this.type = {
+    fit(dataset.rdd)
+  }
+
+  /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
    * @param dataset an RDD of term frequency vectors
-   * @return an RDD of tf-idf vectors
+   * @return an RDD of TF-IDF vectors
    */
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     if (!initialized) {
@@ -90,6 +99,15 @@ class IDF {
     }
   }
 
+  /**
+   * Transforms term frequency (TF) vectors to TF-IDF vectors (Java version).
+   * @param dataset a JavaRDD of term frequency vectors
+   * @return a JavaRDD of TF-IDF vectors
+   */
+  def transform(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
+    transform(dataset.rdd).toJavaRDD()
+  }
+
   /** Returns the IDF vector. */
   def idf(): Vector = {
     if (!initialized) {
@@ -103,7 +121,7 @@ class IDF {
 
 private object IDF {
 
-  /** Document frequency aggregator .*/
+  /** Document frequency aggregator. */
   class DocumentFrequencyAggregator extends Serializable {
 
     /** number of documents */
@@ -167,7 +185,7 @@ private object IDF {
       val inv = BDV.zeros[Double](n)
       var j = 0
       while (j < n) {
-        inv(j) = math.log(m.toDouble / (df(j) + 1L))
+        inv(j) = math.log((m + 1.0)/ (df(j) + 1.0))
         j += 1
       }
       inv

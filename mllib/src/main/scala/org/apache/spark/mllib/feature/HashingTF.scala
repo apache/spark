@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.feature.text
+package org.apache.spark.mllib.feature
 
+import java.lang.{Iterable => JavaIterable}
+
+import scala.collection.convert.WrapAsScala
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -53,9 +57,23 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   }
 
   /**
+   * Transforms the input document into a sparse term frequency vector (Java version).
+   */
+  def transform(document: JavaIterable[_]): Vector = {
+    transform(WrapAsScala.iterableAsScalaIterable(document))
+  }
+
+  /**
    * Transforms the input document to term frequency vectors.
    */
   def transform[D <: Iterable[_]](dataset: RDD[D]): RDD[Vector] = {
     dataset.map(this.transform)
+  }
+
+  /**
+   * Transforms the input document to term frequency vectors (Java version).
+   */
+  def transform[D <: JavaIterable[_]](dataset: JavaRDD[D]): JavaRDD[Vector] = {
+    dataset.rdd.map(this.transform).toJavaRDD()
   }
 }
