@@ -154,8 +154,8 @@ private[spark] class DiskBlockObjectWriter(
       objOut.flush()
       bs.flush()
       close()
-      finalPosition = file.length()
     }
+    finalPosition = file.length()
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
