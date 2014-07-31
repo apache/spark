@@ -47,13 +47,35 @@ object KafkaUtils {
       zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): ReceiverInputDStream[(String, String)] = {
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
+      consumerNum: Int = 1
+    ): DStream[(String, String)] = {
     val kafkaParams = Map[String, String](
       "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
       "zookeeper.connection.timeout.ms" -> "10000")
     createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topics, storageLevel)
+      ssc, kafkaParams, topics, storageLevel,consumerNum)
+  }
+
+  /**
+   * Create an input stream that pulls messages from a Kafka Broker.
+   * @param ssc         StreamingContext object
+   * @param kafkaParams Map of kafka configuration parameters,
+   *                    see http://kafka.apache.org/08/configuration.html
+   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                    in its own thread.
+   * @param consumerNum   Number of consumers.
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Map[String, Int],
+      storageLevel: StorageLevel,
+      consumerNum: Int
+    ): DStream[(K, V)] = {
+    (1 to consumerNum).map(_ => createStream[K, V, StringDecoder, StringDecoder](ssc, kafkaParams, topics, storageLevel)
+    ).reduce(_.union(_))
   }
 
   /**
@@ -70,7 +92,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
       storageLevel: StorageLevel
-    ): ReceiverInputDStream[(K, V)] = {
+    ): DStream[(K, V)] = {
     new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
   }
 
@@ -88,7 +110,7 @@ object KafkaUtils {
       zkQuorum: String,
       groupId: String,
       topics: JMap[String, JInt]
-    ): JavaPairReceiverInputDStream[String, String] = {
+    ): JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
@@ -110,11 +132,11 @@ object KafkaUtils {
       groupId: String,
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
-    ): JavaPairReceiverInputDStream[String, String] = {
+    ): JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
-      storageLevel)
+     storageLevel)
   }
 
   /**
@@ -139,7 +161,7 @@ object KafkaUtils {
       kafkaParams: JMap[String, String],
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
-    ): JavaPairReceiverInputDStream[K, V] = {
+    ): JavaPairDStream[K, V] = {
     implicit val keyCmt: ClassTag[K] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
     implicit val valueCmt: ClassTag[V] =
