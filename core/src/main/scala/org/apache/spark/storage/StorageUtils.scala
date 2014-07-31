@@ -110,17 +110,6 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils {
 
-  /** Return a list of RDDInfo based on the RDDs cached in the given SparkContext. */
-  def makeRddInfo(sc: SparkContext): Seq[RDDInfo] = {
-    sc.persistentRdds.values.toSeq.map { rdd =>
-      val name = Option(rdd.name).getOrElse(rdd.id.toString)
-      val numPartitions = rdd.partitions.size
-      val storageLevel = rdd.getStorageLevel
-      val rddInfo = new RDDInfo(rdd.id, name, numPartitions, storageLevel)
-      rddInfo
-    }
-  }
-
   /**
    * Update the given list of RDDInfo with the given list of storage statuses.
    * This method overwrites the old values stored in the RDDInfo's.
@@ -142,7 +131,7 @@ private[spark] object StorageUtils {
         .flatMap(_.rddBlocks(rddId))
         .filter { case (bid, _) => !newBlockIds.contains(bid) } // avoid duplicates
       val blocks = (oldBlocks ++ newBlocks).map { case (_, bstatus) => bstatus }
-      val persistedBlocks = blocks.filter { s => s.memSize + s.diskSize + s.tachyonSize > 0 }
+      val persistedBlocks = blocks.filter(_.isCached)
 
       // Assume all blocks belonging to the same RDD have the same storage level
       val storageLevel = blocks.headOption.map(_.storageLevel).getOrElse(StorageLevel.NONE)

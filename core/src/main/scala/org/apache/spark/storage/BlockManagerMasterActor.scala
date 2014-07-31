@@ -420,7 +420,9 @@ case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    tachyonSize: Long)
+    tachyonSize: Long) {
+  def isCached: Boolean = memSize + diskSize + tachyonSize > 0
+}
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,

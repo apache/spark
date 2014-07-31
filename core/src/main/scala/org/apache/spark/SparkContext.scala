@@ -47,7 +47,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
-import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
+import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
@@ -840,9 +840,9 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def getRDDStorageInfo: Array[RDDInfo] = {
-    val rddInfos = StorageUtils.makeRddInfo(this)
+    val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
     StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
-    rddInfos.toArray
+    rddInfos.filter(_.isCached)
   }
 
   /**
