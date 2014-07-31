@@ -31,8 +31,8 @@ import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * :: Experimental ::
- * A class that implements a decision tree algorithm for classification and regression. It
- * supports both continuous and categorical features.
+ * A class which implements a decision tree learning algorithm for classification and regression.
+ * It supports both continuous and categorical features.
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
@@ -42,8 +42,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
   /**
    * Method to train a decision tree model over an RDD
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   * @return a DecisionTreeModel that can be used for prediction
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @return DecisionTreeModel which can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
@@ -197,17 +197,16 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 object DecisionTree extends Serializable with Logging {
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes. The parameters for the algorithm are specified using the strategy parameter.
+   * Method to train a decision tree model.
+   * The method supports binary and multiclass classification and regression.
    *
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
    * @param strategy The configuration parameters for the tree algorithm which specify the type
    *                 of algorithm (classification, regression, etc.), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
-   * @return a DecisionTreeModel that can be used for prediction
+   * @return DecisionTreeModel which can be used for prediction
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).train(input)
@@ -219,13 +218,14 @@ object DecisionTree extends Serializable with Logging {
    * binary classification, the label for each instance should either be 0 or 1 to denote the two
    * classes.
    *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
    * @param algo algorithm, classification or regression
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @return a DecisionTreeModel that can be used for prediction
+   * @return DecisionTreeModel which can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -242,14 +242,15 @@ object DecisionTree extends Serializable with Logging {
    * binary classification, the label for each instance should either be 0 or 1 to denote the two
    * classes.
    *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
    * @param algo algorithm, classification or regression
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClassesForClassification number of classes for classification. Default value of 2.
-   * @return a DecisionTreeModel that can be used for prediction
+   * @return DecisionTreeModel which can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -268,8 +269,9 @@ object DecisionTree extends Serializable with Logging {
    * 1 to denote the two classes. The method also supports categorical features inputs where the
    * number of categories can specified using the categoricalFeaturesInfo option.
    *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data for DecisionTree
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
    * @param algo classification or regression
    * @param impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
@@ -282,7 +284,7 @@ object DecisionTree extends Serializable with Logging {
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return a DecisionTreeModel that can be used for prediction
+   * @return DecisionTreeModel which can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -304,11 +306,10 @@ object DecisionTree extends Serializable with Logging {
    * Returns an array of optimal splits for all nodes at a given level. Splits the task into
    * multiple groups if the level-wise training task could lead to memory overflow.
    *
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-   *                parameters for construction the DecisionTree
+   *                 parameters for constructing the DecisionTree
    * @param level Level of the tree
    * @param filters Filters for all nodes at a given level
    * @param splits possible splits for all features
@@ -351,11 +352,10 @@ object DecisionTree extends Serializable with Logging {
     /**
    * Returns an array of optimal splits for a group of nodes at a given level
    *
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-   *                parameters for construction the DecisionTree
+   *                 parameters for constructing the DecisionTree
    * @param level Level of the tree
    * @param filters Filters for all nodes at a given level
    * @param splits possible splits for all features
@@ -376,7 +376,7 @@ object DecisionTree extends Serializable with Logging {
       groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
 
     /*
-     * The high-level description for the best split optimizations are noted here.
+     * The high-level descriptions of the best split optimizations are noted here.
      *
      * *Level-wise training*
      * We perform bin calculations for all nodes at the given level to avoid making multiple
@@ -399,18 +399,27 @@ object DecisionTree extends Serializable with Logging {
      * drastically reduce the communication overhead.
      */
 
-    // common calculations for multiple nested methods
+    // Common calculations for multiple nested methods:
+
+    // numNodes:  Number of nodes in this (level of tree, group),
+    //            where nodes at deeper (larger) levels may be divided into groups.
     val numNodes = math.pow(2, level).toInt / numGroups
     logDebug("numNodes = " + numNodes)
+
     // Find the number of features by looking at the first sample.
     val numFeatures = input.first().features.size
     logDebug("numFeatures = " + numFeatures)
+
+    // numBins:  Number of bins = 1 + number of possible splits
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
+
     val numClasses = strategy.numClassesForClassification
     logDebug("numClasses = " + numClasses)
+
     val isMulticlassClassification = strategy.isMulticlassClassification
     logDebug("isMulticlassClassification = " + isMulticlassClassification)
+
     val isMulticlassClassificationWithCategoricalFeatures
       = strategy.isMulticlassWithCategoricalFeatures
     logDebug("isMultiClassWithCategoricalFeatures = " +
@@ -468,10 +477,13 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-     * Find bin for one feature.
+     * Find bin for one (labeledPoint, feature).
      */
-    def findBin(featureIndex: Int, labeledPoint: LabeledPoint,
-        isFeatureContinuous: Boolean, isSpaceSufficientForAllCategoricalSplits: Boolean): Int = {
+    def findBin(
+        featureIndex: Int,
+        labeledPoint: LabeledPoint,
+        isFeatureContinuous: Boolean,
+        isSpaceSufficientForAllCategoricalSplits: Boolean): Int = {
       val binForFeatures = bins(featureIndex)
       val feature = labeledPoint.features(featureIndex)
 
@@ -538,7 +550,9 @@ object DecisionTree extends Serializable with Logging {
       } else {
         // Perform sequential search to find bin for categorical features.
         val binIndex = {
-          if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
+          val isUnorderedFeature =
+            isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits
+          if (isUnorderedFeature) {
             sequentialBinSearchForUnorderedCategoricalFeatureInClassification()
           } else {
             sequentialBinSearchForOrderedCategoricalFeatureInClassification()
@@ -558,6 +572,14 @@ object DecisionTree extends Serializable with Logging {
      * where b_ij is an integer between 0 and numBins - 1 for regressions and binary
      * classification and the categorical feature value in  multiclass classification.
      * Invalid sample is denoted by noting bin for feature 1 as -1.
+     *
+     * For unordered features, the "bin index" returned is actually the feature value (category).
+     *
+     * @return  Array of size 1 + numFeatures * numNodes, where
+     *          arr(0) = label for labeledPoint, and
+     *          arr(1 + numFeatures * nodeIndex + featureIndex) =
+     *            bin index for this labeledPoint
+     *            (or InvalidBinIndex if labeledPoint is not handled by this node)
      */
     def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
       // Calculate bin index and label per feature per node.
@@ -601,6 +623,15 @@ object DecisionTree extends Serializable with Logging {
      // Find feature bins for all nodes at a level.
     val binMappedRDD = input.map(x => findBinsForLevel(x))
 
+    /**
+     * Increment aggregate in location for (node, feature, bin, label).
+     *
+     * @param arr  Bin mapping from findBinsForLevel.  arr(0) stores the class label.
+     *             Array of size 1 + (numFeatures * numNodes).
+     * @param agg  Array storing aggregate calculation, of size:
+     *             numClasses * numBins * numFeatures * numNodes.
+     *             Indexed by (node, feature, bin, label) where label is the least significant bit.
+     */
     def updateBinForOrderedFeature(
         arr: Array[Double],
         agg: Array[Double],
@@ -618,6 +649,18 @@ object DecisionTree extends Serializable with Logging {
       agg(aggIndex + labelInt) = agg(aggIndex + labelInt) + 1
     }
 
+    /**
+     * Increment aggregate in location for (nodeIndex, featureIndex, [bins], label),
+     * where [bins] ranges over all bins.
+     * Updates left or right side of aggregate depending on split.
+     *
+     * @param arr  arr(0) = label.
+     *             arr(1 + featureIndex + nodeIndex * numFeatures) = feature value (category)
+     * @param agg  Indexed by (left/right, node, feature, bin, label)
+     *             where label is the least significant bit.
+     *             The left/right specifier is a 0/1 index indicating left/right child info.
+     * @param rightChildShift Offset for right side of agg.
+     */
     def updateBinForUnorderedFeature(
         nodeIndex: Int,
         featureIndex: Int,
@@ -649,17 +692,15 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-     * Performs a sequential aggregation over a partition for classification. For l nodes,
-     * k features, either the left count or the right count of one of the p bins is
-     * incremented based upon whether the feature is classified as 0 or 1.
+     * Helper for binSeqOp.
      *
-     * @param agg Array[Double] storing aggregate calculation of size
-     *            numClasses * numSplits * numFeatures*numNodes for classification
-     * @param arr Array[Double] of size 1 + (numFeatures * numNodes)
-     * @return Array[Double] storing aggregate calculation of size
-     *         2 * numSplits * numFeatures * numNodes for classification
+     * @param arr  Bin mapping from findBinsForLevel. arr(0) stores the class label.
+     *             Array of size 1 + (numFeatures * numNodes).
+     * @param agg  Array storing aggregate calculation, of size:
+     *             numClasses * numBins * numFeatures * numNodes.
+     *             Indexed by (node, feature, bin, label) where label is the least significant bit.
      */
-    def orderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
+    def binaryOrNotCategoricalBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
@@ -681,17 +722,21 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-     * Performs a sequential aggregation over a partition for classification. For l nodes,
-     * k features, either the left count or the right count of one of the p bins is
-     * incremented based upon whether the feature is classified as 0 or 1.
+     * Helper for binSeqOp.
      *
-     * @param agg Array[Double] storing aggregate calculation of size
-     *            numClasses * numSplits * numFeatures*numNodes for classification
-     * @param arr Array[Double] of size 1 + (numFeatures * numNodes)
-     * @return Array[Double] storing aggregate calculation of size
-     *         2 * numClasses * numSplits * numFeatures * numNodes for classification
+     * @param arr  Bin mapping from findBinsForLevel. arr(0) stores the class label.
+     *             Array of size 1 + (numFeatures * numNodes).
+     *             For ordered features,
+     *               arr(1 + featureIndex + nodeIndex * numFeatures) = bin index.
+     *             For unordered features,
+     *               arr(1 + featureIndex + nodeIndex * numFeatures) = feature value (category).
+     * @param agg  Array storing aggregate calculation.
+     *             For ordered features, this is of size:
+     *               numClasses * numBins * numFeatures * numNodes.
+     *             For unordered features, this is of size:
+     *               2 * numClasses * numBins * numFeatures * numNodes.
      */
-    def unorderedClassificationBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
+    def multiclassWithCategoricalBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
@@ -727,14 +772,15 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-     * Performs a sequential aggregation over a partition for regression. For l nodes, k features,
+     * Performs a sequential aggregation over a partition for regression.
+     * For l nodes, k features,
      * the count, sum, sum of squares of one of the p bins is incremented.
      *
-     * @param agg Array[Double] storing aggregate calculation of size
-     *            3 * numSplits * numFeatures * numNodes for classification
-     * @param arr Array[Double] of size 1 + (numFeatures * numNodes)
-     * @return Array[Double] storing aggregate calculation of size
-     *         3 * numSplits * numFeatures * numNodes for regression
+     * @param agg Array storing aggregate calculation, updated by this function.
+     *            Size: 3 * numBins * numFeatures * numNodes
+     * @param arr Bin mapping from findBinsForLevel.
+     *             Array of size 1 + (numFeatures * numNodes).
+     * @return agg
      */
     def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
       // Iterate over all nodes.
@@ -767,14 +813,30 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Performs a sequential aggregation over a partition.
+     * For l nodes, k features,
+     *   For classification:
+     *     Either the left count or the right count of one of the bins is
+     *     incremented based upon whether the feature is classified as 0 or 1.
+     *   For regression:
+     *     The count, sum, sum of squares of one of the bins is incremented.
+     *
+     * @param agg Array storing aggregate calculation, updated by this function.
+     *            Size for classification:
+     *              numClasses * numBins * numFeatures * numNodes for ordered features, or
+     *              2 * numClasses * numBins * numFeatures * numNodes for unordered features.
+     *            Size for regression:
+     *              3 * numBins * numFeatures * numNodes.
+     * @param arr  Bin mapping from findBinsForLevel.
+     *             Array of size 1 + (numFeatures * numNodes).
+     * @return  agg
      */
     def binSeqOp(agg: Array[Double], arr: Array[Double]): Array[Double] = {
       strategy.algo match {
         case Classification =>
           if(isMulticlassClassificationWithCategoricalFeatures) {
-            unorderedClassificationBinSeqOp(arr, agg)
+            multiclassWithCategoricalBinSeqOp(arr, agg)
           } else {
-            orderedClassificationBinSeqOp(arr, agg)
+            binaryOrNotCategoricalBinSeqOp(arr, agg)
           }
         case Regression => regressionBinSeqOp(arr, agg)
       }
@@ -937,10 +999,18 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Extracts left and right split aggregates.
-     * @param binData Array[Double] of size 2*numFeatures*numSplits
-     * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Array[Array[Double\]\]\],
-     *         Array[Array[Array[Double\]\]\]) where each array is of size(numFeature,
-     *         (numBins - 1), numClasses)
+     * @param binData Aggregate array slice from getBinDataForNode.
+     *                For classification:
+     *                  For unordered features, this is leftChildData ++ rightChildData,
+     *                    each of which is indexed by (feature, split/bin, class),
+     *                    with class being the least significant bit.
+     *                  For ordered features, this is of size numClasses * numBins * numFeatures.
+     *                For regression:
+     *                  This is of size 2 * numFeatures * numBins.
+     * @return (leftNodeAgg, rightNodeAgg) pair of arrays.
+     *         For classification, each array is of size (numFeatures, (numBins - 1), numClasses).
+     *         For regression, each array is of size (numFeatures, (numBins - 1), 3).
+     *
      */
     def extractLeftRightNodeAggregates(
         binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
@@ -983,6 +1053,11 @@ object DecisionTree extends Serializable with Logging {
         }
       }
 
+      /**
+       * Reshape binData for this feature.
+       * Indexes binData as (feature, split, class) with class as the least significant bit.
+       * @param leftNodeAgg   leftNodeAgg(featureIndex)(splitIndex)(classIndex) = aggregate value
+       */
       def findAggForUnorderedFeatureClassification(
           leftNodeAgg: Array[Array[Array[Double]]],
           rightNodeAgg: Array[Array[Array[Double]]],
@@ -1107,7 +1182,7 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Find the best split for a node.
-     * @param binData Array[Double] of size 2 * numSplits * numFeatures
+     * @param binData Bin data slice for this node, given by getBinDataForNode.
      * @param nodeImpurity impurity of the top node
      * @return tuple of split and information gain
      */
@@ -1133,7 +1208,7 @@ object DecisionTree extends Serializable with Logging {
         while (featureIndex < numFeatures) {
           // Iterate over all splits.
           var splitIndex = 0
-          val maxSplitIndex : Double = {
+          val maxSplitIndex: Double = {
             val isFeatureContinuous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
             if (isFeatureContinuous) {
               numBins - 1
@@ -1162,8 +1237,8 @@ object DecisionTree extends Serializable with Logging {
         (bestFeatureIndex, bestSplitIndex, bestGainStats)
       }
 
+      logDebug("best split = " + splits(bestFeatureIndex)(bestSplitIndex))
       logDebug("best split bin = " + bins(bestFeatureIndex)(bestSplitIndex))
-      logDebug("best split bin = " + splits(bestFeatureIndex)(bestSplitIndex))
 
       (splits(bestFeatureIndex)(bestSplitIndex), gainStats)
     }
@@ -1214,8 +1289,17 @@ object DecisionTree extends Serializable with Logging {
     bestSplits
   }
 
-  private def getElementsPerNode(numFeatures: Int, numBins: Int, numClasses: Int,
-      isMulticlassClassificationWithCategoricalFeatures: Boolean, algo: Algo): Int = {
+  /**
+   * Get the number of values to be stored per node in the bin aggregates.
+   *
+   * @param numBins  Number of bins = 1 + number of possible splits.
+   */
+  private def getElementsPerNode(
+      numFeatures: Int,
+      numBins: Int,
+      numClasses: Int,
+      isMulticlassClassificationWithCategoricalFeatures: Boolean,
+      algo: Algo): Int = {
     algo match {
       case Classification =>
         if (isMulticlassClassificationWithCategoricalFeatures) {
@@ -1228,18 +1312,40 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Returns split and bins for decision tree calculation.
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
+   * Returns splits and bins for decision tree calculation.
+   * Continuous and categorical features are handled differently.
+   *
+   * Continuous features:
+   *   For each feature, there are numBins - 1 possible splits representing the possible binary
+   *   decisions at each node in the tree.
+   *
+   * Categorical features:
+   *   For each feature, there is 1 bin per split.
+   *   Splits and bins are handled in 2 ways:
+   *   (a) For multiclass classification with a low-arity feature
+   *       (i.e., if isMulticlass && isSpaceSufficientForAllCategoricalSplits),
+   *       the feature is split based on subsets of categories.
+   *       There are 2^(maxFeatureValue - 1) - 1 splits.
+   *   (b) For regression and binary classification,
+   *       and for multiclass classification with a high-arity feature,
+   *       there is one split per category.
+
+   * Categorical case (a) features are called unordered features.
+   * Other cases are called ordered features.
+   *
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-   *                parameters for construction the DecisionTree
-   * @return a tuple of (splits,bins) where splits is an Array of [org.apache.spark.mllib.tree
-   *         .model.Split] of size (numFeatures, numSplits-1) and bins is an Array of [org.apache
-   *         .spark.mllib.tree.model.Bin] of size (numFeatures, numSplits1)
+   *                 parameters for construction the DecisionTree
+   * @return A tuple of (splits,bins).
+   *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   *          of size (numFeatures, numBins - 1).
+   *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
+   *          of size (numFeatures, numBins).
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
       strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
+
     val count = input.count()
 
     // Find the number of features by looking at the first sample
@@ -1271,7 +1377,8 @@ object DecisionTree extends Serializable with Logging {
     logDebug("fraction of data used for calculating quantiles = " + fraction)
 
     // sampled input for RDD calculation
-    val sampledInput = input.sample(false, fraction, new XORShiftRandom().nextInt()).collect()
+    val sampledInput =
+      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
     val numSamples = sampledInput.length
 
     val stride: Double = numSamples.toDouble / numBins
@@ -1306,8 +1413,10 @@ object DecisionTree extends Serializable with Logging {
               = numBins > math.pow(2, featureCategories.toInt - 1) - 1
 
             // Use different bin/split calculation strategy for categorical features in multiclass
-            // classification that satisfy the space constraint
-            if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
+            // classification that satisfy the space constraint.
+            val isUnorderedFeature =
+              isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits
+            if (isUnorderedFeature) {
               // 2^(maxFeatureValue- 1) - 1 combinations
               var index = 0
               while (index < math.pow(2.0, featureCategories - 1).toInt - 1) {
@@ -1332,8 +1441,13 @@ object DecisionTree extends Serializable with Logging {
                 }
                 index += 1
               }
-            } else {
-
+            } else { // ordered feature
+              /* For a given categorical feature, use a subsample of the data
+               * to choose how to arrange possible splits.
+               * This examines each category and computes a centroid.
+               * These centroids are later used to sort the possible splits.
+               * centroidForCategories is a mapping: category (for the given feature) --> centroid
+               */
               val centroidForCategories = {
                 if (isMulticlassClassification) {
                   // For categorical variables in multiclass classification,
@@ -1343,7 +1457,7 @@ object DecisionTree extends Serializable with Logging {
                    .groupBy(_._1)
                    .mapValues(x => x.groupBy(_._2).mapValues(x => x.size.toDouble))
                    .map(x => (x._1, x._2.values.toArray))
-                   .map(x => (x._1, strategy.impurity.calculate(x._2,x._2.sum)))
+                   .map(x => (x._1, strategy.impurity.calculate(x._2, x._2.sum)))
                 } else { // regression or binary classification
                   // For categorical variables in regression and binary classification,
                   // each bin is a category. The bins are sorted and they
@@ -1354,7 +1468,7 @@ object DecisionTree extends Serializable with Logging {
                 }
               }
 
-              logDebug("centriod for categories = " + centroidForCategories.mkString(","))
+              logDebug("centroid for categories = " + centroidForCategories.mkString(","))
 
               // Check for missing categorical variables and putting them last in the sorted list.
               val fullCentroidForCategories = scala.collection.mutable.Map[Double,Double]()
@@ -1369,7 +1483,7 @@ object DecisionTree extends Serializable with Logging {
               // bins sorted by centroids
               val categoriesSortedByCentroid = fullCentroidForCategories.toList.sortBy(_._2)
 
-              logDebug("centriod for categorical variable = " + categoriesSortedByCentroid)
+              logDebug("centroid for categorical variable = " + categoriesSortedByCentroid)
 
               var categoriesForSplit = List[Double]()
               categoriesSortedByCentroid.iterator.zipWithIndex.foreach {

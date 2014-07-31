@@ -145,7 +145,7 @@ object DecisionTreeRunner {
         println(s"Per-class example fractions, counts:")
         println(s"Class\tFrac\tCount")
         sortedClasses.foreach { c => {
-          val frac = classCounts(c) / (0.0 + numExamples)
+          val frac = classCounts(c) / numExamples.toDouble
           println(s"$c\t$frac\t${classCounts(c)}")
         }}
         (examples, numClasses)
