@@ -110,7 +110,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
-
+  private var lastSize = 0L
   /**
    * Insert the given key and value into the map.
    */
@@ -148,12 +148,10 @@ class ExternalAppendOnlyMap[K, V, C](
         // this map to grow and, if possible, allocate the required amount
         shuffleMemoryMap.synchronized {
           val threadId = Thread.currentThread().getId
-          val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
-          val availableMemory = maxMemoryThreshold -
-            (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+          val availableMemory = maxMemoryThreshold - shuffleMemoryMap.values.sum
 
-          // Try to allocate at least 2x more memory, otherwise spill
-          shouldSpill = availableMemory < currentSize * 2
+          // Use growth rate to predict if need to spill
+          shouldSpill = availableMemory < （currentSize - lastSize) * SparkEnv.get.conf.get("spark.executor.cores").toInt
           if (!shouldSpill) {
             shuffleMemoryMap(threadId) = currentSize * 2
             myMemoryThreshold = currentSize * 2
@@ -162,7 +160,10 @@ class ExternalAppendOnlyMap[K, V, C](
         // Do not synchronize spills
         if (shouldSpill) {
           spill(currentSize)
+          lastSize = 0L
         }
+        
+        lastSize = currentSize
       }
       currentMap.changeValue(curEntry._1, update)
       elementsRead += 1
