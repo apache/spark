@@ -640,7 +640,7 @@ class SQLContext:
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._pythonToJava = self._jvm.PythonRDD.pythonToJava
+        self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
 
         if sqlContext:
             self._scala_SQLContext = sqlContext
@@ -686,10 +686,7 @@ class SQLContext:
 
         schema = _inferSchema(first)
         rdd = rdd.mapPartitions(lambda rows: _dropSchema(rows, schema))
-
-        jrdd = self._pythonToJava(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
-        return SchemaRDD(srdd, self)
+        return self.applySchema(rdd, schema)
 
     def applySchema(self, rdd, schema):
         """Applies the given schema to the given RDD of L{dict}s.
@@ -719,7 +716,8 @@ class SQLContext:
         >>> srdd.collect()[0]
         (127, -32768, 1.0, datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         """
-        jrdd = self._pythonToJava(rdd._jrdd)
+        batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
+        jrdd = self._pythonToJava(rdd._jrdd, batched)
         srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
         return SchemaRDD(srdd, self)
 

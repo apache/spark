@@ -705,25 +705,25 @@ private[spark] object PythonRDD extends Logging {
    * Convert an RDD of serialized Python tuple to Array (no recursive conversions).
    * It is only used by pyspark.sql.
    */
-  def pythonToJava(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[_]] = {
+  def pythonToJavaArray(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Array[_]] = {
+
+    def toArray(obj: Any): Array[_] = {
+      obj match {
+        case objs: JArrayList[_] =>
+          objs.toArray
+        case obj if obj.getClass.isArray =>
+          obj.asInstanceOf[Array[_]].toArray
+      }
+    }
+
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
       iter.flatMap { row =>
-        unpickle.loads(row) match {
-          // in case of objects are pickled in batch mode
-          case objs: JArrayList[_] => Try(objs.map(obj => obj match {
-            case list: JArrayList[_] => list.toArray // list
-            case obj if obj.getClass.isArray => // tuple
-              obj.asInstanceOf[Array[_]].toArray
-          })) match {
-            // objs is list of list or tuple
-            case Success(v) => v
-            // objs is a row, list of different objects
-            case Failure(e) => Seq(objs.toArray)
-          }
-          // not in batch mode
-          case obj if obj.getClass.isArray => // tuple
-            Seq(obj.asInstanceOf[Array[_]].toArray)
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]].map(toArray)
+        } else {
+          Seq(toArray(obj))
         }
       }
     }.toJavaRDD()
