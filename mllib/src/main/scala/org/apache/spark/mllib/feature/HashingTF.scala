@@ -19,7 +19,7 @@ package org.apache.spark.mllib.feature
 
 import java.lang.{Iterable => JavaIterable}
 
-import scala.collection.convert.WrapAsScala
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
@@ -60,7 +60,7 @@ class HashingTF(val numFeatures: Int) extends Serializable {
    * Transforms the input document into a sparse term frequency vector (Java version).
    */
   def transform(document: JavaIterable[_]): Vector = {
-    transform(WrapAsScala.iterableAsScalaIterable(document))
+    transform(document.asScala)
   }
 
   /**
