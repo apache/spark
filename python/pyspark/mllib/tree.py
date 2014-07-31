@@ -35,42 +35,6 @@ class DecisionTreeModel(object):
     A decision tree model for classification or regression.
 
     WARNING: This is an experimental API.  It will probably be modified for Spark v1.2.
-
-    # TODO: UPDATE:
-    >>> from numpy import array, ndarray
-    >>> from pyspark.mllib.regression import LabeledPoint
-    >>> from pyspark.mllib.tree import DecisionTree
-    >>> from pyspark.mllib.linalg import SparseVector
-    >>> data = [
-    ...     LabeledPoint(0.0, [0.0]),
-    ...     LabeledPoint(1.0, [1.0]),
-    ...     LabeledPoint(1.0, [2.0]),
-    ...     LabeledPoint(1.0, [3.0])
-    ... ]
-    >>> datasetInfo = DatasetInfo(2, 1)
-    >>> params = DecisionTreeClassifier.defaultParams()
-    >>> dtLearner = DecisionTreeClassifier(params)
-    >>> model = dtLearner.run(sc.parallelize(data), datasetInfo)
-    >>> model.predict(array([1.0])) > 0
-    True
-    >>> model.predict(array([0.0])) == 0
-    True
-    >>> sparse_data = [
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
-    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
-    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
-    ... ]
-    >>> datasetInfo = DatasetInfo(2, 2)
-    >>> model = dtLearner.run(sc.parallelize(sparse_data), datasetInfo)
-    >>> model.predict(array([0.0, 1.0])) == 1
-    True
-    >>> model.predict(array([0.0, 0.0])) == 0
-    True
-    >>> model.predict(SparseVector(2, {1: 1.0})) == 1
-    True
-    >>> model.predict(SparseVector(2, {1: 0.0})) == 0
-    True
     """
 
     def __init__(self, sc, java_model):
