@@ -253,6 +253,22 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
+  test("handles confs with flag equivalents") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--conf", "spark.executor.memory=4g",
+      "--conf", "spark.master=yarn",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sysProps, mainClass) = createLaunchEnv(appArgs)
+    sysProps("spark.executor.memory") should be ("5g")
+    sysProps("spark.master") should be ("yarn-cluster")
+    mainClass should be ("org.apache.spark.deploy.yarn.Client")
+  }
+
   test("launch simple application with spark-submit") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(

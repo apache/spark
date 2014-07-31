@@ -184,7 +184,7 @@ object SparkSubmit {
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
 
       // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name", sysProp = "spark.app.name"),
+      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
@@ -268,13 +268,16 @@ object SparkSubmit {
       }
     }
 
+    // Properties given with --conf are superceded by other options, but take precedence over
+    // properties in the defaults file.
+    for ((k, v) <- args.sparkProperties) {
+      sysProps.getOrElseUpdate(k, v)
+    }
+
     // Read from default spark properties, if any
     for ((k, v) <- args.getDefaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
-
-    // Spark properties included on command line take precedence
-    sysProps ++= args.sparkProperties
 
     (childArgs, childClasspath, sysProps, childMainClass)
   }
