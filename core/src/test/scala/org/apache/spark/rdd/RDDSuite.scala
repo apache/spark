@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
@@ -26,6 +27,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
@@ -716,6 +718,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ranked = data.zipWithUniqueId()
     val ids = ranked.map(_._1).distinct().collect()
     assert(ids.length === n)
+  }
+
+  test("retag with implicit ClassTag") {
+    val jsc: JavaSparkContext = new JavaSparkContext(sc)
+    val jrdd: JavaRDD[String] = jsc.parallelize(Seq("A", "B", "C").asJava)
+    jrdd.rdd.retag.collect()
   }
 
   test("getNarrowAncestors") {
