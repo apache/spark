@@ -17,6 +17,7 @@
 
 import os
 import signal
+import select
 import socket
 import sys
 import traceback
@@ -27,11 +28,6 @@ from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN
 from pyspark.worker import main as worker_main
 from pyspark.serializers import write_int
-
-try:
-    POOLSIZE = multiprocessing.cpu_count()
-except NotImplementedError:
-    POOLSIZE = 4
 
 exit_flag = multiprocessing.Value(c_bool, False)
 
@@ -50,29 +46,16 @@ def compute_real_exit_code(exit_code):
         return 1
 
 
-def worker(listen_sock):
+def worker(sock):
+    """
+    Called by a worker process after the fork().
+    """
     # Redirect stdout to stderr
     os.dup2(2, 1)
     sys.stdout = sys.stderr   # The sys.stdout object is different from file descriptor 1
 
-    # Manager sends SIGHUP to request termination of workers in the pool
-    def handle_sighup(*args):
-        assert should_exit()
-    signal.signal(SIGHUP, handle_sighup)
-
-    # Cleanup zombie children
-    def handle_sigchld(*args):
-        pid = status = None
-        try:
-            while (pid, status) != (0, 0):
-                pid, status = os.waitpid(0, os.WNOHANG)
-        except EnvironmentError as err:
-            if err.errno == EINTR:
-                # retry
-                handle_sigchld()
-            elif err.errno != ECHILD:
-                raise
-    signal.signal(SIGCHLD, handle_sigchld)
+    signal.signal(SIGHUP, SIG_DFL)
+    signal.signal(SIGCHLD, SIG_DFL)
 
     # Blocks until the socket is closed by draining the input stream
     # until it raises an exception or returns EOF.
@@ -85,55 +68,21 @@ def worker(listen_sock):
         except:
             pass
 
-    # Handle clients
-    while not should_exit():
-        # Wait until a client arrives or we have to exit
-        sock = None
-        while not should_exit() and sock is None:
-            try:
-                sock, addr = listen_sock.accept()
-            except EnvironmentError as err:
-                if err.errno != EINTR:
-                    raise
-
-        if sock is not None:
-            # Fork a child to handle the client.
-            # The client is handled in the child so that the manager
-            # never receives SIGCHLD unless a worker crashes.
-            if os.fork() == 0:
-                # Leave the worker pool
-                signal.signal(SIGHUP, SIG_DFL)
-                signal.signal(SIGCHLD, SIG_DFL)
-                listen_sock.close()
-                # Read the socket using fdopen instead of socket.makefile() because the latter
-                # seems to be very slow; note that we need to dup() the file descriptor because
-                # otherwise writes also cause a seek that makes us miss data on the read side.
-                infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
-                outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
-                exit_code = 0
-                try:
-                    worker_main(infile, outfile)
-                except SystemExit as exc:
-                    exit_code = exc.code
-                finally:
-                    outfile.flush()
-                    # The Scala side will close the socket upon task completion.
-                    waitSocketClose(sock)
-                    os._exit(compute_real_exit_code(exit_code))
-            else:
-                sock.close()
-
-
-def launch_worker(listen_sock):
-    if os.fork() == 0:
-        try:
-            worker(listen_sock)
-        except Exception as err:
-            traceback.print_exc()
-            os._exit(1)
-        else:
-            assert should_exit()
-            os._exit(0)
+    # Read the socket using fdopen instead of socket.makefile() because the latter
+    # seems to be very slow; note that we need to dup() the file descriptor because
+    # otherwise writes also cause a seek that makes us miss data on the read side.
+    infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
+    outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
+    exit_code = 0
+    try:
+        worker_main(infile, outfile)
+    except SystemExit as exc:
+        exit_code = exc.code
+    finally:
+        outfile.flush()
+        # The Scala side will close the socket upon task completion.
+        waitSocketClose(sock)
+        os._exit(compute_real_exit_code(exit_code))
 
 
 def manager():
@@ -143,14 +92,9 @@ def manager():
     # Create a listening socket on the AF_INET loopback interface
     listen_sock = socket.socket(AF_INET, SOCK_STREAM)
     listen_sock.bind(('127.0.0.1', 0))
-    listen_sock.listen(max(1024, 2 * POOLSIZE, SOMAXCONN))
+    listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
     write_int(listen_port, sys.stdout)
-
-    # Launch initial worker pool
-    for idx in range(POOLSIZE):
-        launch_worker(listen_sock)
-    listen_sock.close()
 
     def shutdown():
         global exit_flag
@@ -176,13 +120,30 @@ def manager():
     try:
         while not should_exit():
             try:
-                # Spark tells us to exit by closing stdin
-                if os.read(0, 512) == '':
-                    shutdown()
-            except EnvironmentError as err:
-                if err.errno != EINTR:
-                    shutdown()
+                ready_fds = select.select([0, listen_sock], [], [])[0]
+            except select.error as ex:
+                if ex[0] == 4:
+                    continue
+                else:
                     raise
+            if 0 in ready_fds:
+                # Spark told us to exit by closing stdin
+                shutdown()
+            if listen_sock in ready_fds:
+                sock, addr = listen_sock.accept()
+                # Launch a worker process
+                if os.fork() == 0:
+                    listen_sock.close()
+                    try:
+                        worker(sock)
+                    except:
+                        traceback.print_exc()
+                        os._exit(1)
+                    else:
+                        assert should_exit()
+                        os._exit(0)
+                else:
+                    sock.close()
     finally:
         signal.signal(SIGTERM, SIG_DFL)
         exit_flag.value = True
