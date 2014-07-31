@@ -118,18 +118,23 @@ private[spark] object StorageUtils {
       rddInfos: Seq[RDDInfo],
       storageStatuses: Seq[StorageStatus],
       updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty): Unit = {
+
     rddInfos.foreach { rddInfo =>
       val rddId = rddInfo.id
 
       // Collect all block statuses that belong to the given RDD
-      val newBlocks = updatedBlocks
-        .collect { case (bid: RDDBlockId, bstatus) => (bid, bstatus) }
-        .filter { case (bid, _) => bid.rddId == rddId }
+      val newBlocks = updatedBlocks.filter { case (b, _) =>
+        b.asRDDId.filter(_.rddId == rddId).isDefined
+      }
       val newBlockIds = newBlocks.map { case (bid, _) => bid }.toSet
-      val oldBlocks = storageStatuses
-        .filter(_.rddIds.contains(rddId))
-        .flatMap(_.rddBlocks(rddId))
-        .filter { case (bid, _) => !newBlockIds.contains(bid) } // avoid duplicates
+      val oldBlocks = storageStatuses.flatMap { s =>
+        if (s.rddIds.contains(rddId)) {
+          // If the block is being updated, leave it out here in favor of the new status
+          s.rddBlocks(rddId).filterKeys { bid => !newBlockIds.contains(bid) }
+        } else {
+          Seq.empty
+        }
+      }
       val blocks = (oldBlocks ++ newBlocks).map { case (_, bstatus) => bstatus }
       val persistedBlocks = blocks.filter(_.isCached)
 
