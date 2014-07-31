@@ -53,7 +53,12 @@ object APIGenerator {
         publicMembers ++= classSymbol.typeSignature.members.filterNot(x =>
           x.fullName.startsWith("java") || x.fullName.startsWith("scala"))
           .filterNot(x => x.isPrivate || x.isProtected || x.isSynthetic || isPackagePrivate(x)
-          || isDeveloperApi(x) || isExperimental(x)).map(_.fullName).toSet
+          || isDeveloperApi(x) || isExperimental(x)).map { x =>
+            s"""
+                |Member Name:${x.fullName}
+                |TypeSig:${x.typeSignature}
+                |ArgumentList:${if (x.isMethod) x.asMethod.paramss.mkString("\n")}""".stripMargin
+        }.toSet
       } catch {
         case t: Throwable =>
           println(s"[Warn] Failed to instrument class:$className for reason ${t.getMessage}")
