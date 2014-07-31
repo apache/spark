@@ -773,11 +773,9 @@ options.
 # Cached tables
 
 Spark SQL can cache tables using an in-memory columnar format by calling `cacheTable("tableName")`.
-Then Spark SQL will scan only required columns and will automatically select best compression,
-besides, it will alleviate GC impact due to fewer allocated objects. You can call
-`uncacheTable("tableName")` to remove the table from memory.
+Then Spark SQL will scan only required columns and will automatically tune compression to minimize
+memory usage and GC pressure. You can call `uncacheTable("tableName")` to remove the table from memory.
 
-Note that if you just call `cache` rather than `cacheTable`, tables will not be cached in
+Note that if you just call `cache` rather than `cacheTable`, tables will _not_ be cached in
 in-memory columnar format. So we strongly recommend using `cacheTable` whenever you want to
 cache tables.
-
