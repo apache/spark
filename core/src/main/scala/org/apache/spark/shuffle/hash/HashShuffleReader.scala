@@ -21,7 +21,7 @@ import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 
-class HashShuffleReader[K, C](
+private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,
@@ -47,7 +47,8 @@ class HashShuffleReader[K, C](
     } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
-      iter
+      // Convert the Product2s to pairs since this is what downstream RDDs currently expect
+      iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
     }
 
     // Sort the output if there is a sort ordering defined.

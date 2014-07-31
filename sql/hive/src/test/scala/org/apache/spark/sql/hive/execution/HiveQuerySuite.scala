@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{Row, SchemaRDD}
@@ -29,6 +31,15 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+
+  createQueryTest("single case",
+    """SELECT case when true then 1 else 2 end FROM src LIMIT 1""")
+
+  createQueryTest("double case",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else 2 end FROM src LIMIT 1""")
+
+  createQueryTest("case else null",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src LIMIT 1""")
 
   createQueryTest("having no references",
     "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")

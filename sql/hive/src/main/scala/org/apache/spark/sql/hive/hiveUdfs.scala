@@ -251,8 +251,10 @@ private[hive] case class HiveGenericUdtf(
   @transient
   protected lazy val function: GenericUDTF = createFunction()
 
+  @transient
   protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
 
+  @transient
   protected lazy val outputInspectors = {
     val structInspector = function.initialize(inputInspectors.toArray)
     structInspector.getAllStructFieldRefs.map(_.getFieldObjectInspector)
@@ -278,7 +280,7 @@ private[hive] case class HiveGenericUdtf(
   override def eval(input: Row): TraversableOnce[Row] = {
     outputInspectors // Make sure initialized.
 
-    val inputProjection = new Projection(children)
+    val inputProjection = new InterpretedProjection(children)
     val collector = new UDTFCollector
     function.setCollector(collector)
 
@@ -332,7 +334,7 @@ private[hive] case class HiveUdafFunction(
   override def eval(input: Row): Any = unwrapData(function.evaluate(buffer), returnInspector)
 
   @transient
-  val inputProjection = new Projection(exprs)
+  val inputProjection = new InterpretedProjection(exprs)
 
   def update(input: Row): Unit = {
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
