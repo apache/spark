@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark
 
-import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfterAll
 
-class LabelParsersSuite extends FunSuite {
-  test("binary label parser") {
-    for (parser <- Seq(BinaryLabelParser, BinaryLabelParser.getInstance())) {
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("0") === 0.0)
-      assert(parser.parse("-1") === 0.0)
-    }
+class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+
+  // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
+
+  override def beforeAll() {
+    System.setProperty("spark.shuffle.manager",
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
   }
 
-  test("multiclass label parser") {
-    for (parser <- Seq(MulticlassLabelParser, MulticlassLabelParser.getInstance())) {
-      assert(parser.parse("0") == 0.0)
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("2") === 2.0)
-      assert(parser.parse("3") === 3.0)
-    }
+  override def afterAll() {
+    System.clearProperty("spark.shuffle.manager")
   }
 }

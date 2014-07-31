@@ -58,8 +58,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     // default Java serializer cannot handle the non serializable class.
     val c = new ShuffledRDD[Int,
       NonJavaSerializableClass,
-      NonJavaSerializableClass,
-      (Int, NonJavaSerializableClass)](b, new HashPartitioner(NUM_BLOCKS))
+      NonJavaSerializableClass](b, new HashPartitioner(NUM_BLOCKS))
     c.setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
@@ -83,8 +82,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     // default Java serializer cannot handle the non serializable class.
     val c = new ShuffledRDD[Int,
       NonJavaSerializableClass,
-      NonJavaSerializableClass,
-      (Int, NonJavaSerializableClass)](b, new HashPartitioner(3))
+      NonJavaSerializableClass](b, new HashPartitioner(3))
     c.setSerializer(new KryoSerializer(conf))
     assert(c.count === 10)
   }
@@ -100,7 +98,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, Int, (Int, Int)](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
       .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
@@ -126,7 +124,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     val b = a.map(x => (x, x*2))
 
     // NOTE: The default Java serializer should create zero-sized blocks
-    val c = new ShuffledRDD[Int, Int, Int, (Int, Int)](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
@@ -141,19 +139,19 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("shuffle using mutable pairs") {
+  test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
-    val results = new ShuffledRDD[Int, Int, Int, MutablePair[Int, Int]](pairs,
+    val results = new ShuffledRDD[Int, Int, Int](pairs,
       new HashPartitioner(2)).collect()
 
-    data.foreach { pair => results should contain (pair) }
+    data.foreach { pair => results should contain ((pair._1, pair._2)) }
   }
 
-  test("sorting using mutable pairs") {
+  test("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test")
@@ -162,10 +160,10 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
       .sortByKey().collect()
-    results(0) should be (p(1, 11))
-    results(1) should be (p(2, 22))
-    results(2) should be (p(3, 33))
-    results(3) should be (p(100, 100))
+    results(0) should be ((1, 11))
+    results(1) should be ((2, 22))
+    results(2) should be ((3, 33))
+    results(3) should be ((100, 100))
   }
 
   test("cogroup using mutable pairs") {
