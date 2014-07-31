@@ -18,16 +18,17 @@
 package org.apache.spark.mllib.regression
 
 import java.io.File
+import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.io.FileUtils
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.{MLStreamingUtils, LinearDataGenerator, LocalSparkContext}
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
+import org.apache.spark.util.Utils
 
 class StreamingLinearRegressionSuite extends FunSuite {
 
@@ -66,7 +67,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
     for (i <- 0 until numBatches) {
       val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
-      FileUtils.writeStringToFile(file, samples.map(x => x.toString).mkString("\n"))
+      Files.write(samples.map(x => x.toString).mkString("\n"), file, Charset.forName("UTF-8"))
       Thread.sleep(Milliseconds(1000).milliseconds)
     }
     Thread.sleep(Milliseconds(5000).milliseconds)
@@ -74,7 +75,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
     ssc.stop()
 
     System.clearProperty("spark.driver.port")
-    FileUtils.deleteDirectory(testDir)
+    Utils.deleteRecursively(testDir)
 
     // check accuracy of final parameter estimates
     assertEqual(model.latest().intercept, 0.0, 0.1)
@@ -106,7 +107,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
     for (i <- 0 until numBatches) {
       val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
-      FileUtils.writeStringToFile(file, samples.map(x => x.toString).mkString("\n"))
+      Files.write(samples.map(x => x.toString).mkString("\n"), file, Charset.forName("UTF-8"))
       Thread.sleep(Milliseconds(6000).milliseconds)
       history.append(math.abs(model.latest().weights(0) - 10.0))
     }
@@ -115,7 +116,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
     ssc.stop()
 
     System.clearProperty("spark.driver.port")
-    FileUtils.deleteDirectory(testDir)
+    Utils.deleteRecursively(testDir)
 
     val deltas = history.drop(1).zip(history.dropRight(1))
     // check error stability (it always either shrinks, or increases with small tol)
