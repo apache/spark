@@ -301,7 +301,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         val locs = statuses.map { s =>
           (s.location, MapOutputTracker.decompressSize(s.compressedSizes(r)))
         }
-        statusByReducer(shuffleId) + (r -> locs)
+        statusByReducer(shuffleId) += (r -> locs)
         r = r + 1
       }
     }
