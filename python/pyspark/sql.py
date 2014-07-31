@@ -22,8 +22,9 @@ import array
 import itertools
 import warnings
 from operator import itemgetter
+import warnings
 
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 from py4j.protocol import Py4JError
@@ -829,6 +830,10 @@ class LocalHiveContext(HiveContext):
     >>> reduce_sum
     130091
     """
+
+    def __init__(self, sparkContext, sqlContext=None):
+      HiveContext.__init__(self, sparkContext, sqlContext)
+      warnings.warn("LocalHiveContext is deprecated.  Use HiveContext instead.", DeprecationWarning)
 
     def _get_hive_ctx(self):
         return self._jvm.LocalHiveContext(self._jsc.sc())

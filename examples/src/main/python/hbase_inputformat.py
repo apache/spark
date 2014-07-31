@@ -65,7 +65,8 @@ if __name__ == "__main__":
         "org.apache.hadoop.hbase.mapreduce.TableInputFormat",
         "org.apache.hadoop.hbase.io.ImmutableBytesWritable",
         "org.apache.hadoop.hbase.client.Result",
-        valueConverter="org.apache.spark.examples.pythonconverters.HBaseConverter",
+        keyConverter="org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter",
+        valueConverter="org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter",
         conf=conf)
     output = hbase_rdd.collect()
     for (k, v) in output:

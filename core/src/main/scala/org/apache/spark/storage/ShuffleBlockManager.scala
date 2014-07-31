@@ -28,6 +28,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -58,6 +59,7 @@ private[spark] trait ShuffleWriterGroup {
  * each block stored in each file. In order to find the location of a shuffle block, we search the
  * files within a ShuffleFileGroups associated with the block's reducer.
  */
+// TODO: Factor this into a separate class for each ShuffleManager implementation
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   def conf = blockManager.conf
@@ -66,6 +68,10 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   // TODO: Remove this once the shuffle file consolidation feature is stable.
   val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
+
+  // Are we using sort-based shuffle?
+  val sortBasedShuffle =
+    conf.get("spark.shuffle.manager", "") == classOf[SortShuffleManager].getName
 
   private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
 
@@ -91,6 +97,20 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
 
+  /**
+   * Register a completed map without getting a ShuffleWriterGroup. Used by sort-based shuffle
+   * because it just writes a single file by itself.
+   */
+  def addCompletedMap(shuffleId: Int, mapId: Int, numBuckets: Int): Unit = {
+    shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
+    val shuffleState = shuffleStates(shuffleId)
+    shuffleState.completedMapTasks.add(mapId)
+  }
+
+  /**
+   * Get a ShuffleWriterGroup for the given map task, which will register it as complete
+   * when the writers are closed successfully
+   */
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
@@ -182,7 +202,14 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
-        if (consolidateShuffleFiles) {
+        if (sortBasedShuffle) {
+          // There's a single block ID for each map, plus an index file for it
+          for (mapId <- state.completedMapTasks) {
+            val blockId = new ShuffleBlockId(shuffleId, mapId, 0)
+            blockManager.diskBlockManager.getFile(blockId).delete()
+            blockManager.diskBlockManager.getFile(blockId.name + ".index").delete()
+          }
+        } else if (consolidateShuffleFiles) {
           for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
             file.delete()
           }
