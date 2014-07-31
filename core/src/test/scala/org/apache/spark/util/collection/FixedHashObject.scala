@@ -15,19 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util.collection
 
-import org.scalatest.BeforeAndAfterAll
-
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
-
-  // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
-
-  override def beforeAll() {
-    System.setProperty("spark.shuffle.use.netty", "true")
-  }
-
-  override def afterAll() {
-    System.clearProperty("spark.shuffle.use.netty")
-  }
+/**
+ * A dummy class that always returns the same hash code, to easily test hash collisions
+ */
+case class FixedHashObject(v: Int, h: Int) extends Serializable {
+  override def hashCode(): Int = h
 }
