@@ -52,7 +52,7 @@ object SimpleApp {
     }
 
     // Remove kinesis from default build due to ASL license issue
-    val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisReceiver")).isSuccess
+    val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisUtils")).isSuccess
     if (foundKinesis) {
       println("Kinesis was loaded via kinesis-asl")
       System.exit(-1)
