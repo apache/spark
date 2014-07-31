@@ -373,9 +373,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     ParquetRelation.enableLogForwarding()
 
-    val children = fs.listStatus(path).filterNot {
-      _.getPath.getName == FileOutputCommitter.SUCCEEDED_FILE_NAME
-    }
+    val children = fs.listStatus(path).filterNot(
+      status => (status.getPath.getName.charAt(0) == '.' ||
+                 status.getPath.getName == FileOutputCommitter.SUCCEEDED_FILE_NAME)
+    )
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a
