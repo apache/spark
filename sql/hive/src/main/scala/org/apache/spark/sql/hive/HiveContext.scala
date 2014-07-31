@@ -47,7 +47,7 @@ import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 @deprecated("""
   Use HiveContext instead.  It will still create a local metastore if one is not specified.
   However, note that the default directory is ./metastore_db, not ./metastore
-  """)
+  """, "1.1")
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val metastorePath = new File("metastore").getCanonicalPath
