@@ -23,6 +23,8 @@ import org.apache.spark.sql.hive.execution.HiveComparisonTest
 import org.apache.spark.sql.hive.test.TestHive
 
 class CachedTableSuite extends HiveComparisonTest {
+  import TestHive._
+
   TestHive.loadTestTable("src")
 
   test("cache table") {
@@ -31,6 +33,20 @@ class CachedTableSuite extends HiveComparisonTest {
 
   createQueryTest("read from cached table",
     "SELECT * FROM src LIMIT 1", reset = false)
+
+  test("Drop cached table") {
+    hql("CREATE TABLE test(a INT)")
+    cacheTable("test")
+    hql("SELECT * FROM test").collect()
+    hql("DROP TABLE test")
+    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+      hql("SELECT * FROM test").collect()
+    }
+  }
+
+  test("DROP nonexistant table") {
+    hql("DROP TABLE IF EXISTS nonexistantTable")
+  }
 
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
