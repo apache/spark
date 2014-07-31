@@ -25,21 +25,32 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 
-private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitIndex: Int)
+/**
+ * Partition for UnionRDD.
+ *
+ * @param idx index of the partition
+ * @param rdd the parent RDD this partition refers to
+ * @param parentRddIndex index of the parent RDD this partition refers to
+ * @param parentRddPartitionIndex index of the partition within the parent RDD
+ *                                this partition refers to
+ */
+private[spark] class UnionPartition[T: ClassTag](
+    idx: Int,
+    @transient rdd: RDD[T],
+    val parentRddIndex: Int,
+    @transient parentRddPartitionIndex: Int)
   extends Partition {
 
-  var split: Partition = rdd.partitions(splitIndex)
+  var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
 
-  def iterator(context: TaskContext) = rdd.iterator(split, context)
-
-  def preferredLocations() = rdd.preferredLocations(split)
+  def preferredLocations() = rdd.preferredLocations(parentPartition)
 
   override val index: Int = idx
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
     // Update the reference to parent split at the time of task serialization
-    split = rdd.partitions(splitIndex)
+    parentPartition = rdd.partitions(parentRddPartitionIndex)
     oos.defaultWriteObject()
   }
 }
@@ -47,14 +58,14 @@ private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitInd
 @DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
-    @transient var rdds: Seq[RDD[T]])
+    var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](rdds.map(_.partitions.size).sum)
     var pos = 0
-    for (rdd <- rdds; split <- rdd.partitions) {
-      array(pos) = new UnionPartition(pos, rdd, split.index)
+    for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
+      array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
       pos += 1
     }
     array
@@ -70,9 +81,17 @@ class UnionRDD[T: ClassTag](
     deps
   }
 
-  override def compute(s: Partition, context: TaskContext): Iterator[T] =
-    s.asInstanceOf[UnionPartition[T]].iterator(context)
+  override def compute(s: Partition, context: TaskContext): Iterator[T] = {
+    val part = s.asInstanceOf[UnionPartition[T]]
+    val parentRdd = dependencies(part.parentRddIndex).rdd.asInstanceOf[RDD[T]]
+    parentRdd.iterator(part.parentPartition, context)
+  }
 
   override def getPreferredLocations(s: Partition): Seq[String] =
     s.asInstanceOf[UnionPartition[T]].preferredLocations()
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    rdds = null
+  }
 }
