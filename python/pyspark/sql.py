@@ -18,14 +18,14 @@
 
 import sys
 import types
-import array
 import itertools
 import warnings
 import decimal
 import datetime
-from operator import itemgetter
 import keyword
 import warnings
+from array import array
+from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
@@ -441,7 +441,7 @@ def _infer_type(obj):
             raise ValueError("Can not infer type for empty dict")
         key, value = obj.iteritems().next()
         return MapType(_infer_type(key), _infer_type(value), True)
-    elif isinstance(obj, (list, array.array)):
+    elif isinstance(obj, (list, array)):
         if not obj:
             raise ValueError("Can not infer type for empty list/array")
         return ArrayType(_infer_type(obj[0]), True)
@@ -456,14 +456,20 @@ def _infer_schema(row):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
+
     elif isinstance(row, tuple):
         if hasattr(row, "_fields"): # namedtuple
             items = zip(row._fields, tuple(row))
-        elif all(isinstance(x, tuple) and len(x) == 2
-                 for x in row):
+        elif hasattr(row, "__FIELDS__"): # Row
+            items = zip(row.__FIELDS__, tuple(row))
+        elif all(isinstance(x, tuple) and len(x) == 2 for x in row):
             items = row
+        else:
+            raise ValueError("Can't infer schema from tuple")
+
     elif hasattr(row, "__dict__"): # object
         items = sorted(row.__dict__.items())
+
     else:
         raise ValueError("Can not infer schema for type: %s" % type(row))
 
@@ -494,9 +500,12 @@ def _create_converter(obj, dataType):
     elif isinstance(obj, tuple):
         if hasattr(obj, "_fields"): # namedtuple
             conv = tuple
-        elif all(isinstance(x, tuple) and len(x) == 2
-                 for x in obj):
+        elif hasattr(obj, "__FIELDS__"):
+            conv = tuple
+        elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
             conv = lambda o: tuple(v for k, v in o)
+        else:
+            raise ValueError("unexpected tuple")
 
     elif hasattr(obj, "__dict__"): # object
         conv = lambda o: [o.__dict__.get(n, None) for n in names]
@@ -783,6 +792,7 @@ def _create_cls(dataType):
         """ Row in SchemaRDD """
         __DATATYPE__ = dataType
         __FIELDS__ = tuple(f.name for f in dataType.fields)
+        __slots__ = ()
 
         # create property for fast access
         locals().update(_create_properties(dataType.fields))
@@ -814,7 +824,7 @@ class SQLContext:
         >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
-        ValueError:...
+        TypeError:...
 
         >>> bad_rdd = sc.parallelize([1,2,3])
         >>> sqlCtx.inferSchema(bad_rdd) # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -823,9 +833,9 @@ class SQLContext:
         ValueError:...
 
         >>> from datetime import datetime
-        >>> allTypes = sc.parallelize([{"int": 1, "string": "string",
-        ... "double": 1.0, "long": 1L, "boolean": True, "list": [1, 2, 3],
-        ... "time": datetime(2010, 1, 1, 1, 1, 1), "dict": {"a": 1},}])
+        >>> allTypes = sc.parallelize([Row(int=1, string="string",
+        ...     double=1.0, long=1L, boolean=True, list=[1, 2, 3],
+        ...     time=datetime(2010, 1, 1, 1, 1, 1), dict={"a": 1})])
         >>> srdd = sqlCtx.inferSchema(allTypes).map(lambda x: (x.int, x.string,
         ... x.double, x.long, x.boolean, x.time, x.dict["a"], x.list))
         >>> srdd.collect()[0]
@@ -851,33 +861,48 @@ class SQLContext:
         return self._scala_SQLContext
 
     def inferSchema(self, rdd):
-        """Infer and apply a schema to an RDD of L{dict}s.
+        """Infer and apply a schema to an RDD of L{Row}s.
 
-        We peek at the first row of the RDD to determine the fields names
-        and types, and then use that to extract all the dictionaries. Nested
-        collections are supported, which include array, dict, list, set, and
-        tuple.
+        We peek at the first row of the RDD to determine the fields' names
+        and types. Nested collections are supported, which include array,
+        dict, list, Row, tuple, namedtuple, or object.
 
+        Each row in `rdd` should be Row object or namedtuple or objects,
+        using dict is deprecated.
+
+        >>> rdd = sc.parallelize(
+        ...     [Row(field1=1, field2="row1"),
+        ...      Row(field1=2, field2="row2"),
+        ...      Row(field1=3, field2="row3")])
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.collect()[0]
         Row(field1=1, field2=u'row1')
 
-        >>> from array import array
+        >>> NestedRow = Row("f1", "f2")
+        >>> nestedRdd1 = sc.parallelize([
+        ...     NestedRow(array('i', [1, 2]), {"row1": 1.0}),
+        ...     NestedRow(array('i', [2, 3]), {"row2": 2.0})])
         >>> srdd = sqlCtx.inferSchema(nestedRdd1)
         >>> srdd.collect()
         [Row(f1=[1, 2], f2={u'row1': 1.0}), ..., f2={u'row2': 2.0})]
 
+        >>> nestedRdd2 = sc.parallelize([
+        ...     NestedRow([[1, 2], [2, 3]], [1, 2]),
+        ...     NestedRow([[2, 3], [3, 4]], [2, 3])])
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
         >>> srdd.collect()
         [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), ..., f2=[2, 3])]
         """
-        if (rdd.__class__ is SchemaRDD):
-            raise ValueError("Cannot apply schema to %s" % SchemaRDD.__name__)
+
+        if isinstance(rdd, SchemaRDD):
+            raise TypeError("Cannot apply schema to SchemaRDD")
 
         first = rdd.first()
         if not first:
             raise ValueError("The first row in RDD is empty, "
                     "can not infer schema")
+        if type(first) is dict:
+            warnings.warn("Using RDD of dict to inferSchema is deprecated")
 
         schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
@@ -889,6 +914,7 @@ class SQLContext:
 
         The schema should be a StructType.
 
+        >>> rdd2 = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
         >>> srdd = sqlCtx.applySchema(rdd2, schema)
@@ -928,6 +954,9 @@ class SQLContext:
         >>> srdd.collect()
         [Row(byte=127, short=-32768, float=1.0, time=..., list=[1, 2, 3])]
         """
+
+        if isinstance(rdd, SchemaRDD):
+            raise TypeError("Cannot apply schema to SchemaRDD")
 
         first = rdd.first()
         if not isinstance(first, (tuple, list)):
@@ -1198,11 +1227,83 @@ class TestHiveContext(HiveContext):
         return self._jvm.TestHiveContext(self._jsc.sc())
 
 
-# a stub type, the real type is dynamic generated.
+def _create_row(fields, values):
+    row = Row(*values)
+    row.__FIELDS__ = fields
+    return row
+
+
 class Row(tuple):
     """
     A row in L{SchemaRDD}. The fields in it can be accessed like attributes.
+
+    Row can be used to create a row object by using named arguments,
+    the fields will be sorted by names.
+
+    >>> row = Row(name="Alice", age=11)
+    >>> row
+    Row(age=11, name='Alice')
+    >>> row.name, row.age
+    ('Alice', 11)
+
+    Row also can be used to create another Row like class, then it
+    could be used to create Row objects, such as
+
+    >>> Person = Row("name", "age")
+    >>> Person
+    <Row(name, age)>
+    >>> Person("Alice", 11)
+    Row(name='Alice', age=11)
     """
+
+    def __new__(self, *args, **kwargs):
+        if args and kwargs:
+            raise ValueError("Can not use both args "
+                             "and kwargs to create Row")
+        if args:
+            # create row class or objects
+            return tuple.__new__(self, args)
+
+        elif kwargs:
+            # create row objects
+            names = sorted(kwargs.keys())
+            values = tuple(kwargs[n] for n in names)
+            row = tuple.__new__(self, values)
+            row.__FIELDS__ = names
+            return row
+
+        else:
+            raise ValueError("No args or kwargs")
+
+
+    # let obect acs like class
+    def __call__(self, *args):
+        """create new Row object"""
+        return _create_row(self, args)
+
+    def __getattr__(self, item):
+        if item.startswith("__"):
+            raise AttributeError(item)
+        try:
+            # it will be slow when it has many fields,
+            # but this will not be used in normal cases
+            idx = self.__FIELDS__.index(item)
+            return self[idx]
+        except IndexError:
+            raise AttributeError(item)
+
+    def __reduce__(self):
+        if hasattr(self, "__FIELDS__"):
+            return (_create_row, (self.__FIELDS__, tuple(self)))
+        else:
+            return tuple.__reduce__(self)
+
+    def __repr__(self):
+        if hasattr(self, "__FIELDS__"):
+            return "Row(%s)" % ", ".join("%s=%r" % (k, v)
+                for k, v in zip(self.__FIELDS__, self))
+        else:
+            return "<Row(%s)>" % ", ".join(self)
 
 
 class SchemaRDD(RDD):
@@ -1424,7 +1525,7 @@ def _test():
     from pyspark.context import SparkContext
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql
-    from pyspark.sql import SQLContext
+    from pyspark.sql import Row, SQLContext
     globs = pyspark.sql.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
@@ -1432,11 +1533,10 @@ def _test():
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize(
-        [{"field1": 1, "field2": "row1"},
-         {"field1": 2, "field2": "row2"},
-         {"field1": 3, "field2": "row3"}]
+        [Row(field1=1, field2="row1"),
+         Row(field1=2, field2="row2"),
+         Row(field1=3, field2="row3")]
     )
-    globs['rdd2'] = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
@@ -1446,12 +1546,6 @@ def _test():
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
-    globs['nestedRdd1'] = sc.parallelize([
-        {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
-        {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])
-    globs['nestedRdd2'] = sc.parallelize([
-        {"f1": [[1, 2], [2, 3]], "f2": [1, 2]},
-        {"f1": [[2, 3], [3, 4]], "f2": [2, 3]}])
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql, globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
