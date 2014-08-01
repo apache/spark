@@ -23,16 +23,25 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 /**
  * Train or predict a linear regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
- * incoming data from a DStream (see LinearRegressionWithSGD for model equation)
+ * incoming data from a DStream (see `LinearRegressionWithSGD` for model equation)
  *
  * Each batch of data is assumed to be an RDD of LabeledPoints.
  * The number of data points per batch can vary, but the number
  * of features must be constant. An initial weight
  * vector must be provided.
  *
+ * Use a builder pattern to construct a streaming linear regression
+ * analysis in an application, like:
+ *
+ *  model = new StreamingLinearRegressionWithSGD()
+ *    .setStepSize(0.5)
+ *    .setNumIterations(10)
+ *    .setInitialWeights(Vectors.dense(...))
+ *    .trainOn(DStream)
+ *
  */
 @Experimental
-class StreamingLinearRegressionWithSGD private (
+class StreamingLinearRegressionWithSGD (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double,
@@ -72,66 +81,6 @@ class StreamingLinearRegressionWithSGD private (
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = algorithm.createModel(initialWeights, 0.0)
     this
-  }
-
-}
-
-/**
- * Top-level methods for calling StreamingLinearRegressionWithSGD.
- */
-@Experimental
-object StreamingLinearRegressionWithSGD {
-
-  /**
-   * Start a streaming Linear Regression model by setting optimization parameters.
-   *
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Weights to initialize model with.
-   */
-  def start(
-      stepSize: Double,
-      numIterations: Int,
-      miniBatchFraction: Double,
-      initialWeights: Vector): StreamingLinearRegressionWithSGD = {
-    new StreamingLinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, initialWeights)
-  }
-
-  /**
-   * Start a streaming Linear Regression model by setting optimization parameters.
-   *
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param initialWeights Weights to initialize model with.
-   */
-  def start(
-      stepSize: Double,
-      numIterations: Int,
-      initialWeights: Vector): StreamingLinearRegressionWithSGD = {
-    start(stepSize, numIterations, 1.0, initialWeights)
-  }
-
-  /**
-   * Start a streaming Linear Regression model by setting optimization parameters.
-   *
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param initialWeights Weights to initialize model with.
-   */
-  def start(
-      numIterations: Int,
-      initialWeights: Vector): StreamingLinearRegressionWithSGD = {
-    start(0.1, numIterations, 1.0, initialWeights)
-  }
-
-  /**
-   * Start a streaming Linear Regression model by setting optimization parameters.
-   *
-   * @param initialWeights Weights to initialize model with.
-   */
-  def start(
-      initialWeights: Vector): StreamingLinearRegressionWithSGD = {
-    start(0.1, 50, 1.0, initialWeights)
   }
 
 }
