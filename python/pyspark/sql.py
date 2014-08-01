@@ -24,6 +24,7 @@ import warnings
 import decimal
 import datetime
 from operator import itemgetter
+import keyword
 import warnings
 
 from pyspark.rdd import RDD, PipelinedRDD
@@ -659,16 +660,15 @@ def _infer_schema_type(obj, dataType):
 _cached_cls = {}
 
 
-def _restore_object(fields, obj):
+def _restore_object(dataType, obj):
     """ Restore object during unpickling. """
-    cls = _cached_cls.get(fields)
+    # use id(dataType) as key to speed up lookup in dict
+    # Because of batched pickling, dataType will be the
+    # same object in mose cases.
+    cls = _cached_cls.get(id(dataType))
     if cls is None:
-        # create a mock StructType, because nested StructType will
-        # be restored by itself
-        fs = [StructField(n, StringType, True) for n in fields]
-        dataType = StructType(fs)
         cls = _create_cls(dataType)
-        _cached_cls[fields] = cls
+        _cached_cls[id(dataType)] = cls
     return cls(obj)
 
 
@@ -703,10 +703,10 @@ def _create_properties(fields):
     ps = {}
     for i, f in enumerate(fields):
         name = f.name
-        if name.startswith("__") and name.endswith("__"):
+        if (name.startswith("__") and name.endswith("__")
+                or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
-                          "use position to access instead" % name)
-            continue
+                          "use position to access it instead" % name)
         if _has_struct(f.dataType):
             # delay creating object until accessing it
             getter = _create_getter(f.dataType, i)
@@ -721,6 +721,21 @@ def _create_cls(dataType):
     Create an class by dataType
 
     The created class is similar to namedtuple, but can have nested schema.
+
+    >>> schema = _parse_schema_abstract("a b c")
+    >>> row = (1, 1.0, "str")
+    >>> schema = _infer_schema_type(row, schema)
+    >>> obj = _create_cls(schema)(row)
+    >>> import pickle
+    >>> pickle.loads(pickle.dumps(obj))
+    Row(a=1, b=1.0, c='str')
+
+    >>> row = [[1], {"key": (1, 2.0)}]
+    >>> schema = _parse_schema_abstract("a[] b{c d}")
+    >>> schema = _infer_schema_type(row, schema)
+    >>> obj = _create_cls(schema)(row)
+    >>> pickle.loads(pickle.dumps(obj))
+    Row(a=[1], b={'key': Row(c=1, d=2.0)})
     """
 
     if isinstance(dataType, ArrayType):
@@ -737,9 +752,8 @@ def _create_cls(dataType):
                 return "[%s]" % (", ".join(repr(self[i])
                                            for i in range(len(self))))
 
-            # pickle as dict, the nested struct can be reduced by itself
             def __reduce__(self):
-                return (list, (list(self),))
+                return list.__reduce__(self)
 
         return List
 
@@ -757,9 +771,8 @@ def _create_cls(dataType):
                 return "{%s}" % (", ".join("%r: %r" % (k, self[k])
                                            for k in self))
 
-            # pickle as dict, the nested struct can be reduced by itself
             def __reduce__(self):
-                return (dict, (dict(self),))
+                return dict.__reduce__(self)
 
         return Dict
 
@@ -768,7 +781,7 @@ def _create_cls(dataType):
 
     class Row(tuple):
         """ Row in SchemaRDD """
-
+        __DATATYPE__ = dataType
         __FIELDS__ = tuple(f.name for f in dataType.fields)
 
         # create property for fast access
@@ -780,7 +793,7 @@ def _create_cls(dataType):
                     for n in self.__FIELDS__))
 
         def __reduce__(self):
-            return (_restore_object, (self.__FIELDS__, tuple(self)))
+            return (_restore_object, (self.__DATATYPE__, tuple(self)))
 
     return Row
 
