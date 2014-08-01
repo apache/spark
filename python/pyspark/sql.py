@@ -526,6 +526,17 @@ class SQLContext:
         return self._scala_SQLContext
 
     def registerFunction(self, name, f, returnType=StringType()):
+        """Registers a lambda function as a UDF so it can be used in SQL statements.
+
+        In addition to a name and the function itself, the return type can be optionally specified.
+        When the return type is not given it default to a string and conversion will automatically
+        be done.  For any other return type, the produced object must match the specified type.
+
+
+        sqlCtx.registerFunction("stringLengthPy", lambda x: len(x))
+        rdd = sc.parallelize(xrange(10)).map(lambda x: {"s": x})
+        sqlCtx.inferSchema(rdd).registerAsTable("stringData")
+        """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
