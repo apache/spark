@@ -533,6 +533,7 @@ class PythonMLLibAPI extends Serializable {
       dataJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
     val data = dataJRDD.rdd.map(xBytes => deserializeDoubleVector(xBytes))
     model.predict(data).map(serializeDouble)
+  }
 
   /**
    * Java stub for mllib Statistics.corr(X: RDD[Vector], method: String).
