@@ -230,6 +230,20 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       case xs       => xs find (_.name == cmd)
     }
   }
+  private var fallbackMode = false 
+
+  private def toggleFallbackMode() {
+    val old = fallbackMode
+    fallbackMode = !old
+    System.setProperty("spark.repl.fallback", fallbackMode.toString)
+    echo(s"""
+      |Switched ${if (old) "off" else "on"} fallback mode without restarting.
+      |       If you have defined classes in the repl, it would 
+      |be good to redefine them incase you plan to use them. If you still run
+      |into issues it would be good to restart the repl and turn on `:fallback` 
+      |mode as first command.
+      """.stripMargin)
+  }
 
   /** Show the history */
   lazy val historyCommand = new LoopCommand("history", "show the history (optional num is commands to show)") {
@@ -299,6 +313,9 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     nullary("reset", "reset the repl to its initial state, forgetting all session entries", resetCommand),
     shCommand,
     nullary("silent", "disable/enable automatic printing of results", verbosity),
+    nullary("fallback", """
+                           |disable/enable advanced repl changes, these fix some issues but may introduce others. 
+                           |This mode will be removed once these fixes stablize""".stripMargin, toggleFallbackMode),
     cmd("type", "[-v] <expr>", "display the type of an expression without evaluating it", typeCommand),
     nullary("warnings", "show the suppressed warnings from the most recent line which had any", warningsCommand)
   )
