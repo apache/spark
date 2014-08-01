@@ -58,7 +58,7 @@ class Statistics(object):
                [ 0.05564149,  1.        ,         nan,  0.91359586],
                [        nan,         nan,  1.        ,         nan],
                [ 0.40047142,  0.91359586,         nan,  1.        ]])
-        >>> Statistics.corr(rdd, "spearman")
+        >>> Statistics.corr(rdd, method="spearman")
         array([[ 1.        ,  0.10540926,         nan,  0.4       ],
                [ 0.10540926,  1.        ,         nan,  0.9486833 ],
                [        nan,         nan,  1.        ,         nan],
@@ -69,12 +69,8 @@ class Statistics(object):
         # Since it's legal for users to use the method name as the second argument, we need to
         # check if y is used to specify the method name instead.
         if type(y) == str:
-            if not method:
-                method = y
-            else:
-                raise TypeError("Multiple string arguments detected when only at most one " \
-                                + "allowed for Statistics.corr")
-        if not y or type(y) == str:
+            raise TypeError("Use 'method=' to specify method name.")
+        if not y:
             try:
                 Xser = _get_unmangled_double_vector_rdd(x)
             except TypeError:

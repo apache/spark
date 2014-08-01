@@ -70,9 +70,9 @@ class PythonMLLibAPISuite extends FunSuite {
   test("matrix to 2D array") {
     val values = Array[Double](0, 1.2, 3, 4.56, 7, 8)
     val matrix = Matrices.dense(2, 3, values)
-    val twoDarray = py.to2dArray(matrix)
-    val expected = Array(Array[Double](0, 1.2, 3), Array[Double](4.56, 7, 8))
-    assert(twoDarray === expected)
+    val arr = py.to2dArray(matrix)
+    val expected = Array(Array[Double](0, 3, 7), Array[Double](1.2, 4.56, 8))
+    assert(arr === expected)
 
     // Test conversion for empty matrix
     val empty = Array[Double]()

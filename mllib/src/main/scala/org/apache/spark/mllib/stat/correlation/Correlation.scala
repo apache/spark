@@ -87,7 +87,7 @@ private[stat] object Correlations {
  * After new correlation algorithms are added, please update the documentation here and in
  * Statistics.scala for the correlation APIs.
  */
-object CorrelationNames {
+private[mllib] object CorrelationNames {
 
   // Note: after new types of correlations are implemented, please update this map.
   val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmanCorrelation))

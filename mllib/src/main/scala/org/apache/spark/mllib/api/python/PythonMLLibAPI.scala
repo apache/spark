@@ -485,8 +485,8 @@ class PythonMLLibAPI extends Serializable {
 
   // Reformat a Matrix into Array[Array[Double]] for serialization
   private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
-    val values = matrix.toArray.toIterator
-    Array.fill(matrix.numRows)(Array.fill(matrix.numCols)(values.next()))
+    val values = matrix.toArray
+    Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
   }
 
   // Used by the *RDD methods to get default seed if not passed in from pyspark
