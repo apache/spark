@@ -65,7 +65,8 @@ private[spark] class HashShuffleWriter[K, V](
   }
 
   /** Close this writer, passing along whether the map completed */
-  override def stop(success: Boolean): Option[MapStatus] = {
+  override def stop(initiallySuccess: Boolean): Option[MapStatus] = {
+    var success = initiallySuccess
     try {
       if (stopping) {
         return None
@@ -73,15 +74,16 @@ private[spark] class HashShuffleWriter[K, V](
       stopping = true
       if (success) {
         try {
-          return Some(commitWritesAndBuildStatus())
+          Some(commitWritesAndBuildStatus())
         } catch {
           case e: Exception =>
+            success = false
             revertWrites()
             throw e
         }
       } else {
         revertWrites()
-        return None
+        None
       }
     } finally {
       // Release the writers back to the shuffle block manager.
@@ -100,8 +102,7 @@ private[spark] class HashShuffleWriter[K, V](
     var totalBytes = 0L
     var totalTime = 0L
     val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
-      writer.commit()
-      writer.close()
+      writer.commitAndClose()
       val size = writer.fileSegment().length
       totalBytes += size
       totalTime += writer.timeWriting()
@@ -120,8 +121,7 @@ private[spark] class HashShuffleWriter[K, V](
   private def revertWrites(): Unit = {
     if (shuffle != null && shuffle.writers != null) {
       for (writer <- shuffle.writers) {
-        writer.revertPartialWrites()
-        writer.close()
+        writer.revertPartialWritesAndClose()
       }
     }
   }
