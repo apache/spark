@@ -515,8 +515,8 @@ def _create_converter(obj, dataType):
     return nested_conv
 
 
-def _dropSchema(rows, schema):
-    """Drop all the names of fields, becoming tuples"""
+def _drop_schema(rows, schema):
+    """ all the names of fields, becoming tuples"""
     iterator = iter(rows)
     row = iterator.next()
     converter = _create_converter(row, schema)
@@ -880,7 +880,7 @@ class SQLContext:
                     "can not infer schema")
 
         schema = _infer_schema(first)
-        rdd = rdd.mapPartitions(lambda rows: _dropSchema(rows, schema))
+        rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
         return self.applySchema(rdd, schema)
 
     def applySchema(self, rdd, schema):
