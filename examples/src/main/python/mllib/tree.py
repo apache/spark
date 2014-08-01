@@ -38,15 +38,17 @@ def parsePoint(line):
 # Return accuracy of DecisionTreeModel on the given RDD[LabeledPoint].
 def getAccuracy(dtModel, data):
     seqOp = (lambda acc, x: acc + (x[0] == x[1]))
-    trainCorrect = \
-        dtModel.predict(data).zip(data.map(lambda p: p.label)).aggregate(0, seqOp, add)
+    predictions = dtModel.predict(data)
+    truth = data.map(lambda p: p.label)
+    trainCorrect = predictions.zip(truth).aggregate(0, seqOp, add)
     return trainCorrect / (0.0 + data.count())
 
 # Return mean squared error (MSE) of DecisionTreeModel on the given RDD[LabeledPoint].
 def getMSE(dtModel, data):
     seqOp = (lambda acc, x: acc + numpy.square(x[0] - x[1]))
-    trainMSE = \
-        dtModel.predict(data).zip(data.map(lambda p: p.label)).aggregate(0, seqOp, add)
+    predictions = dtModel.predict(data)
+    truth = data.map(lambda p: p.label)
+    trainMSE = predictions.zip(truth).aggregate(0, seqOp, add)
     return trainMSE / (0.0 + data.count())
 
 # Return a new LabeledPoint with the label and feature 0 swapped.
@@ -81,10 +83,10 @@ if __name__ == "__main__":
     regressionPoints = points.map(lambda labeledPoint: swapLabelAndFeature0(labeledPoint))
     categoricalFeaturesInfo = {0: 2}
     regressionModel = \
-        DecisionTree.trainRegressor(points, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        DecisionTree.trainRegressor(regressionPoints, categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for regression:"
     print "  Model numNodes: %d\n" % regressionModel.numNodes()
     print "  Model depth: %d\n" % regressionModel.depth()
-    print "  Training MSE: %g\n" % getMSE(regressionModel, points)
+    print "  Training MSE: %g\n" % getMSE(regressionModel, regressionPoints)
     print regressionModel

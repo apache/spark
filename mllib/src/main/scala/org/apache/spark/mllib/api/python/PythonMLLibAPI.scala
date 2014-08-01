@@ -530,7 +530,7 @@ class PythonMLLibAPI extends Serializable {
       model: DecisionTreeModel,
       dataJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
     val data = dataJRDD.rdd.map(xBytes => deserializeDoubleVector(xBytes))
-    model.predict(data).map(Utils.serialize(_))
+    model.predict(data).map(serializeDouble)
   }
 
   // Used by the *RDD methods to get default seed if not passed in from pyspark

@@ -376,7 +376,7 @@ def _linear_predictor_typecheck(x, coeffs):
         if x.size != coeffs.shape[0]:
             raise RuntimeError("Got sparse vector of size %d; wanted %d" % (
                 x.size, coeffs.shape[0]))
-    elif (type(x) == RDD):
+    elif isinstance(x, RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
         raise TypeError("Argument of type " + type(x).__name__ + " unsupported")

@@ -19,8 +19,9 @@ from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
 from pyspark.mllib._common import \
-    _get_unmangled_double_vector_rdd, _serialize_double_vector, \
-    _deserialize_labeled_point, _get_unmangled_labeled_point_rdd
+    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, _serialize_double_vector, \
+    _deserialize_labeled_point, _get_unmangled_labeled_point_rdd, \
+    _deserialize_double
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
@@ -44,16 +45,24 @@ class DecisionTreeModel(object):
 
     def predict(self, x):
         """
-        :param x:  Either one data point (feature vector), or a dataset (RDD of feature vectors)
+        Predict the label of one or more examples.
+        NOTE: This currently does NOT support batch prediction.
+
+        :param x:  Data point: feature vector, or a LabeledPoint (whose label is ignored).
         """
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
-        print "predict called for type: " + str(type(x))
         if isinstance(x, RDD):
             # Bulk prediction
+            if x.count() == 0:
+                raise RuntimeError("DecisionTreeModel.predict(x) given empty RDD x.")
+            elementType = type(x.take(1)[0])
+            if elementType == LabeledPoint:
+                x = x.map(lambda x: x.features)
             dataBytes = _get_unmangled_double_vector_rdd(x)
             jSerializedPreds = pythonAPI.predictDecisionTreeModel(self._java_model, dataBytes._jrdd)
+            dataBytes.unpersist()
             serializedPreds = RDD(jSerializedPreds, self._sc, NoOpSerializer())
-            return serializedPreds.map(lambda bytes: _deserialize_labeled_point(bytearray(bytes)))
+            return serializedPreds.map(lambda bytes: _deserialize_double(bytearray(bytes)))
         else:
             if type(x) == LabeledPoint:
                 x_ = _serialize_double_vector(x.features)
@@ -202,6 +211,7 @@ class DecisionTree(object):
             dataBytes._jrdd, algo,
             numClasses, categoricalFeaturesInfoJMap,
             impurity, maxDepth, maxBins)
+        dataBytes.unpersist()
         return DecisionTreeModel(sc, model)
 
 
