@@ -24,9 +24,23 @@ import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 /**
- * Continually update a model on one stream of data using streaming linear regression,
- * while making predictions on another stream of data. Assumes data arrive in the form
- * of text files saved to a directory.
+ * Train a linear regression model on one stream of data and make predictions
+ * on another stream, where the data streams arrive as text files
+ * into two different directories.
+ *
+ * The rows of the text files must be labeled data points in the form
+ * `(y,[x1,x2,x3,...,xn])`
+ * Where n is the number of features. n must be the same for train and test.
+ *
+ * Usage: StreamingLinearRegression <trainingDir> <testDir> <batchDuration> <numFeatures>
+ *
+ * To run on your local machine using the two directories `trainingDir` and `testDir`,
+ * with updates every 5 seconds, and 2 features per data point, call:
+ *    $ bin/run-example \
+ *        org.apache.spark.examples.mllib.StreamingLinearRegression trainingDir testDir 5 2
+ *
+ * As you add text files to `trainingDir` the model will continuously update.
+ * Anytime you add text files to `testDir`, you'll see predictions from the current model.
  *
  */
 object StreamingLinearRegression {
@@ -35,7 +49,7 @@ object StreamingLinearRegression {
 
     if (args.length != 4) {
       System.err.println(
-        "Usage: StreamingLinearRegression <trainingData> <testData> <batchDuration> <numFeatures>")
+        "Usage: StreamingLinearRegression <trainingDir> <testDir> <batchDuration> <numFeatures>")
       System.exit(1)
     }
 

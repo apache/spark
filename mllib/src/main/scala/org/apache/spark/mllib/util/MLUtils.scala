@@ -197,6 +197,8 @@ object MLUtils {
   /**
    * Loads streaming labeled points from a stream of text files
    * where points are in the same format as used in `RDD[LabeledPoint].saveAsTextFile`.
+   * See `StreamingContext.textFileStream` for more details on how to
+   * generate a stream from files
    *
    * @param ssc Streaming context
    * @param dir Directory path in any Hadoop-supported file system URI
