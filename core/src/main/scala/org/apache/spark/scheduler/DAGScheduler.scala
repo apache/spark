@@ -1135,8 +1135,7 @@ class DAGScheduler(
   }
 
   /** Recursive implementation for getPreferredLocs. */
-  private
-  def getPreferredLocsInternal(
+  private def getPreferredLocsInternal(
       rdd: RDD[_],
       partition: Int,
       visited: HashSet[(RDD[_],Int)])
