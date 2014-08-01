@@ -30,9 +30,8 @@ private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
-  extends Serializable
 
-private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean) extends Serializable
+private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
  * Lives in the driver to receive heartbeats from executors..
