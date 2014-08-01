@@ -66,15 +66,15 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT max(LENGTH(s)) FROM nullableRepeatedData"), 4)
   }
 
-  test("SPARK-2686 Added Parser of SQL STRLEN()") {
+  test("SPARK-2686 Added Parser of SQL OCTET_LENGTH()") {
     checkAnswer(
-      sql("SELECT octet_len(s) from repeatedData"), Seq(Seq(4),Seq(4)))
+      sql("SELECT octet_length(s) from repeatedData"), Seq(Seq(4),Seq(4)))
     checkAnswer(
-      sql("SELECT octet_len(s,'UTF-8') from repeatedData"), Seq(Seq(4),Seq(4)))
+      sql("SELECT octet_length(s,'UTF-8') from repeatedData"), Seq(Seq(4),Seq(4)))
     checkAnswer(
-      sql("SELECT max(octet_len(s,'UTF-8')) from nullStrings"), 3)
+      sql("SELECT max(octet_length(s,'UTF-8')) from nullStrings"), 3)
     checkAnswer(
-      sql("SELECT octet_len('a','ISO-8859-1') + strlen('abcde','ISO-8859-1') FROM testData limit 1"), 6)
+      sql("SELECT octet_length('a','ISO-8859-1') + octet_length('abcde','ISO-8859-1') FROM testData limit 1"), 6)
   }
 
   test("index into array") {

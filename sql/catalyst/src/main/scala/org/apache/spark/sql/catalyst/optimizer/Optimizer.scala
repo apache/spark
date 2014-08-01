@@ -175,7 +175,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(_, _, Literal(null, _)) => Literal(null, e.dataType)
 
       case e @ Length(Literal(null, _)) => Literal(null, e.dataType)
-      case e @ OctetLen(Literal(null, _),_) => Literal(null, e.dataType)
+      case e @ OctetLength(Literal(null, _),_) => Literal(null, e.dataType)
 
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {

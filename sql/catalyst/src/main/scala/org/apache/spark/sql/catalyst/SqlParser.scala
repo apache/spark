@@ -124,8 +124,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val LEN = Keyword("LEN")
   protected val LENGTH = Keyword("LENGTH")
-  protected val CHAR_LEN = Keyword("CHAR_LEN")
-  protected val OCTET_LEN = Keyword("OCTET_LEN")
+  protected val CHAR_LENGTH = Keyword("CHAR_LENGTH")
+  protected val OCTET_LENGTH = Keyword("OCTET_LENGTH")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -327,12 +327,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
-    (LEN | LENGTH | CHAR_LEN) ~> "(" ~> expression <~ ")" ^^ { case s => Length(s) } |
-      OCTET_LEN ~> "(" ~> expression ~ "," ~  expression <~ ")" ^^ {
-      case s ~ "," ~  e => OctetLen(s, e)
+    (LEN | LENGTH | CHAR_LENGTH) ~> "(" ~> expression <~ ")" ^^ { case s => Length(s) } |
+      OCTET_LENGTH ~> "(" ~> expression ~ "," ~  expression <~ ")" ^^ {
+      case s ~ "," ~  e => OctetLength(s, e)
     } |
-    OCTET_LEN ~> "(" ~> expression  <~ ")" ^^ {
-      case s  => OctetLen(s, Literal(OctetLenConstants.DefaultEncoding))
+      OCTET_LENGTH ~> "(" ~> expression  <~ ")" ^^ {
+      case s  => OctetLength(s, Literal(OctetLengthConstants.DefaultEncoding))
     } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)

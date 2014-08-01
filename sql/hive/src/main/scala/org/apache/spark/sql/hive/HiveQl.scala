@@ -866,8 +866,8 @@ private[hive] object HiveQl {
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
-  val CHAR_LEN = "(?i)CHAR_LEN".r
-  val OCTET_LEN = "(?i)OCTET_LEN".r
+  val CHAR_LENGTH = "(?i)CHAR_LENGTH".r
+  val OCTET_LENGTH = "(?i)OCTET_LENGTH".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -999,10 +999,10 @@ private[hive] object HiveQl {
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
-    case Token("TOK_FUNCTION", Token(OCTET_LEN(), Nil) :: string :: Nil) =>
-      OctetLen(nodeToExpr(string), Literal(StrlenConstants.DefaultEncoding))
-    case Token("TOK_FUNCTION", Token(OCTET_LEN(), Nil) :: string :: encoding :: Nil) =>
-      OctetLen(nodeToExpr(string), nodeToExpr(encoding))
+    case Token("TOK_FUNCTION", Token(OCTET_LENGTH(), Nil) :: string :: Nil) =>
+      OctetLength(nodeToExpr(string), Literal(StrlenConstants.DefaultEncoding))
+    case Token("TOK_FUNCTION", Token(OCTET_LENGTH(), Nil) :: string :: encoding :: Nil) =>
+      OctetLength(nodeToExpr(string), nodeToExpr(encoding))
 
 
     /* UDFs - Must be last otherwise will preempt built in functions */

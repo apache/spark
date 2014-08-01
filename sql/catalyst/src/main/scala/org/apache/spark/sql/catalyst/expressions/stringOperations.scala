@@ -240,7 +240,7 @@ case class Length(child: Expression) extends UnaryExpression {
 
 }
 
-object OctetLenConstants {
+object OctetLengthConstants {
   val DefaultEncoding = "ISO-8859-1"
 }
 
@@ -261,7 +261,7 @@ object OctetLenUtils {
 /**
  * A function that returns the number of characters in a string expression
  */
-case class OctetLen(child: Expression, encoding : Expression) extends UnaryExpression
+case class OctetLength(child: Expression, encoding : Expression) extends UnaryExpression
   with Logging {
 
   type EvaluatedType = Any
@@ -275,11 +275,11 @@ case class OctetLen(child: Expression, encoding : Expression) extends UnaryExpre
   override def toString = s"OctetLen($child, $encoding)"
 
   override def eval(input: Row): EvaluatedType = {
-    val string = child.eval(input)
-    if (string == null) {
+    val evalInput = child.eval(input)
+    if (evalInput == null) {
       null
-    } else if (!string.isInstanceOf[String]) {
-      log.debug(s"Non-string value [$string] provided to OctetLen")
+    } else if (!evalInput.isInstanceOf[String]) {
+      log.debug(s"Non-string value [$evalInput] provided to OctetLen")
       null
     } else {
       var evalEncoding = encoding.eval(input)
@@ -287,11 +287,11 @@ case class OctetLen(child: Expression, encoding : Expression) extends UnaryExpre
         if (evalEncoding != null) {
           evalEncoding.toString
         } else {
-          OctetLenConstants.DefaultEncoding
+          OctetLengthConstants.DefaultEncoding
         }
       val s: String = ""
       try {
-        string.asInstanceOf[String].getBytes(strEncoding).length
+        evalInput.asInstanceOf[String].getBytes(strEncoding).length
       } catch {
         case ue : UnsupportedEncodingException => {
           throw new UnsupportedEncodingException(s"OctetLen: Caught UnsupportedEncodingException for encoding=[$strEncoding]")
