@@ -32,6 +32,10 @@ import org.apache.spark.streaming.dstream.DStream
  * streaming versions of arbitrary regression analyses. For example usage,
  * see StreamingLinearRegressionWithSGD.
  *
+ * NOTE: Only weights will be updated, not an intercept.
+ * If the model needs an intercept, it should be manually appended
+ * to the input data.
+ *
  */
 @DeveloperApi
 abstract class StreamingLinearAlgorithm[
@@ -52,17 +56,16 @@ abstract class StreamingLinearAlgorithm[
   /**
    * Update the model by training on batches of data from a DStream.
    * This operation registers a DStream for training the model,
-   * and updates the model based on every subsequent non-empty
+   * and updates the model based on every subsequent
    * batch of data from the stream.
    *
    * @param data DStream containing labeled data
    */
   def trainOn(data: DStream[LabeledPoint]) {
-    data.foreachRDD { rdd =>
+    data.foreachRDD { (rdd, time) =>
         model = algorithm.run(rdd, model.weights)
-        logInfo("Model updated")
-        logInfo("Current model: weights, %s".format(model.weights.toString))
-        logInfo("Current model: intercept, %s".format(model.intercept.toString))
+        logInfo("Model updated at time %s".format(time.toString))
+        logInfo("Current model: weights, %s".format(model.weights.toArray.take(100).mkString("[", ",", "]")))
     }
   }
 
