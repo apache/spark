@@ -128,7 +128,7 @@ if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Okay, exiting."
     exit 1
-  fi 
+  fi
 fi
 
 if [ "$NAME" == "none" ]; then
@@ -173,7 +173,7 @@ cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
-cp -r $FWDIR/examples/src/main "$DISTDIR/examples/src/" 
+cp -r $FWDIR/examples/src/main "$DISTDIR/examples/src/"
 
 if [ "$SPARK_HIVE" == "true" ]; then
   cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
@@ -199,7 +199,7 @@ cp -r "$FWDIR/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.4.1"
+  TACHYON_VERSION="0.5.0"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
