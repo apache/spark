@@ -116,15 +116,6 @@ private[spark] class BlockManager(
   private var asyncReregisterTask: Future[Unit] = null
   private val asyncReregisterLock = new Object
 
-  private def heartBeat(): Unit = {
-    if (!master.sendHeartBeat(blockManagerId)) {
-      reregister()
-    }
-  }
-
-  private val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
-  private var heartBeatTask: Cancellable = null
-
   private val metadataCleaner = new MetadataCleaner(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
@@ -161,11 +152,6 @@ private[spark] class BlockManager(
   private def initialize(): Unit = {
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
-    if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
-      heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
-        Utils.tryOrExit { heartBeat() }
-      }
-    }
   }
 
   /**
@@ -195,7 +181,7 @@ private[spark] class BlockManager(
    *
    * Note that this method must be called without any BlockInfo locks held.
    */
-  private def reregister(): Unit = {
+  def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
@@ -1065,9 +1051,6 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    if (heartBeatTask != null) {
-      heartBeatTask.cancel()
-    }
     connectionManager.stop()
     shuffleBlockManager.stop()
     diskBlockManager.stop()
@@ -1094,12 +1077,6 @@ private[spark] object BlockManager extends Logging {
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
-
-  def getHeartBeatFrequency(conf: SparkConf): Long =
-    conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000) / 4
-
-  def getDisableHeartBeatsForTesting(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.test.disableBlockManagerHeartBeat", false)
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that

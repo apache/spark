@@ -29,7 +29,6 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.actor._
-import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy.Stop
 import akka.pattern.ask
 import akka.util.Timeout
@@ -39,8 +38,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
+import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -152,6 +152,23 @@ class DAGScheduler(
       taskInfo: TaskInfo,
       taskMetrics: TaskMetrics) {
     eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
+  }
+
+  /**
+   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
+   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, Int, TaskMetrics)], // (taskId, stageId, metrics)
+      blockManagerId: BlockManagerId): Boolean = {
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
+    implicit val timeout = Timeout(600 seconds)
+
+    Await.result(
+      blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
+      timeout.duration).asInstanceOf[Boolean]
   }
 
   // Called by TaskScheduler when an executor fails.
