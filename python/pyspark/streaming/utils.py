@@ -17,6 +17,7 @@
 
 from pyspark.rdd import RDD
 
+
 class RDDFunction():
     def __init__(self, ctx, jrdd_deserializer, func):
         self.ctx = ctx
