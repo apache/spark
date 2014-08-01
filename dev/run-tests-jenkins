@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Wrapper script that runs the Spark tests then reports QA results
+# to github via its API.
+
+# Go to the Spark project root directory
+FWDIR="$(cd `dirname $0`/..; pwd)"
+cd "$FWDIR"
+
+COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
+
+function post_message {
+  message=$1
+  data="{\"body\": \"$message\"}"
+  echo "Attempting to post to Github:"
+  echo "$data"
+
+  curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data "$data" -H \
+    "Content-Type: application/json" \
+    $COMMENTS_URL | head -n 8
+}
+
+start_message="QA tests have started for PR $ghprbPullId."
+if [ "$sha1" == "$ghprbActualCommit" ]; then
+  start_message="$start_message This patch DID NOT merge cleanly! "
+else
+  start_message="$start_message This patch merges cleanly. "
+fi
+start_message="$start_message<br>View progress: "
+start_message="$start_message${BUILD_URL}consoleFull"
+
+post_message "$start_message"
+
+./dev/run-tests
+test_result="$?"
+
+result_message="QA results for PR $ghprbPullId:<br>"
+
+if [ "$test_result" -eq "0" ]; then
+  result_message="$result_message- This patch PASSES unit tests.<br>"
+else
+  result_message="$result_message- This patch FAILED unit tests.<br>"
+fi
+
+if [ "$sha1" != "$ghprbActualCommit" ]; then
+  result_message="$result_message- This patch merges cleanly<br>"
+  non_test_files=$(git diff master --name-only | grep -v "\/test" | tr "\n" " ")
+  new_public_classes=$(git diff master $non_test_files \
+    | grep -e "trait " -e "class " \
+    | grep -e "{" -e "("  \
+    | grep -v -e \@\@ -e private \
+    | grep \+ \
+    | sed "s/\+ *//" \
+    | tr "\n" "~" \
+    | sed "s/~/<br>/g")
+  if [ "$new_public_classes" == "" ]; then
+    result_message="$result_message- This patch adds no public classes<br>"
+  else
+    result_message="$result_message- This patch adds the following public classes (experimental):<br>"
+    result_message="$result_message$new_public_classes"
+  fi
+fi
+result_message="${result_message}<br>For more information see test ouptut:"
+result_message="${result_message}<br>${BUILD_URL}consoleFull"
+
+post_message "$result_message"
+
+exit $test_result

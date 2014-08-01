@@ -71,7 +71,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         val ser = SparkEnv.get.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+        executor.launchTask(this, taskDesc.taskId, taskDesc.name, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -88,6 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
@@ -98,8 +99,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-    workerUrl: Option[String]) {
+
+  private def run(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      workerUrl: Option[String]) {
 
     SignalLogger.register(log)
 

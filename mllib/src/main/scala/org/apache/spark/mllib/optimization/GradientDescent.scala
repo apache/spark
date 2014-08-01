@@ -25,6 +25,7 @@ import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -159,6 +160,7 @@ object GradientDescent extends Logging {
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
     val numExamples = data.count()
+    val miniBatchSize = numExamples * miniBatchFraction
 
     // if no data, return initial weights to avoid NaNs
     if (numExamples == 0) {
@@ -168,10 +170,9 @@ object GradientDescent extends Logging {
 
     } else {
 
-      val miniBatchSize = numExamples * miniBatchFraction
-
       // Initialize weights as a column vector
       var weights = Vectors.dense(initialWeights.toArray)
+      val n = weights.size
 
       /**
        * For the first iteration, the regVal will be initialized as sum of weight squares

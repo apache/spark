@@ -17,12 +17,12 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | SPARK_HIVE=true sbt/sbt scalastyle > scalastyle.txt
+echo -e "q\n" | sbt/sbt -Phive -Phive-thriftserver scalastyle > scalastyle.txt
 # Check style with YARN alpha built too
-echo -e "q\n" | SPARK_HADOOP_VERSION=0.23.9 SPARK_YARN=true sbt/sbt yarn-alpha/scalastyle \
+echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-alpha/scalastyle \
   >> scalastyle.txt
 # Check style with YARN built too
-echo -e "q\n" | SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt yarn/scalastyle \
+echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 yarn/scalastyle \
   >> scalastyle.txt
 
 ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")

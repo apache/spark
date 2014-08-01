@@ -289,7 +289,7 @@ class SparkContext(config: SparkConf) extends Logging {
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
-  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v => 
+  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
     executorEnvs("SPARK_PREPEND_CLASSES") = v
   }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
@@ -990,6 +990,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val dagSchedulerCopy = dagScheduler
     dagScheduler = null
     if (dagSchedulerCopy != null) {
+      env.metricsSystem.report()
       metadataCleaner.cancel()
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
@@ -997,8 +998,6 @@ class SparkContext(config: SparkConf) extends Logging {
       // TODO: Cache.stop()?
       env.stop()
       SparkEnv.set(null)
-      ShuffleMapTask.clearCache()
-      ResultTask.clearCache()
       listenerBus.stop()
       eventLogger.foreach(_.stop())
       logInfo("Successfully stopped SparkContext")
@@ -1037,7 +1036,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def getCallSite(): CallSite = {
     Option(getLocalProperty("externalCallSite")) match {
-      case Some(callSite) => CallSite(callSite, long = "")
+      case Some(callSite) => CallSite(callSite, longForm = "")
       case None => Utils.getCallSite
     }
   }
@@ -1059,11 +1058,12 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
-    logInfo("Starting job: " + callSite.short)
+    logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
-    logInfo("Job finished: " + callSite.short + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo(
+      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
   }
 
@@ -1144,11 +1144,12 @@ class SparkContext(config: SparkConf) extends Logging {
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
     val callSite = getCallSite
-    logInfo("Starting job: " + callSite.short)
+    logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
       localProperties.get)
-    logInfo("Job finished: " + callSite.short + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo(
+      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 
@@ -1203,10 +1204,10 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
-   * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively 
-   * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt> 
+   * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively
+   * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt>
    * if not.
-   * 
+   *
    * @param f the closure to clean
    * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability
    * @throws <tt>SparkException<tt> if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
@@ -1451,9 +1452,9 @@ object SparkContext extends Logging {
   /** Creates a task scheduler based on a given master URL. Extracted for testing. */
   private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
     // Regular expression used for local[N] and local[*] master formats
-    val LOCAL_N_REGEX = """local\[([0-9\*]+)\]""".r
+    val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
-    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+)\s*,\s*([0-9]+)\]""".r
+    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
@@ -1483,8 +1484,12 @@ object SparkContext extends Logging {
         scheduler
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
+        def localCpuCount = Runtime.getRuntime.availableProcessors()
+        // local[*, M] means the number of cores on the computer with M failures
+        // local[N, M] means exactly N threads with M failures
+        val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
-        val backend = new LocalBackend(scheduler, threads.toInt)
+        val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
 
@@ -1531,7 +1536,16 @@ object SparkContext extends Logging {
             throw new SparkException("YARN mode not available ?", e)
           }
         }
-        val backend = new CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+        val backend = try {
+          val clazz =
+            Class.forName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
+          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
+          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
+        } catch {
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
+          }
+        }
         scheduler.initialize(backend)
         scheduler
 

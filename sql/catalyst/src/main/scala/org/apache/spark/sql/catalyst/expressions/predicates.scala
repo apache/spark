@@ -23,6 +23,9 @@ import org.apache.spark.sql.catalyst.types.BooleanType
 
 
 object InterpretedPredicate {
+  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    apply(BindReferences.bindReference(expression, inputSchema))
+
   def apply(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
@@ -149,6 +152,22 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     } else {
       val r = right.eval(input)
       if (r == null) null else l == r
+    }
+  }
+}
+
+case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+  def symbol = "<=>"
+  override def nullable = false
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
+    if (l == null && r == null) {
+      true
+    } else if (l == null || r == null) {
+      false
+    } else {
+      l == r
     }
   }
 }

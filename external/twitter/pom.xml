@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-twitter_2.10</artifactId>
+  <properties>
+    <sbt.project.name>streaming-twitter</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project External Twitter</name>
   <url>http://spark.apache.org/</url>
@@ -57,6 +60,11 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

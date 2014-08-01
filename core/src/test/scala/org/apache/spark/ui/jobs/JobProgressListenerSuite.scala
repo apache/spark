@@ -26,6 +26,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
+
   test("test LRU eviction of stages") {
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
@@ -47,11 +48,11 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     }
 
     listener.completedStages.size should be (5)
-    listener.completedStages.filter(_.stageId == 50).size should be (1)
-    listener.completedStages.filter(_.stageId == 49).size should be (1)
-    listener.completedStages.filter(_.stageId == 48).size should be (1)
-    listener.completedStages.filter(_.stageId == 47).size should be (1)
-    listener.completedStages.filter(_.stageId == 46).size should be (1)
+    listener.completedStages.count(_.stageId == 50) should be (1)
+    listener.completedStages.count(_.stageId == 49) should be (1)
+    listener.completedStages.count(_.stageId == 48) should be (1)
+    listener.completedStages.count(_.stageId == 47) should be (1)
+    listener.completedStages.count(_.stageId == 46) should be (1)
   }
 
   test("test executor id to summary") {
@@ -59,48 +60,42 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val listener = new JobProgressListener(conf)
     val taskMetrics = new TaskMetrics()
     val shuffleReadMetrics = new ShuffleReadMetrics()
-
-    // nothing in it
-    assert(listener.stageIdToExecutorSummaries.size == 0)
+    assert(listener.stageIdToData.size === 0)
 
     // finish this task, should get updated shuffleRead
     shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
+    taskMetrics.updateShuffleReadMetrics(shuffleReadMetrics)
     var taskInfo = new TaskInfo(1234L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
-    var task = new ShuffleMapTask(0, null, null, 0, null)
+    var task = new ShuffleMapTask(0)
     val taskType = Utils.getFormattedClassName(task)
     listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
-      .shuffleRead == 1000)
+    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-1", fail())
+      .shuffleRead === 1000)
 
     // finish a task with unknown executor-id, nothing should happen
     taskInfo =
       new TaskInfo(1234L, 0, 1, 1000L, "exe-unknown", "host1", TaskLocality.NODE_LOCAL, true)
     taskInfo.finishTime = 1
-    task = new ShuffleMapTask(0, null, null, 0, null)
+    task = new ShuffleMapTask(0)
     listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToExecutorSummaries.size == 1)
+    assert(listener.stageIdToData.size === 1)
 
     // finish this task, should get updated duration
-    shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1235L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
-    task = new ShuffleMapTask(0, null, null, 0, null)
+    task = new ShuffleMapTask(0)
     listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
-      .shuffleRead == 2000)
+    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-1", fail())
+      .shuffleRead === 2000)
 
     // finish this task, should get updated duration
-    shuffleReadMetrics.remoteBytesRead = 1000
-    taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1236L, 0, 2, 0L, "exe-2", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
-    task = new ShuffleMapTask(0, null, null, 0, null)
+    task = new ShuffleMapTask(0)
     listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-2", fail())
-      .shuffleRead == 1000)
+    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-2", fail())
+      .shuffleRead === 1000)
   }
 
   test("test task success vs failure counting for different task end reasons") {
@@ -109,7 +104,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val metrics = new TaskMetrics()
     val taskInfo = new TaskInfo(1234L, 0, 3, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
-    val task = new ShuffleMapTask(0, null, null, 0, null)
+    val task = new ShuffleMapTask(0)
     val taskType = Utils.getFormattedClassName(task)
 
     // Go through all the failure cases to make sure we are counting them as failures.
@@ -121,13 +116,17 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       TaskKilled,
       ExecutorLostFailure,
       UnknownReason)
+    var failCount = 0
     for (reason <- taskFailedReasons) {
       listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, reason, taskInfo, metrics))
-      assert(listener.stageIdToTasksComplete.get(task.stageId) === None)
+      failCount += 1
+      assert(listener.stageIdToData(task.stageId).numCompleteTasks === 0)
+      assert(listener.stageIdToData(task.stageId).numFailedTasks === failCount)
     }
 
     // Make sure we count success as success.
     listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, metrics))
-    assert(listener.stageIdToTasksComplete.get(task.stageId) === Some(1))
+    assert(listener.stageIdToData(task.stageId).numCompleteTasks === 1)
+    assert(listener.stageIdToData(task.stageId).numFailedTasks === failCount)
   }
 }

@@ -24,21 +24,23 @@ from pyspark.rdd import RDD
 from pyspark.serializers import NoOpSerializer
 
 
-
 class MLUtils:
     """
     Helper methods to load, save and pre-process data used in MLlib.
     """
 
+    @deprecated
     @staticmethod
     def _parse_libsvm_line(line, multiclass):
+        return _parse_libsvm_line(line)
+
+    @staticmethod
+    def _parse_libsvm_line(line):
         """
         Parses a line in LIBSVM format into (label, indices, values).
         """
         items = line.split(None)
         label = float(items[0])
-        if not multiclass:
-            label = 1.0 if label > 0.5 else 0.0
         nnz = len(items) - 1
         indices = np.zeros(nnz, dtype=np.int32)
         values = np.zeros(nnz)
@@ -65,8 +67,13 @@ class MLUtils:
                             " but got " % type(v))
         return " ".join(items)
 
+    @deprecated
     @staticmethod
     def loadLibSVMFile(sc, path, multiclass=False, numFeatures=-1, minPartitions=None):
+        return loadLibSVMFile(sc, path, numFeatures, minPartitions)
+
+    @staticmethod
+    def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
         LabeledPoint. The LIBSVM format is a text-based format used by
@@ -82,13 +89,6 @@ class MLUtils:
         @param sc: Spark context
         @param path: file or directory path in any Hadoop-supported file
                      system URI
-        @param multiclass: whether the input labels contain more than
-                           two classes. If false, any label with value
-                           greater than 0.5 will be mapped to 1.0, or
-                           0.0 otherwise. So it works for both +1/-1 and
-                           1/0 cases. If true, the double value parsed
-                           directly from the label string will be used
-                           as the label value.
         @param numFeatures: number of features, which will be determined
                             from the input data if a nonpositive value
                             is given. This is useful when the dataset is
@@ -106,7 +106,7 @@ class MLUtils:
         >>> tempFile.write("+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
         >>> tempFile.flush()
         >>> examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
-        >>> multiclass_examples = MLUtils.loadLibSVMFile(sc, tempFile.name, True).collect()
+        >>> multiclass_examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
         >>> tempFile.close()
         >>> type(examples[0]) == LabeledPoint
         True
@@ -125,7 +125,7 @@ class MLUtils:
         """
 
         lines = sc.textFile(path, minPartitions)
-        parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l, multiclass))
+        parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
         if numFeatures <= 0:
             parsed.cache()
             numFeatures = parsed.map(lambda x: 0 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
@@ -153,7 +153,6 @@ class MLUtils:
         """
         lines = data.map(lambda p: MLUtils._convert_labeled_point_to_libsvm(p))
         lines.saveAsTextFile(dir)
-
 
     @staticmethod
     def loadLabeledPoints(sc, path, minPartitions=None):

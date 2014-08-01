@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume_2.10</artifactId>
+  <properties>
+    <sbt.project.name>streaming-flume</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project External Flume</name>
   <url>http://spark.apache.org/</url>
@@ -70,9 +73,19 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-flume-sink_2.10</artifactId>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
   <build>

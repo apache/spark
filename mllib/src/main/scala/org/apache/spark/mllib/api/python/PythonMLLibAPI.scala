@@ -24,10 +24,12 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.random.{RandomRDDGenerators => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -52,6 +54,13 @@ class PythonMLLibAPI extends Serializable {
     } else {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
+  }
+
+  private[python] def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
+    require(bytes.length - offset == 8, "Wrong size byte array for Double")
+    val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
+    bb.order(ByteOrder.nativeOrder())
+    bb.getDouble
   }
 
   private def deserializeDenseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
@@ -87,6 +96,22 @@ class PythonMLLibAPI extends Serializable {
     val values = new Array[Double](nonZeros)
     db.get(values)
     Vectors.sparse(size, indices, values)
+  }
+
+  /**
+   * Returns an 8-byte array for the input Double.
+   *
+   * Note: we currently do not use a magic byte for double for storage efficiency.
+   * This should be reconsidered when we add Ser/De for other 8-byte types (e.g. Long), for safety.
+   * The corresponding deserializer, deserializeDouble, needs to be modified as well if the
+   * serialization scheme changes.
+   */
+  private[python] def serializeDouble(double: Double): Array[Byte] = {
+    val bytes = new Array[Byte](8)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.putDouble(double)
+    bytes
   }
 
   private def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
@@ -429,5 +454,100 @@ class PythonMLLibAPI extends Serializable {
       alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+  }
+
+  // Used by the *RDD methods to get default seed if not passed in from pyspark
+  private def getSeedOrDefault(seed: java.lang.Long): Long = {
+    if (seed == null) Utils.random.nextLong else seed
+  }
+
+  // Used by *RDD methods to get default numPartitions if not passed in from pyspark
+  private def getNumPartitionsOrDefault(numPartitions: java.lang.Integer,
+      jsc: JavaSparkContext): Int = {
+    if (numPartitions == null) {
+      jsc.sc.defaultParallelism
+    } else {
+      numPartitions
+    }
+  }
+
+  // Note: for the following methods, numPartitions and seed are boxed to allow nulls to be passed
+  // in for either argument from pyspark
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformRDD()
+   */
+  def uniformRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.uniformRDD(jsc.sc, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalRDD()
+   */
+  def normalRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.normalRDD(jsc.sc, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
+   */
+  def poissonRDD(jsc: JavaSparkContext,
+      mean: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.poissonRDD(jsc.sc, mean, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformVectorRDD()
+   */
+  def uniformVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.uniformVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalVectorRDD()
+   */
+  def normalVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.normalVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
+   */
+  def poissonVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s).map(serializeDoubleVector)
   }
 }

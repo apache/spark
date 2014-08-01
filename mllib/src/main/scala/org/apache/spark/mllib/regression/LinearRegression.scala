@@ -27,7 +27,7 @@ import org.apache.spark.mllib.optimization._
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LinearRegressionModel private[mllib] (
+class LinearRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {

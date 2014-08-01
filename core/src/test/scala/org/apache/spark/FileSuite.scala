@@ -24,12 +24,14 @@ import scala.io.Source
 import com.google.common.io.Files
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
-import org.apache.hadoop.mapred.{JobConf, FileAlreadyExistsException, TextOutputFormat}
-import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.apache.hadoop.mapred.{JobConf, FileAlreadyExistsException, FileSplit, TextInputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{NewHadoopRDD, HadoopRDD}
 import org.apache.spark.util.Utils
 
 class FileSuite extends FunSuite with LocalSparkContext {
@@ -177,6 +179,31 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(output.collect().toList === List((1, "a"), (2, "aa"), (3, "aaa")))
   }
 
+  test("object files of classes from a JAR") {
+    val original = Thread.currentThread().getContextClassLoader
+    val className = "FileSuiteObjectFileTest"
+    val jar = TestUtils.createJarWithClasses(Seq(className))
+    val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    Thread.currentThread().setContextClassLoader(loader)
+    try {
+      sc = new SparkContext("local", "test")
+      val objs = sc.makeRDD(1 to 3).map { x =>
+        val loader = Thread.currentThread().getContextClassLoader
+        Class.forName(className, true, loader).newInstance()
+      }
+      val outputDir = new File(tempDir, "output").getAbsolutePath
+      objs.saveAsObjectFile(outputDir)
+      // Try reading the output back as an object file
+      val ct = reflect.ClassTag[Any](Class.forName(className, true, loader))
+      val output = sc.objectFile[Any](outputDir)
+      assert(output.collect().size === 3)
+      assert(output.collect().head.getClass.getName === className)
+    }
+    finally {
+      Thread.currentThread().setContextClassLoader(original)
+    }
+  }
+
   test("write SequenceFile using new Hadoop API") {
     import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
     sc = new SparkContext("local", "test")
@@ -292,5 +319,33 @@ class FileSuite extends FunSuite with LocalSparkContext {
     job.getConfiguration.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
     randomRDD.saveAsNewAPIHadoopDataset(job.getConfiguration)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
+  }
+
+  test("Get input files via old Hadoop API") {
+    sc = new SparkContext("local", "test")
+    val outDir = new File(tempDir, "output").getAbsolutePath
+    sc.makeRDD(1 to 4, 2).saveAsTextFile(outDir)
+
+    val inputPaths =
+      sc.hadoopFile(outDir, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
+        .asInstanceOf[HadoopRDD[_, _]]
+        .mapPartitionsWithInputSplit { (split, part) =>
+          Iterator(split.asInstanceOf[FileSplit].getPath.toUri.getPath)
+        }.collect()
+    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+  }
+
+  test("Get input files via new Hadoop API") {
+    sc = new SparkContext("local", "test")
+    val outDir = new File(tempDir, "output").getAbsolutePath
+    sc.makeRDD(1 to 4, 2).saveAsTextFile(outDir)
+
+    val inputPaths =
+      sc.newAPIHadoopFile(outDir, classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
+        .asInstanceOf[NewHadoopRDD[_, _]]
+        .mapPartitionsWithInputSplit { (split, part) =>
+          Iterator(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath)
+        }.collect()
+    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
 }

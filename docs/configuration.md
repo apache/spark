@@ -42,13 +42,15 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My fancy app" --master local[4] myApp.jar
+./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
 tool support two ways to load configurations dynamically. The first are command line options,
-such as `--master`, as shown above. Running `./bin/spark-submit --help` will show the entire list
-of options.
+such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
+flag, but uses special flags for properties that play a part in launching the Spark application.
+Running `./bin/spark-submit --help` will show the entire list of these options.
 
 `bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
 each line consists of a key and a value separated by whitespace. For example:
@@ -195,6 +197,15 @@ Apart from these, the following properties are also available, and may be useful
     Spark's dependencies and user dependencies. It is currently an experimental feature.
   </td>
 </tr>
+<tr>
+  <td><code>spark.python.worker.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per python worker process during aggregation, in the same
+    format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
+    used during aggregation goes above this amount, it will spill the data into disks.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -228,7 +239,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.3</td>
+  <td>0.2</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
     <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
@@ -336,13 +347,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
+  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
   <td>
     The codec used to compress internal data such as RDD partitions and shuffle outputs.
-    By default, Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code>
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>. Of these two choices,
-    Snappy offers faster compression and decompression, while LZF offers a better compression
-    ratio.
+    By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -350,7 +360,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
-    is used.
+    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lz4.block.size</code></td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
@@ -362,13 +380,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.serializer.objectStreamReset</code></td>
-  <td>10000</td>
+  <td>100</td>
   <td>
     When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
     objects to prevent writing redundant data, however that stops garbage collection of those
     objects. By calling 'reset' you flush that info from the serializer, and allow old
     objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
-    By default it will reset the serializer every 10,000 objects.
+    By default it will reset the serializer every 100 objects.
   </td>
 </tr>
 <tr>
@@ -382,13 +400,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.registrationRequired</code></td>
+  <td>false</td>
+  <td>
+    Whether to require registration with Kryo. If set to 'true', Kryo will throw an exception
+    if an unregistered class is serialized. If set to false (the default), Kryo will write
+    unregistered class names along with each object. Writing class names can cause
+    significant performance overhead, so enabling this option can enforce strictly that a
+    user has not omitted classes from registration.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>2</td>
   <td>
-    Maximum object size to allow within Kryo (the library needs to create a buffer at least as
-    large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
-    worker.
+    Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
+     <i>per core</i> on each worker. This buffer will grow up to
+     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
+  <td>64</td>
+  <td>
+    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
+    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
+    inside Kryo.
   </td>
 </tr>
 </table>
@@ -412,7 +449,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
@@ -449,6 +486,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
     increase it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.unrollFraction</code></td>
+  <td>0.2</td>
+  <td>
+    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
+    This is dynamically allocated by dropping existing blocks when there is not enough free
+    storage space to unroll the new block in its entirety.
   </td>
 </tr>
 <tr>
@@ -490,9 +536,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
     <td>spark.hadoop.validateOutputSpecs</td>
     <td>true</td>
-    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists) 
-    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing 
-    output directories. We recommend that users do not disable this except if trying to achieve compatibility with 
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 </table>
@@ -699,6 +745,25 @@ Apart from these, the following properties are also available, and may be useful
     (in milliseconds)
   </td>
 </tr>
+</tr>
+  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td>0</td>
+  <td>
+    The minimum ratio of registered executors (registered executors / total expected executors)
+    to wait for before scheduling begins. Specified as a double between 0 and 1.
+    Regardless of whether the minimum ratio of executors has been reached,
+    the maximum amount of time it will wait before scheduling begins is controlled by config 
+    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td>30000</td>
+  <td>
+    Maximum amount of time to wait for executors to register before scheduling begins
+    (in milliseconds).  
+  </td>
+</tr>
 </table>
 
 #### Security
@@ -774,6 +839,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.receiver.maxRate</code></td>
+  <td>infinite</td>
+  <td>
+    Maximum rate (per second) at which each receiver will push data into blocks. Effectively,
+    each stream will consume at most this number of records per second.
+    Setting this configuration to 0 or a negative number will put no limit on the rate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.unpersist</code></td>
   <td>true</td>
   <td>
@@ -826,7 +900,7 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 #### Cluster Managers
-Each cluster manager in Spark has additional configuration options. Configurations 
+Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
  * [YARN](running-on-yarn.html#configuration)
