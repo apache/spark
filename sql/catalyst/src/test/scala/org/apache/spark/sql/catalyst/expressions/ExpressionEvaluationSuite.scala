@@ -18,16 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
 
-import scala.collection.mutable.ArrayBuffer
-
 /* Implicit conversions */
-
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class ExpressionEvaluationSuite extends FunSuite {
@@ -63,8 +59,8 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   val notTrueTable =
     (true, false) ::
-      (false, true) ::
-      (null, null) :: Nil
+    (false, true) ::
+    (null, null) :: Nil
 
   test("3VL Not") {
     notTrueTable.foreach {
@@ -74,45 +70,45 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   booleanLogicTest("AND", _ && _,
-    (true, true, true) ::
-      (true, false, false) ::
-      (true, null, null) ::
-      (false, true, false) ::
-      (false, false, false) ::
-      (false, null, false) ::
-      (null, true, null) ::
-      (null, false, false) ::
-      (null, null, null) :: Nil)
+    (true,  true,  true) ::
+    (true,  false, false) ::
+    (true,  null,  null) ::
+    (false, true,  false) ::
+    (false, false, false) ::
+    (false, null,  false) ::
+    (null,  true,  null) ::
+    (null,  false, false) ::
+    (null,  null,  null) :: Nil)
 
   booleanLogicTest("OR", _ || _,
-    (true, true, true) ::
-      (true, false, true) ::
-      (true, null, true) ::
-      (false, true, true) ::
-      (false, false, false) ::
-      (false, null, null) ::
-      (null, true, true) ::
-      (null, false, null) ::
-      (null, null, null) :: Nil)
+    (true,  true,  true) ::
+    (true,  false, true) ::
+    (true,  null,  true) ::
+    (false, true,  true) ::
+    (false, false, false) ::
+    (false, null,  null) ::
+    (null,  true,  true) ::
+    (null,  false, null) ::
+    (null,  null,  null) :: Nil)
 
   booleanLogicTest("=", _ === _,
-    (true, true, true) ::
-      (true, false, false) ::
-      (true, null, null) ::
-      (false, true, false) ::
-      (false, false, true) ::
-      (false, null, null) ::
-      (null, true, null) ::
-      (null, false, null) ::
-      (null, null, null) :: Nil)
+    (true,  true,  true) ::
+    (true,  false, false) ::
+    (true,  null,  null) ::
+    (false, true,  false) ::
+    (false, false, true) ::
+    (false, null,  null) ::
+    (null,  true,  null) ::
+    (null,  false, null) ::
+    (null,  null,  null) :: Nil)
 
   def booleanLogicTest(
-                        name: String,
-                        op: (Expression, Expression) => Expression,
-                        truthTable: Seq[(Any, Any, Any)]) {
+      name: String,
+      op: (Expression, Expression) => Expression,
+      truthTable: Seq[(Any, Any, Any)]) {
     test(s"3VL $name") {
       truthTable.foreach {
-        case (l, r, answer) =>
+        case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
           checkEvaluation(expr, answer)
       }
@@ -127,8 +123,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if (actual != expected) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+    if(actual != expected) {
+      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
@@ -153,8 +149,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("addb" like "a%", true)
     checkEvaluation("addb" like "**", false)
     checkEvaluation("abc" like "a%", true)
-    checkEvaluation("abc" like "b%", false)
-    checkEvaluation("abc" like "bc%", false)
+    checkEvaluation("abc"  like "b%", false)
+    checkEvaluation("abc"  like "bc%", false)
   }
 
   test("LIKE Non-literal Regular Expression") {
@@ -191,10 +187,10 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("axe" rlike "pi|apa", false)
     checkEvaluation("pip" rlike "^(pi)*$", false)
 
-    checkEvaluation("abc" rlike "^ab", true)
-    checkEvaluation("abc" rlike "^bc", false)
-    checkEvaluation("abc" rlike "^ab", true)
-    checkEvaluation("abc" rlike "^bc", false)
+    checkEvaluation("abc"  rlike "^ab", true)
+    checkEvaluation("abc"  rlike "^bc", false)
+    checkEvaluation("abc"  rlike "^ab", true)
+    checkEvaluation("abc"  rlike "^bc", false)
 
     intercept[java.util.regex.PatternSyntaxException] {
       evaluate("abbbbc" rlike "**")
@@ -261,9 +257,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24.toByte)
     checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24.toShort)
 
-    intercept[Exception] {
-      evaluate(Literal(1) cast BinaryType, null)
-    }
+    intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
 
     assert(("abcdef" cast StringType).nullable === false)
     assert(("abcdef" cast BinaryType).nullable === false)
@@ -290,7 +284,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
     val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000) // a timestamp without the milliseconds part
+    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)
     checkEvaluation(Cast(ts, LongType), 15)
@@ -341,11 +335,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(If(Literal(false, BooleanType),
       Literal("a", StringType), Literal("b", StringType)), "b", row)
 
-    checkEvaluation(c1 in(c1, c2), true, row)
+    checkEvaluation(c1 in (c1, c2), true, row)
     checkEvaluation(
       Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType)), true, row)
     checkEvaluation(
-      Literal("^Ba*n", StringType) in(Literal("^Ba*n", StringType), c2), true, row)
+      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType), c2), true, row)
   }
 
   test("case when") {
@@ -393,11 +387,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("complex type") {
     val row = new GenericRow(Array[Any](
-      "^Ba*n", // 0
-      null.asInstanceOf[String], // 1
-      new GenericRow(Array[Any]("aa", "bb")), // 2
-      Map("aa" -> "bb"), // 3
-      Seq("aa", "bb") // 4
+      "^Ba*n",                                  // 0
+      null.asInstanceOf[String],                // 1
+      new GenericRow(Array[Any]("aa", "bb")),   // 2
+      Map("aa"->"bb"),                          // 3
+      Seq("aa", "bb")                           // 4
     ))
 
     val typeS = StructType(
@@ -428,7 +422,7 @@ class ExpressionEvaluationSuite extends FunSuite {
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2, typeS, nullable = true), "a").nullable === true)
+    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
     assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
     assert(GetField(Literal(null, typeS), "a").nullable === true)
