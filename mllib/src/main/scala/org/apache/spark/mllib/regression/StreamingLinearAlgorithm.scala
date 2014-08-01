@@ -23,9 +23,9 @@ import org.apache.spark.streaming.dstream.DStream
 
 /**
  * :: DeveloperApi ::
- * StreamingRegression implements methods for training
- * a linear regression model on streaming data, and using it
- * for prediction on streaming data.
+ * StreamingLinearAlgorithm implements methods for continuously
+ * training a generalized linear model model on streaming data,
+ * and using it for prediction on streaming data.
  *
  * This class takes as type parameters a GeneralizedLinearModel,
  * and a GeneralizedLinearAlgorithm, making it easy to extend to construct
@@ -34,7 +34,7 @@ import org.apache.spark.streaming.dstream.DStream
  *
  */
 @DeveloperApi
-abstract class StreamingRegression[
+abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
@@ -45,7 +45,7 @@ abstract class StreamingRegression[
   val algorithm: A
 
   /** Return the latest model. */
-  def latest(): M = {
+  def latestModel(): M = {
     model
   }
 
@@ -58,8 +58,7 @@ abstract class StreamingRegression[
    * @param data DStream containing labeled data
    */
   def trainOn(data: DStream[LabeledPoint]) {
-    data.foreachRDD{
-      rdd =>
+    data.foreachRDD { rdd =>
         model = algorithm.run(rdd, model.weights)
         logInfo("Model updated")
         logInfo("Current model: weights, %s".format(model.weights.toString))

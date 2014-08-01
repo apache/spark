@@ -75,13 +75,13 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
     Utils.deleteRecursively(testDir)
 
     // check accuracy of final parameter estimates
-    assertEqual(model.latest().intercept, 0.0, 0.1)
-    assertEqual(model.latest().weights(0), 10.0, 0.1)
-    assertEqual(model.latest().weights(1), 10.0, 0.1)
+    assertEqual(model.latestModel().intercept, 0.0, 0.1)
+    assertEqual(model.latestModel().weights(0), 10.0, 0.1)
+    assertEqual(model.latestModel().weights(1), 10.0, 0.1)
 
     // check accuracy of predictions
     val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
-    validatePrediction(validationData.map(row => model.latest().predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.latestModel().predict(row.features)), validationData)
   }
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
@@ -107,7 +107,7 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
       Thread.sleep(batchDuration.milliseconds)
       // wait an extra few seconds to make sure the update finishes before new data arrive
       Thread.sleep(4000)
-      history.append(math.abs(model.latest().weights(0) - 10.0))
+      history.append(math.abs(model.latestModel().weights(0) - 10.0))
     }
 
     ssc.stop(stopSparkContext=false)

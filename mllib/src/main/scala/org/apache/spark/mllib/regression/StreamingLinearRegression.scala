@@ -35,7 +35,7 @@ class StreamingLinearRegressionWithSGD private (
     private var numIterations: Int,
     private var miniBatchFraction: Double,
     private var numFeatures: Int)
-  extends StreamingRegression[LinearRegressionModel, LinearRegressionWithSGD] with Serializable {
+  extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD] with Serializable {
 
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
 
