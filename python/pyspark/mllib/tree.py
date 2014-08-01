@@ -130,15 +130,6 @@ class DecisionTree(object):
     True
     """
 
-    def run(self, data, datasetInfo):
-        """
-        :param data: RDD of NumPy vectors, one per element, where the first
-                     coordinate is the label and the rest is the feature vector.
-                     Labels are integers {0,1,...,numClasses}.
-        :param datasetInfo: Dataset metadata
-        :return: DecisionTreeClassifierModel
-        """
-
     @staticmethod
     def trainClassifier(data, numClasses, categoricalFeaturesInfo={},
                         impurity="gini", maxDepth=4, maxBins=100):
