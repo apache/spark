@@ -43,9 +43,6 @@ __all__ = [
 class DataType(object):
     """Spark SQL DataType"""
 
-    def __str__(self):
-        return repr(self)
-
     def __repr__(self):
         return self.__class__.__name__
 
@@ -975,6 +972,9 @@ class SQLContext:
 
         if isinstance(rdd, SchemaRDD):
             raise TypeError("Cannot apply schema to SchemaRDD")
+
+        if not isinstance(schema, StructType):
+            raise TypeError("schema should be StructType")
 
         first = rdd.first()
         if not isinstance(first, (tuple, list)):
