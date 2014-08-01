@@ -18,9 +18,8 @@
 
 package org.apache.spark.mllib.feature
 
-import scala.util._
+import scala.util.{Random => Random}
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 import scala.collection.mutable
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
