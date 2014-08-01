@@ -48,7 +48,7 @@ import org.apache.spark.SparkContext
  */
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
-  extends Logging
+  extends org.apache.spark.Logging
   with SQLConf
   with ExpressionConversions
   with UdfRegistration

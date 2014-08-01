@@ -212,7 +212,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       }
     } catch {
       case e: Exception =>
-        logger.error(
+        log.error(
           s"""
             |======================
             |HIVE FAILURE OUTPUT

@@ -56,7 +56,8 @@ protected[sql] trait UdfRegistration {
     val dataType = parseDataType(stringDataType)
 
     def builder(e: Seq[Expression]) =
-      PythonUDF(name,
+      PythonUDF(
+        name,
         command,
         envVars,
         pythonIncludes,
