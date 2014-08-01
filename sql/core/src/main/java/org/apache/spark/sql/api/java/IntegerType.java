@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing String values.
+ * The data type representing int and Integer values.
  *
- * {@code StringType} is represented by the singleton object {@link DataType#StringType}.
+ * {@code IntegerType} is represented by the singleton object {@link DataType#IntegerType}.
  */
-public class StringType extends DataType {
-  protected StringType() {}
+public class IntegerType extends DataType {
+  protected IntegerType() {}
 }

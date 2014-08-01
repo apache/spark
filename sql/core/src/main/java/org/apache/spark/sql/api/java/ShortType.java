@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing java.sql.Timestamp values.
+ * The data type representing short and Short values.
  *
- * {@code TimestampType} is represented by the singleton object {@link DataType#TimestampType}.
+ * {@code ShortType} is represented by the singleton object {@link DataType#ShortType}.
  */
-public class TimestampType extends DataType {
-  protected TimestampType() {}
+public class ShortType extends DataType {
+  protected ShortType() {}
 }
