@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kinesis
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream
 import org.apache.spark.streaming.api.java.JavaStreamingContext
@@ -36,52 +37,63 @@ object KinesisUtils extends Logging {
   /**
    * Create an InputDStream that pulls messages from a Kinesis stream.
    *
-   * @param ssc StreamingContext
-   * @param appName unique name for your Kinesis app.  Multiple instances of the app pull from
-   *   the same stream.  The Kinesis Client Library coordinates all load-balancing and 
-   *   failure-recovery.
-   * @param stream Kinesis stream name
-   * @param endpoint url of Kinesis service (ie. https://kinesis.us-east-1.amazonaws.com)
-   *   Available endpoints:  http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region
-   * @param checkpointIntervalMillis interval (millis) for Kinesis checkpointing
-   * @param initialPositionInStream in the absence of a Kinesis checkpoint info, this is the 
-   *   worker's initial starting position in the stream.
+   * @param ssc    StreamingContext object
+   * @param streamName   Kinesis stream name
+   * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+   *                                 worker's initial starting position in the stream.
+   *                                 The values are either the beginning of the stream
+   *                                 per Kinesis' limit of 24 hours
+   *                                 (InitialPositionInStream.TRIM_HORIZON) or
+   *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param storageLevel Storage level to use for storing the received objects
+   *
    * @return ReceiverInputDStream[Array[Byte]]
    */
   def createStream(
       ssc: StreamingContext,
-      appName: String,
-      stream: String,
-      endpoint: String,
-      checkpointIntervalMillis: Long,
-      initialPositionInStream: InitialPositionInStream): ReceiverInputDStream[Array[Byte]] = {
-    ssc.receiverStream(new KinesisReceiver(appName, stream, endpoint, checkpointIntervalMillis, 
-        initialPositionInStream))
+      streamName: String,
+      endpointUrl: String,
+      checkpointInterval: Duration,
+      initialPositionInStream: InitialPositionInStream,
+      storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
+    ssc.receiverStream(new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl,
+        checkpointInterval, initialPositionInStream, storageLevel))
   }
 
   /**
    * Create a Java-friendly InputDStream that pulls messages from a Kinesis stream.
    *
    * @param jssc Java StreamingContext object
-   * @param appName unique name for your Kinesis app.  Multiple instances of the app pull from
-   *   the same stream.  The Kinesis Client Library coordinates all load-balancing and 
-   *   failure-recovery.
-   * @param stream Kinesis stream name
-   * @param endpoint url of Kinesis service (ie. https://kinesis.us-east-1.amazonaws.com)
-   *   Available endpoints:  http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region
-   * @param checkpointIntervalMillis interval (millis) for Kinesis checkpointing
-   * @param initialPositionInStream in the absence of a Kinesis checkpoint info, this is the
-   *   worker's initial starting position in the stream.
+   * @param ssc    StreamingContext object
+   * @param streamName   Kinesis stream name
+   * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+   *                                 worker's initial starting position in the stream.
+   *                                 The values are either the beginning of the stream
+   *                                 per Kinesis' limit of 24 hours
+   *                                 (InitialPositionInStream.TRIM_HORIZON) or
+   *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param storageLevel Storage level to use for storing the received objects
+   *
+   * @return JavaReceiverInputDStream[Array[Byte]]   
+   *
    * @return JavaReceiverInputDStream[Array[Byte]]
    */
   def createStream(
       jssc: JavaStreamingContext, 
-      appName: String, 
-      stream: String, 
-      endpoint: String, 
-      checkpointIntervalMillis: Long,
-      initialPositionInStream: InitialPositionInStream): JavaReceiverInputDStream[Array[Byte]] = {
-    jssc.receiverStream(new KinesisReceiver(appName, stream, endpoint, checkpointIntervalMillis, 
-        initialPositionInStream))
+      streamName: String, 
+      endpointUrl: String, 
+      checkpointInterval: Duration,
+      initialPositionInStream: InitialPositionInStream,
+      storageLevel: StorageLevel): JavaReceiverInputDStream[Array[Byte]] = {
+    jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName,
+        endpointUrl, checkpointInterval, initialPositionInStream, storageLevel))
   }
 }

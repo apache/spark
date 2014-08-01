@@ -27,10 +27,9 @@
   <!-- 
     Kinesis integration is not included by default due to ASL-licensed code.
     Note:  This project - if activated - is packaged with the main Spark assembly.
-           This only needs to packaged as a separate jar when running the examples.
   -->
   <groupId>org.apache.spark</groupId>
-  <artifactId>kinesis-asl_2.10</artifactId>
+  <artifactId>spark-streaming-kinesis-asl_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 

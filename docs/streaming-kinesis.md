@@ -16,6 +16,7 @@ Deployment and runtime notes:
 <li>Each shard of a stream is processed by one or more KinesisReceiver's managed by the Kinesis Client Library (KCL) Worker.</li>
 <li>Said differently, a single KinesisReceiver can process many shards of a stream.</li>
 <li>You never need more KinesisReceivers than the number of shards in your stream.</li>
+<li>You can horizontally scale the receiving by creating more KinesisReceiver/DStreams (up to the number of shards for a given stream)</li>
 <li>The Kinesis assembly jar must also be present on all worker nodes, as they will need access to the Kinesis Client Library.</li>
 <li>/tmp/checkpoint is a valid and accessible directory on all workers (or locally if running in local mode)</li>
 <li>This code uses the DefaultAWSCredentialsProviderChain and searches for credentials in the following order of precedence:<br/>

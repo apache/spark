@@ -19,10 +19,14 @@ package org.apache.spark.streaming.kinesis
 import java.util.List
 
 import scala.collection.JavaConversions.asScalaBuffer
-import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.apache.spark.Logging
 
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
@@ -33,15 +37,15 @@ import com.amazonaws.services.kinesis.model.Record
  * This implementation operates on the Array[Byte] from the KinesisReceiver.
  * The Kinesis Worker creates an instance of this KinesisRecordProcessor upon startup.
  *
- * @param Kinesis receiver
+ * @param receiver Kinesis receiver
  * @param workerId for logging purposes
- * @param checkpointState represents the checkpoint state including the next time a 
- *   checkpoint is needed.  it's injected here for mocking purposes.
+ * @param checkpointState represents the checkpoint state including the next checkpoint time.
+ *   It's injected here for mocking purposes.
  */
 private[kinesis] class KinesisRecordProcessor(
     receiver: KinesisReceiver,
     workerId: String,
-    checkpointState: CheckpointState) extends IRecordProcessor with Logging {
+    checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
   /** shardId to be populated during initialize() */
   var shardId: String = _
@@ -61,7 +65,7 @@ private[kinesis] class KinesisRecordProcessor(
    * This is the record-processing bridge between the KCL's IRecordProcessor.processRecords()
    * and Spark Streaming's Receiver.store().
    *
-   * @param list of records from the Kinesis stream shard
+   * @param batch list of records from the Kinesis stream shard
    * @param checkpointer used to update Kinesis when this batch has been processed/stored 
    *   in the DStream
    */
@@ -69,18 +73,16 @@ private[kinesis] class KinesisRecordProcessor(
     if (!receiver.isStopped()) {
       try {
         /**
-         * Convert the list of records to a list of Array[Byte]
          * Note:  If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
          * Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
          *   internally-configured Spark serializer (kryo, etc).
-         *        This is not desirable, so we instead store a raw Array[Byte] and decouple
-         *        ourselves from the internal serialization strategy.
+         * This is not desirable, so we instead store a raw Array[Byte] and decouple
+         *   ourselves from Spark's internal serialization strategy.
          */
-        val batchByteArrays = new ArrayBuffer[Array[Byte]](batch.size())
-        batchByteArrays ++= batch.map(record => record.getData().array())
-
-        /** Store the list of Array[Byte] in Spark */
-        KinesisRecordProcessorUtils.retry(receiver.store(batchByteArrays), 4, 500)
+        batch.foreach(record => 
+          KinesisRecordProcessor.retry(receiver.store(record.getData().array()), 4, 500)
+        )
+        
         logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /**
@@ -96,7 +98,7 @@ private[kinesis] class KinesisRecordProcessor(
          */
         if (checkpointState.shouldCheckpoint()) {
           /** Perform the checkpoint */
-          KinesisRecordProcessorUtils.retry(checkpointer.checkpoint(), 4, 500)
+          KinesisRecordProcessor.retry(checkpointer.checkpoint(), 4, 500)
 
           /** Update the next checkpoint time */
           checkpointState.advanceCheckpoint()
@@ -134,8 +136,8 @@ private[kinesis] class KinesisRecordProcessor(
    * 2) the failed or latent Worker has stopped sending heartbeats for whatever reason 
    *     (ShutdownReason.ZOMBIE)
    *
-   * @param checkpointer used to performn a Kinesis checkpoint for ShutdownReason.TERMINATE
-   * @param shutdown reason (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
+   * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
+   * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
    */
   override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
@@ -145,7 +147,7 @@ private[kinesis] class KinesisRecordProcessor(
        * Checkpoint to indicate that all records from the shard have been drained and processed.
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
-      case ShutdownReason.TERMINATE => KinesisRecordProcessorUtils.retry(checkpointer.checkpoint(),
+      case ShutdownReason.TERMINATE => KinesisRecordProcessor.retry(checkpointer.checkpoint(),
           4, 500)
 
       /**
@@ -158,6 +160,55 @@ private[kinesis] class KinesisRecordProcessor(
 
       /** Unknown reason.  NoOp */
       case _ =>
+    }
+  }
+}
+
+private[kinesis] object KinesisRecordProcessor extends Logging {
+    /**
+   * Retry the given amount of times with a random backoff time (millis) less than the
+   *   given maxBackOffMillis
+   *
+   * @param expression expression to evalute
+   * @param numRetriesLeft number of retries left
+   * @param maxBackOffMillis: max millis between retries
+   *
+   * @return evaluation of the given expression
+   * @throws Unretryable exception, unexpected exception,
+   *  or any exception that persists after numRetriesLeft reaches 0
+   */
+  @annotation.tailrec
+  def retry[T](expression: => T, numRetriesLeft: Int, maxBackOffMillis: Int): T = {
+    util.Try { expression } match {
+      /** If the function succeeded, evaluate to x. */
+      case util.Success(x) => x
+      /** If the function failed, either retry or throw the exception */
+      case util.Failure(e) => e match {
+        /** Retry:  Throttling or other Retryable exception has occurred */
+        case _: ThrottlingException | _: KinesisClientLibDependencyException if numRetriesLeft > 1
+          => {
+               val backOffMillis = Random.nextInt(maxBackOffMillis)
+               Thread.sleep(backOffMillis)
+               logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
+               retry(expression, numRetriesLeft - 1, maxBackOffMillis)
+             }
+        /** Throw:  Shutdown has been requested by the Kinesis Client Library.*/
+        case _: ShutdownException => {
+          logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
+          throw e
+        }
+        /** Throw:  Non-retryable exception has occurred with the Kinesis Client Library */
+        case _: InvalidStateException => {
+          logError(s"InvalidStateException:  Cannot save checkpoint to the DynamoDB table used" +
+              s" by the Amazon Kinesis Client Library.  Table likely doesn't exist.", e)
+          throw e
+        }
+        /** Throw:  Unexpected exception has occurred */
+        case _ => {
+          logError(s"Unexpected, non-retryable exception.", e)
+          throw e
+        }
+      }
     }
   }
 }

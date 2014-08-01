@@ -47,14 +47,14 @@ object SimpleApp {
       System.exit(-1)
     }
     if (foundGanglia) {
-      println("Ganglia sink was loaded via spark-ganglia-lgpl")
+      println("Ganglia sink was loaded via spark-core")
       System.exit(-1)
     }
 
     // Remove kinesis from default build due to ASL license issue
     val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisUtils")).isSuccess
     if (foundKinesis) {
-      println("Kinesis was loaded via kinesis-asl")
+      println("Kinesis was loaded via spark-core")
       System.exit(-1)
     }
   }

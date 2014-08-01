@@ -196,8 +196,6 @@ cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
 cp -r "$FWDIR/ec2" "$DISTDIR"
-cp -r "$FWDIR/extras/kinesis-asl/bin" "$DISTDIR"
-
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then

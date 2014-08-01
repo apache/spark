@@ -19,12 +19,16 @@ package org.apache.spark.streaming.kinesis
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions.seqAsJavaList
-import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.Milliseconds
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.util.Clock
 import org.apache.spark.streaming.util.ManualClock
 import org.scalatest.BeforeAndAfter
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.mock.EasyMockSugar
 
@@ -33,13 +37,25 @@ import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibD
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 /**
  *  Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor 
  */
-class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter with EasyMockSugar {
+class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
+    with EasyMockSugar {
+  
+  test("kinesis input stream") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    // Tests the API, does not actually test data receiving
+    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
+    ssc.stop()
+  }
+  
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
   val endpoint = "endpoint-url"
@@ -51,20 +67,18 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
   val record2 = new Record()
   record2.setData(ByteBuffer.wrap("Learning Spark".getBytes()))
   val batch = List[Record](record1, record2)
-  val expectedArrayBuffer = new ArrayBuffer[Array[Byte]]() += record1.getData().array() += 
-    record2.getData().array()
 
   var receiverMock: KinesisReceiver = _
   var checkpointerMock: IRecordProcessorCheckpointer = _
   var checkpointClockMock: ManualClock = _
-  var checkpointStateMock: CheckpointState = _
+  var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
   before {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
-    checkpointStateMock = mock[CheckpointState]
+    checkpointStateMock = mock[KinesisCheckpointState]
     currentClockMock = mock[Clock]
   }
 
@@ -72,7 +86,8 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     val expectedCheckpointIntervalMillis = 10
     expecting {
       receiverMock.isStopped().andReturn(false).once()
-      receiverMock.store(expectedArrayBuffer).once()
+      receiverMock.store(record1.getData().array()).once()
+      receiverMock.store(record2.getData().array()).once()
       checkpointStateMock.shouldCheckpoint().andReturn(true).once()
       checkpointerMock.checkpoint().once()
       checkpointStateMock.advanceCheckpoint().once()
@@ -98,7 +113,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
   test("shouldn't checkpoint when exception occurs during store") {
     expecting {
       receiverMock.isStopped().andReturn(false).once()
-      receiverMock.store(expectedArrayBuffer).andThrow(new RuntimeException()).once()
+      receiverMock.store(record1.getData().array()).andThrow(new RuntimeException()).once()
     }
     whenExecuting(receiverMock, checkpointerMock, checkpointStateMock) {
       intercept[RuntimeException] {
@@ -115,7 +130,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(currentClockMock) {
     val checkpointIntervalMillis = 10
-    val checkpointState = new CheckpointState(checkpointIntervalMillis, currentClockMock)
+    val checkpointState = new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
     assert(checkpointState.checkpointClock.currentTime() == checkpointIntervalMillis)
     }
   }
@@ -125,7 +140,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
       currentClockMock.currentTime().andReturn(0).once()
     }
     whenExecuting(currentClockMock) {
-      val checkpointState = new CheckpointState(Long.MinValue, currentClockMock)
+      val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MinValue), currentClockMock)
       assert(checkpointState.shouldCheckpoint())
     }
   }
@@ -135,7 +150,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
       currentClockMock.currentTime().andReturn(0).once()
     }
     whenExecuting(currentClockMock) {
-      val checkpointState = new CheckpointState(Long.MaxValue, currentClockMock)
+      val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MaxValue), currentClockMock)
       assert(!checkpointState.shouldCheckpoint())
     }
   }
@@ -146,7 +161,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(currentClockMock) {
       val checkpointIntervalMillis = 10
-      val checkpointState = new CheckpointState(checkpointIntervalMillis, currentClockMock)
+      val checkpointState = new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
       assert(checkpointState.checkpointClock.currentTime() == checkpointIntervalMillis)
       checkpointState.advanceCheckpoint()
       assert(checkpointState.checkpointClock.currentTime() == (2 * checkpointIntervalMillis))
@@ -176,25 +191,13 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
   }
 
-  test("string record converter") {
-    val expectedString = "http://sparkinaction.com"
-    val expectedByteArray = expectedString.getBytes()
-    val stringRecordSerializer = new KinesisStringRecordSerializer()
-
-    expectedByteArray should be(stringRecordSerializer.serialize(expectedString))
-
-    expectedString should be(stringRecordSerializer.deserialize(expectedByteArray))
-    expectedString should 
-      be(stringRecordSerializer.deserialize(stringRecordSerializer.serialize(expectedString)))
-  }
-
   test("retry success on first attempt") {
     val expectedIsStopped = false
     expecting {
       receiverMock.isStopped().andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessorUtils.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -206,7 +209,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
         .andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessorUtils.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -218,7 +221,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
         .andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessorUtils.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -229,7 +232,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(checkpointerMock) {
       intercept[ShutdownException] {
-        KinesisRecordProcessorUtils.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -240,7 +243,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(checkpointerMock) {
       intercept[InvalidStateException] {
-        KinesisRecordProcessorUtils.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -251,7 +254,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(checkpointerMock) {
       intercept[RuntimeException] {
-        KinesisRecordProcessorUtils.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -264,7 +267,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter wi
     }
     whenExecuting(checkpointerMock) {
       val exception = intercept[RuntimeException] {
-        KinesisRecordProcessorUtils.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
       }
       exception.getMessage().shouldBe(expectedErrorMessage)
     }

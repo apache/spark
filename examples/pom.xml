@@ -98,7 +98,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>kinesis-asl_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
