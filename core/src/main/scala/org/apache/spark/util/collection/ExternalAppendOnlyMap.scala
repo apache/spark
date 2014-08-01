@@ -404,7 +404,8 @@ class ExternalAppendOnlyMap[K, V, C](
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
-    extends Iterator[(K, C)] {
+    extends Iterator[(K, C)]
+  {
     private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)  // Size will be batchSize.length + 1
     assert(file.length() == batchOffsets(batchOffsets.length - 1))
 
