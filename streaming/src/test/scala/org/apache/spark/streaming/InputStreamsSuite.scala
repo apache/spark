@@ -38,8 +38,10 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
+import org.apache.spark.streaming.receiver.{StoreResult, ActorHelper, Receiver}
 import org.apache.spark.rdd.RDD
+
+import scala.concurrent.ExecutionContext
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -236,6 +238,36 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(output.sum === numTotalRecords)
   }
 
+  /**
+   * Test to ensure callbacks are called when the store which has a callback specified is called.
+   */
+  test("receiver with callbacks") {
+    val limit = 100
+    val testReceiver = new CallbackReceiver(limit)
+    // set up the network stream using the test receiver
+    val ssc = new StreamingContext(conf, batchDuration)
+    val networkStream = ssc.receiverStream[Int](testReceiver)
+    val outputBuffer = new ArrayBuffer[Seq[Int]]
+    val outputStream = new TestOutputStream(networkStream, outputBuffer)
+    def output = outputBuffer.flatten
+    outputStream.register()
+    ssc.start()
+
+    // Let the data from the receiver be received
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val startTime = System.currentTimeMillis()
+    while((output.size < limit + 1) &&
+      System.currentTimeMillis() - startTime < 5000) {
+      Thread.sleep(50)
+      clock.addToTime(batchDuration.milliseconds)
+    }
+    logInfo("Stopping context")
+    assert(output.size === limit + 1)
+    // Sum would be (sum(1..limit)) * 2 since each number appears twice.
+    assert(output.sum === limit * (limit + 1))
+    ssc.stop()
+  }
+  
   test("queue input stream - oneAtATime=true") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
@@ -423,4 +455,32 @@ class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
 
 object MultiThreadTestReceiver {
   var haveAllThreadsFinished = false
+}
+
+class CallbackReceiver(val limit: Int)
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
+
+  lazy implicit val executionContext = ExecutionContext
+    .fromExecutorService(Executors.newSingleThreadExecutor())
+  lazy val executor = Executors.newSingleThreadExecutor()
+
+  override def onStart(): Unit = {
+    executor.submit(new Runnable {
+      override def run(): Unit = {
+        val arrayBuffer = ArrayBuffer.range(1, limit + 1)
+        import org.scalatest.Assertions._
+        storeReliably(arrayBuffer).onSuccess {
+          case s: StoreResult =>
+            assert(s.success === true)
+            assert(s.error === None)
+            store(arrayBuffer.sum)
+        }
+      }
+    })
+  }
+
+  override def onStop(): Unit = {
+    executor.shutdownNow()
+    executionContext.shutdownNow()
+  }
 }

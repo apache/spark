@@ -23,7 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
+
+import scala.concurrent.Future
 
 /**
  * :: DeveloperApi ::
@@ -177,6 +179,104 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    */
   def store(bytes: ByteBuffer, metadata: Any) {
     executor.pushBytes(bytes, Some(metadata), None)
+  }
+
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataBuffer: ArrayBuffer[T]): Future[StoreResult] = {
+    executor.pushArrayBufferReliably(dataBuffer, None, None)
+  }
+
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataBuffer: ArrayBuffer[T], metadata: Any): Future[StoreResult] = {
+    executor.pushArrayBufferReliably(dataBuffer, Some(metadata), None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataIterator: Iterator[T]): Future[StoreResult] = {
+    executor.pushIteratorReliably(dataIterator, None, None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataIterator: java.util.Iterator[T], metadata: Any): Future[StoreResult] = {
+    executor.pushIteratorReliably(dataIterator, Some(metadata), None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataIterator: java.util.Iterator[T]): Future[StoreResult] = {
+    executor.pushIteratorReliably(dataIterator, None, None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(dataIterator: Iterator[T], metadata: Any): Future[StoreResult] = {
+    executor.pushIteratorReliably(dataIterator, Some(metadata), None)
+  }
+
+  /**
+   * Store the bytes of received data as a data block into Spark's memory. Note
+   * that the data in the ByteBuffer must be serialized using the same serializer
+   * that Spark is configured to use. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(bytes: ByteBuffer): Future[StoreResult] = {
+    executor.pushBytesReliably(bytes, None, None)
+  }
+
+  /**
+   * Store the bytes of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The future can be
+   * used to verify if the data was reliably stored or not, using the [[StoreResult]] instance
+   * returned by the future. If the data was stored reliably,any transaction with the system
+   * from which the data is coming in can be committed.
+   */
+  @Experimental
+  def storeReliably(bytes: ByteBuffer, metadata: Any): Future[StoreResult] = {
+    executor.pushBytesReliably(bytes, Some(metadata), None)
   }
 
   /** Report exceptions in receiving data. */

@@ -20,22 +20,22 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import scala.concurrent.Await
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Promise, Future, Await}
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler.DeregisterReceiver
 import org.apache.spark.streaming.scheduler.AddBlock
-import scala.Some
 import org.apache.spark.streaming.scheduler.RegisterReceiver
 import com.google.common.base.Throwables
+
+import scala.util.Try
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -108,11 +108,7 @@ private[streaming] class ReceiverSupervisorImpl(
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putArray(blockId, arrayBuffer.toArray[Any], storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
+    pushData(arrayBuffer, optionalMetadata, optionalBlockId)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
@@ -121,11 +117,7 @@ private[streaming] class ReceiverSupervisorImpl(
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, -1, optionalMetadata)
+    pushData(iterator, optionalMetadata, optionalBlockId)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
@@ -134,11 +126,83 @@ private[streaming] class ReceiverSupervisorImpl(
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
+    pushData(bytes, optionalMetadata, optionalBlockId)
+  }
+
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The future can
+   * return the result of the attempt to store reliably.
+   */
+  override def pushArrayBufferReliably(
+    arrayBuffer: ArrayBuffer[_],
+    optionalMetadata: Option[Any],
+    optionalBlockId: Option[StreamBlockId]
+    ): Future[StoreResult] = {
+    pushDataReliably(arrayBuffer, optionalMetadata, optionalBlockId)
+  }
+
+  /**
+   * Store a iterator of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
+   */
+  override def pushIteratorReliably(
+    iterator: Iterator[_],
+    optionalMetadata: Option[Any],
+    optionalBlockId: Option[StreamBlockId]
+    ): Future[StoreResult] = {
+    pushDataReliably(iterator, optionalMetadata, optionalBlockId)
+  }
+
+  /**
+   * Store the bytes of received data as a data block into Spark's memory. The future can return
+   * the result of the attempt to store reliably.
+   */
+  override def pushBytesReliably(
+      bytes: ByteBuffer,
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]
+    ): Future[StoreResult] = {
+    pushDataReliably(bytes, optionalMetadata, optionalBlockId)
+  }
+
+  /**
+   * Store the data reliably as a data block into Spark's memory. The data can be a
+   * [[ByteBuffer]], [[ArrayBuffer]] or an [[Iterator]]. Once the data is pushed,
+   * this method stores the data reliably but asynchronously. The result of the attempt to
+   * successfully store the data can be retrieved from the future returned from this method.
+   */
+  private def pushDataReliably(
+      data: Any,
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]
+    ): Future[StoreResult] = {
+    val blockId = pushData(data, optionalMetadata, optionalBlockId)
+    completePushReliably(blockId)
+  }
+
+  /**
+   * Store the data reliably as a data block into Spark's memory. The data can be a
+   * [[ByteBuffer]], [[ArrayBuffer]] or an [[Iterator]].
+   */
+  private def pushData(
+      data: Any,
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId]
+    ): StreamBlockId = {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
-    blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
+    data match {
+      case bytes: ByteBuffer =>
+        blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
+      case arrayBuffer: ArrayBuffer[_] =>
+        blockManager.putArray(blockId, arrayBuffer.toArray[Any], storageLevel, tellMaster = true)
+      case iterator: Iterator[_] =>
+        blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
+      case _ => throw new RuntimeException("Unknown Data Type!")
+    }
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, -1, optionalMetadata)
+    blockId
   }
 
   /** Report pushed block */
@@ -180,6 +244,16 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo("Stopped receiver " + streamId)
   }
 
+  private def completePushReliably(blockId: StreamBlockId): Future[StoreResult] = {
+    val successPromise = Promise[StoreResult]()
+    // Right now, this method is a no-op, but once we have BlockManagerMaster replicated/stored
+    // to some storage system, we'd have to asynchronously instruct the BMM to persist the
+    // added block, wait for a response and mark success only when that is successfully done.
+    successPromise.success(new StoreResult(true, None))
+    successPromise.future
+  }
+
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
 }
