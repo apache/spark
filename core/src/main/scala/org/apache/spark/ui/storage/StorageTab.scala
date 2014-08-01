@@ -52,7 +52,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
     val rddIdsToUpdate = updatedBlocks.flatMap { case (bid, _) => bid.asRDDId.map(_.rddId) }.toSet
     val rddInfosToUpdate = _rddInfoMap.values.toSeq.filter { s => rddIdsToUpdate.contains(s.id) }
-    StorageUtils.updateRddInfo(rddInfosToUpdate, storageStatusList, updatedBlocks)
+    StorageUtils.updateRddInfo(rddInfosToUpdate, storageStatusList)
   }
 
   /**

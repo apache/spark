@@ -228,56 +228,16 @@ class StorageSuite extends FunSuite {
     val storageStatuses = stockStorageStatuses
     val rddInfos = stockRDDInfos
     StorageUtils.updateRddInfo(rddInfos, storageStatuses)
+    assert(rddInfos(0).storageLevel === memAndDisk)
     assert(rddInfos(0).numCachedPartitions === 5)
     assert(rddInfos(0).memSize === 5L)
     assert(rddInfos(0).diskSize === 10L)
+    assert(rddInfos(0).tachyonSize === 0L)
+    assert(rddInfos(1).storageLevel === memAndDisk)
     assert(rddInfos(1).numCachedPartitions === 3)
     assert(rddInfos(1).memSize === 3L)
     assert(rddInfos(1).diskSize === 6L)
-  }
-
-  test("StorageUtils.updateRddInfo with updated blocks") {
-    val storageStatuses = stockStorageStatuses
-    val rddInfos = stockRDDInfos
-
-    // Drop 3 blocks from RDD 0, and cache more of RDD 1
-    val updatedBlocks1 = Seq(
-      (RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(0, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(0, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 100L, 100L, 0L)),
-      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 100L, 100L, 0L))
-    )
-    StorageUtils.updateRddInfo(rddInfos, storageStatuses, updatedBlocks1)
-    assert(rddInfos(0).numCachedPartitions === 2)
-    assert(rddInfos(0).memSize === 2L)
-    assert(rddInfos(0).diskSize === 4L)
-    assert(rddInfos(1).numCachedPartitions === 4)
-    assert(rddInfos(1).memSize === 202L)
-    assert(rddInfos(1).diskSize === 204L)
-
-    // Actually update storage statuses so we can chain the calls to StorageUtils.updateRddInfo
-    updatedBlocks1.foreach { case (bid, bstatus) =>
-      storageStatuses.find(_.containsBlock(bid)) match {
-        case Some(s) => s.updateBlock(bid, bstatus)
-        case None => storageStatuses(0).addBlock(bid, bstatus) // arbitrarily pick the first
-      }
-    }
-
-    // Drop all of RDD 1, following previous updates
-    val updatedBlocks2 = Seq(
-      (RDDBlockId(1, 0), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(1, 1), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(1, 2), BlockStatus(memAndDisk, 0L, 0L, 0L)),
-      (RDDBlockId(1, 100), BlockStatus(memAndDisk, 0L, 0L, 0L))
-    )
-    StorageUtils.updateRddInfo(rddInfos, storageStatuses, updatedBlocks2)
-    assert(rddInfos(0).numCachedPartitions === 2)
-    assert(rddInfos(0).memSize === 2L)
-    assert(rddInfos(0).diskSize === 4L)
-    assert(rddInfos(1).numCachedPartitions === 0)
-    assert(rddInfos(1).memSize === 0L)
-    assert(rddInfos(1).diskSize === 0L)
+    assert(rddInfos(1).tachyonSize === 0L)
   }
 
   test("StorageUtils.getRddBlockLocations") {

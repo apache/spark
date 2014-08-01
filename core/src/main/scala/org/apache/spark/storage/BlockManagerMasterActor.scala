@@ -424,6 +424,11 @@ case class BlockStatus(
   def isCached: Boolean = memSize + diskSize + tachyonSize > 0
 }
 
+@DeveloperApi
+object BlockStatus {
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+}
+
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
