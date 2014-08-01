@@ -18,4 +18,4 @@
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
  */
-package org.apache.spark.sql;
+package org.apache.spark.sql.api.java;
