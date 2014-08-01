@@ -248,11 +248,11 @@ class PythonMLLibAPI extends Serializable {
       dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int,
       stepSize: Double,
+      miniBatchFraction: Double,
+      initialWeightsBA: Array[Byte], 
       regParam: Double,
       regType: String,
-      intercept: Boolean,
-      miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      intercept: Boolean): java.util.List[java.lang.Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
     lrAlg.optimizer
@@ -263,6 +263,9 @@ class PythonMLLibAPI extends Serializable {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
     else if (regType == "l1")
       lrAlg.optimizer.setUpdater(new L1Updater)
+    else if (regType != "none")
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + "Can only be initialized using the following string values: [l1, l2, none].")
     trainRegressionModel(
       (data, initialWeights) =>
         lrAlg.run(data, initialWeights),
