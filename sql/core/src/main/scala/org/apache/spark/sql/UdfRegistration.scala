@@ -40,8 +40,8 @@ protected[sql] trait UdfRegistration {
       pythonIncludes: JList[String],
       pythonExec: String,
       accumulator: Accumulator[JList[Array[Byte]]],
-      dataType: String): Unit = {
-    logger.debug(
+      stringDataType: String): Unit = {
+    log.debug(
       s"""
         | Registering new PythonUDF:
         | name: $name
@@ -49,9 +49,11 @@ protected[sql] trait UdfRegistration {
         | envVars: $envVars
         | pythonIncludes: $pythonIncludes
         | pythonExec: $pythonExec
-        | dataType: $dataType
+        | dataType: $stringDataType
       """.stripMargin)
 
+
+    val dataType = parseDataType(stringDataType)
 
     def builder(e: Seq[Expression]) =
       PythonUDF(name,
@@ -60,7 +62,7 @@ protected[sql] trait UdfRegistration {
         pythonIncludes,
         pythonExec,
         accumulator,
-        parseDataType(dataType),
+        dataType,
         e)
 
     functionRegistry.registerFunction(name, builder)
