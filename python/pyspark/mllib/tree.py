@@ -18,9 +18,11 @@
 from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
+from pyspark.mllib._common import \
+    _get_unmangled_double_vector_rdd, _serialize_double_vector, \
+    _deserialize_labeled_point, _get_unmangled_labeled_point_rdd
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
-
 
 class DecisionTreeModel(object):
     """
@@ -45,7 +47,8 @@ class DecisionTreeModel(object):
         :param x:  Either one data point (feature vector), or a dataset (RDD of feature vectors)
         """
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
-        if type(x) == RDD:
+        print "predict called for type: " + str(type(x))
+        if isinstance(x, RDD):
             # Bulk prediction
             dataBytes = _get_unmangled_double_vector_rdd(x)
             jSerializedPreds = pythonAPI.predictDecisionTreeModel(self._java_model, dataBytes._jrdd)

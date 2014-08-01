@@ -71,9 +71,9 @@ if __name__ == "__main__":
     classificationModel = DecisionTree.trainClassifier(points, numClasses=2)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"
-    print "  Model numNodes: " + classificationModel.numNodes() + "\n"
-    print "  Model depth: " + classificationModel.depth() + "\n"
-    print "  Training accuracy: " + getAccuracy(classificationModel, points) + "\n"
+    print "  Model numNodes: %d\n" % classificationModel.numNodes()
+    print "  Model depth: %d\n" % classificationModel.depth()
+    print "  Training accuracy: %g\n" % getAccuracy(classificationModel, points)
     print classificationModel
 
     # Switch labels and first feature to create a regression dataset with categorical features.
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         DecisionTree.trainRegressor(points, categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for regression:"
-    print "  Model numNodes: " + regressionModel.numNodes() + "\n"
-    print "  Model depth: " + regressionModel.depth() + "\n"
-    print "  Training MSE: " + getMSE(regressionModel, points) + "\n"
+    print "  Model numNodes: %d\n" % regressionModel.numNodes()
+    print "  Model depth: %d\n" % regressionModel.depth()
+    print "  Training MSE: %g\n" % getMSE(regressionModel, points)
     print regressionModel
