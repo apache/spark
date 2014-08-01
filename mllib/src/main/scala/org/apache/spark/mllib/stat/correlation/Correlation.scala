@@ -66,7 +66,7 @@ private[stat] object Correlations {
     correlation.computeCorrelationMatrix(X)
   }
 
-  //Match input correlation name with a known name via simple string matching.
+  // Match input correlation name with a known name via simple string matching.
   def getCorrelationFromName(method: String): Correlation = {
     try {
       CorrelationNames.nameToObjectMap(method)
