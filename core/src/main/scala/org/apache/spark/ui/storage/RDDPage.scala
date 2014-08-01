@@ -63,12 +63,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     // Worker table
     val workers = getWorkers(rddId, storageStatusList)
     val workerTableId = "workerTable"
-    val workerTable = UIUtils.listingEmptyTable(workerHeader, workerTableId)
+    val workerTable = UIUtils.listingEmptyTable(workerHeader, workerTableId, simpleTable = true)
 
     // Block table
     val blocks = getBlocks(rddId, storageStatusList)
     val blockTableId = "blockTable"
-    val blockTable = UIUtils.listingEmptyTable(blockHeader, blockTableId)
+    val blockTable = UIUtils.listingEmptyTable(blockHeader, blockTableId, simpleTable = true)
 
     val content =
       <div class="row-fluid">

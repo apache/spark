@@ -38,7 +38,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
     val tableId = "storageTable"
-    val content = UIUtils.listingEmptyTable(rddHeader, tableId) ++
+    val content = UIUtils.listingEmptyTable(rddHeader, tableId, simpleTable = true) ++
       UIUtils.fillTableJavascript(parent.prefix, tableId)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
   }

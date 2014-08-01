@@ -42,33 +42,44 @@ Spark.UI = (function ($) {
     //          -> "<tr><td>1</td></tr><tr><td att='high'>2</td></tr>"
     //
     var fillTable = function (data, tableId) {
-        var tbl_body = "";
-            $.each(data, function() {
-              var tbl_row = "";
-              $.each(this, function(k, v) {
-                if (v instanceof Array) {
-                  tbl_longentry = "";
-                  $.each(this, function(i, l) {
-                    tbl_longentry += "<span>" + l + "<br/></span>";
-                  })
-                  tbl_row += "<td>" + tbl_longentry + "</td>";
-                } else if ((typeof v == "object") && (v != null)) {
-                  options = ""
-                  for (var key in v) {
-                    if ( v.hasOwnProperty(key) && (key != 'value')) {
-                      options += " " + key + "='" + v[key] +"'"
-                    }
-                  }
-                  tbl_row += "<td" + options + ">" + v['value'] + "</td>";
-                } else if (v.toString().indexOf("</td>") != -1){
-                  tbl_row += v;
-                } else {
-                  tbl_row += "<td>" + v + "</td>";
+      var initTime = Date.now()
+      // creating this array to hold the elements is an optimization since it's faster in
+      // Javascript to join of strings rather than having a string and keep adding substring
+      var r = new Array();
+      var j = -1;
+      for (var i = 0; i < data.length; i++) {
+        var d = data[i];
+        r[++j] = "<tr>";
+        for (var ttt in d) {
+          if (d.hasOwnProperty(ttt)) {
+            var v = d[ttt]
+            if (v instanceof Array) {
+              tbl_longentry = "";
+              for (var k = 0; k < v.length; k++){
+                tbl_longentry += "<span>" + v[k] + "<br/></span>";
+              }
+              r[++j] = "<td>" + tbl_longentry + "</td>";
+            } else if ((typeof v == "object") && (v != null)) {
+              options = "";
+              for (var key in v) {
+                if ( v.hasOwnProperty(key) && (key != 'value')) {
+                  options += " " + key + "='" + v[key] +"'";
                 }
-              });
-              tbl_body += "<tr>" + tbl_row + "</tr>";
-            })
-        $("#" + tableId + " tbody").html(tbl_body);
+              }
+              r[++j] = "<td"; r[++j] = options; r[++j] = ">"; r[++j] = v['value']; r[++j] = "</td>";
+            } else if (v.toString().indexOf("</td>") != -1){
+              r[++j] = v;
+            } else {
+              r[++j] = "<td>"; r[++j] = v; r[++j] = "</td>";
+            }
+          }
+        }
+        r[++j] = "</tr>";
+      }
+      $("#" + tableId + " tbody").html(r.join(''));
+      $("#" + tableId + "Text").text("");
+      var finalTime = Date.now();
+      log("total rendering time for table " + tableId +": " + (finalTime - initTime)/1000 + " sec");
     };
 
     // Return the public facing methods for Spark.UI

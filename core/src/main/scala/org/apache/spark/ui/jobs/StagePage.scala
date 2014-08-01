@@ -106,7 +106,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         Seq("Errors")
 
       val taskTableId = "taskTable"
-      val taskTable = UIUtils.listingEmptyTable(taskHeaders, taskTableId)
+      val taskTable = UIUtils.listingEmptyTable(taskHeaders, taskTableId, simpleTable = true)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)

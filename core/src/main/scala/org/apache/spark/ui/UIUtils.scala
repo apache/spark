@@ -159,7 +159,9 @@ private[spark] object UIUtils extends Logging {
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
           type="text/css" />
-    <script src={prependBaseUri("/static/sorttable.js")} ></script>
+    <link rel="stylesheet" href={prependBaseUri("/static/spark.css")}
+          type="text/css" />
+    <script src={prependBaseUri("/static/sorttable.js")}></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
@@ -276,9 +278,13 @@ private[spark] object UIUtils extends Logging {
   def listingEmptyTable[T](
                        headers: Seq[String],
                        tableId: String,
-                       fixedWidth: Boolean = false): Seq[Node] = {
+                       fixedWidth: Boolean = false,
+                       simpleTable: Boolean = false): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
+    if (simpleTable) {
+      listingTableClass = "spark-simple-table sortable"
+    }
     if (fixedWidth) {
       listingTableClass += " table-fixed"
     }
@@ -304,7 +310,8 @@ private[spark] object UIUtils extends Logging {
       <thead>{headerRow}</thead>
       <tbody>
       </tbody>
-    </table>
+      </table>
+      <text id={tableId + "Text"}> Loading table data... </text>
   }
 
   /** create a JSON object representing a cell with a sorttable custom key */
@@ -321,7 +328,9 @@ private[spark] object UIUtils extends Logging {
     }
     <script>
       $.get('/{path}/json', {{ {paramId} }})
-      .done( function(data) {{ Spark.UI.fillTable(data, '{tableId}') }});
+      .done( function(data) {{
+        $('#' + '{tableId}' + 'Text').text('Received data. Rendering table...');
+        Spark.UI.fillTable(data, '{tableId}') }});
     </script>
   }
 

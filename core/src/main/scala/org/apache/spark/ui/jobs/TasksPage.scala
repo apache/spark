@@ -122,7 +122,7 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
         ("Duration" -> UIUtils.cellWithSorttableCustomKey(formatDuration, duration.toString)) ~
         ("GC Time" -> {if (gcTime > 0) {
           UIUtils.cellWithSorttableCustomKey(UIUtils.formatDuration(gcTime), gcTime.toString)
-          } else JNothing })
+          } else JString("") })
       if (hasInput) {
         content ~= ("Input" -> UIUtils.cellWithSorttableCustomKey(inputReadable,
           inputSortable))
