@@ -103,6 +103,7 @@
     <module>external/flume-sink</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
+    <module>external/hbase</module>
     <module>examples</module>
   </modules>
 
@@ -125,6 +126,7 @@
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <hbase-new.version>0.96.2-hadoop1</hbase-new.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <hive.version>0.12.0</hive.version>
     <parquet.version>1.4.3</parquet.version>
