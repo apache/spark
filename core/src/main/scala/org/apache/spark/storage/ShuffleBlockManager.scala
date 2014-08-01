@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 
@@ -80,7 +80,6 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
    * ShuffleFileGroups, as well as all ShuffleFileGroups that have been created for the shuffle.
    */
   private class ShuffleState(val numBuckets: Int) {
-    val nextFileId = new AtomicInteger(0)
     val unusedFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
     val allFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
 
@@ -89,6 +88,11 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
      * NB: This is only populated if consolidateShuffleFiles is FALSE. We don't need it otherwise.
      */
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
+  }
+
+  // Ensure the nextFileId is globally unique, It is ok if it wraps around after 'long' time.
+  private object ShuffleState {
+    val nextFileId = new AtomicInteger(0)
   }
 
   type ShuffleId = Int
@@ -144,7 +148,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
         if (consolidateShuffleFiles) {
           if (success) {
             val offsets = writers.map(_.fileSegment().offset)
-            fileGroup.recordMapOutput(mapId, offsets)
+            val lengths = writers.map(_.fileSegment().length)
+            fileGroup.recordMapOutput(mapId, offsets, lengths)
           }
           recycleFileGroup(fileGroup)
         } else {
@@ -158,7 +163,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
       }
 
       private def newFileGroup(): ShuffleFileGroup = {
-        val fileId = shuffleState.nextFileId.getAndIncrement()
+        val fileId = ShuffleState.nextFileId.getAndIncrement()
         val files = Array.tabulate[File](numBuckets) { bucketId =>
           val filename = physicalFileName(shuffleId, bucketId, fileId)
           blockManager.diskBlockManager.getFile(filename)
@@ -263,31 +268,61 @@ object ShuffleBlockManager {
       new PrimitiveVector[Long]()
     }
 
-    def numBlocks = mapIdToIndex.size
+    /*
+     * This is required for shuffle consolidation to work. In particular when updates to file are
+     * happening while parallel requests to fetch block happens.
+     */
+    private val blockLengthsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
+      new PrimitiveVector[Long]()
+    }
+
+    private var numBlocks = 0
 
     def apply(bucketId: Int) = files(bucketId)
 
-    def recordMapOutput(mapId: Int, offsets: Array[Long]) {
+    def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
       mapIdToIndex(mapId) = numBlocks
       for (i <- 0 until offsets.length) {
+        assert(blockOffsetsByReducer(i).size == numBlocks)
+        assert(offsets(i) >= 0)
+        assert(blockOffsetsByReducer(i).size <= 0 ||
+          blockOffsetsByReducer(i)(blockOffsetsByReducer(i).size - 1) +
+            blockLengthsByReducer(i)(blockLengthsByReducer(i).size - 1) == offsets(i),
+          "Failed for " + i + ", blockOffsetsByReducer = " + blockOffsetsByReducer(i) +
+            ", blockLengthsByReducer = " + blockLengthsByReducer(i))
         blockOffsetsByReducer(i) += offsets(i)
+        blockLengthsByReducer(i) += lengths(i)
+        assert(files(i).length() == lengths(i) + offsets(i) || Utils.inShutdown(),
+          "file = " + files(i).getAbsolutePath + ", offset = " + offsets(i) +
+            ", length = " + lengths(i) + ", file len = " + files(i).length())
       }
+      numBlocks += 1
     }
 
     /** Returns the FileSegment associated with the given map task, or None if no entry exists. */
     def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
-      val file = files(reducerId)
-      val blockOffsets = blockOffsetsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)
       if (index >= 0) {
+        val file = files(reducerId)
+        val blockOffsets = blockOffsetsByReducer(reducerId)
+        val blockLengths = blockLengthsByReducer(reducerId)
         val offset = blockOffsets(index)
-        val length =
-          if (index + 1 < numBlocks) {
-            blockOffsets(index + 1) - offset
-          } else {
-            file.length() - offset
-          }
+        val length = blockLengths(index)
+
+        assert(offset >= 0)
         assert(length >= 0)
+        assert(blockOffsets.size <= index + 1 || blockOffsets(index + 1) == offset + length,
+          "Failed for reducerId = " + reducerId + " index = " + index + ", offset = " + offset +
+            ", length = " + length + ", file exists = " + file.exists() +
+            ", blockOffsetsByReducer = " + blockOffsetsByReducer(reducerId) +
+            ", blockLengthsByReducer = " + blockLengthsByReducer(reducerId) +
+            ", file len = " + file.length() + ", file = " + file.getAbsolutePath)
+        assert(file.length() >= offset + length || (! file.exists() && Utils.inShutdown()),
+          "Failed for reducerId = " + reducerId + " index = " + index + ", offset = " + offset +
+            ", length = " + length + ", file exists = " + file.exists() +
+            ", blockOffsetsByReducer = " + blockOffsetsByReducer(reducerId) +
+            ", blockLengthsByReducer = " + blockLengthsByReducer(reducerId) +
+            ", file len = " + file.length() + ", file = " + file.getAbsolutePath)
         Some(new FileSegment(file, offset, length))
       } else {
         None

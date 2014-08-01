@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{File, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
@@ -82,19 +82,22 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     val dirId = hash % localDirs.length
     val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
 
+    // prevent DCL: Other (expensive) option is to proactively create all directories ...
     // Create the subdirectory if it doesn't already exist
-    var subDir = subDirs(dirId)(subDirId)
-    if (subDir == null) {
-      subDir = subDirs(dirId).synchronized {
-        val old = subDirs(dirId)(subDirId)
-        if (old != null) {
-          old
-        } else {
-          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-          newDir.mkdir()
-          subDirs(dirId)(subDirId) = newDir
-          newDir
+    val subDir = subDirs(dirId).synchronized {
+      val old = subDirs(dirId)(subDirId)
+      if (old != null) {
+        old
+      } else {
+        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+        if (!newDir.isDirectory()) {
+          val created = newDir.mkdirs()
+          if (!created && !newDir.isDirectory) {
+            throw new IOException("Unable to create directory " + newDir.getAbsolutePath)
+          }
         }
+        subDirs(dirId)(subDirId) = newDir
+        newDir
       }
     }
 
@@ -128,6 +131,8 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     while (getFile(blockId).exists()) {
       blockId = new TempBlockId(UUID.randomUUID())
     }
+    // Note, since the file is not created, theoretically the while loop can return the same file
+    // Practically though, since we use UUID, this should not happen.
     (blockId, getFile(blockId))
   }
 
@@ -176,8 +181,9 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
 
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
+    logInfo("shutting down DiskBlockManager")
     localDirs.foreach { localDir =>
-      if (localDir.isDirectory() && localDir.exists()) {
+      if (localDir.exists() && localDir.isDirectory()) {
         try {
           if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
         } catch {
