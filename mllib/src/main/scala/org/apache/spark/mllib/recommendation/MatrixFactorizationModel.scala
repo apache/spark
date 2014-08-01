@@ -66,6 +66,48 @@ class MatrixFactorizationModel private[mllib] (
   }
 
   /**
+   * Recommends products to a user.
+   *
+   * @param user the user to recommend products to
+   * @param num how many products to return. The number returned may be less than this.
+   * @return [[Rating]] objects, each of which contains the given user ID, a product ID, and a
+   *  "score" in the rating field. Each represents one recommended product, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most strongly
+   *  recommended to the user. The score is an opaque value that indicates how strongly
+   *  recommended the product is.
+   */
+  def recommendProducts(user: Int, num: Int): Array[Rating] =
+    recommend(userFeatures.lookup(user).head, productFeatures, num)
+      .map(t => Rating(user, t._1, t._2))
+
+  /**
+   * Recommends users to a product. That is, this returns users who are most likely to be
+   * interested in a product.
+   *
+   * @param product the product to recommend users to
+   * @param num how many users to return. The number returned may be less than this.
+   * @return [[Rating]] objects, each of which contains a user ID, the given product ID, and a
+   *  "score" in the rating field. Each represents one recommended user, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most strongly
+   *  recommended to the product. The score is an opaque value that indicates how strongly
+   *  recommended the user is.
+   */
+  def recommendUsers(product: Int, num: Int): Array[Rating] =
+    recommend(productFeatures.lookup(product).head, userFeatures, num)
+      .map(t => Rating(t._1, product, t._2))
+
+  private def recommend(
+      recommendToFeatures: Array[Double],
+      recommendableFeatures: RDD[(Int, Array[Double])],
+      num: Int): Array[(Int, Double)] = {
+    val recommendToVector = new DoubleMatrix(recommendToFeatures)
+    val scored = recommendableFeatures.map { case (id,features) =>
+      (id, recommendToVector.dot(new DoubleMatrix(features)))
+    }
+    scored.top(num)(Ordering.by(_._2))
+  }
+
+  /**
    * :: DeveloperApi ::
    * Predict the rating of many users for many products.
    * This is a Java stub for python predictAll()
@@ -80,6 +122,4 @@ class MatrixFactorizationModel private[mllib] (
     predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
   }
 
-  // TODO: Figure out what other good bulk prediction methods would look like.
-  // Probably want a way to get the top users for a product or vice-versa.
 }
