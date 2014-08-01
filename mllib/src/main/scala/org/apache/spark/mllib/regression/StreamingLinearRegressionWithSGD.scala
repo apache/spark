@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * Use a builder pattern to construct a streaming linear regression
  * analysis in an application, like:
  *
- *  model = new StreamingLinearRegressionWithSGD()
+ *  val model = new StreamingLinearRegressionWithSGD()
  *    .setStepSize(0.5)
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))

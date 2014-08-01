@@ -67,7 +67,8 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
 
     // write data to a file stream
     for (i <- 0 until numBatches) {
-      val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42 * (i + 1))
+      val samples = LinearDataGenerator.generateLinearInput(
+        0.0, Array(10.0, 10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
       Files.write(samples.map(x => x.toString).mkString("\n"), file, Charset.forName("UTF-8"))
       Thread.sleep(batchDuration.milliseconds)
@@ -85,7 +86,8 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
 
     // check accuracy of predictions
     val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
-    validatePrediction(validationData.map(row => model.latestModel().predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.latestModel().predict(row.features)),
+      validationData)
   }
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
