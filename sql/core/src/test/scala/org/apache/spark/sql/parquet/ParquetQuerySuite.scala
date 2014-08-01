@@ -209,19 +209,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection of simple Parquet file") {
-    SparkPlan.currentContext.set(TestSQLContext)
-    val scanner = new ParquetTableScan(
-      ParquetTestData.testData.output,
-      ParquetTestData.testData,
-      Seq())
-    val projected = scanner.pruneColumns(ParquetTypesConverter
-      .convertToAttributes(MessageTypeParser
-      .parseMessageType(ParquetTestData.subTestSchema)))
-    assert(projected.output.size === 2)
-    val result = projected
-      .execute()
-      .map(_.copy())
-      .collect()
+    val result = ParquetTestData.testData.select('myboolean, 'mylong).collect()
     result.zipWithIndex.foreach {
       case (row, index) => {
           if (index % 3 == 0)
