@@ -109,6 +109,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     """
 
+
 class LinearRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
