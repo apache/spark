@@ -32,27 +32,6 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   // Ensures tables are loaded.
   TestData
 
-  var left: UnresolvedRelation = _
-  var right: UnresolvedRelation = _
-
-  override def beforeEach() {
-    super.beforeEach()
-    left = UnresolvedRelation(None, "left", None)
-    right = UnresolvedRelation(None, "right", None)
-  }
-
-  override def afterEach() {
-    super.afterEach()
-
-    TestSQLContext.catalog.unregisterTable(None, "left")
-    TestSQLContext.catalog.unregisterTable(None, "right")
-  }
-  
-  def check(run: () => Unit) {
-    // TODO hack the logical statistics for cost based optimization.
-    run()
-  }
-
   test("equi-join is hash-join") {
     val x = testData2.as('x)
     val y = testData2.as('y)
@@ -183,131 +162,112 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left outer join") {
-    lowerCaseData.registerAsTable("right")
-    upperCaseData.registerAsTable("left")
-    def run() {
-      checkAnswer(
-        left.join(right, LeftOuter, Some('n === 'N)),
-        (1, "A", 1, "a") ::
-        (2, "B", 2, "b") ::
-        (3, "C", 3, "c") ::
-        (4, "D", 4, "d") ::
-        (5, "E", null, null) ::
-        (6, "F", null, null) :: Nil)
-  
-      checkAnswer(
-        left.join(right, LeftOuter, Some('n === 'N && 'n > 1)),
-        (1, "A", null, null) ::
-        (2, "B", 2, "b") ::
-        (3, "C", 3, "c") ::
-        (4, "D", 4, "d") ::
-        (5, "E", null, null) ::
-        (6, "F", null, null) :: Nil)
-  
-      checkAnswer(
-        left.join(right, LeftOuter, Some('n === 'N && 'N > 1)),
-        (1, "A", null, null) ::
-        (2, "B", 2, "b") ::
-        (3, "C", 3, "c") ::
-        (4, "D", 4, "d") ::
-        (5, "E", null, null) ::
-        (6, "F", null, null) :: Nil)
-  
-      checkAnswer(
-        left.join(right, LeftOuter, Some('n === 'N && 'l > 'L)),
-        (1, "A", 1, "a") ::
-        (2, "B", 2, "b") ::
-        (3, "C", 3, "c") ::
-        (4, "D", 4, "d") ::
-        (5, "E", null, null) ::
-        (6, "F", null, null) :: Nil)
-    }
-
-    check(run)
+    checkAnswer(
+      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
+      (1, "A", 1, "a") ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::
+      (5, "E", null, null) ::
+      (6, "F", null, null) :: Nil)
+    
+    checkAnswer(
+      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'n > 1)),
+      (1, "A", null, null) ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::
+      (5, "E", null, null) ::
+      (6, "F", null, null) :: Nil)
+    
+    checkAnswer(
+      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'N > 1)),
+      (1, "A", null, null) ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::
+      (5, "E", null, null) ::
+      (6, "F", null, null) :: Nil)
+    
+    checkAnswer(
+      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'l > 'L)),
+      (1, "A", 1, "a") ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::
+      (5, "E", null, null) ::
+      (6, "F", null, null) :: Nil)
   }
 
   test("right outer join") {
-    lowerCaseData.registerAsTable("left")
-    upperCaseData.registerAsTable("right")
-
-    val left = UnresolvedRelation(None, "left", None)
-    val right = UnresolvedRelation(None, "right", None)
-
-    def run() {
-      checkAnswer(
-        left.join(right, RightOuter, Some('n === 'N)),
-        (1, "a", 1, "A") ::
-        (2, "b", 2, "B") ::
-        (3, "c", 3, "C") ::
-        (4, "d", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-      checkAnswer(
-        left.join(right, RightOuter, Some('n === 'N && 'n > 1)),
-        (null, null, 1, "A") ::
-        (2, "b", 2, "B") ::
-        (3, "c", 3, "C") ::
-        (4, "d", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-      checkAnswer(
-        left.join(right, RightOuter, Some('n === 'N && 'N > 1)),
-        (null, null, 1, "A") ::
-        (2, "b", 2, "B") ::
-        (3, "c", 3, "C") ::
-        (4, "d", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-      checkAnswer(
-        left.join(right, RightOuter, Some('n === 'N && 'l > 'L)),
-        (1, "a", 1, "A") ::
-        (2, "b", 2, "B") ::
-        (3, "c", 3, "C") ::
-        (4, "d", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-    }
-
-    check(run)
+    checkAnswer(
+      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
+      (1, "a", 1, "A") ::
+      (2, "b", 2, "B") ::
+      (3, "c", 3, "C") ::
+      (4, "d", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+    checkAnswer(
+      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'n > 1)),
+      (null, null, 1, "A") ::
+      (2, "b", 2, "B") ::
+      (3, "c", 3, "C") ::
+      (4, "d", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+    checkAnswer(
+      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'N > 1)),
+      (null, null, 1, "A") ::
+      (2, "b", 2, "B") ::
+      (3, "c", 3, "C") ::
+      (4, "d", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+    checkAnswer(
+      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'l > 'L)),
+      (1, "a", 1, "A") ::
+      (2, "b", 2, "B") ::
+      (3, "c", 3, "C") ::
+      (4, "d", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
   }
 
   test("full outer join") {
     upperCaseData.where('N <= 4).registerAsTable("left")
     upperCaseData.where('N >= 3).registerAsTable("right")
 
-    def run() {
-      checkAnswer(
-        left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
-        (1, "A", null, null) ::
-        (2, "B", null, null) ::
-        (3, "C", 3, "C") ::
-        (4, "D", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-  
-      checkAnswer(
-        left.join(right, FullOuter, 
-            Some(("left.N".attr === "right.N".attr) && ("left.N".attr !== 3))),
-        (1, "A", null, null) ::
-        (2, "B", null, null) ::
-        (3, "C", null, null) ::
-        (null, null, 3, "C") ::
-        (4, "D", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-  
-      checkAnswer(
-        left.join(right, FullOuter, 
-            Some(("left.N".attr === "right.N".attr) && ("right.N".attr !== 3))),
-        (1, "A", null, null) ::
-        (2, "B", null, null) ::
-        (3, "C", null, null) ::
-        (null, null, 3, "C") ::
-        (4, "D", 4, "D") ::
-        (null, null, 5, "E") ::
-        (null, null, 6, "F") :: Nil)
-    }
+    val left = UnresolvedRelation(None, "left", None)
+    val right = UnresolvedRelation(None, "right", None)
 
-    check(run)
+    checkAnswer(
+      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
+      (1, "A", null, null) ::
+      (2, "B", null, null) ::
+      (3, "C", 3, "C") ::
+      (4, "D", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+    
+    checkAnswer(
+      left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("left.N".attr !== 3))),
+      (1, "A", null, null) ::
+      (2, "B", null, null) ::
+      (3, "C", null, null) ::
+      (null, null, 3, "C") ::
+      (4, "D", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+    
+    checkAnswer(
+      left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("right.N".attr !== 3))),
+      (1, "A", null, null) ::
+      (2, "B", null, null) ::
+      (3, "C", null, null) ::
+      (null, null, 3, "C") ::
+      (4, "D", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
   }
 }
