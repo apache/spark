@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
  * The data type representing Maps. A MapType object comprises two fields,
@@ -27,8 +27,8 @@ package org.apache.spark.sql.api.java.types;
  * For values of a MapType column, keys are not allowed to have {@code null} values.
  *
  * To create a {@link MapType},
- * {@link org.apache.spark.sql.api.java.types.DataType#createMapType(DataType, DataType)} or
- * {@link org.apache.spark.sql.api.java.types.DataType#createMapType(DataType, DataType, boolean)}
+ * {@link DataType#createMapType(DataType, DataType)} or
+ * {@link DataType#createMapType(DataType, DataType, boolean)}
  * should be used.
  */
 public class MapType extends DataType {

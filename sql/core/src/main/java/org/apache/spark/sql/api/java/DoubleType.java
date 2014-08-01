@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing long and Long values.
+ * The data type representing double and Double values.
  *
- * {@code LongType} is represented by the singleton object {@link DataType#LongType}.
+ * {@code DoubleType} is represented by the singleton object {@link DataType#DoubleType}.
  */
-public class LongType extends DataType {
-  protected LongType() {}
+public class DoubleType extends DataType {
+  protected DoubleType() {}
 }

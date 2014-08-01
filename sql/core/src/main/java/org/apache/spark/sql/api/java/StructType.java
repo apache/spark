@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * The data type representing Rows.
  * A StructType object comprises an array of StructFields.
  *
  * To create an {@link StructType},
- * {@link org.apache.spark.sql.api.java.types.DataType#createStructType(java.util.List)} or
- * {@link org.apache.spark.sql.api.java.types.DataType#createStructType(StructField[])}
+ * {@link DataType#createStructType(java.util.List)} or
+ * {@link DataType#createStructType(StructField[])}
  * should be used.
  */
 public class StructType extends DataType {

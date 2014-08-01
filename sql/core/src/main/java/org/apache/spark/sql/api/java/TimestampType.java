@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing byte and Byte values.
+ * The data type representing java.sql.Timestamp values.
  *
- * {@code ByteType} is represented by the singleton object {@link DataType#ByteType}.
+ * {@code TimestampType} is represented by the singleton object {@link DataType#TimestampType}.
  */
-public class ByteType extends DataType {
-  protected ByteType() {}
+public class TimestampType extends DataType {
+  protected TimestampType() {}
 }

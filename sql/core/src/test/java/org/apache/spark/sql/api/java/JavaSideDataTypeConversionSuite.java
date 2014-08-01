@@ -24,8 +24,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.sql.types.util.DataTypeConversions;
-import org.apache.spark.sql.api.java.types.DataType;
-import org.apache.spark.sql.api.java.types.StructField;
 
 public class JavaSideDataTypeConversionSuite {
   public void checkDataType(DataType javaDataType) {

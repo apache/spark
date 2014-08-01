@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing boolean and Boolean values.
+ * The data type representing byte[] values.
  *
- * {@code BooleanType} is represented by the singleton object {@link DataType#BooleanType}.
+ * {@code BinaryType} is represented by the singleton object {@link DataType#BinaryType}.
  */
-public class BooleanType extends DataType {
-  protected BooleanType() {}
+public class BinaryType extends DataType {
+  protected BinaryType() {}
 }

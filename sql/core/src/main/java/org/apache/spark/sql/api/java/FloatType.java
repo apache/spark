@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing double and Double values.
+ * The data type representing float and Float values.
  *
- * {@code DoubleType} is represented by the singleton object {@link DataType#DoubleType}.
+ * {@code FloatType} is represented by the singleton object {@link DataType#FloatType}.
  */
-public class DoubleType extends DataType {
-  protected DoubleType() {}
+public class FloatType extends DataType {
+  protected FloatType() {}
 }
