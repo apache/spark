@@ -939,9 +939,9 @@ if __name__ == "__main__":
     if not _have_scipy:
         print "NOTE: Skipping SciPy tests as it does not seem to be installed"
     if not _have_numpy:
-            print "NOTE: Skipping NumPy tests as it does not seem to be installed"
+        print "NOTE: Skipping NumPy tests as it does not seem to be installed"
     unittest.main()
     if not _have_scipy:
         print "NOTE: SciPy tests were skipped as it does not seem to be installed"
     if not _have_numpy:
-            print "NOTE: NumPy tests were skipped as it does not seem to be installed"
+        print "NOTE: NumPy tests were skipped as it does not seem to be installed"

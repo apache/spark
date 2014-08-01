@@ -28,6 +28,7 @@ except:
     # no NumPy, so fall back on scalar operators
     pass
 
+
 class StatCounter(object):
 
     def __init__(self, values=[]):
