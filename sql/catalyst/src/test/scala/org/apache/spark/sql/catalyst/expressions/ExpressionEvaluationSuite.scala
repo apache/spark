@@ -583,17 +583,17 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Length(Literal("\uF93D\uF936\uF949\uF942",StringType)), 4)
   }
 
-  test("Strlen") {
-    checkEvaluation(Strlen(Literal(null, StringType), "ISO-8859-1"), null)
-    checkEvaluation(Strlen(Literal(null, StringType), "UTF-8"), null)
-    checkEvaluation(Strlen(Literal(null, StringType), "UTF-16"), null)
-    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "ISO-8859-1"), 13)
-    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "UTF-8"), 13)
-    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "UTF-16"), 7)
-    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "ISO-8859-1"), 4)
-    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-8"), 4)
-    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-16"), 2)
-    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-32"), 1)
+  test("OctetLen") {
+    checkEvaluation(OctetLen(Literal(null, StringType), "ISO-8859-1"), null)
+    checkEvaluation(OctetLen(Literal(null, StringType), "UTF-8"), null)
+    checkEvaluation(OctetLen(Literal(null, StringType), "UTF-16"), null)
+    checkEvaluation(OctetLen(Literal("1234567890ABC", StringType), "ISO-8859-1"), 13)
+    checkEvaluation(OctetLen(Literal("1234567890ABC", StringType), "UTF-8"), 13)
+    checkEvaluation(OctetLen(Literal("1234567890ABC", StringType), "UTF-16"), 7)
+    checkEvaluation(OctetLen(Literal("\uF93D\uF936\uF949\uF942", StringType), "ISO-8859-1"), 4)
+    checkEvaluation(OctetLen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-8"), 4)
+    checkEvaluation(OctetLen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-16"), 2)
+    checkEvaluation(OctetLen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-32"), 1)
   }
 
 }

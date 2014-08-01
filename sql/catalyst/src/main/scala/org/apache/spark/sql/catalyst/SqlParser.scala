@@ -124,7 +124,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val LEN = Keyword("LEN")
   protected val LENGTH = Keyword("LENGTH")
-  protected val STRLEN = Keyword("STRLEN")
+  protected val CHAR_LEN = Keyword("CHAR_LEN")
+  protected val OCTET_LEN = Keyword("OCTET_LEN")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -326,12 +327,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
-    (LEN | LENGTH) ~> "(" ~> expression <~ ")" ^^ { case s => Length(s) } |
-    STRLEN ~> "(" ~> expression ~ "," ~  expression <~ ")" ^^ {
-      case s ~ "," ~  e => Strlen(s, e)
+    (LEN | LENGTH | CHAR_LEN) ~> "(" ~> expression <~ ")" ^^ { case s => Length(s) } |
+      OCTET_LEN ~> "(" ~> expression ~ "," ~  expression <~ ")" ^^ {
+      case s ~ "," ~  e => OctetLen(s, e)
     } |
-    STRLEN ~> "(" ~> expression  <~ ")" ^^ {
-      case s  => Strlen(s, Literal(StrlenConstants.DefaultEncoding))
+    OCTET_LEN ~> "(" ~> expression  <~ ")" ^^ {
+      case s  => OctetLen(s, Literal(OctetLenConstants.DefaultEncoding))
     } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)

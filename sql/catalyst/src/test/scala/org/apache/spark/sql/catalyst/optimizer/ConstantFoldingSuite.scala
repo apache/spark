@@ -211,7 +211,7 @@ class ConstantFoldingSuite extends PlanTest {
           Contains("abc", Literal(null, StringType)) as 'c20,
 
           Length(Literal(null, IntegerType)) as 'c21,
-          Strlen(Literal(null, StringType), "ISO-8859-1") as 'c22
+          OctetLen(Literal(null, StringType), "ISO-8859-1") as 'c22
 
         )
 
