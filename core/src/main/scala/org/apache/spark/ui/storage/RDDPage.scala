@@ -120,10 +120,10 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.bytesToString(status.memUsedByRDD(rddId))}
+        {Utils.bytesToString(status.memUsedByRdd(rddId))}
         ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.bytesToString(status.diskUsedByRDD(rddId))}</td>
+      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
     </tr>
   }
 

@@ -196,10 +196,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def offHeapUsed: Long = blocks.values.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
 
   /** Return the memory used by the given RDD in this block manager in O(1) time. */
-  def memUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
+  def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
 
   /** Return the disk space used by the given RDD in this block manager in O(1) time. */
-  def diskUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
+  def diskUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
 
   /** Return the off-heap space used by the given RDD in this block manager in O(1) time. */
   def offHeapUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._3).getOrElse(0L)
@@ -253,8 +253,8 @@ private[spark] object StorageUtils {
         .map(_.rddStorageLevel(rddId)).flatMap(s => s).headOption.getOrElse(StorageLevel.NONE)
       val numCachedPartitions = statuses
         .map(_.numRddBlocksById(rddId)).reduceOption(_ + _).getOrElse(0)
-      val memSize = statuses.map(_.memUsedByRDD(rddId)).reduceOption(_ + _).getOrElse(0L)
-      val diskSize = statuses.map(_.diskUsedByRDD(rddId)).reduceOption(_ + _).getOrElse(0L)
+      val memSize = statuses.map(_.memUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
+      val diskSize = statuses.map(_.diskUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
       val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
 
       rddInfo.storageLevel = storageLevel
