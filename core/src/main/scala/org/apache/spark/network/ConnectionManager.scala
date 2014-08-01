@@ -252,14 +252,14 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   def run() {
     try {
       while(!selectorThread.isInterrupted) {
-        while (!registerRequests.isEmpty) {
+        while (registerRequests.nonEmpty) {
           val conn: SendingConnection = registerRequests.dequeue()
           addListeners(conn)
           conn.connect()
           addConnection(conn)
         }
 
-        while(!keyInterestChangeRequests.isEmpty) {
+        while(keyInterestChangeRequests.nonEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue()
 
           try {

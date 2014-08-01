@@ -239,7 +239,7 @@ object MasterFailureTest extends Logging {
         while (!killed && !isLastOutputGenerated && !isTimedOut) {
           Thread.sleep(100)
           timeRan = System.currentTimeMillis() - startTime
-          isLastOutputGenerated = (!output.isEmpty && output.last == lastExpectedOutput)
+          isLastOutputGenerated = (output.nonEmpty && output.last == lastExpectedOutput)
           isTimedOut = (timeRan + totalTimeRan > maxTimeToRun)
         }
       } catch {

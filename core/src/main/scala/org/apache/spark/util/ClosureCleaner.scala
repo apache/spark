@@ -80,7 +80,7 @@ private[spark] object ClosureCleaner extends Logging {
   private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
-    while (!stack.isEmpty) {
+    while (stack.nonEmpty) {
       val cr = getClassReader(stack.head)
       stack = stack.tail
       val set = Set[Class[_]]()

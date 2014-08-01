@@ -156,7 +156,7 @@ class KMeans private (
     val iterationStartTime = System.nanoTime()
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
-    while (iteration < maxIterations && !activeRuns.isEmpty) {
+    while (iteration < maxIterations && activeRuns.nonEmpty) {
       type WeightedPoint = (BV[Double], Long)
       def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
         (p1._1 += p2._1, p1._2 + p2._2)

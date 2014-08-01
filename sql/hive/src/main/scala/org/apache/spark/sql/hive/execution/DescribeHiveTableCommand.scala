@@ -60,7 +60,7 @@ case class DescribeHiveTableCommand(
     val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
     val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
     results ++= columns.map(field => (field.getName, field.getType, field.getComment))
-    if (!partitionColumns.isEmpty) {
+    if (partitionColumns.nonEmpty) {
       val partColumnInfo =
         partitionColumns.map(field => (field.getName, field.getType, field.getComment))
       results ++=

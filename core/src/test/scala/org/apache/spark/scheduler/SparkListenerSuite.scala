@@ -318,7 +318,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
         listener.wait(remainingWait)
         remainingWait = finishTime - System.currentTimeMillis
       }
-      assert(!listener.startedTasks.isEmpty)
+      assert(listener.startedTasks.nonEmpty)
     }
 
     f.cancel()

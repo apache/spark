@@ -315,7 +315,7 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
 
     failAfter(Span(3000, Millis)) {
       try {
-        while (! sc.getRDDStorageInfo.isEmpty) {
+        while (sc.getRDDStorageInfo.nonEmpty) {
           Thread.sleep(200)
         }
       } catch {

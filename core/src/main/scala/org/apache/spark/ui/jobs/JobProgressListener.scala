@@ -155,7 +155,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (Some(e.toErrorString), None)
         }
 
-      if (!metrics.isEmpty) {
+      if (metrics.nonEmpty) {
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
         updateAggregateMetrics(stageData, info.executorId, metrics.get, oldMetrics)
       }

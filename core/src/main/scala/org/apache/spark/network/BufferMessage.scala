@@ -53,7 +53,7 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
       return Some(newChunk)
     }
 
-    while(!buffers.isEmpty) {
+    while(buffers.nonEmpty) {
       val buffer = buffers(0)
       if (buffer.remaining == 0) {
         BlockManager.dispose(buffer)

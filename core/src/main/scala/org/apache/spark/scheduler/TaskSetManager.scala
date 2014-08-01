@@ -287,7 +287,7 @@ private[spark] class TaskSetManager(
     def canRunOnHost(index: Int): Boolean =
       !hasAttemptOnHost(index, host) && !executorIsBlacklisted(execId, index)
 
-    if (!speculatableTasks.isEmpty) {
+    if (speculatableTasks.nonEmpty) {
       // Check for process-local or preference-less tasks; note that tasks can be process-local
       // on multiple nodes when we replicate cached blocks, as in Spark Streaming
       for (index <- speculatableTasks if canRunOnHost(index)) {
@@ -734,15 +734,15 @@ private[spark] class TaskSetManager(
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
     import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
-    if (!pendingTasksForExecutor.isEmpty && getLocalityWait(PROCESS_LOCAL) != 0 &&
+    if (pendingTasksForExecutor.nonEmpty && getLocalityWait(PROCESS_LOCAL) != 0 &&
         pendingTasksForExecutor.keySet.exists(sched.isExecutorAlive(_))) {
       levels += PROCESS_LOCAL
     }
-    if (!pendingTasksForHost.isEmpty && getLocalityWait(NODE_LOCAL) != 0 &&
+    if (pendingTasksForHost.nonEmpty && getLocalityWait(NODE_LOCAL) != 0 &&
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
     }
-    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
+    if (pendingTasksForRack.nonEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
         pendingTasksForRack.keySet.exists(sched.hasHostAliveOnRack(_))) {
       levels += RACK_LOCAL
     }

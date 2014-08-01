@@ -81,7 +81,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       throw new SparkException("ReceiverTracker already started")
     }
 
-    if (!receiverInputStreams.isEmpty) {
+    if (receiverInputStreams.nonEmpty) {
       actor = ssc.env.actorSystem.actorOf(Props(new ReceiverTrackerActor),
         "ReceiverTracker")
       receiverExecutor.start()
@@ -91,7 +91,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
 
   /** Stop the receiver execution thread. */
   def stop() = synchronized {
-    if (!receiverInputStreams.isEmpty && actor != null) {
+    if (receiverInputStreams.nonEmpty && actor != null) {
       // First, stop the receivers
       receiverExecutor.stop()
 
@@ -223,7 +223,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       thread.join(10000)
 
       // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
+      if (receiverInfo.nonEmpty) {
         logWarning("All of the receivers have not deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")

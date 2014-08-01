@@ -530,7 +530,7 @@ private[yarn] class YarnAllocationHandler(
       retval += container
     }
     // Remove from the original list.
-    if (! retval.isEmpty) {
+    if (retval.nonEmpty) {
       releasedContainerList.removeAll(retval)
       for (v <- retval) pendingReleaseContainers.put(v, true)
       logInfo("Releasing " + retval.size + " containers. pendingReleaseContainers : " +

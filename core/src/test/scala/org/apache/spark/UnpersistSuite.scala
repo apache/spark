@@ -32,7 +32,7 @@ class UnpersistSuite extends FunSuite with LocalSparkContext {
 
     failAfter(Span(3000, Millis)) {
       try {
-        while (! sc.getRDDStorageInfo.isEmpty) {
+        while (sc.getRDDStorageInfo.nonEmpty) {
           Thread.sleep(200)
         }
       } catch {

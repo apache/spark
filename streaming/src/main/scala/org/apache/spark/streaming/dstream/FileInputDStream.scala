@@ -74,7 +74,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     // Find new files
     val (newFiles, minNewFileModTime) = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
-    if (!newFiles.isEmpty) {
+    if (newFiles.nonEmpty) {
       lastFoundFiles.clear()
       lastFoundFiles ++= newFiles
       ignoreTime = minNewFileModTime

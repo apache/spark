@@ -337,7 +337,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
-    if (!nonExistFields.isEmpty) {
+    if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
         s"Field ${nonExistFields.mkString(",")} does not exist.")
     }
