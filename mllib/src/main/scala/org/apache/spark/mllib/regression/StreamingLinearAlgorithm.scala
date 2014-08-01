@@ -25,16 +25,27 @@ import org.apache.spark.streaming.dstream.DStream
  * :: DeveloperApi ::
  * StreamingLinearAlgorithm implements methods for continuously
  * training a generalized linear model model on streaming data,
- * and using it for prediction on streaming data.
+ * and using it for prediction on (possibly different) streaming data.
  *
  * This class takes as type parameters a GeneralizedLinearModel,
  * and a GeneralizedLinearAlgorithm, making it easy to extend to construct
- * streaming versions of any analyses using GLMs. For example usage,
- * see StreamingLinearRegressionWithSGD.
- *
- * NOTE: Only weights will be updated, not an intercept.
- * If the model needs an intercept, it should be manually appended
+ * streaming versions of any analyses using GLMs. Only weights will be updated,
+ * not an intercept. If the model needs an intercept, it should be manually appended
  * to the input data.
+ *
+ * For example usage, see `StreamingLinearRegressionWithSGD`.
+ *
+ * NOTE(Freeman): In some use cases, the order in which trainOn and predictOn
+ * are called in an application will affect the results. When called on
+ * the same DStream, if trainOn is called before predictOn, when new data
+ * arrive the model will update and the prediction will be based on the new
+ * model. Whereas if predictOn is called first, the prediction will use the model
+ * from the previous update.
+ *
+ * NOTE(Freeman): It is ok to call predictOn repeatedly on multiple streams; this
+ * will generate predictions for each one all using the current model.
+ * It is also ok to call trainOn on different streams; this will update
+ * the model using each of the different sources, in sequence.
  *
  */
 @DeveloperApi
