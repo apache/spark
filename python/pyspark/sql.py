@@ -525,7 +525,7 @@ def _dropSchema(rows, schema):
         yield converter(i)
 
 
-_BRAKETS = {'(': ')', '[': ']', '{': '}'}
+_BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
 def _split_schema_abstract(s):
@@ -552,10 +552,10 @@ def _split_schema_abstract(s):
             w = ''
         else:
             w += c
-            if c in _BRAKETS:
+            if c in _BRACKETS:
                 brackets.append(c)
-            elif c in _BRAKETS.values():
-                if not brackets or c != _BRAKETS[brackets.pop()]:
+            elif c in _BRACKETS.values():
+                if not brackets or c != _BRACKETS[brackets.pop()]:
                     raise ValueError("unexpected " + c)
 
     if brackets:
@@ -578,8 +578,8 @@ def _parse_field_abstract(s):
     >>> _parse_field_abstract("a{[]}")
     StructField(a,MapType(None,ArrayType(None,true),true),true)
     """
-    if set(_BRAKETS.keys()) & set(s):
-        idx = min((s.index(c) for c in _BRAKETS if c in s))
+    if set(_BRACKETS.keys()) & set(s):
+        idx = min((s.index(c) for c in _BRACKETS if c in s))
         name = s[:idx]
         return StructField(name, _parse_schema_abstract(s[idx:]), True)
     else:
