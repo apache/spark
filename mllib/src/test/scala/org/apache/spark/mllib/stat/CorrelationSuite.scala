@@ -31,6 +31,7 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
   // test input data
   val xData = Array(1.0, 0.0, -2.0)
   val yData = Array(4.0, 5.0, 3.0)
+  val zeros = new Array[Double](3)
   val data = Seq(
     Vectors.dense(1.0, 0.0, 0.0, -2.0),
     Vectors.dense(4.0, 5.0, 0.0, 3.0),
@@ -54,6 +55,10 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
       val p2 = Statistics.corr(x1, y1)
       assert(approxEqual(expected, p2))
     }
+
+    // RDD of zero variance
+    val z = sc.parallelize(zeros)
+    assert(Statistics.corr(x, z).isNaN())
   }
 
   test("corr(x, y) spearman") {
@@ -70,6 +75,10 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
       val s2 = Statistics.corr(x1, y1, "spearman")
       assert(approxEqual(expected, s2))
     }
+
+    // RDD of zero variance => zero variance in ranks
+    val z = sc.parallelize(zeros)
+    assert(Statistics.corr(x, z, "spearman").isNaN())
   }
 
   test("corr(X) default, pearson") {

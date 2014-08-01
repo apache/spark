@@ -89,13 +89,14 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     val ranks: RDD[(Long, Double)] = sorted.mapPartitions { iter =>
       // add an extra element to signify the end of the list so that flatMap can flush the last
       // batch of duplicates
-      val padded = iter ++ Iterator[((Double, Long), Long)](((Double.NaN, -1L), -1L))
+      val end = -1L
+      val padded = iter ++ Iterator[((Double, Long), Long)](((Double.NaN, end), end))
       val firstEntry = padded.next()
       var lastVal = firstEntry._1._1
       var firstRank = firstEntry._2.toDouble
-      val idBuffer = new ArrayBuffer[Long]() += firstEntry._1._2
+      val idBuffer = ArrayBuffer(firstEntry._1._2)
       padded.flatMap { case ((v, id), rank) =>
-        if (v == lastVal && id != Long.MinValue) {
+        if (v == lastVal && id != end) {
           idBuffer += id
           Iterator.empty
         } else {

@@ -57,7 +57,8 @@ object Statistics {
    * Compute the Pearson correlation for the input RDDs.
    * Returns NaN if either vector has 0 variance.
    *
-   * Note: the two input RDDs need to have the same number of partitions.
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
    *
    * @param x RDD[Double] of the same cardinality as y.
    * @param y RDD[Double] of the same cardinality as x.
@@ -69,7 +70,8 @@ object Statistics {
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * Note: the two input RDDs need to have the same number of partitions.
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
    *
    * @param x RDD[Double] of the same cardinality as y.
    * @param y RDD[Double] of the same cardinality as x.
