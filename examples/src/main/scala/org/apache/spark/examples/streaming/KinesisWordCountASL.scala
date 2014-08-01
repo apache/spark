@@ -94,7 +94,8 @@ object KinesisWordCountASL extends Logging {
     /** Determine the number of shards from the stream */
     val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
     kinesisClient.setEndpoint(endpointUrl)
-    val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards().size()
+    val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards()
+      .size()
 
     /** In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard. */
     val numStreams = numShards
@@ -108,7 +109,8 @@ object KinesisWordCountASL extends Logging {
     /** Setup the and SparkConfig and StreamingContext */
     /** Spark Streaming batch interval */
     val batchInterval = Milliseconds(2000)    
-    val sparkConfig = new SparkConf().setAppName("KinesisWordCount").setMaster(s"local[$numSparkThreads]")
+    val sparkConfig = new SparkConf().setAppName("KinesisWordCount")
+      .setMaster(s"local[$numSparkThreads]")
     val ssc = new StreamingContext(sparkConfig, batchInterval)
     /** Setup the checkpoint directory used by Spark Streaming */
     ssc.checkpoint("/tmp/checkpoint");

@@ -46,16 +46,7 @@ import com.amazonaws.services.kinesis.model.Record
  */
 class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
     with EasyMockSugar {
-  
-  test("kinesis input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    // Tests the API, does not actually test data receiving
-    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
-    ssc.stop()
-  }
-  
+
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
   val endpoint = "endpoint-url"
@@ -74,12 +65,21 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  before {
+  override def beforeFunction() = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
     checkpointStateMock = mock[KinesisCheckpointState]
     currentClockMock = mock[Clock]
+  }
+
+  test("kinesis utils api") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    // Tests the API, does not actually test data receiving
+    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
+    ssc.stop()
   }
 
   test("process records including store and checkpoint") {
