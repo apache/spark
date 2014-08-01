@@ -50,7 +50,7 @@ class StorageStatusListener extends SparkListener {
   /** Update storage status list to reflect the removal of an RDD from the cache */
   private def updateStorageStatus(unpersistedRDDId: Int) {
     storageStatusList.foreach { storageStatus =>
-      storageStatus.rddBlocks(unpersistedRDDId).foreach { case (blockId, _) =>
+      storageStatus.rddBlocksById(unpersistedRDDId).foreach { case (blockId, _) =>
         storageStatus.removeBlock(blockId)
       }
     }
