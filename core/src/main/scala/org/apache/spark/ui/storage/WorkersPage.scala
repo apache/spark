@@ -35,11 +35,6 @@ private[ui] class WorkersPage(parent: StorageTab) extends WebUIPage("rdd/workers
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  private def getWorkers(rddId: Int, storageStatusList: Seq[StorageStatus]):
-  Seq[(Int, StorageStatus)] = {
-    storageStatusList.map((rddId, _))
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "Only JSON view available",
       parent.headerTabs, parent)
@@ -54,7 +49,7 @@ private[ui] class WorkersPage(parent: StorageTab) extends WebUIPage("rdd/workers
     }
 
     // Worker table
-    val workers = getWorkers(rddId, storageStatusList)
+    val workers = StorageUtils.workersFromRDDId(rddId, storageStatusList)
     val workerJson = UIUtils.listingJson(workerRowJson, workers)
 
     workerJson

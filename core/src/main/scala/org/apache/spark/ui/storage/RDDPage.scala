@@ -35,22 +35,6 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  private def getWorkers(rddId: Int,
-                         storageStatusList: Seq[StorageStatus]): Seq[(Int, StorageStatus)] = {
-    storageStatusList.map((rddId, _))
-  }
-
-  private def getBlocks(rddId: Int,
-                        storageStatusList: Seq[StorageStatus]):
-  Seq[(BlockId, BlockStatus, Seq[String])] = {
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
     val storageStatusList = listener.storageStatusList
@@ -61,12 +45,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     }
 
     // Worker table
-    val workers = getWorkers(rddId, storageStatusList)
+    val workers = StorageUtils.workersFromRDDId(rddId, storageStatusList)
     val workerTableId = "workerTable"
     val workerTable = UIUtils.listingEmptyTable(workerHeader, workerTableId, simpleTable = true)
 
     // Block table
-    val blocks = getBlocks(rddId, storageStatusList)
+    val blocks = StorageUtils.blocksFromRDDId(rddId, storageStatusList)
     val blockTableId = "blockTable"
     val blockTable = UIUtils.listingEmptyTable(blockHeader, blockTableId, simpleTable = true)
 

@@ -35,17 +35,6 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  private def getBlocks(rddId: Int,
-                        storageStatusList: Seq[StorageStatus]):
-  Seq[(BlockId, BlockStatus, Seq[String])] = {
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "Only JSON view available",
       parent.headerTabs, parent)
@@ -60,7 +49,7 @@ private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks")
     }
 
     // Block table
-    val blocks = getBlocks(rddId, storageStatusList)
+    val blocks = StorageUtils.blocksFromRDDId(rddId, storageStatusList)
     val blockJson = UIUtils.listingJson(blockRowJson, blocks)
 
     blockJson

@@ -138,4 +138,22 @@ private[spark] object StorageUtils {
       new StorageStatus(status.blockManagerId, status.maxMem, filteredBlockMap)
     }.toArray
   }
+
+  /** get workers for a given rddId */
+  def workersFromRDDId(rddId: Int,
+                 storageStatusList: Seq[StorageStatus]): Seq[(Int, StorageStatus)] = {
+    storageStatusList.map((rddId, _))
+  }
+
+  /** get blocks for a given rddId */
+  def blocksFromRDDId(rddId: Int,
+                storageStatusList: Seq[StorageStatus]):
+  Seq[(BlockId, BlockStatus, Seq[String])] = {
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
+    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
+    blockStatuses.map { case (blockId, status) =>
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+    }
+  }
 }
