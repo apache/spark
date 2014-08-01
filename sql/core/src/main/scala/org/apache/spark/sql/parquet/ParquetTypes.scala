@@ -248,9 +248,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
     val primitiveType = fromPrimitiveDataType(ctype)
+    val typeLength = ctype match {
+      case FixedLenBinaryType(_) => ctype.asInstanceOf[FixedLenBinaryType].length
+      case _ => 0
+    }
     primitiveType.map {
       case (primitiveType, originalType) =>
-        new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
+        new ParquetPrimitiveType(repetition, primitiveType, typeLength, name, originalType.orNull)
     }.getOrElse {
       ctype match {
         case ArrayType(elementType, false) => {

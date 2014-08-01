@@ -42,7 +42,8 @@ object DataType extends RegexParsers {
     "BinaryType" ^^^ BinaryType |
     "BooleanType" ^^^ BooleanType |
     "DecimalType" ^^^ DecimalType |
-    "TimestampType" ^^^ TimestampType
+    "TimestampType" ^^^ TimestampType |
+    fixedLenBinaryType
 
 
   protected lazy val arrayType: Parser[DataType] =
@@ -67,7 +68,7 @@ object DataType extends RegexParsers {
     }
 
   protected lazy val intVal: Parser[Integer] =
-    "[0-9]+" ^^ { 
+    "[0-9]+".r ^^ { 
       case t => t.toInt 
     }
 
