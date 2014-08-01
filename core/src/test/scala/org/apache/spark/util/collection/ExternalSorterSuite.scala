@@ -190,6 +190,11 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
         fail(s"Value 2 for ${i} was wrong: expected ${expected}, got ${seq2.toSet}")
       }
     }
+
+    // sortByKey - should spill ~17 times
+    val rddE = sc.parallelize(0 until 100000).map(i => (i/4, i))
+    val resultE = rddE.sortByKey().collect().toSeq
+    assert(resultE === (0 until 100000).map(i => (i/4, i)).toSeq)
   }
 
   test("spilling in local cluster with many reduce tasks") {
@@ -256,6 +261,11 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
         fail(s"Value 2 for ${i} was wrong: expected ${expected}, got ${seq2.toSet}")
       }
     }
+
+    // sortByKey - should spill ~8 times per executor
+    val rddE = sc.parallelize(0 until 100000).map(i => (i/4, i))
+    val resultE = rddE.sortByKey().collect().toSeq
+    assert(resultE === (0 until 100000).map(i => (i/4, i)).toSeq)
   }
 
   test("cleanup of intermediate files in sorter") {
