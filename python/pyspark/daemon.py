@@ -47,6 +47,7 @@ def worker(sock):
 
     signal.signal(SIGHUP, SIG_DFL)
     signal.signal(SIGCHLD, SIG_DFL)
+    signal.signal(SIGTERM, SIG_DFL)
 
     # Blocks until the socket is closed by draining the input stream
     # until it raises an exception or returns EOF.
@@ -93,10 +94,9 @@ def manager():
         os.kill(0, SIGHUP)
         exit(code)
 
-    def sig_term(signum, frame):
-        print >> sys.stderr, "daemon.py shutting down due to SIGTERM"
+    def handle_sigterm(*args):
         shutdown(1)
-    signal.signal(SIGTERM, sig_term)  # Gracefully exit on SIGTERM
+    signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
 
     # Cleanup zombie children
@@ -124,7 +124,6 @@ def manager():
                     raise
             if 0 in ready_fds:
                 # Spark told us to exit by closing stdin
-                print >> sys.stderr, "daemon.py shutting down because Java closed stdin"
                 shutdown(0)
             if listen_sock in ready_fds:
                 sock, addr = listen_sock.accept()
@@ -141,7 +140,6 @@ def manager():
                 else:
                     sock.close()
     finally:
-        print >> sys.stderr, "daemon.py shutting down due to uncaught exception"
         shutdown(1)
 
 
