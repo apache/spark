@@ -55,22 +55,24 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
     this(bmid, maxMem)
-    initialBlocks.foreach { case (blockId, blockStatus) => addBlock(blockId, blockStatus) }
+    initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
   }
 
-  /** Return the blocks stored in this block manager. */
-  def blocks: Seq[(BlockId, BlockStatus)] = {
-    _nonRddBlocks.toSeq ++ rddBlocks.toSeq
-  }
+  /**
+   * Return the blocks stored in this block manager.
+   *
+   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * concatenating them together. Much faster alternatives exist for common operations such as
+   * contains, get, and size.
+   */
+  def blocks: Map[BlockId, BlockStatus] = _nonRddBlocks ++ rddBlocks
 
   /** Return the RDD blocks stored in this block manager. */
-  def rddBlocks: Seq[(BlockId, BlockStatus)] = {
-    _rddBlocks.flatMap { case (_, blocks) => blocks }.toSeq
-  }
+  def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
 
   /** Return the blocks that belong to the given RDD stored in this block manager. */
-  def rddBlocksById(rddId: Int): Seq[(BlockId, BlockStatus)] = {
-    _rddBlocks.get(rddId).map(_.toSeq).getOrElse(Seq.empty)
+  def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = {
+    _rddBlocks.get(rddId).getOrElse(Map.empty)
   }
 
   /** Add the given block to this storage status. */
@@ -84,7 +86,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /** Update the given block in this storage status. If it doesn't already exist, add it. */
-  def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = addBlock(blockId, blockStatus)
+  def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+    addBlock(blockId, blockStatus)
+  }
 
   /** Remove the given block from this storage status. */
   def removeBlock(blockId: BlockId): Option[BlockStatus] = {
@@ -107,7 +111,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return whether the given block is stored in this block manager in O(1) time.
-   * Note that the alternative of doing this through `blocks` is O(blocks), which is much slower.
+   * Note that this is much faster than `this.blocks.contains`, which is O(blocks) time.
    */
   def containsBlock(blockId: BlockId): Boolean = {
     blockId match {
@@ -119,8 +123,21 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /**
-   * Return the number of blocks in O(R) time, where R is the number of distinct RDD IDs.
-   * Note that the alternative of doing this through `blocks` is O(blocks), which is much slower.
+   * Return the given block stored in this block manager in O(1) time.
+   * Note that this is much faster than `this.blocks.get`, which is O(blocks) time.
+   */
+  def getBlock(blockId: BlockId): Option[BlockStatus] = {
+    blockId match {
+      case RDDBlockId(rddId, _) =>
+        _rddBlocks.get(rddId).map(_.get(blockId)).flatten
+      case _ =>
+        _nonRddBlocks.get(blockId)
+    }
+  }
+
+  /**
+   * Return the number of blocks stored in this block manager in O(rdds) time.
+   * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
    */
   def numBlocks: Int = {
     _nonRddBlocks.size + _rddBlocks.values.map(_.size).reduceOption(_ + _).getOrElse(0)
@@ -142,10 +159,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def diskUsedByRDD(rddId: Int): Long = diskUsed(rddBlocksById(rddId))
 
   // Helper methods for computing memory and disk usages
-  private def memUsed(_blocks: Seq[(BlockId, BlockStatus)]): Long =
-    _blocks.map { case (_, s) => s.memSize }.reduceOption(_ + _).getOrElse(0L)
-  private def diskUsed(_blocks: Seq[(BlockId, BlockStatus)]): Long =
-    _blocks.map { case (_, s) => s.diskSize }.reduceOption(_ + _).getOrElse(0L)
+  private def memUsed(_blocks: Map[BlockId, BlockStatus]): Long =
+    _blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
+  private def diskUsed(_blocks: Map[BlockId, BlockStatus]): Long =
+    _blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 }
 
 /** Helper methods for storage-related objects. */
@@ -190,7 +207,7 @@ private[spark] object StorageUtils {
   /**
    * Return mapping from block ID to its locations for each block that belongs to the given RDD.
    */
-  def getRDDBlockLocations(
+  def getRddBlockLocations(
       storageStatuses: Seq[StorageStatus],
       rddId: Int): Map[BlockId, Seq[String]] = {
     val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]

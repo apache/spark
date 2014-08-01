@@ -45,7 +45,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val blockLocations = StorageUtils.getRDDBlockLocations(storageStatusList, rddId)
+    val blockLocations = StorageUtils.getRddBlockLocations(storageStatusList, rddId)
     val blocks = storageStatusList
       .flatMap(_.rddBlocksById(rddId))
       .sortWith(_._1.name < _._1.name)
