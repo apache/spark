@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.hash
 
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
-import org.apache.spark.storage.{BlockObjectWriter}
+import org.apache.spark.storage.BlockObjectWriter
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus

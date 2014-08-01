@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.examples.streaming.StreamingExamples;
 import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.streaming.flume.FlumeUtils;

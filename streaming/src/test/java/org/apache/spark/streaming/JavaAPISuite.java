@@ -23,7 +23,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import java.io.*;
 import java.util.*;
-import java.lang.Iterable;
 
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
