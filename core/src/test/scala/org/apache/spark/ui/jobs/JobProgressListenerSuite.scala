@@ -135,7 +135,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
 
-    val taskType = Utils.getFormattedClassName(new ShuffleMapTask(0, null, null, 0, null))
+    val taskType = Utils.getFormattedClassName(new ShuffleMapTask(0))
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int) = {

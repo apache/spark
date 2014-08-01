@@ -125,8 +125,10 @@ private[spark] class Executor(
     }
   }
 
-  def stop(): Unit = {
+  def stop() {
     env.metricsSystem.report()
+    isStopped = true
+    threadPool.shutdown()
   }
 
   /** Get the Yarn approved local directories. */
@@ -358,13 +360,8 @@ private[spark] class Executor(
     }
   }
 
-  def stop() {
-    isStopped = true
-    threadPool.shutdown()
-  }
-
   def startDriverHeartbeater() {
-    val interval = conf.getInt("spark.executor.heartbeatInterval", 2000)
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
     val timeout = AkkaUtils.lookupTimeout(conf)
     val retryAttempts = AkkaUtils.numRetries(conf)
     val retryIntervalMs = AkkaUtils.retryWaitMs(conf)

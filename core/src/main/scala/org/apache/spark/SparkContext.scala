@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
+import akka.actor.Props
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -50,7 +51,6 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
-import akka.actor.Props
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -995,9 +995,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dagSchedulerCopy != null) {
       env.metricsSystem.report()
       metadataCleaner.cancel()
-      if (heartbeatReceiver != null) {
-        env.actorSystem.stop(heartbeatReceiver)
-      }
+      env.actorSystem.stop(heartbeatReceiver)
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       taskScheduler = null

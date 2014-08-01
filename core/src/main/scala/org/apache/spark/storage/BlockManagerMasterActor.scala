@@ -53,7 +53,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
   val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
-    (conf.getInt("spark.executor.heartbeatInterval", 2000) * 20))
+    math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
   val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs",
     60000)
