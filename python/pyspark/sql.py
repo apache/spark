@@ -674,10 +674,15 @@ def _restore_object(dataType, obj):
     # use id(dataType) as key to speed up lookup in dict
     # Because of batched pickling, dataType will be the
     # same object in mose cases.
-    cls = _cached_cls.get(id(dataType))
+    k = id(dataType)
+    cls = _cached_cls.get(k)
     if cls is None:
-        cls = _create_cls(dataType)
-        _cached_cls[id(dataType)] = cls
+        # use dataType as key to avoid create multiple class
+        cls = _cached_cls.get(dataType)
+        if cls is None:
+            cls = _create_cls(dataType)
+            _cached_cls[dataType] = cls
+        _cached_cls[k] = cls
     return cls(obj)
 
 
