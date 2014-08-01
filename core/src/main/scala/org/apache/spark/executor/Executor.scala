@@ -121,6 +121,10 @@ private[spark] class Executor(
     }
   }
 
+  def stop(): Unit = {
+    env.metricsSystem.report()
+  }
+
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(): String = {
     // Hadoop 0.23 and 2.x have different Environment variable names for the
