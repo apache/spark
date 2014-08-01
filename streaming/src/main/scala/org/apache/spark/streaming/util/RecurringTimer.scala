@@ -77,7 +77,9 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   def stop(interruptTimer: Boolean): Long = synchronized {
     if (!stopped) {
       stopped = true
-      if (interruptTimer) thread.interrupt()
+      if (interruptTimer) {
+        thread.interrupt()
+      }
       thread.join()
       logInfo("Stopped timer for " + name + " after time " + prevTime)
     }

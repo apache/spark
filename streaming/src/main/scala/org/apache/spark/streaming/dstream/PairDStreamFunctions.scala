@@ -37,13 +37,13 @@ import org.apache.spark.streaming.{Time, Duration}
  * Import `org.apache.spark.streaming.StreamingContext._` at the top of your program to use
  * these functions.
  */
-class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
-  extends Serializable {
-
+class PairDStreamFunctions[K, V](self: DStream[(K,V)])
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
+  extends Serializable
+{
   private[streaming] def ssc = self.ssc
 
-  private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism)
-  = {
+  private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
     new HashPartitioner(numPartitions)
   }
 
@@ -576,7 +576,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F]) {
-    saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass,
+    saveAsHadoopFiles(prefix, suffix, keyClass, valueClass,
       fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
@@ -607,7 +607,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F])  {
-    saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass,
+    saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass,
       fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
@@ -630,7 +630,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
     self.foreachRDD(saveFunc)
   }
 
-  private def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
+  private def keyClass: Class[_] = kt.runtimeClass
 
-  private def getValueClass() = implicitly[ClassTag[V]].runtimeClass
+  private def valueClass: Class[_] = vt.runtimeClass
 }

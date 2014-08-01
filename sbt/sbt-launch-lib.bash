@@ -16,6 +16,7 @@ declare -a residual_args
 declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
+declare -a maven_profiles
 
 if test -x "$JAVA_HOME/bin/java"; then
     echo -e "Using $JAVA_HOME as default JAVA_HOME."
@@ -87,6 +88,13 @@ addJava () {
   dlog "[addJava] arg = '$1'"
   java_args=( "${java_args[@]}" "$1" )
 }
+
+enableProfile () {
+  dlog "[enableProfile] arg = '$1'"
+  maven_profiles=( "${maven_profiles[@]}" "$1" )
+  export SBT_MAVEN_PROFILES="${maven_profiles[@]}"
+}
+
 addSbt () {
   dlog "[addSbt] arg = '$1'"
   sbt_commands=( "${sbt_commands[@]}" "$1" )
@@ -141,7 +149,8 @@ process_args () {
      -java-home) require_arg path "$1" "$2" && java_cmd="$2/bin/java" && export JAVA_HOME=$2 && shift 2 ;;
 
             -D*) addJava "$1" && shift ;;
-            -J*) addJava "${1:2}" && shift ;;
+            -J*) addJava "${1:2}" && shift ;; 
+            -P*) enableProfile "$1" && shift ;;
               *) addResidual "$1" && shift ;;
     esac
   done

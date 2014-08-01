@@ -25,6 +25,8 @@ import twitter4j.auth.OAuthAuthorization
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.Logging
+import org.apache.spark.streaming.receiver.Receiver
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -41,7 +43,7 @@ class TwitterInputDStream(
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[Status](ssc_)  {
+  ) extends ReceiverInputDStream[Status](ssc_)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
@@ -49,7 +51,7 @@ class TwitterInputDStream(
 
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
-  override def getReceiver(): NetworkReceiver[Status] = {
+  override def getReceiver(): Receiver[Status] = {
     new TwitterReceiver(authorization, filters, storageLevel)
   }
 }
@@ -59,39 +61,55 @@ class TwitterReceiver(
     twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[Status] {
+  ) extends Receiver[Status](storageLevel) with Logging {
 
-  var twitterStream: TwitterStream = _
-  lazy val blockGenerator = new BlockGenerator(storageLevel)
+  @volatile private var twitterStream: TwitterStream = _
+  @volatile private var stopped = false
 
-  protected override def onStart() {
-    blockGenerator.start()
-    twitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
-    twitterStream.addListener(new StatusListener {
-      def onStatus(status: Status) = {
-        blockGenerator += status
+  def onStart() {
+    try {
+      val newTwitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
+      newTwitterStream.addListener(new StatusListener {
+        def onStatus(status: Status) = {
+          store(status)
+        }
+        // Unimplemented
+        def onDeletionNotice(statusDeletionNotice: StatusDeletionNotice) {}
+        def onTrackLimitationNotice(i: Int) {}
+        def onScrubGeo(l: Long, l1: Long) {}
+        def onStallWarning(stallWarning: StallWarning) {}
+        def onException(e: Exception) {
+          if (!stopped) {
+            restart("Error receiving tweets", e)
+          }
+        }
+      })
+
+      val query = new FilterQuery
+      if (filters.size > 0) {
+        query.track(filters.toArray)
+        newTwitterStream.filter(query)
+      } else {
+        newTwitterStream.sample()
       }
-      // Unimplemented
-      def onDeletionNotice(statusDeletionNotice: StatusDeletionNotice) {}
-      def onTrackLimitationNotice(i: Int) {}
-      def onScrubGeo(l: Long, l1: Long) {}
-      def onStallWarning(stallWarning: StallWarning) {}
-      def onException(e: Exception) { stopOnError(e) }
-    })
-
-    val query: FilterQuery = new FilterQuery
-    if (filters.size > 0) {
-      query.track(filters.toArray)
-      twitterStream.filter(query)
-    } else {
-      twitterStream.sample()
+      setTwitterStream(newTwitterStream)
+      logInfo("Twitter receiver started")
+      stopped = false
+    } catch {
+      case e: Exception => restart("Error starting Twitter stream", e)
     }
-    logInfo("Twitter receiver started")
   }
 
-  protected override def onStop() {
-    blockGenerator.stop()
-    twitterStream.shutdown()
+  def onStop() {
+    stopped = true
+    setTwitterStream(null)
     logInfo("Twitter receiver stopped")
+  }
+
+  private def setTwitterStream(newTwitterStream: TwitterStream) = synchronized {
+    if (twitterStream != null) {
+      twitterStream.shutdown()
+    }
+    twitterStream = newTwitterStream
   }
 }

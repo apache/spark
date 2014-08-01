@@ -68,12 +68,51 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("local-*-n-failures") {
+    val sched = createTaskScheduler("local[* ,2]")
+    assert(sched.maxTaskFailures === 2)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
+      case _ => fail()
+    }
+  }
+
   test("local-n-failures") {
     val sched = createTaskScheduler("local[4, 2]")
     assert(sched.maxTaskFailures === 2)
     sched.backend match {
       case s: LocalBackend => assert(s.totalCores === 4)
       case _ => fail()
+    }
+  }
+
+  test("bad-local-n") {
+    val e = intercept[SparkException] {
+      createTaskScheduler("local[2*]")
+    }
+    assert(e.getMessage.contains("Could not parse Master URL"))
+  }
+
+  test("bad-local-n-failures") {
+    val e = intercept[SparkException] {
+      createTaskScheduler("local[2*,4]")
+    }
+    assert(e.getMessage.contains("Could not parse Master URL"))
+  }
+
+  test("local-default-parallelism") {
+    val defaultParallelism = System.getProperty("spark.default.parallelism")
+    System.setProperty("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("local")
+
+    sched.backend match {
+      case s: LocalBackend => assert(s.defaultParallelism() === 16)
+      case _ => fail()
+    }
+
+    Option(defaultParallelism) match {
+      case Some(v) => System.setProperty("spark.default.parallelism", v)
+      case _ => System.clearProperty("spark.default.parallelism")
     }
   }
 

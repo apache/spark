@@ -19,6 +19,7 @@ package org.apache.spark.streaming.mqtt
 
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 class MQTTStreamSuite extends TestSuiteBase {
 
@@ -28,8 +29,9 @@ class MQTTStreamSuite extends TestSuiteBase {
     val topic = "def"
 
     // tests the API, does not actually test data receiving
-    val test1 = MQTTUtils.createStream(ssc, brokerUrl, topic)
-    val test2 = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test1: ReceiverInputDStream[String] = MQTTUtils.createStream(ssc, brokerUrl, topic)
+    val test2: ReceiverInputDStream[String] =
+      MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // TODO: Actually test receiving data
     ssc.stop()

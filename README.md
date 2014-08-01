@@ -1,6 +1,13 @@
 # Apache Spark
 
-Lightning-Fast Cluster Computing - <http://spark.apache.org/>
+Spark is a fast and general cluster computing system for Big Data. It provides
+high-level APIs in Scala, Java, and Python, and an optimized engine that
+supports general computation graphs for data analysis. It also supports a
+rich set of higher-level tools including Spark SQL for SQL and structured
+data processing, MLLib for machine learning, GraphX for graph processing,
+and Spark Streaming.
+
+<http://spark.apache.org/>
 
 
 ## Online Documentation
@@ -9,12 +16,13 @@ You can find the latest Spark documentation, including a programming
 guide, on the project webpage at <http://spark.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
-
 ## Building Spark
 
 Spark is built on Scala 2.10. To build Spark and its example programs, run:
 
     ./sbt/sbt assembly
+
+(You do not need to do this if you downloaded a pre-built package.)
 
 ## Interactive Scala Shell
 
@@ -39,17 +47,22 @@ And run the following command, which should also return 1000:
 ## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./bin/run-example <class> <params>`. For example:
+To run one of them, use `./bin/run-example <class> [params]`. For example:
 
-    ./bin/run-example org.apache.spark.examples.SparkLR local[2]
+    ./bin/run-example SparkPi
 
-will run the Logistic Regression example locally on 2 CPUs.
+will run the Pi example locally.
 
-Each of the example programs prints usage help if no params are given.
+You can set the MASTER environment variable when running examples to submit
+examples to a cluster. This can be a mesos:// or spark:// URL, 
+"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run 
+locally with one thread, or "local[N]" to run locally with N threads. You 
+can also use an abbreviated class name if the class is in the `examples`
+package. For instance:
 
-All of the Spark samples take a `<master>` parameter that is the cluster URL
-to connect to. This can be a mesos:// or spark:// URL, or "local" to run
-locally with one thread, or "local[N]" to run locally with N threads.
+    MASTER=spark://host:7077 ./bin/run-example SparkPi
+
+Many of the example programs print usage help if no params are given.
 
 ## Running Tests
 
@@ -63,29 +76,28 @@ can be run using:
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
 storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
-You can change the version by setting the `SPARK_HADOOP_VERSION` environment
-when building Spark.
+You can change the version by setting `-Dhadoop.version` when building Spark.
 
 For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
 versions without YARN, use:
 
     # Apache Hadoop 1.2.1
-    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
+    $ sbt/sbt -Dhadoop.version=1.2.1 assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v1
-    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
+    $ sbt/sbt -Dhadoop.version=2.0.0-mr1-cdh4.2.0 assembly
 
 For Apache Hadoop 2.2.X, 2.1.X, 2.0.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
-with YARN, also set `SPARK_YARN=true`:
+with YARN, also set `-Pyarn`:
 
     # Apache Hadoop 2.0.5-alpha
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+    $ sbt/sbt -Dhadoop.version=2.0.5-alpha -Pyarn assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
+    $ sbt/sbt -Dhadoop.version=2.0.0-cdh4.2.0 -Pyarn assembly
 
     # Apache Hadoop 2.2.X and newer
-    $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt assembly
+    $ sbt/sbt -Dhadoop.version=2.2.0 -Pyarn assembly
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're

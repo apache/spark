@@ -31,8 +31,8 @@ private[spark] class TaskSet(
     val properties: Properties) {
     val id: String = stageId + "." + attempt
 
-  def kill() {
-    tasks.foreach(_.kill())
+  def kill(interruptThread: Boolean) {
+    tasks.foreach(_.kill(interruptThread))
   }
 
   override def toString: String = "TaskSet " + id

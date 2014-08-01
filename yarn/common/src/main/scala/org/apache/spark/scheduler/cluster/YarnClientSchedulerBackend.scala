@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -30,15 +30,22 @@ private[spark] class YarnClientSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
+  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
+    minRegisteredRatio = 0.8
+    ready = false
+  }
+
   var client: Client = null
   var appId: ApplicationId = null
+  var checkerThread: Thread = null
+  var stopping: Boolean = false
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
-    if (System.getProperty(sysProp) != null) {
-      arrayBuf += (optionName, System.getProperty(sysProp))
-    } else if (System.getenv(envVar) != null) {
+    if (System.getenv(envVar) != null) {
       arrayBuf += (optionName, System.getenv(envVar))
+    } else if (sc.getConf.contains(sysProp)) {
+      arrayBuf += (optionName, sc.getConf.get(sysProp))
     }
   }
 
@@ -48,11 +55,13 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
+    conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
+    conf.set("spark.driver.appUIHistoryAddress", YarnSparkHadoopUtil.getUIHistoryAddress(sc, conf))
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", null,
+      "--jar", null, // The primary jar will be added dynamically in SparkContext.
       "--args", hostport,
       "--am-class", classOf[ExecutorLauncher].getName
     )
@@ -63,23 +72,23 @@ private[spark] class YarnClientSchedulerBackend(
     // variables.
     List(("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
       ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
-      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.worker.instances"),
+      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
       ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
       ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
       ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
       ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
       ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
       ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"),
-      ("--files", "SPARK_YARN_DIST_FILES", "spark.yarn.dist.files"),
-      ("--archives", "SPARK_YARN_DIST_ARCHIVES", "spark.yarn.dist.archives"))
+      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"))
     .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
+    totalExpectedExecutors.set(args.numExecutors)
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()
+    checkerThread = yarnApplicationStateCheckerThread()
   }
 
   def waitForApp() {
@@ -110,10 +119,35 @@ private[spark] class YarnClientSchedulerBackend(
     }
   }
 
+  private def yarnApplicationStateCheckerThread(): Thread = {
+    val t = new Thread {
+      override def run() {
+        while (!stopping) {
+          val report = client.getApplicationReport(appId)
+          val state = report.getYarnApplicationState()
+          if (state == YarnApplicationState.FINISHED || state == YarnApplicationState.KILLED
+            || state == YarnApplicationState.FAILED) {
+            logError(s"Yarn application already ended: $state")
+            sc.stop()
+            stopping = true
+          }
+          Thread.sleep(1000L)
+        }
+        checkerThread = null
+        Thread.currentThread().interrupt()
+      }
+    }
+    t.setName("Yarn Application State Checker")
+    t.setDaemon(true)
+    t.start()
+    t
+  }
+
   override def stop() {
+    stopping = true
     super.stop()
-    client.stop()
-    logInfo("Stoped")
+    client.stop
+    logInfo("Stopped")
   }
 
 }

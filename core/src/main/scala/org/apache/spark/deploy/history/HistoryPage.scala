@@ -25,20 +25,36 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
+  private val pageSize = 20
+
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
-    val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
+    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
+    val requestedFirst = (requestedPage - 1) * pageSize
+
+    val allApps = parent.getApplicationList()
+    val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
+    val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
+
+    val actualPage = (actualFirst / pageSize) + 1
+    val last = Math.min(actualFirst + pageSize, allApps.size) - 1
+    val pageCount = allApps.size / pageSize + (if (allApps.size % pageSize > 0) 1 else 0)
+
+    val appTable = UIUtils.listingTable(appHeader, appRow, apps)
+    val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
+            {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
           {
-            if (parent.appIdToInfo.size > 0) {
+            if (allApps.size > 0) {
               <h4>
-                Showing {parent.appIdToInfo.size}/{parent.getNumApplications}
-                Completed Application{if (parent.getNumApplications > 1) "s" else ""}
+                Showing {actualFirst + 1}-{last + 1} of {allApps.size}
+                <span style="float: right">
+                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
+                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
+                </span>
               </h4> ++
               appTable
             } else {
@@ -56,26 +72,20 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Completed",
     "Duration",
     "Spark User",
-    "Log Directory",
     "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val appName = if (info.started) info.name else info.logDirPath.getName
-    val uiAddress = parent.getAddress + info.ui.basePath
-    val startTime = if (info.started) UIUtils.formatDate(info.startTime) else "Not started"
-    val endTime = if (info.completed) UIUtils.formatDate(info.endTime) else "Not completed"
-    val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
-    val duration = if (difference > 0) UIUtils.formatDuration(difference) else "---"
-    val sparkUser = if (info.started) info.sparkUser else "Unknown user"
-    val logDirectory = info.logDirPath.getName
+    val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
+    val startTime = UIUtils.formatDate(info.startTime)
+    val endTime = UIUtils.formatDate(info.endTime)
+    val duration = UIUtils.formatDuration(info.endTime - info.startTime)
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{appName}</a></td>
+      <td><a href={uiAddress}>{info.name}</a></td>
       <td>{startTime}</td>
       <td>{endTime}</td>
       <td>{duration}</td>
-      <td>{sparkUser}</td>
-      <td>{logDirectory}</td>
+      <td>{info.sparkUser}</td>
       <td>{lastUpdated}</td>
     </tr>
   }

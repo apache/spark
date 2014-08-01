@@ -24,11 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Logging
 
 /**
- * Abstract class to store blocks
+ * Abstract class to store blocks.
  */
-private[spark]
-abstract class BlockStore(val blockManager: BlockManager) extends Logging {
-  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel) : PutResult
+private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
+
+  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
 
   /**
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
@@ -37,11 +37,17 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
    * @return a PutResult that contains the size of the data, as well as the values put if
    *         returnValues is true (if not, the result's data field can be null)
    */
-  def putValues(blockId: BlockId, values: Iterator[Any], level: StorageLevel,
-    returnValues: Boolean) : PutResult
+  def putIterator(
+    blockId: BlockId,
+    values: Iterator[Any],
+    level: StorageLevel,
+    returnValues: Boolean): PutResult
 
-  def putValues(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
-    returnValues: Boolean) : PutResult
+  def putArray(
+    blockId: BlockId,
+    values: Array[Any],
+    level: StorageLevel,
+    returnValues: Boolean): PutResult
 
   /**
    * Return the size of a block in bytes.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 /**
+ * :: DeveloperApi ::
  * An execution engine for relational query plans that runs on top Spark and returns RDDs.
  *
  * Note that the operators in this package are created automatically by a query planner using a

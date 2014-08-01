@@ -24,7 +24,7 @@ import akka.util.ByteString
 import akka.zeromq._
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.receivers._
+import org.apache.spark.streaming.receiver.ActorHelper
 
 /**
  * A receiver to subscribe to ZeroMQ stream.
@@ -32,7 +32,7 @@ import org.apache.spark.streaming.receivers._
 private[streaming] class ZeroMQReceiver[T: ClassTag](publisherUrl: String,
   subscribe: Subscribe,
   bytesToObjects: Seq[ByteString] => Iterator[T])
-  extends Actor with Receiver with Logging {
+  extends Actor with ActorHelper with Logging {
 
   override def preStart() = ZeroMQExtension(context.system)
     .newSocket(SocketType.Sub, Listener(self), Connect(publisherUrl), subscribe)
@@ -46,9 +46,8 @@ private[streaming] class ZeroMQReceiver[T: ClassTag](publisherUrl: String,
 
       // We ignore first frame for processing as it is the topic
       val bytes = m.frames.tail
-      pushBlock(bytesToObjects(bytes))
+      store(bytesToObjects(bytes))
 
     case Closed => logInfo("received closed ")
-
   }
 }

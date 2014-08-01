@@ -17,17 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import java.net.URI
-
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
 
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(args: Array[String]) {
-  var logDir = ""
+private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) {
+  private var logDir: String = null
 
   parse(args.toList)
 
@@ -35,6 +31,7 @@ private[spark] class HistoryServerArguments(args: Array[String]) {
     args match {
       case ("--dir" | "-d") :: value :: tail =>
         logDir = value
+        conf.set("spark.history.fs.logDirectory", value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -45,32 +42,33 @@ private[spark] class HistoryServerArguments(args: Array[String]) {
       case _ =>
         printUsageAndExit(1)
     }
-    validateLogDir()
-  }
-
-  private def validateLogDir() {
-    if (logDir == "") {
-      System.err.println("Logging directory must be specified.")
-      printUsageAndExit(1)
-    }
-    val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-    val path = new Path(logDir)
-    if (!fileSystem.exists(path)) {
-      System.err.println("Logging directory specified does not exist: %s".format(logDir))
-      printUsageAndExit(1)
-    }
-    if (!fileSystem.getFileStatus(path).isDir) {
-      System.err.println("Logging directory specified is not a directory: %s".format(logDir))
-      printUsageAndExit(1)
-    }
   }
 
   private def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: HistoryServer [options]\n" +
-      "\n" +
-      "Options:\n" +
-      "  -d DIR,  --dir DIR     Location of event log files")
+      """
+      |Usage: HistoryServer
+      |
+      |Configuration options can be set by setting the corresponding JVM system property.
+      |History Server options are always available; additional options depend on the provider.
+      |
+      |History Server options:
+      |
+      |  spark.history.ui.port              Port where server will listen for connections
+      |                                     (default 18080)
+      |  spark.history.acls.enable          Whether to enable view acls for all applications
+      |                                     (default false)
+      |  spark.history.provider             Name of history provider class (defaults to
+      |                                     file system-based provider)
+      |  spark.history.retainedApplications Max number of application UIs to keep loaded in memory
+      |                                     (default 50)
+      |FsHistoryProvider options:
+      |
+      |  spark.history.fs.logDirectory      Directory where app logs are stored (required)
+      |  spark.history.fs.updateInterval    How often to reload log data from storage (in seconds,
+      |                                     default 10)
+      |""".stripMargin)
     System.exit(exitCode)
   }
+
 }

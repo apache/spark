@@ -30,7 +30,7 @@ package org.apache
  * type (e.g. RDD[(Int, Int)] through implicit conversions when you
  * `import org.apache.spark.SparkContext._`.
  *
- * Java programmers should reference the [[spark.api.java]] package
+ * Java programmers should reference the [[org.apache.spark.api.java]] package
  * for Spark programming APIs in Java.
  *
  * Classes and methods marked with <span class="experimental badge" style="float: none;">

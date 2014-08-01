@@ -43,8 +43,11 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
   }
 
   override def +=(elem: A): this.type = {
-    if (size < maxSize) underlying.offer(elem)
-    else maybeReplaceLowest(elem)
+    if (size < maxSize) {
+      underlying.offer(elem)
+    } else {
+      maybeReplaceLowest(elem)
+    }
     this
   }
 
@@ -59,7 +62,8 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
     if (head != null && ord.gt(a, head)) {
       underlying.poll()
       underlying.offer(a)
-    } else false
+    } else {
+      false
+    }
   }
 }
-

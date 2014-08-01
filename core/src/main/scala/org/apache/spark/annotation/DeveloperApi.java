@@ -23,6 +23,11 @@ import java.lang.annotation.*;
  * A lower-level, unstable API intended for developers.
  *
  * Developer API's might change or be removed in minor versions of Spark.
+ *
+ * NOTE: If there exists a Scaladoc comment that immediately precedes this annotation, the first
+ * line of the comment must be ":: DeveloperApi ::" with no trailing blank line. This is because
+ * of the known issue that Scaladoc displays only either the annotation or the comment, whichever
+ * comes first.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,

@@ -91,7 +91,6 @@ class Serializer(object):
         """
         raise NotImplementedError
 
-
     def _load_stream_without_unbatching(self, stream):
         return self.load_stream(stream)
 
@@ -194,11 +193,11 @@ class BatchedSerializer(Serializer):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def _load_stream_without_unbatching(self, stream):
-            return self.serializer.load_stream(stream)
+        return self.serializer.load_stream(stream)
 
     def __eq__(self, other):
-        return isinstance(other, BatchedSerializer) and \
-               other.serializer == self.serializer
+        return (isinstance(other, BatchedSerializer) and
+                other.serializer == self.serializer)
 
     def __str__(self):
         return "BatchedSerializer<%s>" % str(self.serializer)
@@ -229,8 +228,8 @@ class CartesianDeserializer(FramedSerializer):
                 yield pair
 
     def __eq__(self, other):
-        return isinstance(other, CartesianDeserializer) and \
-               self.key_ser == other.key_ser and self.val_ser == other.val_ser
+        return (isinstance(other, CartesianDeserializer) and
+                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __str__(self):
         return "CartesianDeserializer<%s, %s>" % \
@@ -252,18 +251,20 @@ class PairDeserializer(CartesianDeserializer):
                 yield pair
 
     def __eq__(self, other):
-        return isinstance(other, PairDeserializer) and \
-               self.key_ser == other.key_ser and self.val_ser == other.val_ser
+        return (isinstance(other, PairDeserializer) and
+                self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __str__(self):
-        return "PairDeserializer<%s, %s>" % \
-               (str(self.key_ser), str(self.val_ser))
+        return "PairDeserializer<%s, %s>" % (str(self.key_ser), str(self.val_ser))
 
 
 class NoOpSerializer(FramedSerializer):
 
-    def loads(self, obj): return obj
-    def dumps(self, obj): return obj
+    def loads(self, obj):
+        return obj
+
+    def dumps(self, obj):
+        return obj
 
 
 class PickleSerializer(FramedSerializer):
@@ -276,12 +277,16 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def dumps(self, obj): return cPickle.dumps(obj, 2)
+    def dumps(self, obj):
+        return cPickle.dumps(obj, 2)
+
     loads = cPickle.loads
+
 
 class CloudPickleSerializer(PickleSerializer):
 
-    def dumps(self, obj): return cloudpickle.dumps(obj, 2)
+    def dumps(self, obj):
+        return cloudpickle.dumps(obj, 2)
 
 
 class MarshalSerializer(FramedSerializer):
@@ -295,6 +300,33 @@ class MarshalSerializer(FramedSerializer):
 
     dumps = marshal.dumps
     loads = marshal.loads
+
+
+class AutoSerializer(FramedSerializer):
+    """
+    Choose marshal or cPickle as serialization protocol autumatically
+    """
+    def __init__(self):
+        FramedSerializer.__init__(self)
+        self._type = None
+
+    def dumps(self, obj):
+        if self._type is not None:
+            return 'P' + cPickle.dumps(obj, -1)
+        try:
+            return 'M' + marshal.dumps(obj)
+        except Exception:
+            self._type = 'P'
+            return 'P' + cPickle.dumps(obj, -1)
+
+    def loads(self, obj):
+        _type = obj[0]
+        if _type == 'M':
+            return marshal.loads(obj[1:])
+        elif _type == 'P':
+            return cPickle.loads(obj[1:])
+        else:
+            raise ValueError("invalid sevialization type: %s" % _type)
 
 
 class UTF8Deserializer(Serializer):
