@@ -31,7 +31,7 @@ trait Impurity extends Serializable {
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
-   * @return information value
+   * @return information value, or 0 if totalCount = 0
    */
   @DeveloperApi
   def calculate(counts: Array[Double], totalCount: Double): Double
@@ -42,7 +42,7 @@ trait Impurity extends Serializable {
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
-   * @return information value
+   * @return information value, or 0 if count = 0
    */
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double

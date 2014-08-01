@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.json
 
+import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 import scala.math.BigDecimal
 
