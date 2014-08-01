@@ -288,8 +288,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             out.println(cmd)
           }
 
-          ret = driver.run(cmd).getResponseCode
+          val rc = driver.run(cmd)
+          ret = rc.getResponseCode
           if (ret != 0) {
+            console.printError(rc.getErrorMessage())
             driver.close()
             return ret
           }

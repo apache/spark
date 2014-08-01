@@ -53,10 +53,9 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
   }
 
   override def run(command: String): CommandProcessorResponse = {
-    val execution = context.executePlan(context.hql(command).logicalPlan)
-
     // TODO unify the error code
     try {
+      val execution = context.executePlan(context.hql(command).logicalPlan)
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)

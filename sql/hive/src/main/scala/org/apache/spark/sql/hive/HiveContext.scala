@@ -131,11 +131,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient protected[hive] lazy val sessionState = {
     val ss = new SessionState(hiveconf)
     set(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    
+    ss.err = new PrintStream(outputBuffer, true, "UTF-8")
+    ss.out = new PrintStream(outputBuffer, true, "UTF-8")
+
     ss
   }
-
-  sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
-  sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
   override def set(key: String, value: String): Unit = {
     super.set(key, value)
