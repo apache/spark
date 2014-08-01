@@ -88,7 +88,7 @@ private[python] object SerDeUtil extends Logging {
    */
   def pythonToPairRDD[K, V](pyRDD: RDD[Array[Byte]], batchSerialized: Boolean): RDD[(K, V)] = {
     def isPair(obj: Any): Boolean = {
-      Option(obj.getClass.getComponentType).map(!_.isPrimitive).getOrElse(false) &&
+      Option(obj.getClass.getComponentType).exists(!_.isPrimitive) &&
         obj.asInstanceOf[Array[_]].length == 2
     }
     pyRDD.mapPartitions { iter =>
