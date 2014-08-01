@@ -55,8 +55,11 @@ private[jobs] object UIData {
     var executorSummary = new HashMap[String, ExecutorSummary]
   }
 
+  /**
+   * These are kept mutable and reused throughout a task's lifetime to avoid excessive reallocation.
+   */
   case class TaskUIData(
-      taskInfo: TaskInfo,
-      taskMetrics: Option[TaskMetrics] = None,
-      errorMessage: Option[String] = None)
+      var taskInfo: TaskInfo,
+      var taskMetrics: Option[TaskMetrics] = None,
+      var errorMessage: Option[String] = None)
 }

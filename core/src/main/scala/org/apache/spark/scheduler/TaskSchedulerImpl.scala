@@ -32,6 +32,9 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.BlockManagerId
+import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -318,6 +321,26 @@ private[spark] class TaskSchedulerImpl(
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
+  }
+
+  /**
+   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
+   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  override def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+      blockManagerId: BlockManagerId): Boolean = {
+    val metricsWithStageIds = taskMetrics.flatMap {
+      case (id, metrics) => {
+        taskIdToTaskSetId.get(id)
+          .flatMap(activeTaskSets.get)
+          .map(_.stageId)
+          .map(x => (id, x, metrics))
+      }
+    }
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {

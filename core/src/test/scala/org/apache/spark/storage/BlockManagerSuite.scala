@@ -19,22 +19,28 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
 
 import akka.actor._
+import akka.pattern.ask
+import akka.util.Timeout
+
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
@@ -73,7 +79,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     oldArch = System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
-    conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
@@ -341,7 +346,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("reregistration on heart beat") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
 
@@ -353,13 +357,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    store invokePrivate heartBeat()
-    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
+    implicit val timeout = Timeout(30, TimeUnit.SECONDS)
+    val reregister = !Await.result(
+      master.driverActor ? BlockManagerHeartbeat(store.blockManagerId),
+      timeout.duration).asInstanceOf[Boolean]
+    assert(reregister == true)
   }
 
   test("reregistration on block update") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+    store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
 
@@ -377,7 +383,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("reregistration doesn't dead lock") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = List(new Array[Byte](400))
@@ -397,7 +402,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       }
       val t3 = new Thread {
         override def run() {
-          store invokePrivate heartBeat()
+          store.reregister()
         }
       }
 
