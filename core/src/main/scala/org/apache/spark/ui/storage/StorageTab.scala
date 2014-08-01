@@ -41,7 +41,7 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
  */
 @DeveloperApi
 class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
-  private val _rddInfoMap = mutable.Map[Int, RDDInfo]()
+  private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
 
   def storageStatusList = storageStatusListener.storageStatusList
 

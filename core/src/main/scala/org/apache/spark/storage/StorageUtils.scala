@@ -77,7 +77,13 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def blocks: Map[BlockId, BlockStatus] = _nonRddBlocks ++ rddBlocks
 
-  /** Return the RDD blocks stored in this block manager. */
+  /**
+   * Return the RDD blocks stored in this block manager.
+   *
+   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * concatenating them together. Much faster alternatives exist for common operations such as
+   * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
+   */
   def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
 
   /** Return the blocks that belong to the given RDD stored in this block manager. */
@@ -85,7 +91,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     _rddBlocks.get(rddId).getOrElse(Map.empty)
   }
 
-  /** Add the given block to this storage status. */
+  /** Add the given block to this storage status. If it already exists, overwrite it. */
   def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     blockId match {
       case RDDBlockId(rddId, _) =>
@@ -162,15 +168,13 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Return the number of blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
    */
-  def numBlocks: Int = {
-    _nonRddBlocks.size + _rddBlocks.values.map(_.size).reduceOption(_ + _).getOrElse(0)
-  }
+  def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
 
   /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
    */
-  def numRddBlocks: Int = _rddBlocks.keys.map(numRddBlocksById).reduceOption(_ + _).getOrElse(0)
+  def numRddBlocks: Int = _rddBlocks.values.map(_.size).reduceOption(_ + _).getOrElse(0)
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
@@ -182,32 +186,32 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /** Return the memory used by this block manager. */
   def memUsed: Long = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
-  /** Return the memory used by the given RDD in this block manager. */
-  def memUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
-
   /** Return the memory remaining in this block manager. */
   def memRemaining: Long = maxMem - memUsed
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 
-  /** Return the disk space used by the given RDD in this block manager. */
-  def diskUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
-
   /** Return the off-heap space used by this block manager. */
   def offHeapUsed: Long = blocks.values.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
 
-  /** Return the off-heap space used by the given RDD in this block manager. */
+  /** Return the memory used by the given RDD in this block manager in O(1) time. */
+  def memUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
+
+  /** Return the disk space used by the given RDD in this block manager in O(1) time. */
+  def diskUsedByRDD(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
+
+  /** Return the off-heap space used by the given RDD in this block manager in O(1) time. */
   def offHeapUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._3).getOrElse(0L)
 
   /** Return the storage level, if any, used by the given RDD in this block manager. */
   def rddStorageLevel(rddId: Int): Option[StorageLevel] = _rddStorageInfo.get(rddId).map(_._4)
 
   /**
-   * Helper function to update the given RDD's storage information based on the
-   * (possibly negative) changes in memory, disk, and off-heap memory usages.
+   * Helper function to update the given RDD's storage information based on the (possibly
+   * negative) changes in memory, disk, and off-heap memory usages. This is exposed for testing.
    */
-  private def updateRddStorageInfo(
+  private[spark] def updateRddStorageInfo(
       rddId: Int,
       changeInMem: Long,
       changeInDisk: Long,

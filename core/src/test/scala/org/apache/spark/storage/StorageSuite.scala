@@ -24,18 +24,21 @@ import org.scalatest.FunSuite
  */
 class StorageSuite extends FunSuite {
   private val memAndDisk = StorageLevel.MEMORY_AND_DISK
+  private val memOnly = StorageLevel.MEMORY_ONLY
+  private val diskOnly = StorageLevel.DISK_ONLY
 
-  // For testing add/update/removeBlock (for non-RDD blocks)
+  // For testing add, update, and remove (for non-RDD blocks)
   private def storageStatus1: StorageStatus = {
     val status = new StorageStatus(BlockManagerId("big", "dog", 1, 1), 1000L)
     assert(status.blocks.isEmpty)
     assert(status.rddBlocks.isEmpty)
-    assert(status.memUsed === 0)
+    assert(status.memUsed === 0L)
     assert(status.memRemaining === 1000L)
-    assert(status.diskUsed === 0)
-    status.addBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(TestBlockId("faa"), BlockStatus(memAndDisk, 10L, 20L, 0L))
+    assert(status.diskUsed === 0L)
+    assert(status.offHeapUsed === 0L)
+    status.addBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 10L, 20L, 1L))
+    status.addBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 10L, 20L, 1L))
+    status.addBlock(TestBlockId("faa"), BlockStatus(memAndDisk, 10L, 20L, 1L))
     status
   }
 
@@ -49,16 +52,18 @@ class StorageSuite extends FunSuite {
     assert(status.memUsed === 30L)
     assert(status.memRemaining === 970L)
     assert(status.diskUsed === 60L)
+    assert(status.offHeapUsed === 3L)
   }
 
   test("storage status update non-RDD blocks") {
     val status = storageStatus1
-    status.updateBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 50L, 100L, 0L))
+    status.updateBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 50L, 100L, 1L))
     status.updateBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 100L, 20L, 0L))
     assert(status.blocks.size === 3)
     assert(status.memUsed === 160L)
     assert(status.memRemaining === 840L)
     assert(status.diskUsed === 140L)
+    assert(status.offHeapUsed === 2L)
   }
 
   test("storage status remove non-RDD blocks") {
@@ -70,17 +75,18 @@ class StorageSuite extends FunSuite {
     assert(status.memUsed === 10L)
     assert(status.memRemaining === 990L)
     assert(status.diskUsed === 20L)
+    assert(status.offHeapUsed === 1L)
   }
 
-  // For testing add/update/remove/contains/getBlock and numBlocks
+  // For testing add, update, remove, get, and contains etc. for both RDD and non-RDD blocks
   private def storageStatus2: StorageStatus = {
     val status = new StorageStatus(BlockManagerId("big", "dog", 1, 1), 1000L)
     assert(status.rddBlocks.isEmpty)
     status.addBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 10L, 20L, 0L))
     status.addBlock(TestBlockId("man"), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 100L, 200L, 0L))
-    status.addBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 10L, 20L, 0L))
+    status.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 10L, 20L, 1L))
+    status.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 100L, 200L, 1L))
+    status.addBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 10L, 20L, 1L))
     status.addBlock(RDDBlockId(2, 3), BlockStatus(memAndDisk, 10L, 20L, 0L))
     status.addBlock(RDDBlockId(2, 4), BlockStatus(memAndDisk, 10L, 40L, 0L))
     status
@@ -109,6 +115,19 @@ class StorageSuite extends FunSuite {
     assert(status.diskUsedByRDD(0) === 20L)
     assert(status.diskUsedByRDD(1) === 200L)
     assert(status.diskUsedByRDD(2) === 80L)
+    assert(status.offHeapUsedByRdd(0) === 1L)
+    assert(status.offHeapUsedByRdd(1) === 1L)
+    assert(status.offHeapUsedByRdd(2) === 1L)
+    assert(status.rddStorageLevel(0) === Some(memAndDisk))
+    assert(status.rddStorageLevel(1) === Some(memAndDisk))
+    assert(status.rddStorageLevel(2) === Some(memAndDisk))
+
+    // Verify default values for RDDs that don't exist
+    assert(status.rddBlocksById(10).isEmpty)
+    assert(status.memUsedByRDD(10) === 0L)
+    assert(status.diskUsedByRDD(10) === 0L)
+    assert(status.offHeapUsedByRdd(10) === 0L)
+    assert(status.rddStorageLevel(10) === None)
   }
 
   test("storage status update RDD blocks") {
@@ -127,6 +146,9 @@ class StorageSuite extends FunSuite {
     assert(status.diskUsedByRDD(0) === 0L)
     assert(status.diskUsedByRDD(1) === 200L)
     assert(status.diskUsedByRDD(2) === 1060L)
+    assert(status.offHeapUsedByRdd(0) === 0L)
+    assert(status.offHeapUsedByRdd(1) === 1L)
+    assert(status.offHeapUsedByRdd(2) === 0L)
   }
 
   test("storage status remove RDD blocks") {
@@ -150,6 +172,9 @@ class StorageSuite extends FunSuite {
     assert(status.diskUsedByRDD(0) === 20L)
     assert(status.diskUsedByRDD(1) === 0L)
     assert(status.diskUsedByRDD(2) === 20L)
+    assert(status.offHeapUsedByRdd(0) === 1L)
+    assert(status.offHeapUsedByRdd(1) === 0L)
+    assert(status.offHeapUsedByRdd(2) === 0L)
   }
 
   test("storage status containsBlock") {
@@ -182,23 +207,87 @@ class StorageSuite extends FunSuite {
     assert(status.blocks.get(RDDBlockId(100, 0)) === status.getBlock(RDDBlockId(100, 0)))
   }
 
-  test("storage status numBlocks") {
+  test("storage status num[Rdd]Blocks") {
     val status = storageStatus2
     assert(status.blocks.size === status.numBlocks)
+    assert(status.rddBlocks.size === status.numRddBlocks)
+    status.addBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 0L, 100L))
     status.addBlock(RDDBlockId(4, 4), BlockStatus(memAndDisk, 0L, 0L, 100L))
-    assert(status.blocks.size === status.numBlocks)
     status.addBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L, 100L))
     assert(status.blocks.size === status.numBlocks)
-    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    assert(status.rddBlocks.size === status.numRddBlocks)
+    assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
+    assert(status.rddBlocksById(10).size === status.numRddBlocksById(10))
+    status.updateBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 10L, 400L))
+    status.updateBlock(RDDBlockId(4, 0), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    status.updateBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    status.updateBlock(RDDBlockId(10, 10), BlockStatus(memAndDisk, 0L, 0L, 100L))
     assert(status.blocks.size === status.numBlocks)
-    // update a block that doesn't exist
-    status.updateBlock(RDDBlockId(100, 99), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    assert(status.rddBlocks.size === status.numRddBlocks)
+    assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
+    assert(status.rddBlocksById(10).size === status.numRddBlocksById(10))
+    assert(status.rddBlocksById(100).size === status.numRddBlocksById(100))
+    status.removeBlock(RDDBlockId(4, 0))
+    status.removeBlock(RDDBlockId(10, 10))
     assert(status.blocks.size === status.numBlocks)
-    status.removeBlock(RDDBlockId(0, 0))
-    assert(status.blocks.size === status.numBlocks)
+    assert(status.rddBlocks.size === status.numRddBlocks)
+    assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
+    assert(status.rddBlocksById(10).size === status.numRddBlocksById(10))
     // remove a block that doesn't exist
     status.removeBlock(RDDBlockId(1000, 999))
     assert(status.blocks.size === status.numBlocks)
+    assert(status.rddBlocks.size === status.numRddBlocks)
+    assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
+    assert(status.rddBlocksById(10).size === status.numRddBlocksById(10))
+    assert(status.rddBlocksById(1000).size === status.numRddBlocksById(1000))
+  }
+
+  test("storage status updateRddStorageInfo") {
+    val status = storageStatus2
+    // Positive delta
+    status.updateRddStorageInfo(0, 1000L, 1000L, 1000L, memOnly)
+    status.updateRddStorageInfo(1, 2000L, 2000L, 2000L, diskOnly)
+    status.updateRddStorageInfo(2, 3000L, 3000L, 3000L, memAndDisk)
+    assert(status.memUsedByRDD(0) === 1010L)
+    assert(status.memUsedByRDD(1) === 2100L)
+    assert(status.memUsedByRDD(2) === 3030L)
+    assert(status.diskUsedByRDD(0) === 1020L)
+    assert(status.diskUsedByRDD(1) === 2200L)
+    assert(status.diskUsedByRDD(2) === 3080L)
+    assert(status.offHeapUsedByRdd(0) === 1001L)
+    assert(status.offHeapUsedByRdd(1) === 2001L)
+    assert(status.offHeapUsedByRdd(2) === 3001L)
+    assert(status.rddStorageLevel(0) === Some(memOnly))
+    assert(status.rddStorageLevel(1) === Some(diskOnly))
+    assert(status.rddStorageLevel(2) === Some(memAndDisk))
+
+    // Negative delta
+    status.updateRddStorageInfo(0, -100L, -100L, -100L, memOnly)
+    status.updateRddStorageInfo(1, -200L, -200L, -200L, diskOnly)
+    status.updateRddStorageInfo(2, -300L, -300L, -300L, memAndDisk)
+    assert(status.memUsedByRDD(0) === 910L)
+    assert(status.memUsedByRDD(1) === 1900L)
+    assert(status.memUsedByRDD(2) === 2730L)
+    assert(status.diskUsedByRDD(0) === 920L)
+    assert(status.diskUsedByRDD(1) === 2000L)
+    assert(status.diskUsedByRDD(2) === 2780L)
+    assert(status.offHeapUsedByRdd(0) === 901L)
+    assert(status.offHeapUsedByRdd(1) === 1801L)
+    assert(status.offHeapUsedByRdd(2) === 2701L)
+
+    // Negative delta so large that the RDDs are no longer persisted
+    status.updateRddStorageInfo(0, -10000L, -10000L, -10000L, memOnly)
+    status.updateRddStorageInfo(1, -20000L, -20000L, -20000L, diskOnly)
+    status.updateRddStorageInfo(2, -30000L, -30000L, -30000L, memAndDisk)
+    assert(status.memUsedByRDD(0) === 0L)
+    assert(status.memUsedByRDD(1) === 0L)
+    assert(status.memUsedByRDD(2) === 0L)
+    assert(status.diskUsedByRDD(0) === 0L)
+    assert(status.diskUsedByRDD(1) === 0L)
+    assert(status.diskUsedByRDD(2) === 0L)
+    assert(status.offHeapUsedByRdd(0) === 0L)
+    assert(status.offHeapUsedByRdd(1) === 0L)
+    assert(status.offHeapUsedByRdd(2) === 0L)
   }
 
   // For testing StorageUtils.updateRddInfo and StorageUtils.getRddBlockLocations
