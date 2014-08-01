@@ -223,7 +223,31 @@ class ConnectionManagerSuite extends FunSuite {
     managerServer.stop()
   }
 
+  test("Ack error message") {
+    val conf = new SparkConf
+    conf.set("spark.authenticate", "false")
+    val securityManager = new SecurityManager(conf)
+    val manager = new ConnectionManager(0, conf, securityManager)
+    val managerServer = new ConnectionManager(0, conf, securityManager)
+    managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      throw new Exception
+    })
 
+    val size = 10 * 1024 * 1024
+    val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
+    buffer.flip
+    val bufferMessage = Message.createBufferMessage(buffer)
+
+    val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
+
+    val message = Await.result(future, 1 second) 
+    assert(message.isDefined)
+    assert(message.get.hasError)
+
+    manager.stop()
+    managerServer.stop()
+
+  }
 
 }
 
