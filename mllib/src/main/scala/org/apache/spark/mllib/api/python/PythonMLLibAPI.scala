@@ -458,7 +458,6 @@ class PythonMLLibAPI extends Serializable {
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 
-<<<<<<< HEAD
   /**
    * Java stub for mllib Statistics.corr(X: RDD[Vector], method: String).
    * Returns the correlation matrix serialized into a byte array understood by deserializers in
@@ -488,7 +487,8 @@ class PythonMLLibAPI extends Serializable {
   private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
     val values = matrix.toArray.toIterator
     Array.fill(matrix.numRows)(Array.fill(matrix.numCols)(values.next()))
-=======
+  }
+
   // Used by the *RDD methods to get default seed if not passed in from pyspark
   private def getSeedOrDefault(seed: java.lang.Long): Long = {
     if (seed == null) Utils.random.nextLong else seed
@@ -582,6 +582,5 @@ class PythonMLLibAPI extends Serializable {
     val parts = getNumPartitionsOrDefault(numPartitions, jsc)
     val s = getSeedOrDefault(seed)
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s).map(serializeDoubleVector)
->>>>>>> master
   }
 }
