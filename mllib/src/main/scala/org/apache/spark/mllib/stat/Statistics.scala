@@ -30,7 +30,7 @@ object Statistics {
 
   /**
    * Compute the Pearson correlation matrix for the input RDD of Vectors.
-   * Returns NaN if either vector has 0 variance.
+   * Columns with 0 covariance produce NaN entries in the correlation matrix.
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @return Pearson correlation matrix comparing columns in X.
@@ -39,7 +39,7 @@ object Statistics {
 
   /**
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
-   * Methods currently supported: `pearson` (default), `spearman`
+   * Methods currently supported: `pearson` (default), `spearman`.
    *
    * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
    * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
@@ -55,20 +55,26 @@ object Statistics {
 
   /**
    * Compute the Pearson correlation for the input RDDs.
-   * Columns with 0 covariance produce NaN entries in the correlation matrix.
+   * Returns NaN if either vector has 0 variance.
    *
-   * @param x RDD[Double] of the same cardinality as y
-   * @param y RDD[Double] of the same cardinality as x
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
+   *
+   * @param x RDD[Double] of the same cardinality as y.
+   * @param y RDD[Double] of the same cardinality as x.
    * @return A Double containing the Pearson correlation between the two input RDD[Double]s
    */
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
    * Compute the correlation for the input RDDs using the specified method.
-   * Methods currently supported: pearson (default), spearman
+   * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * @param x RDD[Double] of the same cardinality as y
-   * @param y RDD[Double] of the same cardinality as x
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
+   *
+   * @param x RDD[Double] of the same cardinality as y.
+   * @param y RDD[Double] of the same cardinality as x.
    * @param method String specifying the method to use for computing correlation.
    *               Supported: `pearson` (default), `spearman`
    *@return A Double containing the correlation between the two input RDD[Double]s using the

@@ -20,7 +20,9 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.io.EOFException
+
 import scala.collection.immutable.Map
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapred.FileSplit
@@ -39,6 +41,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
+import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.NextIterator
 
 /**
@@ -232,6 +235,14 @@ class HadoopRDD[K, V](
     new InterruptibleIterator[(K, V)](context, iter)
   }
 
+  /** Maps over a partition, providing the InputSplit that was used as the base of the partition. */
+  @DeveloperApi
+  def mapPartitionsWithInputSplit[U: ClassTag](
+      f: (InputSplit, Iterator[(K, V)]) => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = {
+    new HadoopMapPartitionsWithSplitRDD(this, f, preservesPartitioning)
+  }
+
   override def getPreferredLocations(split: Partition): Seq[String] = {
     // TODO: Filtering out "localhost" in case of file:// URLs
     val hadoopSplit = split.asInstanceOf[HadoopPartition]
@@ -271,5 +282,26 @@ private[spark] object HadoopRDD {
     conf.setBoolean("mapred.task.is.map", true)
     conf.setInt("mapred.task.partition", splitId)
     conf.set("mapred.job.id", jobID.toString)
+  }
+
+  /**
+   * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
+   * the given function rather than the index of the partition.
+   */
+  private[spark] class HadoopMapPartitionsWithSplitRDD[U: ClassTag, T: ClassTag](
+      prev: RDD[T],
+      f: (InputSplit, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean = false)
+    extends RDD[U](prev) {
+
+    override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+
+    override def getPartitions: Array[Partition] = firstParent[T].partitions
+
+    override def compute(split: Partition, context: TaskContext) = {
+      val partition = split.asInstanceOf[HadoopPartition]
+      val inputSplit = partition.inputSplit.value
+      f(inputSplit, firstParent[T].iterator(split, context))
+    }
   }
 }

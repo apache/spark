@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.util.collection
 
 /**
- * The data type representing int and Integer values.
- *
- * {@code IntegerType} is represented by the singleton object {@link DataType#IntegerType}.
+ * A dummy class that always returns the same hash code, to easily test hash collisions
  */
-public class IntegerType extends DataType {
-  protected IntegerType() {}
+case class FixedHashObject(v: Int, h: Int) extends Serializable {
+  override def hashCode(): Int = h
 }

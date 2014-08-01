@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import scala.collection.Map
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 
 import java.util.Properties
 import java.util.concurrent.Executors
@@ -48,8 +48,8 @@ private[streaming]
 class KafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
-  U <: Decoder[_]: Manifest,
-  T <: Decoder[_]: Manifest](
+  U <: Decoder[_]: ClassTag,
+  T <: Decoder[_]: ClassTag](
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
@@ -66,8 +66,8 @@ private[streaming]
 class KafkaReceiver[
   K: ClassTag,
   V: ClassTag,
-  U <: Decoder[_]: Manifest,
-  T <: Decoder[_]: Manifest](
+  U <: Decoder[_]: ClassTag,
+  T <: Decoder[_]: ClassTag](
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
@@ -103,10 +103,10 @@ class KafkaReceiver[
       tryZookeeperConsumerGroupCleanup(zkConnect, kafkaParams("group.id"))
     }
 
-    val keyDecoder = manifest[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
+    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
-    val valueDecoder = manifest[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
+    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 

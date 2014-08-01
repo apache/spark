@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
  * The data type representing Lists.
@@ -25,8 +25,8 @@ package org.apache.spark.sql.api.java.types;
  * {@code null} values.
  *
  * To create an {@link ArrayType},
- * {@link org.apache.spark.sql.api.java.types.DataType#createArrayType(DataType)} or
- * {@link org.apache.spark.sql.api.java.types.DataType#createArrayType(DataType, boolean)}
+ * {@link DataType#createArrayType(DataType)} or
+ * {@link DataType#createArrayType(DataType, boolean)}
  * should be used.
  */
 public class ArrayType extends DataType {

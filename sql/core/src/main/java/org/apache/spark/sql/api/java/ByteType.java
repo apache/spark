@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing long and Long values.
+ * The data type representing byte and Byte values.
  *
- * {@code LongType} is represented by the singleton object {@link DataType#LongType}.
+ * {@code ByteType} is represented by the singleton object {@link DataType#ByteType}.
  */
-public class LongType extends DataType {
-  protected LongType() {}
+public class ByteType extends DataType {
+  protected ByteType() {}
 }

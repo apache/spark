@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.api.java;
 
 /**
- * Allows users to get and create Spark SQL data types.
+ * The data type representing double and Double values.
+ *
+ * {@code DoubleType} is represented by the singleton object {@link DataType#DoubleType}.
  */
-package org.apache.spark.sql.api.java.types;
+public class DoubleType extends DataType {
+  protected DoubleType() {}
+}

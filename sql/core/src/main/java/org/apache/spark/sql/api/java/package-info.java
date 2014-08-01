@@ -15,13 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
-
 /**
- * The data type representing java.sql.Timestamp values.
- *
- * {@code TimestampType} is represented by the singleton object {@link DataType#TimestampType}.
+ * Allows the execution of relational queries, including those expressed in SQL using Spark.
  */
-public class TimestampType extends DataType {
-  protected TimestampType() {}
-}
+package org.apache.spark.sql.api.java;

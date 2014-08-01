@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing java.math.BigDecimal values.
+ * The data type representing byte[] values.
  *
- * {@code DecimalType} is represented by the singleton object {@link DataType#DecimalType}.
+ * {@code BinaryType} is represented by the singleton object {@link DataType#BinaryType}.
  */
-public class DecimalType extends DataType {
-  protected DecimalType() {}
+public class BinaryType extends DataType {
+  protected BinaryType() {}
 }

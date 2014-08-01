@@ -487,9 +487,9 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can also experiment with the `LocalHiveContext`,
-which is similar to `HiveContext`, but creates a local copy of the `metastore` and `warehouse`
-automatically.
+not have an existing Hive deployment can still create a HiveContext.  When not configured by the
+hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
+directory.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -769,3 +769,13 @@ To start the Spark SQL CLI, run the following in the Spark directory:
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
+
+# Cached tables
+
+Spark SQL can cache tables using an in-memory columnar format by calling `cacheTable("tableName")`.
+Then Spark SQL will scan only required columns and will automatically tune compression to minimize
+memory usage and GC pressure. You can call `uncacheTable("tableName")` to remove the table from memory.
+
+Note that if you just call `cache` rather than `cacheTable`, tables will _not_ be cached in
+in-memory columnar format. So we strongly recommend using `cacheTable` whenever you want to
+cache tables.

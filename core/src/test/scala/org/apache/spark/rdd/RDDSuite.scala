@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
@@ -26,6 +27,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
@@ -119,6 +121,18 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert((nums1Parts(0) ++ nums2Parts(0)).toList === unionParts(0).toList)
     assert((nums1Parts(1) ++ nums2Parts(1)).toList === unionParts(1).toList)
     assert(union.partitioner === nums1.partitioner)
+  }
+
+  test("UnionRDD partition serialized size should be small") {
+    val largeVariable = new Array[Byte](1000 * 1000)
+    val rdd1 = sc.parallelize(1 to 10, 2).map(i => largeVariable.length)
+    val rdd2 = sc.parallelize(1 to 10, 3)
+
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    val union = rdd1.union(rdd2)
+    // The UnionRDD itself should be large, but each individual partition should be small.
+    assert(ser.serialize(union).limit() > 2000)
+    assert(ser.serialize(union.partitions.head).limit() < 2000)
   }
 
   test("aggregate") {
@@ -270,7 +284,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // we can optionally shuffle to keep the upstream parallel
     val coalesced5 = data.coalesce(1, shuffle = true)
     val isEquals = coalesced5.dependencies.head.rdd.dependencies.head.rdd.
-      asInstanceOf[ShuffledRDD[_, _, _, _]] != null
+      asInstanceOf[ShuffledRDD[_, _, _]] != null
     assert(isEquals)
 
     // when shuffling, we can increase the number of partitions
@@ -706,6 +720,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ids.length === n)
   }
 
+  test("retag with implicit ClassTag") {
+    val jsc: JavaSparkContext = new JavaSparkContext(sc)
+    val jrdd: JavaRDD[String] = jsc.parallelize(Seq("A", "B", "C").asJava)
+    jrdd.rdd.retag.collect()
+  }
+
   test("getNarrowAncestors") {
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.filter(_ % 2 == 0).map(_ + 1)
@@ -730,9 +750,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     // Any ancestors before the shuffle are not considered
     assert(ancestors4.size === 0)
-    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _, _]]) === 0)
+    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 0)
     assert(ancestors5.size === 3)
-    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
     assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 0)
     assert(ancestors5.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 2)
   }
