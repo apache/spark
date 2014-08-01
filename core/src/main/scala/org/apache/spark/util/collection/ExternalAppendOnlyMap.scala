@@ -157,13 +157,12 @@ class ExternalAppendOnlyMap[K, V, C](
             myMemoryThreshold = currentSize * 2
           }
         }
+        lastSize = currentSize
         // Do not synchronize spills
         if (shouldSpill) {
           spill(currentSize)
           lastSize = 0L
         }
-        
-        lastSize = currentSize
       }
       currentMap.changeValue(curEntry._1, update)
       elementsRead += 1
