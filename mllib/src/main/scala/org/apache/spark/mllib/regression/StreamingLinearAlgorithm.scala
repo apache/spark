@@ -65,7 +65,8 @@ abstract class StreamingLinearAlgorithm[
     data.foreachRDD { (rdd, time) =>
         model = algorithm.run(rdd, model.weights)
         logInfo("Model updated at time %s".format(time.toString))
-        logInfo("Current model: weights, %s".format(model.weights.toArray.take(100).mkString("[", ",", "]")))
+        logInfo("Current model: weights, %s".format(
+          model.weights.toArray.take(100).mkString("[", ",", "]")))
     }
   }
 
