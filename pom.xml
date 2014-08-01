@@ -1070,16 +1070,6 @@
     </profile>
 
     <profile>
-      <id>hadoop-2.3-cdh5.0.0</id>
-      <properties>
-        <hadoop.version>2.3.0-cdh5.0.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.0</jets3t.version>
-        <hbase.version>0.96.1.1-cdh5.0.0</hbase.version>
-      </properties>
-    </profile>
-
-    <profile>
       <id>hadoop-2.4</id>
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
