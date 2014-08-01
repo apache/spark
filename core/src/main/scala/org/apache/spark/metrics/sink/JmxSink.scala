@@ -35,4 +35,6 @@ private[spark] class JmxSink(val property: Properties, val registry: MetricRegis
     reporter.stop()
   }
 
+  override def report() { }
+
 }

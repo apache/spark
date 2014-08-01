@@ -154,6 +154,8 @@ private[spark] class Master(
   }
 
   override def postStop() {
+    masterMetricsSystem.report()
+    applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
     if (recoveryCompletionTask != null) {
       recoveryCompletionTask.cancel()

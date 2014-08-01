@@ -357,6 +357,7 @@ private[spark] class Worker(
   }
 
   override def postStop() {
+    metricsSystem.report()
     registrationRetryTimer.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())

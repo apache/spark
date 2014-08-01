@@ -990,6 +990,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val dagSchedulerCopy = dagScheduler
     dagScheduler = null
     if (dagSchedulerCopy != null) {
+      env.metricsSystem.report()
       metadataCleaner.cancel()
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
