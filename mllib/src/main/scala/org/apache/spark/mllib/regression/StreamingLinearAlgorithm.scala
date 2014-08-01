@@ -39,10 +39,10 @@ abstract class StreamingLinearAlgorithm[
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  var model: M
+  protected var model: M
 
   /** The algorithm to use for updating. */
-  val algorithm: A
+  protected val algorithm: A
 
   /** Return the latest model. */
   def latestModel(): M = {
