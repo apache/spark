@@ -70,9 +70,11 @@ class MatrixFactorizationModel private[mllib] (
    *
    * @param user the user to recommend products to
    * @param num how many products to return. The number returned may be less than this.
-   * @return product ID and score tuples, sorted descending by score. The first product returned
-   *  is the one predicted to be most strongly recommended to the user. The score is an opaque
-   *  value that indicates how strongly recommended the product is.
+   * @return [[Rating]] objects, each of which contains the given user ID, a product ID, and a
+   *  "score" in the rating field. Each represents one recommended product, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most strongly
+   *  recommended to the user. The score is an opaque value that indicates how strongly
+   *  recommended the product is.
    */
   def recommendProducts(user: Int, num: Int): Array[Rating] =
     recommend(userFeatures.lookup(user).head, productFeatures, num)
@@ -84,9 +86,11 @@ class MatrixFactorizationModel private[mllib] (
    *
    * @param product the product to recommend users to
    * @param num how many users to return. The number returned may be less than this.
-   * @return user ID and score tuples, sorted descending by score. The first user returned
-   *  is the one predicted to be most strongly interested in the product. The score is an opaque
-   *  value that indicates how strongly interested the user is.
+   * @return [[Rating]] objects, each of which contains a user ID, the given product ID, and a
+   *  "score" in the rating field. Each represents one recommended user, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most strongly
+   *  recommended to the product. The score is an opaque value that indicates how strongly
+   *  recommended the user is.
    */
   def recommendUsers(product: Int, num: Int): Array[Rating] =
     recommend(productFeatures.lookup(product).head, userFeatures, num)

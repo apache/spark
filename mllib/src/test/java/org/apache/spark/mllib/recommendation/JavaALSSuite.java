@@ -20,6 +20,11 @@ package org.apache.spark.mllib.recommendation;
 import java.io.Serializable;
 import java.util.List;
 
+import scala.Tuple2;
+import scala.Tuple3;
+
+import org.jblas.DoubleMatrix;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,10 +32,6 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-
-import scala.Tuple2;
-import scala.Tuple3;
-import org.jblas.DoubleMatrix;
 
 public class JavaALSSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -130,8 +131,8 @@ public class JavaALSSuite implements Serializable {
     JavaRDD<Rating> data = sc.parallelize(testData._1());
 
     MatrixFactorizationModel model = new ALS().setRank(features)
-                                              .setIterations(iterations)
-                                              .run(data.rdd());
+      .setIterations(iterations)
+      .run(data.rdd());
     validatePrediction(model, users, products, features, testData._2(), 0.3, false, testData._3());
   }
 
@@ -178,10 +179,10 @@ public class JavaALSSuite implements Serializable {
 
     JavaRDD<Rating> data = sc.parallelize(testData._1());
     MatrixFactorizationModel model = new ALS().setRank(features)
-        .setIterations(iterations)
-        .setImplicitPrefs(true)
-        .setSeed(8675309L)
-        .run(data.rdd());
+      .setIterations(iterations)
+      .setImplicitPrefs(true)
+      .setSeed(8675309L)
+      .run(data.rdd());
     validatePrediction(model, users, products, features, testData._2(), 0.4, true, testData._3());
   }
 
@@ -195,10 +196,10 @@ public class JavaALSSuite implements Serializable {
         users, products, features, 0.7, true, false);
     JavaRDD<Rating> data = sc.parallelize(testData._1());
     MatrixFactorizationModel model = new ALS().setRank(features)
-        .setIterations(iterations)
-        .setImplicitPrefs(true)
-        .setSeed(8675309L)
-        .run(data.rdd());
+      .setIterations(iterations)
+      .setImplicitPrefs(true)
+      .setSeed(8675309L)
+      .run(data.rdd());
     validateRecommendations(model.recommendProducts(1, 10), 10);
     validateRecommendations(model.recommendUsers(1, 20), 20);
   }
