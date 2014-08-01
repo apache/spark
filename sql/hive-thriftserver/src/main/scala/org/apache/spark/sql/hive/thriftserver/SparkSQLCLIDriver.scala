@@ -288,28 +288,27 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             out.println(cmd)
           }
 
-          ret = driver.run(cmd).getResponseCode
-          if (ret != 0) {
-            driver.close()
-            return ret
-          }
-
-          val res = new JArrayList[String]()
-
-          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
-            // Print the column names.
-            Option(driver.getSchema.getFieldSchemas).map { fields =>
-              out.println(fields.map(_.getName).mkString("\t"))
-            }
-          }
-
           try {
+            ret = driver.run(cmd).getResponseCode
+            if (ret != 0) {
+              driver.close()
+                return ret
+            }
+            val res = new JArrayList[String]()
+
+            if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+              // Print the column names.
+              Option(driver.getSchema.getFieldSchemas).map { fields =>
+                out.println(fields.map(_.getName).mkString("\t"))
+              }
+            }
+
             while (!out.checkError() && driver.getResults(res)) {
               res.foreach(out.println)
               res.clear()
             }
           } catch {
-            case e:IOException =>
+            case e: Exception =>
               console.printError(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
