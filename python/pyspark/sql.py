@@ -663,6 +663,72 @@ def _infer_schema_type(obj, dataType):
         raise ValueError("Unexpected dataType: %s" % dataType)
 
 
+_acceptable_types = {
+    BooleanType: (bool,),
+    ByteType: (int, long),
+    ShortType: (int, long),
+    IntegerType: (int, long),
+    LongType: (int, long),
+    FloatType: (float,),
+    DoubleType: (float,),
+    DecimalType: (decimal.Decimal,),
+    StringType: (str, unicode),
+    TimestampType: (datetime.datetime, datetime.time, datetime.date),
+    ArrayType: (list, tuple, array),
+    MapType: (dict,),
+    StructType: (tuple, list),
+}
+
+def _verify_type(obj, dataType):
+    """
+    Verify the type of obj against dataType, raise an exception if
+    they do not match.
+
+    >>> _verify_type(None, StructType([]))
+    >>> _verify_type("", StringType())
+    >>> _verify_type(0, IntegerType())
+    >>> _verify_type(range(3), ArrayType(ShortType()))
+    >>> _verify_type(set(), ArrayType(StringType())) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    TypeError:...
+    >>> _verify_type({}, MapType(StringType(), IntegerType()))
+    >>> _verify_type((), StructType([]))
+    >>> _verify_type([], StructType([]))
+    >>> _verify_type([1], StructType([])) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    """
+    # all objects are nullable
+    if obj is None:
+        return
+
+    _type = type(dataType)
+    if _type not in _acceptable_types:
+        return
+
+    if type(obj) not in _acceptable_types[_type]:
+        raise TypeError("%s can not accept abject in type %s"
+                        % (dataType, type(obj)))
+
+    if isinstance(dataType, ArrayType):
+        for i in obj:
+            _verify_type(i, dataType.elementType)
+
+    elif isinstance(dataType, MapType):
+        for k, v in obj.iteritems():
+            _verify_type(k, dataType.keyType)
+            _verify_type(v, dataType.valueType)
+
+    elif isinstance(dataType, StructType):
+        if len(obj) != len(dataType.fields):
+            raise ValueError("Length of object (%d) does not match with"
+                "length of fields (%d)" % (len(obj), len(dataType.fields)))
+        for v, f in zip(obj, dataType.fields):
+            _verify_type(v, f.dataType)
+
+
 _cached_cls = {}
 
 
@@ -976,11 +1042,10 @@ class SQLContext:
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")
 
-        first = rdd.first()
-        if not isinstance(first, (tuple, list)):
-            raise ValueError("Can not apply schema to type: %s" % type(first))
-
-        # TODO: verify schema with first few rows
+        # take the first few rows to verify schema
+        rows = rdd.take(10)
+        for row in rows:
+            _verify_type(row, schema)
 
         batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
         jrdd = self._pythonToJava(rdd._jrdd, batched)
