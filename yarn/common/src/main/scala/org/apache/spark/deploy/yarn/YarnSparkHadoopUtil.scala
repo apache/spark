@@ -157,16 +157,20 @@ object YarnSparkHadoopUtil {
    * @return Argument quoted for execution via Yarn's generated shell script.
    */
   def escapeForShell(arg: String): String = {
-    val escaped = new StringBuilder("'")
-    for (i <- 0 to arg.length() - 1) {
-      arg.charAt(i) match {
-        case '$' => escaped.append("\\$")
-        case '"' => escaped.append("\\\"")
-        case '\'' => escaped.append("'\\\"'\\\"'")
-        case c => escaped.append(c)
+    if (arg != null) {
+      val escaped = new StringBuilder("'")
+      for (i <- 0 to arg.length() - 1) {
+        arg.charAt(i) match {
+          case '$' => escaped.append("\\$")
+          case '"' => escaped.append("\\\"")
+          case '\'' => escaped.append("'\\\"'\\\"'")
+          case c => escaped.append(c)
+        }
       }
+      escaped.append("'").toString()
+    } else {
+      arg
     }
-    escaped.append("'").toString()
   }
 
 }
