@@ -35,12 +35,13 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -331,7 +332,7 @@ abstract class RDD[T: ClassTag](
       val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
-          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
           position = position + 1
           (position, t)
@@ -340,7 +341,7 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -351,8 +352,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, 
-      fraction: Double, 
+  def sample(withReplacement: Boolean,
+      fraction: Double,
       seed: Long = Utils.random.nextLong): RDD[T] = {
     require(fraction >= 0.0, "Negative fraction value: " + fraction)
     if (withReplacement) {
@@ -1206,16 +1207,12 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = {
-    checkpointData.map(_.isCheckpointed).getOrElse(false)
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = {
-    checkpointData.flatMap(_.getCheckpointFile)
-  }
+  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
 
   // =======================================================================
   // Other internal methods and fields
@@ -1238,6 +1235,23 @@ abstract class RDD[T: ClassTag](
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context = sc
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(cls: Class[T]): RDD[T] = {
+    val classTag: ClassTag[T] = ClassTag.apply(cls)
+    this.retag(classTag)
+  }
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(implicit classTag: ClassTag[T]): RDD[T] = {
+    this.mapPartitions(identity, preservesPartitioning = true)(classTag)
+  }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false

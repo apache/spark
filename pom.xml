@@ -100,6 +100,7 @@
     <module>external/twitter</module>
     <module>external/kafka</module>
     <module>external/flume</module>
+    <module>external/flume-sink</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
@@ -113,6 +114,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
+    <scala.macros.version>2.0.1</scala.macros.version>
     <mesos.version>0.18.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
@@ -252,9 +254,15 @@
         <version>3.3.2</version>
       </dependency>
       <dependency>
-	  <groupId>commons-codec</groupId>
-	    <artifactId>commons-codec</artifactId>
-	    <version>1.5</version>
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>1.5</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-math3</artifactId>
+        <version>3.3</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
@@ -818,6 +826,15 @@
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
             </javacArgs>
+            <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
+                 by Spark SQL for code generation. -->
+            <compilerPlugins>
+              <compilerPlugin>
+                  <groupId>org.scalamacros</groupId>
+                  <artifactId>paradise_${scala.version}</artifactId>
+                  <version>${scala.macros.version}</version>
+              </compilerPlugin>
+            </compilerPlugins>
           </configuration>
         </plugin>
         <plugin>
@@ -1137,6 +1154,16 @@
           <scope>provided</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>hive-thriftserver</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
     </profile>
 
   </profiles>

@@ -37,15 +37,17 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 /**
- * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
- * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
+ * DEPRECATED: Use HiveContext instead.
  */
+@deprecated("""
+  Use HiveContext instead.  It will still create a local metastore if one is not specified.
+  However, note that the default directory is ./metastore_db, not ./metastore
+  """, "1.1")
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val metastorePath = new File("metastore").getCanonicalPath
@@ -231,7 +233,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveTableScans,
       DataSinks,
       Scripts,
-      PartialAggregation,
+      HashAggregation,
       LeftSemiJoin,
       HashJoin,
       BasicOperators,
@@ -255,14 +257,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
         ShortType, DecimalType, TimestampType, BinaryType)
 
-    protected def toHiveString(a: (Any, DataType)): String = a match {
+    protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ)) =>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -279,9 +281,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ)) =>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))

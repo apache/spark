@@ -18,11 +18,10 @@
 package org.apache.spark.shuffle.hash
 
 import org.apache.spark.{InterruptibleIterator, TaskContext}
-import org.apache.spark.rdd.SortOrder
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 
-class HashShuffleReader[K, C](
+private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,
@@ -48,19 +47,26 @@ class HashShuffleReader[K, C](
     } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
-      iter
+      // Convert the Product2s to pairs since this is what downstream RDDs currently expect
+      iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
     }
 
-    val sortedIter = for (sortOrder <- dep.sortOrder; ordering <- dep.keyOrdering) yield {
-      val buf = aggregatedIter.toArray
-      if (sortOrder == SortOrder.ASCENDING) {
-        buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
-      } else {
-        buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
-      }
+    // Sort the output if there is a sort ordering defined.
+    dep.keyOrdering match {
+      case Some(keyOrd: Ordering[K]) =>
+        // Define a Comparator for the whole record based on the key Ordering.
+        val cmp = new Ordering[Product2[K, C]] {
+          override def compare(o1: Product2[K, C], o2: Product2[K, C]): Int = {
+            keyOrd.compare(o1._1, o2._1)
+          }
+        }
+        val sortBuffer: Array[Product2[K, C]] = aggregatedIter.toArray
+        // TODO: do external sort.
+        scala.util.Sorting.quickSort(sortBuffer)(cmp)
+        sortBuffer.iterator
+      case None =>
+        aggregatedIter
     }
-
-    sortedIter.getOrElse(aggregatedIter)
   }
 
   /** Close this reader */
