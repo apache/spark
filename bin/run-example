@@ -55,4 +55,4 @@ fi
   --master $EXAMPLE_MASTER \
   --class $EXAMPLE_CLASS \
   "$SPARK_EXAMPLES_JAR" \
-  "$@"
+  -- "$@"

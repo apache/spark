@@ -208,9 +208,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    var inSparkOpts = true
+    val EQ_SEPARATED_OPT = """(--[^=]+)=(.+)""".r
+    val WILDCARD_OPT = """(-.*)""".r
 
-    // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
     def parse(opts: Seq[String]): Unit = opts match {
@@ -311,33 +311,29 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         verbose = true
         parse(tail)
 
-      case value :: tail =>
-        if (inSparkOpts) {
-          value match {
-            // convert --foo=bar to --foo bar
-            case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
-              val parts = v.split("=")
-              parse(Seq(parts(0), parts(1)) ++ tail)
-            case v if v.startsWith("-") =>
-              val errMessage = s"Unrecognized option '$value'."
-              SparkSubmit.printErrorAndExit(errMessage)
-            case v =>
-              primaryResource =
-                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
-                  Utils.resolveURI(v).toString
-                } else {
-                  v
-                }
-              inSparkOpts = false
-              isPython = SparkSubmit.isPython(v)
-              parse(tail)
-          }
-        } else {
-          if (!value.isEmpty) {
-            childArgs += value
-          }
-          parse(tail)
+      case EQ_SEPARATED_OPT(opt, value) :: tail =>
+        // convert --foo=bar to --foo bar
+        parse(opt :: value :: tail)
+
+      case "--" :: tail =>
+        if (primaryResource eq null) {
+          SparkSubmit.printErrorAndExit(
+            "User application option separator \"--\" must be after primary resource" +
+              "(i.e., application jar file or Python file).")
         }
+        childArgs ++= tail.filter(_.nonEmpty)
+
+      case WILDCARD_OPT(opt) :: tail =>
+        SparkSubmit.printErrorAndExit(s"Unrecognized option '$opt'.")
+
+      case resource :: tail =>
+        primaryResource = if (!SparkSubmit.isShell(resource) && !SparkSubmit.isInternal(resource)) {
+          Utils.resolveURI(resource).toString
+        } else {
+          resource
+        }
+        isPython = SparkSubmit.isPython(resource)
+        parse(tail)
 
       case Nil =>
     }
@@ -349,7 +345,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     outStream.println(
-      """Usage: spark-submit [options] <app jar | python file> [app options]
+      """Usage: spark-submit <app jar | python file> [options] [-- application options]
+        |
+        |NOTE:
+        |  Start from Spark 1.1, an option separator "--" is required to separate spark-submit
+        |  options and application options.
+        |
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or

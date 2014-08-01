@@ -83,6 +83,6 @@ if defined ARGS set ARGS=%ARGS:~1%
 call "%FWDIR%bin\spark-submit.cmd" ^
   --master %EXAMPLE_MASTER% ^
   --class %EXAMPLE_CLASS% ^
-  "%SPARK_EXAMPLES_JAR%" %ARGS%
+  "%SPARK_EXAMPLES_JAR%" -- %ARGS%
 
 :exit

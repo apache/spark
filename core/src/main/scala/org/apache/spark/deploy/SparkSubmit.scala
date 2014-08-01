@@ -259,7 +259,7 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (clusterManager == YARN && deployMode == CLUSTER) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.primaryResource != SPARK_INTERNAL) {
+      if (isUserJar(args.primaryResource)) {
         childArgs += ("--jar", args.primaryResource)
       }
       childArgs += ("--class", args.mainClass)
