@@ -18,17 +18,9 @@
 from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
-from pyspark.mllib._common import \
-    _convert_vector, \
-    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _deserialize_labeled_point, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
-from pyspark.mllib.linalg import SparseVector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
+
 
 class DecisionTreeModel(object):
     """
@@ -82,6 +74,48 @@ class DecisionTree(object):
     Learning algorithm for a decision tree model for classification or regression.
 
     WARNING: This is an experimental API.  It will probably be modified for Spark v1.2.
+
+    Example usage:
+    >>> from numpy import array, ndarray
+    >>> from pyspark.mllib.regression import LabeledPoint
+    >>> from pyspark.mllib.tree import DecisionTree
+    >>> from pyspark.mllib.linalg import SparseVector
+    >>>
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0]),
+    ...     LabeledPoint(1.0, [1.0]),
+    ...     LabeledPoint(1.0, [2.0]),
+    ...     LabeledPoint(1.0, [3.0])
+    ... ]
+    >>>
+    >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2)
+    >>> print(model)
+    DecisionTreeModel classifier
+      If (feature 0 <= 0.5)
+       Predict: 0.0
+      Else (feature 0 > 0.5)
+       Predict: 1.0
+
+    >>> model.predict(array([1.0])) > 0
+    True
+    >>> model.predict(array([0.0])) == 0
+    True
+    >>> sparse_data = [
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
+    ... ]
+    >>>
+    >>> model = DecisionTree.trainRegressor(sc.parallelize(sparse_data))
+    >>> model.predict(array([0.0, 1.0])) == 1
+    True
+    >>> model.predict(array([0.0, 0.0])) == 0
+    True
+    >>> model.predict(SparseVector(2, {1: 1.0})) == 1
+    True
+    >>> model.predict(SparseVector(2, {1: 0.0})) == 0
+    True
     """
 
     def run(self, data, datasetInfo):

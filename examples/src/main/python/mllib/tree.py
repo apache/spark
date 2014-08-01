@@ -19,7 +19,7 @@
 Decision tree classification and regression using MLlib.
 """
 
-import sys
+import sys, numpy
 
 from operator import add
 
@@ -39,8 +39,22 @@ def parsePoint(line):
 def getAccuracy(dtModel, data):
     seqOp = (lambda acc, x: acc + (x[0] == x[1]))
     trainCorrect = \
-        dtModel.predict(data).zip(data.map((lambda p => p.label))).aggregate(0, seqOp, add)
+        dtModel.predict(data).zip(data.map(lambda p: p.label)).aggregate(0, seqOp, add)
     return trainCorrect / (0.0 + data.count())
+
+# Return mean squared error (MSE) of DecisionTreeModel on the given RDD[LabeledPoint].
+def getMSE(dtModel, data):
+    seqOp = (lambda acc, x: acc + numpy.square(x[0] - x[1]))
+    trainMSE = \
+        dtModel.predict(data).zip(data.map(lambda p: p.label)).aggregate(0, seqOp, add)
+    return trainMSE / (0.0 + data.count())
+
+# Return a new LabeledPoint with the label and feature 0 swapped.
+def swapLabelAndFeature0(labeledPoint):
+    newLabel = labeledPoint.label
+    newFeatures = labeledPoint.features
+    (newLabel, newFeatures[0]) = (newFeatures[0], newLabel)
+    return LabeledPoint(newLabel, newFeatures)
 
 
 if __name__ == "__main__":
@@ -54,23 +68,23 @@ if __name__ == "__main__":
     points = sc.textFile(dataPath).map(parsePoint)
 
     # Train a classifier.
-    model = DecisionTree.trainClassifier(points, numClasses=2)
-    # Print learned tree.
-    print "Model numNodes: " + model.numNodes() + "\n"
-    print "Model depth: " + model.depth() + "\n"
-    print model
-    # Check accuracy.
-    print "Training accuracy: " + getAccuracy(model, points) + "\n"
+    classificationModel = DecisionTree.trainClassifier(points, numClasses=2)
+    # Print learned tree and stats.
+    print "Trained DecisionTree for classification:"
+    print "  Model numNodes: " + classificationModel.numNodes() + "\n"
+    print "  Model depth: " + classificationModel.depth() + "\n"
+    print "  Training accuracy: " + getAccuracy(classificationModel, points) + "\n"
+    print classificationModel
 
     # Switch labels and first feature to create a regression dataset with categorical features.
-    """
-    datasetInfo = DatasetInfo(numClasses=0, numFeatures=numFeatures)
-    dtParams = DecisionTreeRegressor.defaultParams()
-    model = DecisionTreeRegressor.train(points, datasetInfo, dtParams)
-    # Print learned tree.
-    print "Model numNodes: " + model.numNodes() + "\n"
-    print "Model depth: " + model.depth() + "\n"
-    print model
-    # Check error.
-    print "Training accuracy: " + getAccuracy(model, points) + "\n"
-    """
+    # Feature 0 is now categorical with 2 categories, and labels are real numbers.
+    regressionPoints = points.map(lambda labeledPoint: swapLabelAndFeature0(labeledPoint))
+    categoricalFeaturesInfo = {0: 2}
+    regressionModel = \
+        DecisionTree.trainRegressor(points, categoricalFeaturesInfo=categoricalFeaturesInfo)
+    # Print learned tree and stats.
+    print "Trained DecisionTree for regression:"
+    print "  Model numNodes: " + regressionModel.numNodes() + "\n"
+    print "  Model depth: " + regressionModel.depth() + "\n"
+    print "  Training MSE: " + getMSE(regressionModel, points) + "\n"
+    print regressionModel
