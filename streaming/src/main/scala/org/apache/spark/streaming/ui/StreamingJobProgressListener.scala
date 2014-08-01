@@ -116,7 +116,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
     (0 until numReceivers).map { receiverId =>
       val blockInfoOfParticularReceiver = latestBlockInfos.map { batchInfo =>
-        batchInfo.get(receiverId).getOrElse(Array.empty)
+        batchInfo.getOrElse(receiverId, Array.empty)
       }
       val recordsOfParticularReceiver = blockInfoOfParticularReceiver.map { blockInfo =>
       // calculate records per second for each batch

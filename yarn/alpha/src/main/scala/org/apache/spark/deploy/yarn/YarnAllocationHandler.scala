@@ -187,7 +187,7 @@ private[yarn] class YarnAllocationHandler(
           if (rack != null){
             val maxExpectedRackCount = preferredRackToCount.getOrElse(rack, 0)
             val requiredRackCount = maxExpectedRackCount - allocatedContainersOnRack(rack) -
-              rackLocalContainers.get(rack).getOrElse(List()).size
+              rackLocalContainers.getOrElse(rack, List()).size
 
 
             if (requiredRackCount >= remainingContainers.size){

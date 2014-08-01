@@ -34,7 +34,7 @@ object PythonRunner {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-    val pythonExec = sys.env.get("PYSPARK_PYTHON").getOrElse("python") // TODO: get this from conf
+    val pythonExec = sys.env.getOrElse("PYSPARK_PYTHON", "python") // TODO: get this from conf
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
