@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, InputStream, OutputStreamWriter}
-import java.net._
+import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
 
@@ -67,7 +67,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val socket = new Socket(daemonHost, daemonPort)
         val launchStatus = new DataInputStream(socket.getInputStream).readInt()
         if (launchStatus != 0) {
-          logWarning("Python daemon failed to launch worker")
+          throw new IllegalStateException("Python daemon failed to launch worker")
         }
         socket
       } catch {
