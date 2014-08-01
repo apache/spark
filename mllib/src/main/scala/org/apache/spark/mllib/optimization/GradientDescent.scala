@@ -159,45 +159,57 @@ object GradientDescent extends Logging {
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
     val numExamples = data.count()
-    val miniBatchSize = numExamples * miniBatchFraction
 
-    // Initialize weights as a column vector
-    var weights = Vectors.dense(initialWeights.toArray)
+    // if no data, return initial weights to avoid NaNs
+    if (numExamples == 0) {
 
-    /**
-     * For the first iteration, the regVal will be initialized as sum of weight squares
-     * if it's L2 updater; for L1 updater, the same logic is followed.
-     */
-    var regVal = updater.compute(
-      weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
+      logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
+      (initialWeights, stochasticLossHistory.toArray)
 
-    for (i <- 1 to numIterations) {
-      // Sample a subset (fraction miniBatchFraction) of the total data
-      // compute and sum up the subgradients on this subset (this is one map-reduce)
-      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i)
-        .aggregate((BDV.zeros[Double](weights.size), 0.0))(
-          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = gradient.compute(features, label, weights, Vectors.fromBreeze(grad))
-            (grad, loss + l)
-          },
-          combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            (grad1 += grad2, loss1 + loss2)
-          })
+    } else {
+
+      val miniBatchSize = numExamples * miniBatchFraction
+
+      // Initialize weights as a column vector
+      var weights = Vectors.dense(initialWeights.toArray)
 
       /**
-       * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
-       * and regVal is the regularization value computed in the previous iteration as well.
+       * For the first iteration, the regVal will be initialized as sum of weight squares
+       * if it's L2 updater; for L1 updater, the same logic is followed.
        */
-      stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
-      val update = updater.compute(
-        weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
-      weights = update._1
-      regVal = update._2
+      var regVal = updater.compute(
+        weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
+
+      for (i <- 1 to numIterations) {
+        // Sample a subset (fraction miniBatchFraction) of the total data
+        // compute and sum up the subgradients on this subset (this is one map-reduce)
+        val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i)
+          .aggregate((BDV.zeros[Double](weights.size), 0.0))(
+            seqOp = (c, v) => (c, v) match {
+              case ((grad, loss), (label, features)) =>
+                val l = gradient.compute(features, label, weights, Vectors.fromBreeze(grad))
+                (grad, loss + l)
+            },
+            combOp = (c1, c2) => (c1, c2) match {
+              case ((grad1, loss1), (grad2, loss2)) =>
+                (grad1 += grad2, loss1 + loss2)
+            })
+
+        /**
+         * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+         * and regVal is the regularization value computed in the previous iteration as well.
+         */
+        stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+        val update = updater.compute(
+          weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
+        weights = update._1
+        regVal = update._2
+      }
+
+      logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
+        stochasticLossHistory.takeRight(10).mkString(", ")))
+
+      (weights, stochasticLossHistory.toArray)
     }
-
-    logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
-      stochasticLossHistory.takeRight(10).mkString(", ")))
-
-    (weights, stochasticLossHistory.toArray)
   }
 }

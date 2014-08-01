@@ -60,10 +60,8 @@ abstract class StreamingRegression[
   def trainOn(data: DStream[LabeledPoint]) {
     data.foreachRDD{
       rdd =>
-        if (rdd.count() > 0) {
-          model = algorithm.run(rdd, model.weights)
-          logInfo("Model updated")
-        }
+        model = algorithm.run(rdd, model.weights)
+        logInfo("Model updated")
         logInfo("Current model: weights, %s".format(model.weights.toString))
         logInfo("Current model: intercept, %s".format(model.intercept.toString))
     }
