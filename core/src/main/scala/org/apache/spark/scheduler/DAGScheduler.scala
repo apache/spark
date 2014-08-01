@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -211,11 +211,15 @@ class DAGScheduler(
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
+        // We are going to register ancestor shuffle dependencies
+        registerShuffleDependencies(shuffleDep, jobId)
+        // Then register current shuffleDep
         val stage =
           newOrUsedStage(
             shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
             shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
+ 
         stage
     }
   }
@@ -280,6 +284,9 @@ class DAGScheduler(
   private def getParentStages(rdd: RDD[_], jobId: Int): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
         visited += r
@@ -290,18 +297,69 @@ class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               parents += getShuffleMapStage(shufDep, jobId)
             case _ =>
-              visit(dep.rdd)
+              waitingForVisit.push(dep.rdd)
           }
         }
       }
     }
-    visit(rdd)
+    waitingForVisit.push(rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     parents.toList
+  }
+
+  // Find ancestor missing shuffle dependencies and register into shuffleToMapStage
+  private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], jobId: Int) = {
+    val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
+    while (!parentsWithNoMapStage.isEmpty) {
+      val currentShufDep = parentsWithNoMapStage.pop()
+      val stage =
+        newOrUsedStage(
+          currentShufDep.rdd, currentShufDep.rdd.partitions.size, currentShufDep, jobId,
+          currentShufDep.rdd.creationSite)
+      shuffleToMapStage(currentShufDep.shuffleId) = stage
+    }
+  }
+
+  // Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
+    val parents = new Stack[ShuffleDependency[_, _, _]]
+    val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
+    def visit(r: RDD[_]) {
+      if (!visited(r)) {
+        visited += r
+        for (dep <- r.dependencies) {
+          dep match {
+            case shufDep: ShuffleDependency[_, _, _] =>
+              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
+                parents.push(shufDep)
+              }
+
+              waitingForVisit.push(shufDep.rdd)
+            case _ =>
+              waitingForVisit.push(dep.rdd)
+          }
+        }
+      }
+    }
+
+    waitingForVisit.push(rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
+    parents
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
     val missing = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
@@ -314,13 +372,16 @@ class DAGScheduler(
                   missing += mapStage
                 }
               case narrowDep: NarrowDependency[_] =>
-                visit(narrowDep.rdd)
+                waitingForVisit.push(narrowDep.rdd)
             }
           }
         }
       }
     }
-    visit(stage.rdd)
+    waitingForVisit.push(stage.rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     missing.toList
   }
 
@@ -1119,6 +1180,9 @@ class DAGScheduler(
     }
     val visitedRdds = new HashSet[RDD[_]]
     val visitedStages = new HashSet[Stage]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -1128,15 +1192,18 @@ class DAGScheduler(
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage
-                visit(mapStage.rdd)
+                waitingForVisit.push(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
-              visit(narrowDep.rdd)
+              waitingForVisit.push(narrowDep.rdd)
           }
         }
       }
     }
-    visit(stage.rdd)
+    waitingForVisit.push(stage.rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     visitedRdds.contains(target.rdd)
   }
 
