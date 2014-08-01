@@ -687,6 +687,7 @@ private[spark] object PythonRDD extends Logging {
    * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
    * This function is outdated, PySpark does not use it anymore
    */
+  @deprecated
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
