@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -29,7 +29,6 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.actor._
-import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy.Stop
 import akka.pattern.ask
 import akka.util.Timeout
@@ -39,8 +38,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
+import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -154,6 +154,23 @@ class DAGScheduler(
     eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
   }
 
+  /**
+   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
+   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, Int, TaskMetrics)], // (taskId, stageId, metrics)
+      blockManagerId: BlockManagerId): Boolean = {
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
+    implicit val timeout = Timeout(600 seconds)
+
+    Await.result(
+      blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
+      timeout.duration).asInstanceOf[Boolean]
+  }
+
   // Called by TaskScheduler when an executor fails.
   def executorLost(execId: String) {
     eventProcessActor ! ExecutorLost(execId)
@@ -194,11 +211,15 @@ class DAGScheduler(
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
+        // We are going to register ancestor shuffle dependencies
+        registerShuffleDependencies(shuffleDep, jobId)
+        // Then register current shuffleDep
         val stage =
           newOrUsedStage(
             shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
             shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
+ 
         stage
     }
   }
@@ -263,6 +284,9 @@ class DAGScheduler(
   private def getParentStages(rdd: RDD[_], jobId: Int): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
         visited += r
@@ -273,18 +297,69 @@ class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               parents += getShuffleMapStage(shufDep, jobId)
             case _ =>
-              visit(dep.rdd)
+              waitingForVisit.push(dep.rdd)
           }
         }
       }
     }
-    visit(rdd)
+    waitingForVisit.push(rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     parents.toList
+  }
+
+  // Find ancestor missing shuffle dependencies and register into shuffleToMapStage
+  private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], jobId: Int) = {
+    val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
+    while (!parentsWithNoMapStage.isEmpty) {
+      val currentShufDep = parentsWithNoMapStage.pop()
+      val stage =
+        newOrUsedStage(
+          currentShufDep.rdd, currentShufDep.rdd.partitions.size, currentShufDep, jobId,
+          currentShufDep.rdd.creationSite)
+      shuffleToMapStage(currentShufDep.shuffleId) = stage
+    }
+  }
+
+  // Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
+    val parents = new Stack[ShuffleDependency[_, _, _]]
+    val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
+    def visit(r: RDD[_]) {
+      if (!visited(r)) {
+        visited += r
+        for (dep <- r.dependencies) {
+          dep match {
+            case shufDep: ShuffleDependency[_, _, _] =>
+              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
+                parents.push(shufDep)
+              }
+
+              waitingForVisit.push(shufDep.rdd)
+            case _ =>
+              waitingForVisit.push(dep.rdd)
+          }
+        }
+      }
+    }
+
+    waitingForVisit.push(rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
+    parents
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
     val missing = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
@@ -297,13 +372,16 @@ class DAGScheduler(
                   missing += mapStage
                 }
               case narrowDep: NarrowDependency[_] =>
-                visit(narrowDep.rdd)
+                waitingForVisit.push(narrowDep.rdd)
             }
           }
         }
       }
     }
-    visit(stage.rdd)
+    waitingForVisit.push(stage.rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     missing.toList
   }
 
@@ -1102,6 +1180,9 @@ class DAGScheduler(
     }
     val visitedRdds = new HashSet[RDD[_]]
     val visitedStages = new HashSet[Stage]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -1111,15 +1192,18 @@ class DAGScheduler(
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage
-                visit(mapStage.rdd)
+                waitingForVisit.push(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
-              visit(narrowDep.rdd)
+              waitingForVisit.push(narrowDep.rdd)
           }
         }
       }
     }
-    visit(stage.rdd)
+    waitingForVisit.push(stage.rdd)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
+    }
     visitedRdds.contains(target.rdd)
   }
 
@@ -1131,6 +1215,22 @@ class DAGScheduler(
    */
   private[spark]
   def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
+    getPreferredLocsInternal(rdd, partition, new HashSet)
+  }
+
+  /** Recursive implementation for getPreferredLocs. */
+  private def getPreferredLocsInternal(
+      rdd: RDD[_],
+      partition: Int,
+      visited: HashSet[(RDD[_],Int)])
+    : Seq[TaskLocation] =
+  {
+    // If the partition has already been visited, no need to re-visit.
+    // This avoids exponential path exploration.  SPARK-695
+    if (!visited.add((rdd,partition))) {
+      // Nil has already been returned for previously visited partitions.
+      return Nil
+    }
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
     if (!cached.isEmpty) {
@@ -1147,7 +1247,7 @@ class DAGScheduler(
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {
-          val locs = getPreferredLocs(n.rdd, inPart)
+          val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }

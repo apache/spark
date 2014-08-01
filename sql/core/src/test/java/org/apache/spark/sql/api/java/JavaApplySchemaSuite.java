@@ -28,9 +28,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.sql.api.java.types.DataType;
-import org.apache.spark.sql.api.java.types.StructField;
-import org.apache.spark.sql.api.java.types.StructType;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;

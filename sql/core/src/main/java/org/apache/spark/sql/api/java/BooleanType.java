@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.api.java;
+
 /**
- * Allows the execution of relational queries, including those expressed in SQL using Spark.
+ * The data type representing boolean and Boolean values.
+ *
+ * {@code BooleanType} is represented by the singleton object {@link DataType#BooleanType}.
  */
-package org.apache.spark.sql;
+public class BooleanType extends DataType {
+  protected BooleanType() {}
+}

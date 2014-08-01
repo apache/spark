@@ -91,6 +91,10 @@ private[spark] class MetricsSystem private (val instance: String,
     sinks.foreach(_.stop)
   }
 
+  def report(): Unit = {
+    sinks.foreach(_.report())
+  }
+
   def registerSource(source: Source) {
     sources += source
     try {

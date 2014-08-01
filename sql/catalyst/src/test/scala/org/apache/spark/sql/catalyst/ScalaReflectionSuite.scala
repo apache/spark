@@ -182,7 +182,7 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DecimalType === typeOfObject(BigDecimal("1.7976931348623157E318")))
 
     // TimestampType
-    assert(TimestampType === typeOfObject(java.sql.Timestamp.valueOf("2014-7-25 10:26:00")))
+    assert(TimestampType === typeOfObject(java.sql.Timestamp.valueOf("2014-07-25 10:26:00")))
 
     // NullType
     assert(NullType === typeOfObject(null))
