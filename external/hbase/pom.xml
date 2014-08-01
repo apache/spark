@@ -41,10 +41,6 @@
       <artifactId>scalatest_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -85,12 +81,14 @@
       <artifactId>hbase-server</artifactId>
       <version>${hbase-new.version}</version>
       <type>test-jar</type>
-      <classifier>tests</classifier>
+      <classifier>tests</classifier> 
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-hadoop1-compat</artifactId>
       <version>${hbase-new.version}</version>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -98,18 +96,7 @@
       <version>${hbase-new.version}</version>
       <type>test-jar</type>
       <classifier>tests</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-hadoop-compat</artifactId>
-      <version>${hbase-new.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-hadoop-compat</artifactId>
-      <version>${hbase-new.version}</version>
-      <type>test-jar</type>
-      <classifier>tests</classifier>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -122,6 +109,21 @@
       <version>${hbase-new.version}</version>
       <type>test-jar</type>
       <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <version>${hbase-new.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <version>${hbase-new.version}</version>
+      <type>test-jar</type>
+      <classifier>tests</classifier>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
