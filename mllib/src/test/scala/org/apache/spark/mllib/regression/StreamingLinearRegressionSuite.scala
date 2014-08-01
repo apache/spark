@@ -56,7 +56,6 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
     val batchDuration = Milliseconds(1000)
     val ssc = new StreamingContext(sc, batchDuration)
     val data = MLUtils.loadStreamingLabeledPoints(ssc, testDir.toString)
-    //val model = StreamingLinearRegressionWithSGD.start(initialWeights=Vectors.dense(0.0), numIterations=50)
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.1)

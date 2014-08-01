@@ -29,7 +29,7 @@ import org.apache.spark.streaming.dstream.DStream
  *
  * This class takes as type parameters a GeneralizedLinearModel,
  * and a GeneralizedLinearAlgorithm, making it easy to extend to construct
- * streaming versions of arbitrary regression analyses. For example usage,
+ * streaming versions of any analyses using GLMs. For example usage,
  * see StreamingLinearRegressionWithSGD.
  *
  * NOTE: Only weights will be updated, not an intercept.

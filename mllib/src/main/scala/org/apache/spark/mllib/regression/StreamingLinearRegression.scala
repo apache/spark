@@ -84,8 +84,8 @@ object StreamingLinearRegressionWithSGD {
   /**
    * Start a streaming Linear Regression model by setting optimization parameters.
    *
-   * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param numIterations Number of iterations of gradient descent to run.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Weights to initialize model with.
    */
@@ -100,13 +100,13 @@ object StreamingLinearRegressionWithSGD {
   /**
    * Start a streaming Linear Regression model by setting optimization parameters.
    *
-   * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param numIterations Number of iterations of gradient descent to run.
    * @param initialWeights Weights to initialize model with.
    */
   def start(
-      numIterations: Int,
       stepSize: Double,
+      numIterations: Int,
       initialWeights: Vector): StreamingLinearRegressionWithSGD = {
     start(stepSize, numIterations, 1.0, initialWeights)
   }
@@ -130,7 +130,7 @@ object StreamingLinearRegressionWithSGD {
    */
   def start(
       initialWeights: Vector): StreamingLinearRegressionWithSGD = {
-    start(0.1, 100, 1.0, initialWeights)
+    start(0.1, 50, 1.0, initialWeights)
   }
 
 }
