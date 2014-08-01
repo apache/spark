@@ -21,7 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import akka.actor.ActorRef
 
-private[storage] object BlockManagerMessages {
+private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
@@ -52,8 +52,6 @@ private[storage] object BlockManagerMessages {
       maxMemSize: Long,
       sender: ActorRef)
     extends ToBlockManagerMaster
-
-  case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
@@ -123,6 +121,8 @@ private[storage] object BlockManagerMessages {
 
   case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
+
+  case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case object ExpireDeadHosts extends ToBlockManagerMaster
 }

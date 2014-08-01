@@ -286,17 +286,23 @@ private[spark] object Utils extends Logging {
                  out: OutputStream,
                  closeStreams: Boolean = false)
   {
-    val buf = new Array[Byte](8192)
-    var n = 0
-    while (n != -1) {
-      n = in.read(buf)
-      if (n != -1) {
-        out.write(buf, 0, n)
+    try {
+      val buf = new Array[Byte](8192)
+      var n = 0
+      while (n != -1) {
+        n = in.read(buf)
+        if (n != -1) {
+          out.write(buf, 0, n)
+        }
       }
-    }
-    if (closeStreams) {
-      in.close()
-      out.close()
+    } finally {
+      if (closeStreams) {
+        try {
+          in.close()
+        } finally {
+          out.close()
+        }
+      }
     }
   }
 
@@ -868,9 +874,12 @@ private[spark] object Utils extends Logging {
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(effectiveStart)
-    stream.read(buff)
-    stream.close()
+    try {
+      stream.skip(effectiveStart)
+      stream.read(buff)
+    } finally {
+      stream.close()
+    }
     Source.fromBytes(buff).mkString
   }
 

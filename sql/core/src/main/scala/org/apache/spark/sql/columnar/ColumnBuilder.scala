@@ -154,6 +154,7 @@ private[sql] object ColumnBuilder {
       case STRING.typeId  => new StringColumnBuilder
       case BINARY.typeId  => new BinaryColumnBuilder
       case GENERIC.typeId => new GenericColumnBuilder
+      case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 
     builder.initialize(initialSize, columnName, useCompression)

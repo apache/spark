@@ -199,7 +199,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush() = {
-      writer.commit()
+      writer.commitAndClose()
       val bytesWritten = writer.bytesWritten
       batchSizes.append(bytesWritten)
       _diskBytesSpilled += bytesWritten
