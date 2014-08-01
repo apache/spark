@@ -15,47 +15,29 @@
 # limitations under the License.
 #
 
+"""
+Python package for statistical functions in MLlib.
+"""
+
 from pyspark.mllib._common import \
     _get_unmangled_double_vector_rdd, _get_unmangled_rdd, \
-    _serialize_double, _deserialize_double, _deserialize_double_matrix
+    _serialize_double, _serialize_double_vector, \
+    _deserialize_double, _deserialize_double_matrix
 
 class Statistics(object):
 
     @staticmethod
-    def corr2(X, method=None):
+    def corr(x, y=None, method=None):
         """
-        # TODO Figure out what to do with naming for this method:
-        If we stick with corr, all doctests are bypassed (i.e. Python confuses
-        it with the other corr.
-
-        Compute the correlation matrix for the input RDD of Vectors using the
+        Compute the correlation (matrix) for the input RDD(s) using the
         specified method.
-        Methods currently supported: I{pearson (default), spearman}
+        Methods currently supported: I{pearson (default), spearman}.
 
-        >>> from linalg import Vectors
-        >>> from numpy import array
-        >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]), \
-        ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
-        >>> pearsonMat = array([[]])
-        >>> Statistics.corr2(rdd) == Statistics.corr2(rdd, "pearson")
-        True
-        >>> Statistics.corr2(rdd, "spearman")
-        """
-        sc = X.ctx
-        serialized = _get_unmangled_double_vector_rdd(X)
-        resultMat = sc._jvm.PythonMLLibAPI().corr(serialized._jrdd, method)
-        return _deserialize_double_matrix(resultMat)
+        If a single RDD of Vectors is passed in, a correlation matrix
+        comparing the columns in the input RDD is returned. Note that the
+        method name can be passed in as the second argument without C{method=}.
+        If two RDDs of floats are passed in, a single float is returned.
 
-    @staticmethod
-    def corr(x, y, method=None):
-        """
-        Compute the correlation for the input RDDs using the specified method.
-        Methods currently supported: I{pearson (default), spearman}
-
-        # TODO fix the ordering bug:
-        #  If the numPartitions = 2 is removed from parallelize, we end up getting
-        #  [0.0, 1.0, -2.0] for x when the RDD is processed in Scala, which produce a
-        #  Spearman correlation value of 0.0 instead of 0.5.
         >>> x = sc.parallelize([1.0, 0.0, -2.0], 2)
         >>> y = sc.parallelize([4.0, 5.0, 3.0], 2)
         >>> zeros = sc.parallelize([0.0, 0.0, 0.0], 2)
@@ -68,13 +50,42 @@ class Statistics(object):
         >>> from math import isnan
         >>> isnan(Statistics.corr(x, zeros))
         True
-
+        >>> from linalg import Vectors
+        >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]),
+        ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
+        >>> Statistics.corr(rdd)
+        array([[ 1.        ,  0.05564149,         nan,  0.40047142],
+               [ 0.05564149,  1.        ,         nan,  0.91359586],
+               [        nan,         nan,  1.        ,         nan],
+               [ 0.40047142,  0.91359586,         nan,  1.        ]])
+        >>> Statistics.corr(rdd, "spearman")
+        array([[ 1.        ,  0.10540926,         nan,  0.4       ],
+               [ 0.10540926,  1.        ,         nan,  0.9486833 ],
+               [        nan,         nan,  1.        ,         nan],
+               [ 0.4       ,  0.9486833 ,         nan,  1.        ]])
         """
         sc = x.ctx
-        xSer = _get_unmangled_rdd(x, _serialize_double)
-        ySer = _get_unmangled_rdd(y, _serialize_double)
-        result = sc._jvm.PythonMLLibAPI().corr(xSer._jrdd, ySer._jrdd, method)
-        return _deserialize_double(result)
+        # Check inputs to determine whether a single value or a matrix is needed for output.
+        # Since it's legal for users to use the method name as the second argument, we need to
+        # check if y is used to specify the method name instead.
+        if type(y) == str:
+            if not method:
+                method = y
+            else:
+                raise TypeError("Multiple string arguments detected when only at most one " \
+                                + "allowed for Statistics.corr")
+        if not y or type(y) == str:
+            try:
+                Xser = _get_unmangled_double_vector_rdd(x)
+            except TypeError:
+                raise TypeError("corr called on a single RDD not consisted of Vectors.")
+            resultMat = sc._jvm.PythonMLLibAPI().corr(Xser._jrdd, method)
+            return _deserialize_double_matrix(resultMat)
+        else:
+            xSer = _get_unmangled_rdd(x, _serialize_double)
+            ySer = _get_unmangled_rdd(y, _serialize_double)
+            result = sc._jvm.PythonMLLibAPI().corr(xSer._jrdd, ySer._jrdd, method)
+            return result
 
 
 def _test():

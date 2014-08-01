@@ -456,23 +456,32 @@ class PythonMLLibAPI extends Serializable {
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 
+  /**
+   * Java stub for mllib Statistics.corr(X: RDD[Vector], method: String).
+   * Returns the correlation matrix serialized into a byte array understood by deserializers in
+   * pyspark.
+   */
   def corr(X: JavaRDD[Array[Byte]], method: String): Array[Byte] = {
     val inputMatrix = X.rdd.map(deserializeDoubleVector(_))
-    val result = Statistics.corr(inputMatrix, getCorrName(method))
+    val result = Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
     serializeDoubleMatrix(to2dArray(result))
   }
 
-  def corr(x: JavaRDD[Array[Byte]], y: JavaRDD[Array[Byte]], method: String): Array[Byte] = {
+  /**
+   * Java stub for mllib Statistics.corr(x: RDD[Double], y: RDD[Double], method: String).
+   */
+  def corr(x: JavaRDD[Array[Byte]], y: JavaRDD[Array[Byte]], method: String): Double = {
     val xDeser = x.rdd.map(deserializeDouble(_))
     val yDeser = y.rdd.map(deserializeDouble(_))
-    val result = Statistics.corr(xDeser, yDeser, getCorrName(method))
-    serializeDouble(result)
+    Statistics.corr(xDeser, yDeser, getCorrNameOrDefault(method))
   }
 
-  private def getCorrName(method: String) = {
+  // used by the corr methods to retrieve the name of the correlation method passed in via pyspark
+  private def getCorrNameOrDefault(method: String) = {
     if (method == null) CorrelationNames.defaultCorrName else method
   }
 
+  // Reformat a Matrix into Array[Array[Double]] for serialization
   private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
     val values = matrix.toArray.toIterator
     Array.fill(matrix.numRows)(Array.fill(matrix.numCols)(values.next()))
