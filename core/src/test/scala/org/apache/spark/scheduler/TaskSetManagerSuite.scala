@@ -573,10 +573,8 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 0)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
-    assert(manager.resourceOffer("execA", "host1", NO_PREF) == None)
-    clock.advance(LOCALITY_WAIT)
-    // schedule a node local task
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index == 1)
+
     manager.speculatableTasks += 1
     clock.advance(LOCALITY_WAIT)
     // schedule the nonPref task
