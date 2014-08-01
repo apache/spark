@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
 
@@ -812,6 +814,10 @@ class LocalHiveContext(HiveContext):
     >>> reduce_sum
     130091
     """
+
+    def __init__(self, sparkContext, sqlContext=None):
+      HiveContext.__init__(self, sparkContext, sqlContext)
+      warnings.warn("LocalHiveContext is deprecated.  Use HiveContext instead.", DeprecationWarning)
 
     def _get_hive_ctx(self):
         return self._jvm.LocalHiveContext(self._jsc.sc())

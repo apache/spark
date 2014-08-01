@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java.types;
+package org.apache.spark.sql.api.java;
 
 /**
  * A StructField object represents a field in a StructType object.
@@ -26,7 +26,7 @@ package org.apache.spark.sql.api.java.types;
  * values.
  *
  * To create a {@link StructField},
- * {@link org.apache.spark.sql.api.java.types.DataType#createStructField(String, DataType, boolean)}
+ * {@link DataType#createStructField(String, DataType, boolean)}
  * should be used.
  */
 public class StructField {

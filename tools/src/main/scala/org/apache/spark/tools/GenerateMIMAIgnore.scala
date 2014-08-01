@@ -114,9 +114,10 @@ object GenerateMIMAIgnore {
 
   private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
     classSymbol.typeSignature.members.filterNot(x =>
-      x.fullName.startsWith("java") || x.fullName.startsWith("scala"))
-        .filter(x => isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)).map(_.fullName) ++
-      getInnerFunctions(classSymbol)
+      x.fullName.startsWith("java") || x.fullName.startsWith("scala")
+    ).filter(x =>
+      isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)
+    ).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
   def main(args: Array[String]) {

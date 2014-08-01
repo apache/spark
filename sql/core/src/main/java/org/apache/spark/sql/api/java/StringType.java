@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.api.java;
 
 /**
- * Allows users to get and create Spark SQL data types.
+ * The data type representing String values.
+ *
+ * {@code StringType} is represented by the singleton object {@link DataType#StringType}.
  */
-package org.apache.spark.sql.api.java.types;
+public class StringType extends DataType {
+  protected StringType() {}
+}

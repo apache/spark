@@ -25,19 +25,23 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
-
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
+import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.junit.After;
 import org.junit.Assert;
@@ -45,6 +49,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaHadoopRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -1261,5 +1266,24 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<SomeCustomClass> rdd = sc.parallelize(data);
     SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
     Assert.assertEquals(data.size(), collected.length);
+  }
+
+  public void getHadoopInputSplits() {
+    String outDir = new File(tempDir, "output").getAbsolutePath();
+    sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2).saveAsTextFile(outDir);
+
+    JavaHadoopRDD<LongWritable, Text> hadoopRDD = (JavaHadoopRDD<LongWritable, Text>)
+        sc.hadoopFile(outDir, TextInputFormat.class, LongWritable.class, Text.class);
+    List<String> inputPaths = hadoopRDD.mapPartitionsWithInputSplit(
+        new Function2<InputSplit, Iterator<Tuple2<LongWritable, Text>>, Iterator<String>>() {
+      @Override
+      public Iterator<String> call(InputSplit split, Iterator<Tuple2<LongWritable, Text>> it)
+          throws Exception {
+        FileSplit fileSplit = (FileSplit) split;
+        return Lists.newArrayList(fileSplit.getPath().toUri().getPath()).iterator();
+      }
+    }, true).collect();
+    Assert.assertEquals(Sets.newHashSet(inputPaths),
+        Sets.newHashSet(outDir + "/part-00000", outDir + "/part-00001"));
   }
 }

@@ -541,6 +541,13 @@ Apart from these, the following properties are also available, and may be useful
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
+<tr>
+    <td>spark.executor.heartbeatInterval</td>
+    <td>10000</td>
+    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
+</tr>
 </table>
 
 #### Networking
