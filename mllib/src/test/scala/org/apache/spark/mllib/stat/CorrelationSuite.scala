@@ -46,6 +46,14 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
     val p1 = Statistics.corr(x, y, "pearson")
     assert(approxEqual(expected, default))
     assert(approxEqual(expected, p1))
+
+    // numPartitions >= size for input RDDs
+    for (numParts <- List(xData.size, xData.size * 2)) {
+      val x1 = sc.parallelize(xData, numParts)
+      val y1 = sc.parallelize(yData, numParts)
+      val p2 = Statistics.corr(x1, y1)
+      assert(approxEqual(expected, p2))
+    }
   }
 
   test("corr(x, y) spearman") {
@@ -54,6 +62,14 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
     val expected = 0.5
     val s1 = Statistics.corr(x, y, "spearman")
     assert(approxEqual(expected, s1))
+
+    // numPartitions >= size for input RDDs
+    for (numParts <- List(xData.size, xData.size * 2)) {
+      val x1 = sc.parallelize(xData, numParts)
+      val y1 = sc.parallelize(yData, numParts)
+      val s2 = Statistics.corr(x1, y1, "spearman")
+      assert(approxEqual(expected, s2))
+    }
   }
 
   test("corr(X) default, pearson") {

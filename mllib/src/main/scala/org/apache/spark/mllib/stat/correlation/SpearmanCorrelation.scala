@@ -64,7 +64,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       ranks(k) = getRanks(column)
     }
 
-    val ranksMat: RDD[Vector] = makeRankMatrix(ranks, X)
+    val ranksMat: RDD[Vector] = makeRankMatrix(ranks, X.partitions.size)
     PearsonCorrelation.computeCorrelationMatrix(ranksMat)
   }
 
@@ -89,20 +89,17 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     val ranks: RDD[(Long, Double)] = sorted.mapPartitions { iter =>
       // add an extra element to signify the end of the list so that flatMap can flush the last
       // batch of duplicates
-      val padded = iter ++
-        Iterator[((Double, Long), Long)](((Double.NaN, -1L), -1L))
-      var lastVal = 0.0
-      var firstRank = 0.0
-      val idBuffer = new ArrayBuffer[Long]()
+      val padded = iter ++ Iterator[((Double, Long), Long)](((Double.NaN, -1L), -1L))
+      val firstEntry = padded.next()
+      var lastVal = firstEntry._1._1
+      var firstRank = firstEntry._2.toDouble
+      val idBuffer = new ArrayBuffer[Long]() += firstEntry._1._2
       padded.flatMap { case ((v, id), rank) =>
-        if (v  == lastVal && id != Long.MinValue) {
+        if (v == lastVal && id != Long.MinValue) {
           idBuffer += id
           Iterator.empty
         } else {
-          val entries = if (idBuffer.size == 0) {
-            // edge case for the first value matching the initial value of lastVal
-            Iterator.empty
-          } else if (idBuffer.size == 1) {
+          val entries = if (idBuffer.size == 1) {
             Iterator((idBuffer(0), firstRank))
           } else {
             val averageRank = firstRank + (idBuffer.size - 1.0) / 2.0
@@ -119,8 +116,8 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     ranks
   }
 
-  private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], input: RDD[Vector]): RDD[Vector] = {
-    val partitioner = new HashPartitioner(input.partitions.size)
+  private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], numPartitions: Int): RDD[Vector] = {
+    val partitioner = new HashPartitioner(numPartitions)
     val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
     cogrouped.map {
       case (_, values: Array[Iterable[_]]) =>
