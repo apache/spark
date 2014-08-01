@@ -505,5 +505,24 @@ class SQLQuerySuite extends QueryTest {
       (2, null) ::
       (3, null) ::
       (4, 2147483644) :: Nil)
+
+    // The value of a MapType column can be a mutable map.
+    val rowRDD3 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
+    }
+
+    val schemaRDD3 = applySchema(rowRDD3, schema2)
+    schemaRDD3.registerAsTable("applySchema3")
+
+    checkAnswer(
+      sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
   }
 }
