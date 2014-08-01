@@ -20,11 +20,12 @@ package org.apache.spark.deploy.worker
 import java.lang.management.ManagementFactory
 
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
+import org.apache.spark.SparkConf
 
 /**
  * Command-line parser for the worker.
  */
-private[spark] class WorkerArguments(args: Array[String]) {
+private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
@@ -48,6 +49,9 @@ private[spark] class WorkerArguments(args: Array[String]) {
   }
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
+  }
+  if (conf.contains("worker.ui.port")) {
+    webUiPort = conf.get("worker.ui.port").toInt
   }
 
   parse(args.toList)

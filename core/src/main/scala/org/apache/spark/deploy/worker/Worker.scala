@@ -78,6 +78,7 @@ private[spark] class Worker(
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
   val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
+  var workerWebUiUrl: String = _
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
@@ -130,8 +131,9 @@ private[spark] class Worker(
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+    webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
+    workerWebUiUrl = conf.get("spark.http.policy") + "://" + publicAddress + ":" + webUi.boundPort
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -157,7 +159,7 @@ private[spark] class Worker(
     for (masterUrl <- masterUrls) {
       logInfo("Connecting to master " + masterUrl + "...")
       val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      actor ! RegisterWorker(workerId, host, port, cores, memory, workerWebUiUrl, publicAddress)
     }
   }
 
@@ -369,7 +371,8 @@ private[spark] class Worker(
 private[spark] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
-    val args = new WorkerArguments(argStrings)
+    val conf = new SparkConf
+    val args = new WorkerArguments(argStrings, conf)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
     actorSystem.awaitTermination()
