@@ -23,6 +23,8 @@ import scala.language.reflectiveCalls
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -64,7 +66,7 @@ class MyRDD(
 class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
-  with ImplicitSender with BeforeAndAfter with LocalSparkContext {
+  with ImplicitSender with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -292,6 +294,18 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     complete(taskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+  test("avoid exponential blowup when getting preferred locs list") {
+    // Build up a complex dependency graph with repeated zip operations, without preferred locations.
+    var rdd: RDD[_] = new MyRDD(sc, 1, Nil)
+    (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
+    // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
+    failAfter(10 seconds) {
+      val preferredLocs = scheduler.getPreferredLocs(rdd,0)
+      // No preferred locations are returned.
+      assert(preferredLocs.length === 0)
+    }
   }
 
   test("unserializable task") {

@@ -1148,6 +1148,22 @@ class DAGScheduler(
    */
   private[spark]
   def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
+    getPreferredLocsInternal(rdd, partition, new HashSet)
+  }
+
+  /** Recursive implementation for getPreferredLocs. */
+  private def getPreferredLocsInternal(
+      rdd: RDD[_],
+      partition: Int,
+      visited: HashSet[(RDD[_],Int)])
+    : Seq[TaskLocation] =
+  {
+    // If the partition has already been visited, no need to re-visit.
+    // This avoids exponential path exploration.  SPARK-695
+    if (!visited.add((rdd,partition))) {
+      // Nil has already been returned for previously visited partitions.
+      return Nil
+    }
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
     if (!cached.isEmpty) {
@@ -1164,7 +1180,7 @@ class DAGScheduler(
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {
-          val locs = getPreferredLocs(n.rdd, inPart)
+          val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }
