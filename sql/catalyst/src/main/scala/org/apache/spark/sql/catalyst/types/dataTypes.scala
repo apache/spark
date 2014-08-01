@@ -44,9 +44,15 @@ object DataType extends RegexParsers {
     "DecimalType" ^^^ DecimalType |
     "TimestampType" ^^^ TimestampType
 
+
   protected lazy val arrayType: Parser[DataType] =
     "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
       case tpe ~ _ ~ containsNull => ArrayType(tpe, containsNull)
+    }
+
+  protected lazy val fixedLenBinaryType: Parser[DataType] =
+    "FixedLenBinaryType" ~> "(" ~> intVal <~ ")" ^^ { 
+       case t => FixedLenBinaryType(t) 
     }
 
   protected lazy val mapType: Parser[DataType] =
@@ -58,6 +64,11 @@ object DataType extends RegexParsers {
     ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
       case name ~ tpe ~ nullable  =>
           StructField(name, tpe, nullable = nullable)
+    }
+
+  protected lazy val intVal: Parser[Integer] =
+    "[0-9]+" ^^ { 
+      case t => t.toInt 
     }
 
   protected lazy val boolVal: Parser[Boolean] =
@@ -149,6 +160,10 @@ case object StringType extends NativeType with PrimitiveType {
 case object BinaryType extends DataType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
   def simpleString: String = "binary"
+}
+
+case class FixedLenBinaryType( length:Int ) extends DataType with PrimitiveType {
+  type JvmType = Array[Byte]
 }
 
 case object BooleanType extends NativeType with PrimitiveType {
