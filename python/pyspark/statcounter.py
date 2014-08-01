@@ -22,7 +22,7 @@ import math
 
 _have_numpy = False
 try:
-    import numpy as np
+    from numpy import maximum, minimum, sqrt
     _have_numpy = True
 except:
     # no NumPy, so fall back on scalar operators
@@ -53,8 +53,8 @@ class StatCounter(object):
             if self.minValue > value:
                 self.minValue = value
         else:
-            self.maxValue = np.maximum(self.maxValue, value)
-            self.minValue = np.minimum(self.minValue, value)
+            self.maxValue = maximum(self.maxValue, value)
+            self.minValue = minimum(self.minValue, value)
 
         return self
 
@@ -86,8 +86,8 @@ class StatCounter(object):
                     self.maxValue = max(self.maxValue, other.maxValue)
                     self.minValue = min(self.minValue, other.minValue)
                 else:
-                    self.maxValue = np.maximum(self.maxValue, other.maxValue)
-                    self.minValue = np.minimum(self.minValue, other.minValue)
+                    self.maxValue = maximum(self.maxValue, other.maxValue)
+                    self.minValue = minimum(self.minValue, other.minValue)
 
                 self.m2 += other.m2 + (delta * delta * self.n * other.n) / (self.n + other.n)
                 self.n += other.n
@@ -134,7 +134,7 @@ class StatCounter(object):
         if not _have_numpy:
             return math.sqrt(self.variance())
         else:
-            return np.sqrt(self.variance())
+            return sqrt(self.variance())
 
     #
     # Return the sample standard deviation of the values, which corrects for bias in estimating the
@@ -144,7 +144,7 @@ class StatCounter(object):
         if not _have_numpy:
             return math.sqrt(self.sampleVariance())
         else:
-            return np.sqrt(self.sampleVariance())
+            return sqrt(self.sampleVariance())
 
     def __repr__(self):
         return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
