@@ -94,8 +94,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         for (elem <- elements) {
           writer.write(elem)
         }
-        writer.commit()
-        writer.close()
+        writer.commitAndClose()
         val segment = writer.fileSegment()
         offsets(id + 1) = segment.offset + segment.length
         lengths(id) = segment.length

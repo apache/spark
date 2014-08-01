@@ -39,16 +39,16 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
   def isOpen: Boolean
 
   /**
-   * Flush the partial writes and commit them as a single atomic block. Return the
-   * number of bytes written for this commit.
+   * Flush the partial writes and commit them as a single atomic block.
    */
-  def commit(): Long
+  def commitAndClose(): Unit
 
   /**
    * Reverts writes that haven't been flushed yet. Callers should invoke this function
-   * when there are runtime exceptions.
+   * when there are runtime exceptions. This method will not throw, though it may be
+   * unsuccessful in truncating written data.
    */
-  def revertPartialWrites()
+  def revertPartialWritesAndClose()
 
   /**
    * Writes an object.
@@ -57,6 +57,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
   /**
    * Returns the file segment of committed data that this Writer has written.
+   * This is only valid after commitAndClose() has been called.
    */
   def fileSegment(): FileSegment
 
@@ -108,7 +109,7 @@ private[spark] class DiskBlockObjectWriter(
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private val initialPosition = file.length()
-  private var lastValidPosition = initialPosition
+  private var finalPosition: Long = -1
   private var initialized = false
   private var _timeWriting = 0L
 
@@ -116,7 +117,6 @@ private[spark] class DiskBlockObjectWriter(
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
-    lastValidPosition = initialPosition
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializer.newInstance().serializeStream(bs)
     initialized = true
@@ -147,28 +147,36 @@ private[spark] class DiskBlockObjectWriter(
 
   override def isOpen: Boolean = objOut != null
 
-  override def commit(): Long = {
+  override def commitAndClose(): Unit = {
     if (initialized) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.
       objOut.flush()
       bs.flush()
-      val prevPos = lastValidPosition
-      lastValidPosition = channel.position()
-      lastValidPosition - prevPos
-    } else {
-      // lastValidPosition is zero if stream is uninitialized
-      lastValidPosition
+      close()
     }
+    finalPosition = file.length()
   }
 
-  override def revertPartialWrites() {
-    if (initialized) {
-      // Discard current writes. We do this by flushing the outstanding writes and
-      // truncate the file to the last valid position.
-      objOut.flush()
-      bs.flush()
-      channel.truncate(lastValidPosition)
+  // Discard current writes. We do this by flushing the outstanding writes and then
+  // truncating the file to its initial position.
+  override def revertPartialWritesAndClose() {
+    try {
+      if (initialized) {
+        objOut.flush()
+        bs.flush()
+        close()
+      }
+
+      val truncateStream = new FileOutputStream(file, true)
+      try {
+        truncateStream.getChannel.truncate(initialPosition)
+      } finally {
+        truncateStream.close()
+      }
+    } catch {
+      case e: Exception =>
+        logError("Uncaught exception while reverting partial writes to file " + file, e)
     }
   }
 
@@ -188,6 +196,7 @@ private[spark] class DiskBlockObjectWriter(
 
   // Only valid if called after commit()
   override def bytesWritten: Long = {
-    lastValidPosition - initialPosition
+    assert(finalPosition != -1, "bytesWritten is only valid after successful commit()")
+    finalPosition - initialPosition
   }
 }
