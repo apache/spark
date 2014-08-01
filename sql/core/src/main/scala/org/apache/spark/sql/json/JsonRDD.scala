@@ -177,7 +177,7 @@ private[sql] object JsonRDD extends Logging {
    * treat the element as String.
    */
   private def typeOfArray(l: Seq[Any]): ArrayType = {
-    val containsNull = l.exists(v => v == null)
+    val containsNull = l.contains(null)
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.

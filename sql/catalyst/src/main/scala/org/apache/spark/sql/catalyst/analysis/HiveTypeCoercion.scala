@@ -346,7 +346,7 @@ trait HiveTypeCoercion {
           case Seq(elseVal) if elseVal.resolved => Some(elseVal.dataType)
           case _ => None
         }.toSeq
-        if (valueTypes.distinct.size == 2 && valueTypes.exists(_ == Some(NullType))) {
+        if (valueTypes.distinct.size == 2 && valueTypes.contains(Some(NullType))) {
           val otherType = valueTypes.filterNot(_ == Some(NullType))(0).get
           val transformedBranches = branches.sliding(2, 2).map {
             case Seq(cond, value) if value.resolved && value.dataType == NullType =>

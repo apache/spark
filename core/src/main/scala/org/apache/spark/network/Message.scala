@@ -58,7 +58,7 @@ private[spark] object Message {
     if (dataBuffers == null) {
       return new BufferMessage(getNewId(), new ArrayBuffer[ByteBuffer], ackId)
     }
-    if (dataBuffers.exists(_ == null)) {
+    if (dataBuffers.contains(null)) {
       throw new Exception("Attempting to create buffer message with null buffer")
     }
     new BufferMessage(getNewId(), new ArrayBuffer[ByteBuffer] ++= dataBuffers, ackId)
