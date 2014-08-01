@@ -36,8 +36,8 @@ trait TestResult {
    * Specific classes implementing this trait should override this method to output test-specific
    * information.
    */
-  def explain: String = {
-    s"pValue = $pValue \n" +
+  override def toString: String = {
+    s"pValue = $pValue \n" + // TODO explain what pValue is
     s"degrees of freedom = $degreesOfFreedom \n" +
     s"statistic = $statistic"
   }
@@ -47,14 +47,14 @@ trait TestResult {
  * :: Experimental ::
  */
 @Experimental
-class ChiSquaredTestResult(override val pValue: Double,
+case class ChiSquaredTestResult(override val pValue: Double,
     override val degreesOfFreedom: Array[Int],
     override val statistic: Double,
     val method: String) extends TestResult {
 
-  override def explain: String = {
+  override def toString: String = {
     "Chi squared test summary: \n" +
     s"method: $method \n" +
-    super.explain
+    super.toString
   }
 }
