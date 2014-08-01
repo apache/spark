@@ -33,7 +33,10 @@ object TwitterUtils {
    *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    *        twitter4j.oauth.accessTokenSecret
    * @param filters Set of filter strings to get only those tweets that match them
-   * @param locations TODO
+   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
+            bounding box defined by those points. Example: Seq(Seq(-180.0,-90.0),Seq(180.0,90.0))
+            gives any geotagged tweet. If locations and filters are both nonempty, then any tweet
+            matching either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
@@ -80,7 +83,10 @@ object TwitterUtils {
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param filters   Set of filter strings to get only those tweets that match them
-   * @param locations TODO
+   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
+            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
+            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
+            either condition may be returned.
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -98,7 +104,10 @@ object TwitterUtils {
    * twitter4j.oauth.accessTokenSecret.
    * @param jssc         JavaStreamingContext object
    * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations    TODO
+   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
+            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
+            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
+            either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
@@ -143,7 +152,10 @@ object TwitterUtils {
    * @param jssc        JavaStreamingContext object
    * @param twitterAuth Twitter4J Authorization
    * @param filters     Set of filter strings to get only those tweets that match them
-   * @param locations   TODO
+   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
+            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
+            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
+            either condition may be returned.
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -161,7 +173,10 @@ object TwitterUtils {
    * @param jssc         JavaStreamingContext object
    * @param twitterAuth  Twitter4J Authorization object
    * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations    TODO
+   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
+            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
+            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
+            either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
