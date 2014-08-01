@@ -173,6 +173,7 @@ object GradientDescent extends Logging {
       // Initialize weights as a column vector
       var weights = Vectors.dense(initialWeights.toArray)
       val n = weights.size
+        .treeAggregate((BDV.zeros[Double](weights.size), 0.0))(
 
       /**
        * For the first iteration, the regVal will be initialized as sum of weight squares
