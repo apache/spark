@@ -23,21 +23,24 @@ import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.rdd.RDD
 
 /**
- * API for statistical functions in MLlib
+ * API for statistical functions in MLlib.
  */
 @Experimental
 object Statistics {
 
   /**
+   * :: Experimental ::
    * Compute the Pearson correlation matrix for the input RDD of Vectors.
    * Columns with 0 covariance produce NaN entries in the correlation matrix.
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @return Pearson correlation matrix comparing columns in X.
    */
+  @Experimental
   def corr(X: RDD[Vector]): Matrix = Correlations.corrMatrix(X)
 
   /**
+   * :: Experimental ::
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
@@ -51,9 +54,11 @@ object Statistics {
    *               Supported: `pearson` (default), `spearman`
    * @return Correlation matrix comparing columns in X.
    */
+  @Experimental
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
 
   /**
+   * :: Experimental ::
    * Compute the Pearson correlation for the input RDDs.
    * Returns NaN if either vector has 0 variance.
    *
@@ -64,9 +69,11 @@ object Statistics {
    * @param y RDD[Double] of the same cardinality as x.
    * @return A Double containing the Pearson correlation between the two input RDD[Double]s
    */
+  @Experimental
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
+   * :: Experimental ::
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
@@ -80,5 +87,6 @@ object Statistics {
    *@return A Double containing the correlation between the two input RDD[Double]s using the
    *         specified method.
    */
+  @Experimental
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 }

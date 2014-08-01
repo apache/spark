@@ -101,7 +101,7 @@ def _serialize_double(d):
     """
     Serialize a double (float or numpy.float64) into a mutually understood format.
     """
-    if type(d) == float or type(d) == float64:
+    if type(d) == float or type(d) == float64 or type(d) == int or type(d) == long:
         d = float64(d)
         ba = bytearray(8)
         _copyto(d, buffer=ba, offset=0, shape=[1], dtype=float64)
@@ -175,6 +175,10 @@ def _deserialize_double(ba, offset=0):
     >>> _deserialize_double(_serialize_double(123.0)) == 123.0
     True
     >>> _deserialize_double(_serialize_double(float64(0.0))) == 0.0
+    True
+    >>> _deserialize_double(_serialize_double(1)) == 1.0
+    True
+    >>> _deserialize_double(_serialize_double(1L)) == 1.0
     True
     >>> x = sys.float_info.max
     >>> _deserialize_double(_serialize_double(sys.float_info.max)) == x

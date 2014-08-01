@@ -49,43 +49,48 @@ private[stat] trait Correlation {
 }
 
 /**
- * Delegates computation to the specific correlation object based on the input method name
- *
- * Currently supported correlations: pearson, spearman.
- * After new correlation algorithms are added, please update the documentation here and in
- * Statistics.scala for the correlation APIs.
- *
- * Maintains the default correlation type, pearson
+ * Delegates computation to the specific correlation object based on the input method name.
  */
 private[stat] object Correlations {
 
-  // Note: after new types of correlations are implemented, please update this map
-  val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmanCorrelation))
-  val defaultCorrName: String = "pearson"
-  val defaultCorr: Correlation = nameToObjectMap(defaultCorrName)
-
-  def corr(x: RDD[Double], y: RDD[Double], method: String = defaultCorrName): Double = {
+  def corr(x: RDD[Double],
+       y: RDD[Double],
+       method: String = CorrelationNames.defaultCorrName): Double = {
     val correlation = getCorrelationFromName(method)
     correlation.computeCorrelation(x, y)
   }
 
-  def corrMatrix(X: RDD[Vector], method: String = defaultCorrName): Matrix = {
+  def corrMatrix(X: RDD[Vector],
+      method: String = CorrelationNames.defaultCorrName): Matrix = {
     val correlation = getCorrelationFromName(method)
     correlation.computeCorrelationMatrix(X)
   }
 
-  /**
-   * Match input correlation name with a known name via simple string matching
-   *
-   * private to stat for ease of unit testing
-   */
-  private[stat] def getCorrelationFromName(method: String): Correlation = {
+  // Match input correlation name with a known name via simple string matching.
+  def getCorrelationFromName(method: String): Correlation = {
     try {
-      nameToObjectMap(method)
+      CorrelationNames.nameToObjectMap(method)
     } catch {
       case nse: NoSuchElementException =>
         throw new IllegalArgumentException("Unrecognized method name. Supported correlations: "
-          + nameToObjectMap.keys.mkString(", "))
+          + CorrelationNames.nameToObjectMap.keys.mkString(", "))
     }
   }
+}
+
+/**
+ * Maintains supported and default correlation names.
+ *
+ * Currently supported correlations: `pearson`, `spearman`.
+ * Current default correlation: `pearson`.
+ *
+ * After new correlation algorithms are added, please update the documentation here and in
+ * Statistics.scala for the correlation APIs.
+ */
+private[mllib] object CorrelationNames {
+
+  // Note: after new types of correlations are implemented, please update this map.
+  val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmanCorrelation))
+  val defaultCorrName: String = "pearson"
+
 }
