@@ -184,7 +184,7 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
         case Some((clazz, runtimeType)) =>
           val sym = intp.symbolOfTerm(id)
           if (sym.isStable) {
-            val param = new NamedParam.Untyped(id, intp valueOfTerm id.orNull)
+            val param = new NamedParam.Untyped(id, intp valueOfTerm id getOrElse null)
             Some(TypeMemberCompletion(tpe, runtimeType, param))
           }
           else default
