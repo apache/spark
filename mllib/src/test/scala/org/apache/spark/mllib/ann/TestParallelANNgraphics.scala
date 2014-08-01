@@ -38,12 +38,12 @@ class OutputCanvas2D( wd: Int, ht: Int ) extends Canvas {
 
   /* input: rdd of (x,y) vectors */
   def setData( rdd: RDD[Vector] ) {
-    points = rdd.toArray
+    points = rdd.collect
     repaint
   }
 
   def setApproxPoints( rdd: RDD[Vector] ) {
-    approxPoints = rdd.toArray
+    approxPoints = rdd.collect
     repaint
   }
 
@@ -148,12 +148,12 @@ class OutputCanvas3D( wd: Int, ht: Int, shadowFrac: Double ) extends Canvas {
 
   /* 3 dimensional (x,y,z) vector */
   def setData( rdd: RDD[Vector] ) {
-    points = rdd.toArray
+    points = rdd.collect
     repaint
   }
 
   def setApproxPoints( rdd: RDD[Vector] ) {
-    approxPoints = rdd.toArray
+    approxPoints = rdd.collect
     repaint
   }
 
