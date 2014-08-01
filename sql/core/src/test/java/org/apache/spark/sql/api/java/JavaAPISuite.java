@@ -28,10 +28,7 @@ import org.junit.runners.Suite;
 import org.junit.runner.RunWith;
 
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.api.java.JavaSQLContext;
-
-// TODO: USE YIN'S API HERE
-import org.apache.spark.sql.catalyst.types.IntegerType$;
+import org.apache.spark.sql.api.java.types.DataType;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -57,14 +54,14 @@ public class JavaAPISuite implements Serializable {
   public void udf1Test() {
     // With Java 8 lambdas:
     // sqlContext.registerFunction(
-    //   "stringLengthTest", (String str) -> str.length(), IntegerType$.MODULE$);
+    //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
 
     sqlContext.registerFunction("stringLengthTest", new UDF1<String, Integer>() {
       @Override
       public Integer call(String str) throws Exception {
         return str.length();
       }
-    }, IntegerType$.MODULE$);
+    }, DataType.IntegerType);
 
     // TODO: Why do we need this cast?
     Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test')").first();
@@ -78,14 +75,14 @@ public class JavaAPISuite implements Serializable {
     // sqlContext.registerFunction(
     //   "stringLengthTest",
     //   (String str1, String str2) -> str1.length() + str2.length,
-    //   IntegerType$.MODULE$);
+    //   DataType.IntegerType);
 
     sqlContext.registerFunction("stringLengthTest", new UDF2<String, String, Integer>() {
       @Override
       public Integer call(String str1, String str2) throws Exception {
         return str1.length() + str2.length();
       }
-    }, IntegerType$.MODULE$);
+    }, DataType.IntegerType);
 
     // TODO: Why do we need this cast?
     Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test', 'test2')").first();
