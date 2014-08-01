@@ -34,8 +34,8 @@ class Statistics(object):
         Methods currently supported: I{pearson (default), spearman}.
 
         If a single RDD of Vectors is passed in, a correlation matrix
-        comparing the columns in the input RDD is returned. Note that the
-        method name can be passed in as the second argument without C{method=}.
+        comparing the columns in the input RDD is returned. Use C{method=}
+        to specify the method to be used for single RDD inout.
         If two RDDs of floats are passed in, a single float is returned.
 
         >>> x = sc.parallelize([1.0, 0.0, -2.0], 2)
@@ -63,6 +63,11 @@ class Statistics(object):
                [ 0.10540926,  1.        ,         nan,  0.9486833 ],
                [        nan,         nan,  1.        ,         nan],
                [ 0.4       ,  0.9486833 ,         nan,  1.        ]])
+        >>> try:
+        ...     Statistics.corr(rdd, "spearman")
+        ...     print "Method name as second argument without 'method=' shouldn't be allowed."
+        ... except TypeError:
+        ...     pass
         """
         sc = x.ctx
         # Check inputs to determine whether a single value or a matrix is needed for output.
