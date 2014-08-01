@@ -265,7 +265,7 @@ class PythonMLLibAPI extends Serializable {
       lrAlg.optimizer.setUpdater(new L1Updater)
     else if (regType != "none")
       throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + "Can only be initialized using the following string values: [l1, l2, none].")
+        + " Can only be initialized using the following string values: [l1, l2, none].")
     trainRegressionModel(
       (data, initialWeights) =>
         lrAlg.run(data, initialWeights),
