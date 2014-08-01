@@ -838,13 +838,17 @@ class SQLContext:
         ValueError:...
 
         >>> from datetime import datetime
-        >>> allTypes = sc.parallelize([Row(int=1, string="string",
-        ...     double=1.0, long=1L, boolean=True, list=[1, 2, 3],
-        ...     time=datetime(2010, 1, 1, 1, 1, 1), dict={"a": 1})])
-        >>> srdd = sqlCtx.inferSchema(allTypes).map(lambda x: (x.int, x.string,
-        ... x.double, x.long, x.boolean, x.time, x.dict["a"], x.list))
-        >>> srdd.collect()[0]
-        (1, u'string', 1.0, 1, True, ...(2010, 1, 1, 1, 1, 1), 1, [1, 2, 3])
+        >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
+        ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
+        ...     time=datetime(2014, 8, 1, 14, 1, 5))])
+        >>> srdd = sqlCtx.inferSchema(allTypes)
+        >>> srdd.registerAsTable("allTypes")
+        >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
+        ...            'from allTypes where b and i > 0').collect()
+        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
+        >>> srdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time,
+        ...                     x.row.a, x.list)).collect()
+        [(1, u'string', 1.0, 1, True, ...(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -872,7 +876,10 @@ class SQLContext:
         and types. Nested collections are supported, which include array,
         dict, list, Row, tuple, namedtuple, or object.
 
-        Each row in `rdd` should be Row object or namedtuple or objects,
+        All the rows in `rdd` should have the same type with the first one,
+        or it will cause runtime exceptions.
+
+        Each row could be L{pyspark.sql.Row} object or namedtuple or objects,
         using dict is deprecated.
 
         >>> rdd = sc.parallelize(
@@ -917,7 +924,13 @@ class SQLContext:
         """
         Applies the given schema to the given RDD of L{tuple} or L{list}s.
 
+        These tuples or lists can contain complex nested structures like
+        lists, maps or nested rows.
+
         The schema should be a StructType.
+
+        It is important that the schema matches the types of the objects
+        in each row or exceptions could be thrown at runtime.
 
         >>> rdd2 = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
         >>> schema = StructType([StructField("field1", IntegerType(), False),
@@ -931,7 +944,7 @@ class SQLContext:
         >>> from datetime import datetime
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
-        ...     {"a": 1}, {"b": 2}, [1, 2, 3], None)])
+        ...     {"a": 1}, (2,), [1, 2, 3], None)])
         >>> schema = StructType([
         ...     StructField("byte", ByteType(), False),
         ...     StructField("short", ShortType(), False),
@@ -951,7 +964,7 @@ class SQLContext:
 
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
-        ...     {"a": 1}, {"b": 2}, [1, 2, 3])])
+        ...     {"a": 1}, (2,), [1, 2, 3])])
         >>> abstract = "byte short float time map{} struct(b) list[]"
         >>> schema = _parse_schema_abstract(abstract)
         >>> typedSchema = _infer_schema_type(rdd.first(), schema)
