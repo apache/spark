@@ -33,10 +33,13 @@ object Gini extends Impurity {
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
-   * @return information value
+   * @return information value, or 0 if totalCount = 0
    */
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
+    if (totalCount == 0) {
+      return 0
+    }
     val numClasses = counts.length
     var impurity = 1.0
     var classIndex = 0
@@ -54,6 +57,7 @@ object Gini extends Impurity {
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
+   * @return information value, or 0 if count = 0
    */
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
