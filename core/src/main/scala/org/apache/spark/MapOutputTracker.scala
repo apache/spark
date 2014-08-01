@@ -291,18 +291,24 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   // Return the list of locations and blockSizes for each reducer.
+  // The map is keyed by reducerId and for each reducer the value contains the array
+  // of (location, size) of map outputs.
+  //
+  // This method is not thread-safe
   def getStatusByReducer(shuffleId: Int): Option[Map[Int, Array[(BlockManagerId, Long)]]] = {
     if (!statusByReducer.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
       val statuses = mapStatuses(shuffleId)
-      val numReducers = statuses(0).compressedSizes.length
-      statusByReducer(shuffleId) = new HashMap[Int, Array[(BlockManagerId, Long)]]
-      var r = 0
-      while (r < numReducers) {
-        val locs = statuses.map { s =>
-          (s.location, MapOutputTracker.decompressSize(s.compressedSizes(r)))
+      if (statuses.length > 0) {
+        val numReducers = statuses(0).compressedSizes.length
+        statusByReducer(shuffleId) = new HashMap[Int, Array[(BlockManagerId, Long)]]
+        var r = 0
+        while (r < numReducers) {
+          val locs = statuses.map { s =>
+            (s.location, MapOutputTracker.decompressSize(s.compressedSizes(r)))
+          }
+          statusByReducer(shuffleId) += (r -> locs)
+          r = r + 1
         }
-        statusByReducer(shuffleId) += (r -> locs)
-        r = r + 1
       }
     }
     statusByReducer.get(shuffleId)
