@@ -290,8 +290,8 @@ class ALS private (
     val usersOut = unblockFactors(users, userOutLinks)
     val productsOut = unblockFactors(products, productOutLinks)
 
-    usersOut.setName("usersOut").persist()
-    productsOut.setName("productsOut").persist()
+    usersOut.setName("usersOut").persist(StorageLevel.MEMORY_AND_DISK)
+    productsOut.setName("productsOut").persist(StorageLevel.MEMORY_AND_DISK)
 
     // Materialize usersOut and productsOut.
     usersOut.count()
