@@ -49,6 +49,7 @@ protected[sql] trait UdfRegistration {
         | envVars: $envVars
         | pythonIncludes: $pythonIncludes
         | pythonExec: $pythonExec
+        | dataType: $dataType
       """.stripMargin)
 
 
@@ -59,8 +60,7 @@ protected[sql] trait UdfRegistration {
         pythonIncludes,
         pythonExec,
         accumulator,
-        org.apache.spark.sql.catalyst.types.StringType,
-        // FIXME: HiveMetastoreTypes.toDataType(dataType),
+        parseDataType(dataType),
         e)
 
     functionRegistry.registerFunction(name, builder)

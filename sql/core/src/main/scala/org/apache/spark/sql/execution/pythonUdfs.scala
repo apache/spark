@@ -81,6 +81,8 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
 
         // Rewrite the child that has the input required for the UDF
         val newChildren = l.children.map { child =>
+          // Check to make sure that the UDF can be evaluated with only the input of this child.
+          // Other cases are disallowed as they are ambiguous or would require a cartisian product.
           if (udf.references.subsetOf(child.outputSet)) {
             evaluation = EvaluatePython(udf, child)
             evaluation
@@ -132,16 +134,11 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
     val parent = childResults.mapPartitions { iter =>
       val pickle = new Pickler
       val currentRow = newMutableProjection(udf.children, child.output)()
-      iter.map { inputRow =>
-        val toBePickled = currentRow(inputRow)
-        log.debug(s"toBePickled: $toBePickled")
-        if(children.length == 1) {
-          pickle.dumps(toBePickled.toArray)
-        } else {
-          pickle.dumps(Array(toBePickled.toArray))
-        }
+      iter.grouped(1000).map { inputRows =>
+        val toBePickled = inputRows.map(currentRow(_).toArray).toArray
+        pickle.dumps(toBePickled)
       }
-    }.asInstanceOf[RDD[Any]]
+    }
 
     val pyRDD = new PythonRDD(
       parent,
@@ -155,9 +152,8 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
     ).mapPartitions { iter =>
       val pickle = new Unpickler
       iter.flatMap { pickedResult =>
-        val res = pickle.loads(pickedResult)
-        log.debug(s"pickleOutput: $res")
-        res.asInstanceOf[java.util.ArrayList[Any]]
+        val unpickledBatch = pickle.loads(pickedResult)
+        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]]
       }
     }.mapPartitions { iter =>
       val row = new GenericMutableRow(1)
@@ -166,7 +162,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
           case StringType => result.toString
           case other => result
         }
-        log.debug(s"resultRow: $row")
         row: Row
       }
     }

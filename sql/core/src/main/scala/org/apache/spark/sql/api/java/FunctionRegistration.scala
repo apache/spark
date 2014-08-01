@@ -18,7 +18,6 @@
 package org.apache.spark.sql.api.java
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUdf}
-import org.apache.spark.sql.api.java.types.DataType
 import org.apache.spark.sql.types.util.DataTypeConversions._
 
 /**
@@ -37,7 +36,8 @@ private[java] trait FunctionRegistration {
      val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs, Any]]"
      val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
      println(s"""
-         |def registerFunction(name: String, f: UDF$i[$extTypeArgs, _], @transient dataType: DataType) = {
+         |def registerFunction(
+         |    name: String, f: UDF$i[$extTypeArgs, _], @transient dataType: DataType) = {
          |  val scalaType = asScalaDataType(dataType)
          |  sqlContext.functionRegistry.registerFunction(
          |    name,

@@ -28,7 +28,6 @@ import org.junit.runners.Suite;
 import org.junit.runner.RunWith;
 
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.api.java.types.DataType;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
