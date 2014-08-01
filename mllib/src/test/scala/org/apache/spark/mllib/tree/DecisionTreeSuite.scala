@@ -42,6 +42,18 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(accuracy >= requiredAccuracy)
   }
 
+  def validateRegressor(
+      model: DecisionTreeModel,
+      input: Seq[LabeledPoint],
+      requiredMSE: Double) {
+    val predictions = input.map(x => model.predict(x.features))
+    val squaredError = predictions.zip(input).map { case (prediction, expected) =>
+      (prediction - expected.label) * (prediction - expected.label)
+    }.sum
+    val mse = squaredError / input.length
+    assert(mse <= requiredMSE)
+  }
+
   test("split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
@@ -452,6 +464,23 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain > 0)
     assert(stats.predict === 0.6)
     assert(stats.impurity > 0.2)
+  }
+
+  test("regression stump with categorical variables of arity 2") {
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length === 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(
+      Regression,
+      Variance,
+      maxDepth = 2,
+      maxBins = 100,
+      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+
+    val model = DecisionTree.train(rdd, strategy)
+    validateRegressor(model, arr, 0.0)
+    assert(model.numNodes === 3)
+    assert(model.depth === 1)
   }
 
   test("stump with fixed label 0 for Gini") {
