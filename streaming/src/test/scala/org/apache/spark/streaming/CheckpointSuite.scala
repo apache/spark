@@ -267,9 +267,9 @@ class CheckpointSuite extends TestSuiteBase {
     // Verify whether files created have been recorded correctly or not
     var fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
     def recordedFiles = fileInputDStream.files.values.flatMap(x => x)
-    assert(recordedFiles.filter(_.endsWith("1")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("2")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("3")).nonEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
@@ -282,9 +282,9 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("*********** RESTARTING ************")
     ssc = new StreamingContext(checkpointDir)
     fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-    assert(recordedFiles.filter(_.endsWith("1")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("2")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("3")).nonEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Restart stream computation
     ssc.start()
@@ -298,14 +298,14 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.stop()
 
     // Verify whether files created while the driver was down have been recorded or not
-    assert(recordedFiles.filter(_.endsWith("4")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("5")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("6")).nonEmpty)
+    assert(recordedFiles.exists(_.endsWith("4")))
+    assert(recordedFiles.exists(_.endsWith("5")))
+    assert(recordedFiles.exists(_.endsWith("6")))
 
     // Verify whether new files created after recover have been recorded or not
-    assert(recordedFiles.filter(_.endsWith("7")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("8")).nonEmpty)
-    assert(recordedFiles.filter(_.endsWith("9")).nonEmpty)
+    assert(recordedFiles.exists(_.endsWith("7")))
+    assert(recordedFiles.exists(_.endsWith("8")))
+    assert(recordedFiles.exists(_.endsWith("9")))
 
     // Append the new output to the old buffer
     outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
