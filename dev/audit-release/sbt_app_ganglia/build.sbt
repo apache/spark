@@ -23,7 +23,7 @@ scalaVersion := System.getenv.get("SCALA_VERSION")
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % System.getenv.get("SPARK_VERSION")
 
-libraryDependencies += "org.apache.spark" %% "spark-ganglia-lgpl" % System.getenv.get("SPARK_VERSION")
+libraryDependencies += "org.apache.spark" %% "ganglia-lgpl" % System.getenv.get("SPARK_VERSION")
 
 resolvers ++= Seq(
   "Spark Release Repository" at System.getenv.get("SPARK_RELEASE_REPOSITORY"),

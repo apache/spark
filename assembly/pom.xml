@@ -176,7 +176,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>spark-ganglia-lgpl</id>
+      <id>ganglia-lgpl</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>

@@ -62,8 +62,8 @@ object SparkBuild extends PomBuild {
     var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq.empty
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
-      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
-      profiles ++= Seq("spark-ganglia-lgpl")
+      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pganglia-lgpl flag.")
+      profiles ++= Seq("ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
       println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")

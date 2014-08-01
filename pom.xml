@@ -1007,9 +1007,9 @@
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
-      <id>spark-ganglia-lgpl</id>
+      <id>ganglia-lgpl</id>
       <modules>
-        <module>extras/spark-ganglia-lgpl</module>
+        <module>extras/ganglia-lgpl</module>
       </modules>
     </profile>
 

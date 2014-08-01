@@ -28,11 +28,11 @@ object SimpleApp {
     val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
     val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
     if (!foundConsole) {
-      println("Console sink not loaded via spark-core")
+      println("Console sink not loaded via ganglia-lgpl")
       System.exit(-1)
     }
     if (!foundGanglia) {
-      println("Ganglia sink not loaded via spark-ganglia-lgpl")
+      println("Ganglia sink not loaded via ganglia-lgpl")
       System.exit(-1)
     }
   }
