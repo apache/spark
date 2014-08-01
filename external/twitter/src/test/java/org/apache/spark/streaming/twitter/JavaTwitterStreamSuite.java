@@ -32,9 +32,6 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   public void testTwitterStream() {
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
     double[][] locations = {{-180.0,-90.0},{180.0,90.0}};
-//    double[][] locations = (double[][])Arrays.<Double[]>asList(
-//        (double[])Arrays.<Double>asList(-180.0, -90.0).toArray(),
-//        (double[])Arrays.<Double>asList(180.0, 90.0).toArray()).toArray();
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
