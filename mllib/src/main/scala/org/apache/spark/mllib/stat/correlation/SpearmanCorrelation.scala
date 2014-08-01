@@ -64,7 +64,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       ranks(k) = getRanks(column)
     }
 
-    val ranksMat: RDD[Vector] = makeRankMatrix(ranks, X.partitions.size)
+    val ranksMat: RDD[Vector] = makeRankMatrix(ranks, X)
     PearsonCorrelation.computeCorrelationMatrix(ranksMat)
   }
 
@@ -116,8 +116,8 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     ranks
   }
 
-  private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], numPartitions: Int): RDD[Vector] = {
-    val partitioner = new HashPartitioner(numPartitions)
+  private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], input: RDD[Vector]): RDD[Vector] = {
+    val partitioner = new HashPartitioner(input.partitions.size)
     val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
     cogrouped.map {
       case (_, values: Array[Iterable[_]]) =>
