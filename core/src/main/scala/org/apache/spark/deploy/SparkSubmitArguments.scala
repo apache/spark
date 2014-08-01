@@ -311,6 +311,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         verbose = true
         parse(tail)
 
+      case "--" :: tail =>
+        if (inSparkOpts) {
+          SparkSubmit.printErrorAndExit(
+            "Application option separator \"--\" must be after the primary resource " +
+              "(i.e., application jar file or Python file).")
+        } else {
+          childArgs ++= tail.filter(_.nonEmpty)
+        }
+
       case value :: tail =>
         if (inSparkOpts) {
           value match {
@@ -377,8 +386,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
-        |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
+        |  --help, -h                  Show this help message and exit.
+        |  --verbose, -v               Print additional debug output.
+        |
+        |  --                          A "--" signals the end of spark-submit options, all command
+        |                              line arguments after "--" are passed to the application.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).

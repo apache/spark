@@ -26,11 +26,16 @@ set -o posix
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./sbin/start-thriftserver [options]"
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+
+if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
+  echo "Usage: ./sbin/start-thriftserver.sh [options] [--] [thrift server options]"
+  exec "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  echo
+  echo "Thrift server options:"
+  exec "$FWDIR"/bin/spark-submit spark-internal --class $CLASS -- -H 2>&1 | tail -n +3
+  echo
   exit 0
 fi
 
-CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@
