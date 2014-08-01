@@ -67,6 +67,8 @@ def worker(sock):
     outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
     exit_code = 0
     try:
+        write_int(0, outfile)  # Acknowledge that the fork was successful
+        outfile.flush()
         worker_main(infile, outfile)
     except SystemExit as exc:
         exit_code = exc.code
@@ -128,16 +130,24 @@ def manager():
             if listen_sock in ready_fds:
                 sock, addr = listen_sock.accept()
                 # Launch a worker process
-                if os.fork() == 0:
-                    listen_sock.close()
-                    try:
-                        worker(sock)
-                    except:
-                        traceback.print_exc()
-                        os._exit(1)
+                try:
+                    fork_return_code = os.fork()
+                    if fork_return_code == 0:
+                        listen_sock.close()
+                        try:
+                            worker(sock)
+                        except:
+                            traceback.print_exc()
+                            os._exit(1)
+                        else:
+                            os._exit(0)
                     else:
-                        os._exit(0)
-                else:
+                        sock.close()
+                except OSError as e:
+                    print >> sys.stderr, "Daemon failed to fork PySpark worker: %s" % e
+                    outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
+                    write_int(-1, outfile)  # Signal that the fork failed
+                    outfile.flush()
                     sock.close()
     finally:
         shutdown(1)

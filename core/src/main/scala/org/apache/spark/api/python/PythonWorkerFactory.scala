@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, InputStream, OutputStreamWriter}
-import java.net.{InetAddress, ServerSocket, Socket, SocketException}
+import java.net._
 
 import scala.collection.JavaConversions._
 
@@ -64,10 +64,16 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       // Attempt to connect, restart and retry once if it fails
       try {
-        new Socket(daemonHost, daemonPort)
+        val socket = new Socket(daemonHost, daemonPort)
+        val launchStatus = new DataInputStream(socket.getInputStream).readInt()
+        if (launchStatus != 0) {
+          logWarning("Python daemon failed to launch worker")
+        }
+        socket
       } catch {
         case exc: SocketException =>
-          logWarning("Python daemon unexpectedly quit, attempting to restart")
+          logWarning("Failed to open socket to Python daemon:", exc)
+          logWarning("Assuming that daemon unexpectedly quit, attempting to restart")
           stopDaemon()
           startDaemon()
           new Socket(daemonHost, daemonPort)
