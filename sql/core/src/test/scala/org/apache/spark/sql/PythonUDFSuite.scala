@@ -171,7 +171,7 @@ class PythonUDFSuite extends QueryTest {
    checkAnswer(
      sql("SELECT test(value) FROM testData"),
      testData.select('value).map(r =>
-       new GenericRow(Array[Any]("test:" + r(0).toString))).collect().toSeq)
+       new GenericRow(Array[Any]("test:" + r(0)))).collect().toSeq)
   }
 
   test("Multiple argument UDF") {
