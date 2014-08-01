@@ -48,9 +48,11 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   /** Filter RDD info to include only those with cached partitions */
   def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
 
-  /** Update each RDD's info to reflect any updates in the RDD's storage status */
+  /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
-    StorageUtils.updateRddInfo(_rddInfoMap.values.toSeq, storageStatusList, updatedBlocks)
+    val rddIdsToUpdate = updatedBlocks.flatMap { case (bid, _) => bid.asRDDId.map(_.rddId) }.toSet
+    val rddInfosToUpdate = _rddInfoMap.values.toSeq.filter { s => rddIdsToUpdate.contains(s.id) }
+    StorageUtils.updateRddInfo(rddInfosToUpdate, storageStatusList, updatedBlocks)
   }
 
   /**
