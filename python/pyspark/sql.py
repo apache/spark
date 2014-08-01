@@ -887,18 +887,7 @@ class SQLContext:
         """
         Applies the given schema to the given RDD of L{tuple} or L{list}s.
 
-
-        The schema could be a StructType or string, such as "name value".
-        The schema can have nested struct (struct, list, map).
-
-        If schema is a string, the fields are seperated by space.
-        Each field can be followed by composit type immediately
-        (without space), for example:
-
-            "name address(city zipcode) items[] props{key value}"
-
-        which will be filled with infered datetype from first row, so you
-        not have empty value in the first row.
+        The schema should be a StructType.
 
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
@@ -932,20 +921,19 @@ class SQLContext:
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, {"b": 2}, [1, 2, 3])])
-        >>> schema = "byte short float time map{} struct(b) list[]"
-        >>> srdd = sqlCtx.applySchema(rdd, schema)
+        >>> abstract = "byte short float time map{} struct(b) list[]"
+        >>> schema = _parse_schema_abstract(abstract)
+        >>> typedSchema = _infer_schema_type(rdd.first(), schema)
+        >>> srdd = sqlCtx.applySchema(rdd, typedSchema)
         >>> srdd.collect()
         [Row(byte=127, short=-32768, float=1.0, time=..., list=[1, 2, 3])]
-
         """
 
         first = rdd.first()
         if not isinstance(first, (tuple, list)):
             raise ValueError("Can not apply schema to type: %s" % type(first))
 
-        if isinstance(schema, basestring):
-            schema = _parse_schema_abstract(schema)
-            schema = _infer_schema_type(first, schema)
+        # TODO: verify schema with first few rows
 
         batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
         jrdd = self._pythonToJava(rdd._jrdd, batched)
