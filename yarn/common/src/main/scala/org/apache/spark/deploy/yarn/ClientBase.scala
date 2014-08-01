@@ -224,7 +224,7 @@ trait ClientBase extends Logging {
     List(
       (ClientBase.SPARK_JAR, ClientBase.sparkJar(sparkConf), ClientBase.CONF_SPARK_JAR),
       (ClientBase.APP_JAR, args.userJar, ClientBase.CONF_SPARK_USER_JAR),
-      ("log4j.properties", oldLog4jConf.getOrElse(null), null)
+      ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case(destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {

@@ -151,7 +151,7 @@ private[streaming] abstract class ReceiverSupervisor(
   def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
     Future {
       logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-        error.getOrElse(null))
+        error.orNull)
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)

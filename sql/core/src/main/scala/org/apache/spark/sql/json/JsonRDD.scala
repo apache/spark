@@ -376,7 +376,7 @@ private[sql] object JsonRDD extends Logging {
       // Other cases
       case (StructField(name, dataType, _), i) =>
         row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          enforceCorrectType(_, dataType)).getOrElse(null))
+          enforceCorrectType(_, dataType)).orNull)
     }
 
     row

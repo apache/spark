@@ -156,7 +156,7 @@ private[yarn] class YarnAllocationHandler(
         val maxExpectedHostCount = preferredHostToCount.getOrElse(candidateHost, 0)
         val requiredHostCount = maxExpectedHostCount - allocatedContainersOnHost(candidateHost)
 
-        var remainingContainers = hostToContainers.get(candidateHost).getOrElse(null)
+        var remainingContainers = hostToContainers.get(candidateHost).orNull
         assert(remainingContainers != null)
 
         if (requiredHostCount >= remainingContainers.size){
@@ -313,10 +313,10 @@ private[yarn] class YarnAllocationHandler(
 
         allocatedHostToContainersMap.synchronized {
           if (allocatedContainerToHostMap.containsKey(containerId)) {
-            val host = allocatedContainerToHostMap.get(containerId).getOrElse(null)
+            val host = allocatedContainerToHostMap.get(containerId).orNull
             assert (host != null)
 
-            val containerSet = allocatedHostToContainersMap.get(host).getOrElse(null)
+            val containerSet = allocatedHostToContainersMap.get(host).orNull
             assert (containerSet != null)
 
             containerSet -= containerId
