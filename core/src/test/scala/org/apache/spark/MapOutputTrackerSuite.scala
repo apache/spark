@@ -17,11 +17,6 @@
 
 package org.apache.spark
 
-import java.util.Date
-import java.util.concurrent._
-
-import org.apache.log4j.Logger
-
 import scala.concurrent.Await
 
 import akka.actor._
@@ -34,7 +29,6 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
 
 class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
-  val logger = Logger.getLogger(getClass.getName)
   private val conf = new SparkConf
   test("compressSize") {
     assert(MapOutputTracker.compressSize(0L) === 0)
@@ -143,75 +137,28 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
-    // Test single shuffle execution
-    val shuffleId = 10
-    val start = new Date().getTime
-    invokeRemoteFetch(masterTracker, slaveTracker, shuffleId)
-    val singleFetchDuration = new Date().getTime - start
-
-    // Test Parallel execution of shuffles
-    val NShuffles = 20
-    import collection.mutable.ArrayBuffer
-    val threads = new ArrayBuffer[Thread](NShuffles)
-    val barrier = new CyclicBarrier(NShuffles)
-    val latch = new CountDownLatch(NShuffles)
-
-    class ShuffleTesterThread(threadNum: Int, barrier: CyclicBarrier, latch : CountDownLatch)
-      extends Thread(s"ShuffleTester$threadNum") {
-      override def run() = {
-        val shuffleId = 20+threadNum
-        barrier.await
-
-        invokeRemoteFetch(masterTracker, slaveTracker, shuffleId)
-        latch.countDown()
-      }
-    }
-
-    for (shuffle <- 1 to NShuffles) {
-      val t = new ShuffleTesterThread(shuffle, barrier, latch)
-      threads += t
-      t.start()
-    }
-    val pstart = new Date().getTime
-    latch.await(10, TimeUnit.SECONDS)
-    assert(latch.getCount == 0, "Not all shuffles completed within allowed time period")
-    val parallelFetchDuration = new Date().getTime - pstart
-    log(s"All $NShuffles fetches Completed: duration=$parallelFetchDuration "
-      + s"(vs single fetch=$singleFetchDuration)")
-        assert (parallelFetchDuration > singleFetchDuration
-          && parallelFetchDuration <= (NShuffles * 0.4) * singleFetchDuration,
-        "Parallel remote fetch should show strong sub-linear execution time increase "
-          + s" vs number of remote Fetches. "
-          + s"Actual: single fetch=$singleFetchDuration $NShuffles-threads=$parallelFetchDuration")
-
-  }
-
-  def invokeRemoteFetch(masterTracker: MapOutputTrackerMaster,
-                        slaveTracker: MapOutputTrackerWorker, shuffleId: Int): Unit = {
-    masterTracker.registerShuffle(shuffleId, 1)
+    masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(shuffleId, 0) }
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(shuffleId, 0, new MapStatus(
+    masterTracker.registerMapOutput(10, 0, new MapStatus(
       BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getServerStatuses(shuffleId, 0).toSeq ===
+    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
 
-    masterTracker.unregisterMapOutput(shuffleId, 0, BlockManagerId("a", "hostA", 1000, 0))
+    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000, 0))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(shuffleId, 0) }
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
     // failure should be cached
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(shuffleId, 0) }
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
   }
-
-  def log(msg: String) = logger.info(msg)
 
   test("remote fetch below akka frame size") {
     val newConf = new SparkConf

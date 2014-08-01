@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io._
-import java.util.concurrent.ConcurrentSkipListSet
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.{HashSet, HashMap, Map}
@@ -96,7 +95,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected val epochLock = new AnyRef
 
   /** Remembers which map output locations are currently being fetched on a worker. */
-  private val fetching = new ConcurrentSkipListSet[Int]
+  private val fetching = new HashSet[Int]
 
   /**
    * Send a message to the trackerActor and get its result within a default timeout, or
@@ -131,13 +130,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       var fetchedStatuses: Array[MapStatus] = null
-      val monitor = shuffleId.toString.intern
-      monitor.synchronized {
+      fetching.synchronized {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
           while (fetching.contains(shuffleId)) {
             try {
-              monitor.wait()
+              fetching.wait()
             } catch {
               case e: InterruptedException =>
             }
@@ -149,7 +147,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
         if (fetchedStatuses == null) {
           // We have to do the fetch, get others to wait for us.
-          fetching.add(shuffleId)
+          fetching += shuffleId
         }
       }
 
@@ -164,9 +162,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
         } finally {
-          monitor.synchronized {
-            fetching.remove(shuffleId)
-            monitor.notifyAll()
+          fetching.synchronized {
+            fetching -= shuffleId
+            fetching.notifyAll()
           }
         }
       }
