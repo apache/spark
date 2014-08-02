@@ -145,7 +145,7 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
   }
 }
 
-private[random] class MockDistro extends DistributionGenerator {
+private[random] class MockDistro extends RandomDataGenerator[Double] {
 
   var seed = 0L
 
