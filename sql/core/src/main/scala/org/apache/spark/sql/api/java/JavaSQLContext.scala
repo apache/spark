@@ -53,7 +53,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * {{{
    *   JavaSQLContext sqlCtx = new JavaSQLContext(...)
    *
-   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerAsTable("people")
+   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerTempTable("people")
    *   sqlCtx.sql("INSERT INTO people SELECT 'michael', 29")
    * }}}
    *
