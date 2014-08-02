@@ -122,7 +122,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
     val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
 
-    sc.testExecutorEnvs.foreach { case (key, value) =>
+    sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
         .setValue(value)
@@ -207,10 +207,12 @@ private[spark] class CoarseMesosSchedulerBackend(
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem", sc.executorMemory))
             .build()
-          d.launchTasks(offer.getId, Collections.singletonList(task), filters)
+          d.launchTasks(
+            Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
         } else {
           // Filter it out
-          d.launchTasks(offer.getId, Collections.emptyList[MesosTaskInfo](), filters)
+          d.launchTasks(
+            Collections.singleton(offer.getId), Collections.emptyList[MesosTaskInfo](), filters)
         }
       }
     }

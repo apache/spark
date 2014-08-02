@@ -28,7 +28,7 @@ private[spark] object ReceiverTest {
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       /* println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis) */
-      val buffer = ByteBuffer.wrap("response".getBytes)
+      val buffer = ByteBuffer.wrap("response".getBytes("utf-8"))
       Some(Message.createBufferMessage(buffer, msg.id))
     })
     Thread.currentThread.join()

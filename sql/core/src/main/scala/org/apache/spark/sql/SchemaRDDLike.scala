@@ -20,13 +20,14 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.SparkLogicalPlan
 
 /**
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
  */
-trait SchemaRDDLike {
+private[sql] trait SchemaRDDLike {
   @transient val sqlContext: SQLContext
-  @transient protected[spark] val logicalPlan: LogicalPlan
+  @transient val baseLogicalPlan: LogicalPlan
 
   private[sql] def baseSchemaRDD: SchemaRDD
 
@@ -48,7 +49,17 @@ trait SchemaRDDLike {
    */
   @transient
   @DeveloperApi
-  lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+  lazy val queryExecution = sqlContext.executePlan(baseLogicalPlan)
+
+  @transient protected[spark] val logicalPlan: LogicalPlan = baseLogicalPlan match {
+    // For various commands (like DDL) and queries with side effects, we force query optimization to
+    // happen right away to let these side effects take place eagerly.
+    case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
+      queryExecution.toRdd
+      SparkLogicalPlan(queryExecution.executedPlan)(sqlContext)
+    case _ =>
+      baseLogicalPlan
+  }
 
   override def toString =
     s"""${super.toString}
@@ -111,4 +122,16 @@ trait SchemaRDDLike {
   @Experimental
   def saveAsTable(tableName: String): Unit =
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
+
+  /** Returns the schema as a string in the tree format.
+   *
+   * @group schema
+   */
+  def schemaString: String = baseSchemaRDD.schema.treeString
+
+  /** Prints out the schema.
+   *
+   * @group schema
+   */
+  def printSchema(): Unit = println(schemaString)
 }

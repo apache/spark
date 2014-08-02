@@ -22,59 +22,34 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
 
-private[spark]
+/**
+ * :: DeveloperApi ::
+ * Storage information for each BlockManager.
+ */
+@DeveloperApi
 class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMem: Long,
     val blocks: mutable.Map[BlockId, BlockStatus] = mutable.Map.empty) {
 
-  def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
+  def memUsed = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
   def memUsedByRDD(rddId: Int) =
     rddBlocks.filterKeys(_.rddId == rddId).values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
-  def diskUsed() = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
+  def diskUsed = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 
   def diskUsedByRDD(rddId: Int) =
     rddBlocks.filterKeys(_.rddId == rddId).values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 
-  def memRemaining : Long = maxMem - memUsed()
+  def memRemaining: Long = maxMem - memUsed
 
   def rddBlocks = blocks.collect { case (rdd: RDDBlockId, status) => (rdd, status) }
 }
 
-@DeveloperApi
-private[spark]
-class RDDInfo(
-    val id: Int,
-    val name: String,
-    val numPartitions: Int,
-    val storageLevel: StorageLevel)
-  extends Ordered[RDDInfo] {
-
-  var numCachedPartitions = 0
-  var memSize = 0L
-  var diskSize = 0L
-  var tachyonSize = 0L
-
-  override def toString = {
-    import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" +
-      "TachyonSize: %s; DiskSize: %s").format(
-        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
-  }
-
-  override def compare(that: RDDInfo) = {
-    this.id - that.id
-  }
-}
-
-/* Helper methods for storage-related objects */
-private[spark]
-object StorageUtils {
+/** Helper methods for storage-related objects. */
+private[spark] object StorageUtils {
 
   /**
    * Returns basic information of all RDDs persisted in the given SparkContext. This does not
@@ -100,24 +75,36 @@ object StorageUtils {
   /** Returns storage information of all RDDs in the given list. */
   def rddInfoFromStorageStatus(
       storageStatuses: Seq[StorageStatus],
-      rddInfos: Seq[RDDInfo]): Array[RDDInfo] = {
+      rddInfos: Seq[RDDInfo],
+      updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty): Array[RDDInfo] = {
+
+    // Mapping from a block ID -> its status
+    val blockMap = mutable.Map(storageStatuses.flatMap(_.rddBlocks): _*)
+
+    // Record updated blocks, if any
+    updatedBlocks
+      .collect { case (id: RDDBlockId, status) => (id, status) }
+      .foreach { case (id, status) => blockMap(id) = status }
 
     // Mapping from RDD ID -> an array of associated BlockStatuses
-    val blockStatusMap = storageStatuses.flatMap(_.rddBlocks).toMap
+    val rddBlockMap = blockMap
       .groupBy { case (k, _) => k.rddId }
       .mapValues(_.values.toArray)
 
     // Mapping from RDD ID -> the associated RDDInfo (with potentially outdated storage information)
     val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
 
-    val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
+    val rddStorageInfos = rddBlockMap.flatMap { case (rddId, blocks) =>
       // Add up memory, disk and Tachyon sizes
       val persistedBlocks =
         blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
+      val _storageLevel =
+        if (persistedBlocks.length > 0) persistedBlocks(0).storageLevel else StorageLevel.NONE
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
       val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
       val tachyonSize = persistedBlocks.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
       rddInfoMap.get(rddId).map { rddInfo =>
+        rddInfo.storageLevel = _storageLevel
         rddInfo.numCachedPartitions = persistedBlocks.length
         rddInfo.memSize = memSize
         rddInfo.diskSize = diskSize

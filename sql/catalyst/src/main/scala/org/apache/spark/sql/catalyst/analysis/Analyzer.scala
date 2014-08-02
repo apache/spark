@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -53,10 +53,26 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
+      UnresolvedHavingClauseAttributes :: 
       typeCoercionRules :_*),
+    Batch("Check Analysis", Once,
+      CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
+
+  /**
+   * Makes sure all attributes have been resolved.
+   */
+  object CheckResolution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.transform {
+        case p if p.expressions.exists(!_.resolved) =>
+          throw new TreeNodeException(p,
+            s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+      }
+    }
+  }
 
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
@@ -133,6 +149,31 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       })
       false
     }
+  }
+
+  /**
+   * This rule finds expressions in HAVING clause filters that depend on
+   * unresolved attributes.  It pushes these expressions down to the underlying
+   * aggregates and then projects them away above the filter.
+   */
+  object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
+          if aggregate.resolved && containsAggregate(havingCondition) => {
+        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+        
+        Project(aggregate.output,
+          Filter(evaluatedCondition.toAttribute,
+            aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+      }
+      
+    }
+    
+    protected def containsAggregate(condition: Expression): Boolean =
+      condition
+        .collect { case ae: AggregateExpression => ae }
+        .nonEmpty
   }
 
   /**

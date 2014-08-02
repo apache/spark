@@ -57,7 +57,6 @@ private[spark] class BlockMessage() {
   }
 
   def set(buffer: ByteBuffer) {
-    val startTime = System.currentTimeMillis
     /*
     println()
     println("BlockMessage: ")
@@ -100,7 +99,6 @@ private[spark] class BlockMessage() {
       data.flip()
     }
 
-    val finishTime = System.currentTimeMillis
   }
 
   def set(bufferMsg: BufferMessage) {
@@ -115,7 +113,6 @@ private[spark] class BlockMessage() {
   def getLevel: StorageLevel =  level
 
   def toBufferMessage: BufferMessage = {
-    val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
     var buffer = ByteBuffer.allocate(4 + 4 + id.name.length * 2)
     buffer.putInt(typ).putInt(id.name.length)
@@ -153,7 +150,6 @@ private[spark] class BlockMessage() {
     println()
     println()
     */
-    val finishTime = System.currentTimeMillis
     Message.createBufferMessage(buffers)
   }
 

@@ -29,6 +29,7 @@ from pyspark.mllib.linalg import SparseVector
 from pyspark.mllib.regression import LabeledPoint, LinearModel
 from math import exp, log
 
+
 class LogisticRegressionModel(LinearModel):
     """A linear binary classification model derived from logistic regression.
 
@@ -62,20 +63,24 @@ class LogisticRegressionModel(LinearModel):
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
         margin = _dot(x, self._coeff) + self._intercept
-        prob = 1/(1 + exp(-margin))
+        if margin > 0:
+            prob = 1 / (1 + exp(-margin))
+        else:
+            exp_margin = exp(margin)
+            prob = exp_margin / (1 + exp_margin)
         return 1 if prob > 0.5 else 0
 
 
 class LogisticRegressionWithSGD(object):
     @classmethod
-    def train(cls, data, iterations=100, step=1.0,
-              miniBatchFraction=1.0, initialWeights=None):
+    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0, initialWeights=None):
         """Train a logistic regression model on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(d._jrdd,
-                        iterations, step, miniBatchFraction, i),
-                LogisticRegressionModel, data, initialWeights)
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
+            d._jrdd, iterations, step, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_func, LogisticRegressionModel, data,
+                                         initialWeights)
+
 
 class SVMModel(LinearModel):
     """A support vector machine.
@@ -90,7 +95,7 @@ class SVMModel(LinearModel):
     >>> svm.predict(array([1.0])) > 0
     True
     >>> sparse_data = [
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
@@ -98,7 +103,7 @@ class SVMModel(LinearModel):
     >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
     >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
     True
-    >>> svm.predict(SparseVector(2, {1: 0.0})) <= 0
+    >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
     True
     """
     def predict(self, x):
@@ -106,16 +111,17 @@ class SVMModel(LinearModel):
         margin = _dot(x, self._coeff) + self._intercept
         return 1 if margin >= 0 else 0
 
+
 class SVMWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
         """Train a support vector machine on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(d._jrdd,
-                        iterations, step, regParam, miniBatchFraction, i),
-                SVMModel, data, initialWeights)
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
+            d._jrdd, iterations, step, regParam, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_func, SVMModel, data, initialWeights)
+
 
 class NaiveBayesModel(object):
     """
@@ -156,6 +162,7 @@ class NaiveBayesModel(object):
         """Return the most likely class for a data vector x"""
         return self.labels[numpy.argmax(self.pi + _dot(x, self.theta.transpose()))]
 
+
 class NaiveBayes(object):
     @classmethod
     def train(cls, data, lambda_=1.0):
@@ -186,8 +193,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

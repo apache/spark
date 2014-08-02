@@ -46,7 +46,13 @@ class CompressionCodecSuite extends FunSuite {
 
   test("default compression codec") {
     val codec = CompressionCodec.createCodec(conf)
-    assert(codec.getClass === classOf[LZFCompressionCodec])
+    assert(codec.getClass === classOf[SnappyCompressionCodec])
+    testCodec(codec)
+  }
+
+  test("lz4 compression codec") {
+    val codec = CompressionCodec.createCodec(conf, classOf[LZ4CompressionCodec].getName)
+    assert(codec.getClass === classOf[LZ4CompressionCodec])
     testCodec(codec)
   }
 

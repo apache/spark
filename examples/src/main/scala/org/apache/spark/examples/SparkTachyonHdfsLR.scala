@@ -51,20 +51,16 @@ object SparkTachyonHdfsLR {
   }
 
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: SparkTachyonHdfsLR <master> <file> <iters>")
-      System.exit(1)
-    }
-    val inputPath = args(1)
+    val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
-    val sc = new SparkContext(args(0), "SparkTachyonHdfsLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq, Map(),
+    val sparkConf = new SparkConf().setAppName("SparkTachyonHdfsLR")
+    val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))
     val lines = sc.textFile(inputPath)
     val points = lines.map(parsePoint _).persist(StorageLevel.OFF_HEAP)
-    val ITERATIONS = args(2).toInt
+    val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}

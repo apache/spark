@@ -10,7 +10,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](scala-programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -130,7 +130,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](scala-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -239,7 +239,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](scala-programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](programming-guide.html#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
@@ -253,4 +253,4 @@ This has been a short guide to point out the main concerns you should know about
 Spark application -- most importantly, data serialization and memory tuning. For most programs,
 switching to Kryo serialization and persisting data in serialized form will solve most common
 performance issues. Feel free to ask on the
-[Spark mailing list](http://groups.google.com/group/spark-users) about other tuning best practices.
+[Spark mailing list](https://spark.apache.org/community.html) about other tuning best practices.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.util.{Set => JavaSet}
@@ -32,8 +32,9 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -52,16 +53,24 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
+class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
-  System.clearProperty("spark.driver.port")
   System.clearProperty("spark.hostPort")
 
-  override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  override lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
+  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+
+  /** Sets up the system initially or after a RESET command */
+  protected def configure() {
+    set("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    set("hive.metastore.warehouse.dir", warehousePath)
+  }
+
+  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -98,15 +107,17 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
+  hiveFilesTemp.deleteOnExit()
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql/hive")) {
-    new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
   } else {
-    new File("sql/hive/src/test/resources")
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+      File.separator + "resources")
   }
 
   def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "")
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
     hiveDevHome
       .map(new File(_, stripped))
       .filter(_.exists)
@@ -128,6 +139,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case CacheCommand(tbl, _) => tbl :: Nil
         case _ => Nil
       }
 

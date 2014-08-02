@@ -24,7 +24,7 @@ package org.apache.spark.sql.catalyst
  * expression, a [[NamedExpression]] in addition to the standard collection of expressions.
  *
  * ==Standard Expressions==
- * A library of standard expressions (e.g., [[Add]], [[Equals]]), aggregates (e.g., SUM, COUNT),
+ * A library of standard expressions (e.g., [[Add]], [[EqualTo]]), aggregates (e.g., SUM, COUNT),
  * and other computations (e.g. UDFs). Each expression type is capable of determining its output
  * schema as a function of its children's output schema.
  *
@@ -47,4 +47,30 @@ package org.apache.spark.sql.catalyst
  * ==Evaluation==
  * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
  */
-package object expressions
+package object expressions  {
+
+  /**
+   * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
+   * new row. If the schema of the input row is specified, then the given expression will be bound
+   * to that schema.
+   */
+  abstract class Projection extends (Row => Row)
+
+  /**
+   * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
+   * new row. If the schema of the input row is specified, then the given expression will be bound
+   * to that schema.
+   *
+   * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
+   * each time an input row is added.  This significantly reduces the cost of calculating the
+   * projection, but means that it is not safe to hold on to a reference to a [[Row]] after `next()`
+   * has been called on the [[Iterator]] that produced it. Instead, the user must call `Row.copy()`
+   * and hold on to the returned [[Row]] before calling `next()`.
+   */
+  abstract class MutableProjection extends Projection {
+    def currentValue: Row
+
+    /** Uses the given row to store the output of the projection. */
+    def target(row: MutableRow): MutableProjection
+  }
+}

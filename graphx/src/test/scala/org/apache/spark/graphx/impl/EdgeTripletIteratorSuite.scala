@@ -26,17 +26,11 @@ import org.apache.spark.graphx._
 
 class EdgeTripletIteratorSuite extends FunSuite {
   test("iterator.toList") {
-    val builder = new EdgePartitionBuilder[Int]
+    val builder = new EdgePartitionBuilder[Int, Int]
     builder.add(1, 2, 0)
     builder.add(1, 3, 0)
     builder.add(1, 4, 0)
-    val vidmap = new VertexIdToIndexMap
-    vidmap.add(1)
-    vidmap.add(2)
-    vidmap.add(3)
-    vidmap.add(4)
-    val vs = Array.fill(vidmap.capacity)(0)
-    val iter = new EdgeTripletIterator[Int, Int](vidmap, vs, builder.toEdgePartition)
+    val iter = new EdgeTripletIterator[Int, Int](builder.toEdgePartition, true, true)
     val result = iter.toList.map(et => (et.srcId, et.dstId))
     assert(result === Seq((1, 2), (1, 3), (1, 4)))
   }

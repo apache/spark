@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+
 /**
- * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
- * new row. If the schema of the input row is specified, then the given expression will be bound to
- * that schema.
+ * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
  */
-class Projection(expressions: Seq[Expression]) extends (Row => Row) {
+class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
@@ -40,23 +41,25 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
 }
 
 /**
- * Converts a [[Row]] to another Row given a sequence of expression that define each column of th
- * new row. If the schema of the input row is specified, then the given expression will be bound to
- * that schema.
- *
- * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
- * each time an input row is added.  This significatly reduces the cost of calcuating the
- * projection, but means that it is not safe
+ * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
+ * expressions.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
  */
-case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
+case class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   private[this] val exprArray = expressions.toArray
-  private[this] val mutableRow = new GenericMutableRow(exprArray.size)
+  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
   def currentValue: Row = mutableRow
 
-  def apply(input: Row): Row = {
+  override def target(row: MutableRow): MutableProjection = {
+    mutableRow = row
+    this
+  }
+
+  override def apply(input: Row): Row = {
     var i = 0
     while (i < exprArray.length) {
       mutableRow(i) = exprArray(i).eval(input)
@@ -67,17 +70,35 @@ case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) 
 }
 
 /**
- * A mutable wrapper that makes two rows appear appear as a single concatenated row.  Designed to
+ * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
  */
 class JoinedRow extends Row {
   private[this] var row1: Row = _
   private[this] var row2: Row = _
 
+  def this(left: Row, right: Row) = {
+    this()
+    row1 = left
+    row2 = right
+  }
+
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
   def apply(r1: Row, r2: Row): Row = {
     row1 = r1
     row2 = r2
+    this
+  }
+
+  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
+  def withLeft(newLeft: Row): Row = {
+    row1 = newLeft
+    this
+  }
+
+  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
+  def withRight(newRight: Row): Row = {
+    row2 = newRight
     this
   }
 
@@ -123,5 +144,10 @@ class JoinedRow extends Row {
       i += 1
     }
     new GenericRow(copiedValues)
+  }
+
+  override def toString() = {
+    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
+    s"[${row.mkString(",")}]"
   }
 }

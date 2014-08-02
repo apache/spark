@@ -30,6 +30,9 @@ import org.apache.spark.scheduler.InputFormatInfo
 
 /**
  * Logistic regression based classification.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkHdfsLR {
   val D = 10   // Numer of dimensions
@@ -48,21 +51,33 @@ object SparkHdfsLR {
     DataPoint(new DenseVector(x), y)
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: SparkHdfsLR <master> <file> <iters>")
+
+    if (args.length < 2) {
+      System.err.println("Usage: SparkHdfsLR <file> <iters>")
       System.exit(1)
     }
-    val inputPath = args(1)
+
+    showWarning()
+
+    val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
+    val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
-    val sc = new SparkContext(args(0), "SparkHdfsLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq, Map(),
+    val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))
     val lines = sc.textFile(inputPath)
     val points = lines.map(parsePoint _).cache()
-    val ITERATIONS = args(2).toInt
+    val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}

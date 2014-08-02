@@ -20,79 +20,16 @@ package org.apache.spark.graphx
 import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.util.Random
+import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.graphx.impl._
-import org.apache.spark.graphx.impl.MsgRDDFunctions._
 import org.apache.spark.serializer.SerializationStream
 
 
 class SerializerSuite extends FunSuite with LocalSparkContext {
-
-  test("IntVertexBroadcastMsgSerializer") {
-    val outMsg = new VertexBroadcastMsg[Int](3, 4, 5)
-    val bout = new ByteArrayOutputStream
-    val outStrm = new IntVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
-    outStrm.writeObject(outMsg)
-    outStrm.writeObject(outMsg)
-    bout.flush()
-    val bin = new ByteArrayInputStream(bout.toByteArray)
-    val inStrm = new IntVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
-    val inMsg1: VertexBroadcastMsg[Int] = inStrm.readObject()
-    val inMsg2: VertexBroadcastMsg[Int] = inStrm.readObject()
-    assert(outMsg.vid === inMsg1.vid)
-    assert(outMsg.vid === inMsg2.vid)
-    assert(outMsg.data === inMsg1.data)
-    assert(outMsg.data === inMsg2.data)
-
-    intercept[EOFException] {
-      inStrm.readObject()
-    }
-  }
-
-  test("LongVertexBroadcastMsgSerializer") {
-    val outMsg = new VertexBroadcastMsg[Long](3, 4, 5)
-    val bout = new ByteArrayOutputStream
-    val outStrm = new LongVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
-    outStrm.writeObject(outMsg)
-    outStrm.writeObject(outMsg)
-    bout.flush()
-    val bin = new ByteArrayInputStream(bout.toByteArray)
-    val inStrm = new LongVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
-    val inMsg1: VertexBroadcastMsg[Long] = inStrm.readObject()
-    val inMsg2: VertexBroadcastMsg[Long] = inStrm.readObject()
-    assert(outMsg.vid === inMsg1.vid)
-    assert(outMsg.vid === inMsg2.vid)
-    assert(outMsg.data === inMsg1.data)
-    assert(outMsg.data === inMsg2.data)
-
-    intercept[EOFException] {
-      inStrm.readObject()
-    }
-  }
-
-  test("DoubleVertexBroadcastMsgSerializer") {
-    val outMsg = new VertexBroadcastMsg[Double](3, 4, 5.0)
-    val bout = new ByteArrayOutputStream
-    val outStrm = new DoubleVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
-    outStrm.writeObject(outMsg)
-    outStrm.writeObject(outMsg)
-    bout.flush()
-    val bin = new ByteArrayInputStream(bout.toByteArray)
-    val inStrm = new DoubleVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
-    val inMsg1: VertexBroadcastMsg[Double] = inStrm.readObject()
-    val inMsg2: VertexBroadcastMsg[Double] = inStrm.readObject()
-    assert(outMsg.vid === inMsg1.vid)
-    assert(outMsg.vid === inMsg2.vid)
-    assert(outMsg.data === inMsg1.data)
-    assert(outMsg.data === inMsg2.data)
-
-    intercept[EOFException] {
-      inStrm.readObject()
-    }
-  }
 
   test("IntAggMsgSerializer") {
     val outMsg = (4: VertexId, 5)
@@ -151,20 +88,11 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestShuffleVertexBroadcastMsg") {
-    withSpark { sc =>
-      val bmsgs = sc.parallelize(0 until 100, 10).map { pid =>
-        new VertexBroadcastMsg[Int](pid, pid, pid)
-      }
-      bmsgs.partitionBy(new HashPartitioner(3)).collect()
-    }
-  }
-
   test("variable long encoding") {
     def testVarLongEncoding(v: Long, optimizePositive: Boolean) {
       val bout = new ByteArrayOutputStream
       val stream = new ShuffleSerializationStream(bout) {
-        def writeObject[T](t: T): SerializationStream = {
+        def writeObject[T: ClassTag](t: T): SerializationStream = {
           writeVarLong(t.asInstanceOf[Long], optimizePositive = optimizePositive)
           this
         }
@@ -173,7 +101,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
       val bin = new ByteArrayInputStream(bout.toByteArray)
       val dstream = new ShuffleDeserializationStream(bin) {
-        def readObject[T](): T = {
+        def readObject[T: ClassTag](): T = {
           readVarLong(optimizePositive).asInstanceOf[T]
         }
       }

@@ -28,8 +28,8 @@ object NamedExpression {
 }
 
 /**
- * A globally (within this JVM) id for a given named expression.
- * Used to identify with attribute output by a relation is being
+ * A globally unique (within this JVM) id for a given named expression.
+ * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
  */
 case class ExprId(id: Long)
@@ -57,6 +57,7 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
+  def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
 
   def toAttribute = this
@@ -103,7 +104,7 @@ case class Alias(child: Expression, name: String)
  * A reference to an attribute produced by another operator in the tree.
  *
  * @param name The name of this attribute, should only be used during analysis or for debugging.
- * @param dataType The [[types.DataType DataType]] of this attribute.
+ * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.
@@ -133,7 +134,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
-  def withNullability(newNullability: Boolean) = {
+  override def withNullability(newNullability: Boolean) = {
     if (nullable == newNullability) {
       this
     } else {
