@@ -134,6 +134,8 @@
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
     <jets3t.version>0.7.1</jets3t.version>
+    <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
+    <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -1008,6 +1010,14 @@
       <id>spark-ganglia-lgpl</id>
       <modules>
         <module>extras/spark-ganglia-lgpl</module>
+      </modules>
+    </profile>
+
+    <!-- Kinesis integration is not included by default due to ASL-licensed code -->
+    <profile>
+      <id>kinesis-asl</id>
+      <modules>
+        <module>extras/kinesis-asl</module>
       </modules>
     </profile>
 
