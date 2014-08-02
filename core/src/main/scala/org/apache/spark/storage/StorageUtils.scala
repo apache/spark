@@ -35,12 +35,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Internal representation of the blocks stored in this block manager.
    *
-   * A common consumption pattern is to access only the blocks that belong to a specific RDD.
-   * For this use case, we should avoid linearly scanning through all the blocks, which could
-   * be expensive if there are thousands of blocks on each block manager. Thus, we need to store
-   * RDD blocks and non-RDD blocks separately. In particular, we store RDD blocks in a map
-   * indexed by RDD IDs, so we can filter out the blocks of interest quickly.
-
+   * We store RDD blocks and non-RDD blocks separately to allow quick retrievals of RDD blocks.
    * These collections should only be mutated through the add/update/removeBlock methods.
    */
   private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
@@ -62,10 +57,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
   private var _nonRddStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
-  /**
-   * Instantiate a StorageStatus with the given initial blocks. This essentially makes a copy of
-   * the original blocks map such that the fate of this storage status is not tied to the source.
-   */
+  /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
   def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
     this(bmid, maxMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
@@ -95,7 +87,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /** Add the given block to this storage status. If it already exists, overwrite it. */
-  def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+  private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     updateStorageInfo(blockId, blockStatus)
     blockId match {
       case RDDBlockId(rddId, _) =>
@@ -106,12 +98,12 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   }
 
   /** Update the given block in this storage status. If it doesn't already exist, add it. */
-  def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+  private[spark] def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     addBlock(blockId, blockStatus)
   }
 
   /** Remove the given block from this storage status. */
-  def removeBlock(blockId: BlockId): Option[BlockStatus] = {
+  private[spark] def removeBlock(blockId: BlockId): Option[BlockStatus] = {
     updateStorageInfo(blockId, BlockStatus.empty)
     blockId match {
       case RDDBlockId(rddId, _) =>
@@ -205,9 +197,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Update the relevant storage info, taking into account any existing status for this block.
-   * This is exposed for testing.
    */
-  private[spark] def updateStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
+  private def updateStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
     val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
     val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
     val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
@@ -215,7 +206,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     val level = newBlockStatus.storageLevel
 
     // Compute new info from old info
-    val oldInfo: (Long, Long, Long) = blockId match {
+    val (oldMem, oldDisk, oldTachyon) = blockId match {
       case RDDBlockId(rddId, _) =>
         _rddStorageInfo.get(rddId)
           .map { case (mem, disk, tachyon, _) => (mem, disk, tachyon) }
@@ -223,28 +214,21 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
       case _ =>
         _nonRddStorageInfo
     }
-    val newInfo: (Long, Long, Long) = oldInfo match {
-      case (oldMem, oldDisk, oldTachyon) =>
-        val newMem = math.max(oldMem + changeInMem, 0L)
-        val newDisk = math.max(oldDisk + changeInDisk, 0L)
-        val newTachyon = math.max(oldTachyon + changeInTachyon, 0L)
-        (newMem, newDisk, newTachyon)
-    }
+    val newMem = math.max(oldMem + changeInMem, 0L)
+    val newDisk = math.max(oldDisk + changeInDisk, 0L)
+    val newTachyon = math.max(oldTachyon + changeInTachyon, 0L)
 
     // Set the correct info
     blockId match {
       case RDDBlockId(rddId, _) =>
-        newInfo match {
-          case (mem, disk, tachyon) =>
-            // If this RDD is no longer persisted, remove it
-            if (mem + disk + tachyon == 0) {
-              _rddStorageInfo.remove(rddId)
-            } else {
-              _rddStorageInfo(rddId) = (mem, disk, tachyon, level)
-            }
+        // If this RDD is no longer persisted, remove it
+        if (newMem + newDisk + newTachyon == 0) {
+          _rddStorageInfo.remove(rddId)
+        } else {
+          _rddStorageInfo(rddId) = (newMem, newDisk, newTachyon, level)
         }
       case _ =>
-        _nonRddStorageInfo = newInfo
+        _nonRddStorageInfo = (newMem, newDisk, newTachyon)
     }
   }
 
@@ -277,9 +261,9 @@ private[spark] object StorageUtils {
   }
 
   /**
-   * Return mapping from block ID to its locations for each block that belongs to the given RDD.
+   * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
    */
-  def getRddBlockLocations(statuses: Seq[StorageStatus], rddId: Int): Map[BlockId, Seq[String]] = {
+  def getRddBlockLocations(rddId: Int, statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
     val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]
     statuses.foreach { status =>
       status.rddBlocksById(rddId).foreach { case (bid, _) =>

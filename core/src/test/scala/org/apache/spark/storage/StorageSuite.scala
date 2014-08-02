@@ -310,8 +310,8 @@ class StorageSuite extends FunSuite {
 
   test("StorageUtils.getRddBlockLocations") {
     val storageStatuses = stockStorageStatuses
-    val blockLocations0 = StorageUtils.getRddBlockLocations(storageStatuses, 0)
-    val blockLocations1 = StorageUtils.getRddBlockLocations(storageStatuses, 1)
+    val blockLocations0 = StorageUtils.getRddBlockLocations(0, storageStatuses)
+    val blockLocations1 = StorageUtils.getRddBlockLocations(1, storageStatuses)
     assert(blockLocations0.size === 5)
     assert(blockLocations1.size === 3)
     assert(blockLocations0.contains(RDDBlockId(0, 0)))
@@ -337,8 +337,8 @@ class StorageSuite extends FunSuite {
     storageStatuses(0).addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
     storageStatuses(0).addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L, 0L))
     storageStatuses(2).addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    val blockLocations0 = StorageUtils.getRddBlockLocations(storageStatuses, 0)
-    val blockLocations1 = StorageUtils.getRddBlockLocations(storageStatuses, 1)
+    val blockLocations0 = StorageUtils.getRddBlockLocations(0, storageStatuses)
+    val blockLocations1 = StorageUtils.getRddBlockLocations(1, storageStatuses)
     assert(blockLocations0.size === 5)
     assert(blockLocations1.size === 3)
     assert(blockLocations0(RDDBlockId(0, 0)) === Seq("dog:1", "cat:3"))
