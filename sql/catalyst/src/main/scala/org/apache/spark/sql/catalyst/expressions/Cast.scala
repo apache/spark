@@ -262,7 +262,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case FloatType => castToFloat
     case LongType => castToLong
     case DoubleType => castToDouble
-    case FixedLenBinaryType(_) => castToFixedLenBinary(dataType.asInstanceOf[FixedLenBinaryType].length)
+    case FixedLenBinaryType(_) => 
+      castToFixedLenBinary(dataType.asInstanceOf[FixedLenBinaryType].length)
   }
 
   override def eval(input: Row): Any = {

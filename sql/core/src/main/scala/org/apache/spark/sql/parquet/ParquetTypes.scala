@@ -59,7 +59,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
         sys.error("Potential loss of precision: cannot convert INT96")
-      case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => FixedLenBinaryType(parquetType.getTypeLength)
+      case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => 
+        FixedLenBinaryType(parquetType.getTypeLength)
       case _ => sys.error(
         s"Unsupported parquet datatype $parquetType")
     }
