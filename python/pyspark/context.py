@@ -126,6 +126,8 @@ class SparkContext(object):
             self._conf.setMaster(master)
         if appName:
             self._conf.setAppName(appName)
+        if sparkHome:
+            self._conf.setSparkHome(sparkHome)
         if environment:
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
@@ -142,7 +144,7 @@ class SparkContext(object):
         # the classpath or an external config file
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
-        self.sparkHome = os.environ.get("SPARK_HOME")
+        self.sparkHome = self._conf.get("spark.home", None)
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
