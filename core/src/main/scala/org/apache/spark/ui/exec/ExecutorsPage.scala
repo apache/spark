@@ -51,7 +51,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
     val memUsed = storageStatusList.map(_.memUsed).fold(0L)(_ + _)
-    val diskSpaceUsed = storageStatusList.map(_.diskUsed).reduceOption(_ + _).getOrElse(0L)
+    val diskUsed = storageStatusList.map(_.diskUsed).fold(0L)(_ + _)
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
 
@@ -80,7 +80,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
           </th>
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_))}
+          {execInfoSorted.map(execRow)}
         </tbody>
       </table>
 
@@ -91,7 +91,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
             <li><strong>Memory:</strong>
               {Utils.bytesToString(memUsed)} Used
               ({Utils.bytesToString(maxMem)} Total) </li>
-            <li><strong>Disk:</strong> {Utils.bytesToString(diskSpaceUsed)} Used </li>
+            <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
           </ul>
         </div>
       </div>
