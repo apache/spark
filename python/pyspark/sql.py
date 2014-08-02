@@ -943,10 +943,15 @@ class SQLContext:
         When the return type is not given it default to a string and conversion will automatically
         be done.  For any other return type, the produced object must match the specified type.
 
-
-        sqlCtx.registerFunction("stringLengthPy", lambda x: len(x))
-        rdd = sc.parallelize(xrange(10)).map(lambda x: {"s": x})
-        sqlCtx.inferSchema(rdd).registerAsTable("stringData")
+        >>> sqlCtx.registerFunction("stringLengthString", lambda x: len(x))
+        >>> sqlCtx.sql("SELECT stringLengthString('test')").collect()
+        [Row(c0=u'4')]
+        >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
+        [Row(c0=4)]
+        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        [Row(c0=5)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func,
