@@ -23,6 +23,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Matrix, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.random.{RandomRDDGenerators => RG}
 import org.apache.spark.mllib.recommendation._
@@ -252,15 +254,27 @@ class PythonMLLibAPI extends Serializable {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      initialWeightsBA: Array[Byte], 
+      regParam: Double,
+      regType: String,
+      intercept: Boolean): java.util.List[java.lang.Object] = {
+    val lrAlg = new LinearRegressionWithSGD()
+    lrAlg.setIntercept(intercept)
+    lrAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+    if (regType == "l2") {
+      lrAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      lrAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType != "none") {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
-        LinearRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          miniBatchFraction,
-          initialWeights),
+        lrAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
