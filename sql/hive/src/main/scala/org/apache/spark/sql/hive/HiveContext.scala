@@ -98,7 +98,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
-   * Right now, it only supports retrieving the size of a Hive table.
+   *
+   * Right now, it only supports Hive tables and it only updates the size of a Hive table
+   * in the Hive metastore.
    */
   def analyze(tableName: String) {
     val relation = catalog.lookupRelation(None, tableName) match {
