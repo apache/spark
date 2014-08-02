@@ -36,6 +36,9 @@ fi
 if [ -z "$SBT_MAVEN_PROFILES_ARGS" ]; then
   export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
 fi
+
+export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
+
 echo "SBT_MAVEN_PROFILES_ARGS=\"$SBT_MAVEN_PROFILES_ARGS\""
 
 # Remove work directory
