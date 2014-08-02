@@ -35,9 +35,16 @@ dependencies, and can support different cluster managers and deploy modes that S
   --deploy-mode <deploy-mode> \
   --conf <key>=<value> \
   ... # other options
-  <application-jar> \
+  --primary <application-jar> \
+  -- \
   [application-arguments]
 {% endhighlight %}
+
+(**NOTE** As of Spark 1.1, `--` is used as a separator for user application options, such that
+anything that follows will be passed to the application as command line arguments. This includes
+those that were once swallowed by `spark-submit`, e.g. `--help` and `--conf`. Note that this must be
+used in conjunction with `--primary` to specify the main application jar. The old way of setting
+application jars and passing arguments to applications is still supported.)
 
 Some of the commonly used options are:
 
@@ -45,7 +52,7 @@ Some of the commonly used options are:
 * `--master`: The [master URL](#master-urls) for the cluster (e.g. `spark://23.195.26.187:7077`)
 * `--deploy-mode`: Whether to deploy your driver on the worker nodes (`cluster`) or locally as an external client (`client`) (default: `client`)*
 * `--conf`: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap "key=value" in quotes (as shown).
-* `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
+* `--primary application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
 *A common deployment strategy is to submit your application from a gateway machine that is
@@ -71,7 +78,8 @@ examples of common options:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master local[8] \
-  /path/to/examples.jar \
+  --primary /path/to/examples.jar \
+  -- \
   100
 
 # Run on a Spark standalone cluster
@@ -80,7 +88,8 @@ examples of common options:
   --master spark://207.184.161.138:7077 \
   --executor-memory 20G \
   --total-executor-cores 100 \
-  /path/to/examples.jar \
+  --primary /path/to/examples.jar \
+  -- \
   1000
 
 # Run on a YARN cluster
@@ -90,13 +99,15 @@ export HADOOP_CONF_DIR=XXX
   --master yarn-cluster \  # can also be `yarn-client` for client mode
   --executor-memory 20G \
   --num-executors 50 \
-  /path/to/examples.jar \
+  --primary /path/to/examples.jar \
+  -- \
   1000
 
 # Run a Python application on a cluster
 ./bin/spark-submit \
   --master spark://207.184.161.138:7077 \
-  examples/src/main/python/pi.py \
+  --primary examples/src/main/python/pi.py \
+  -- \
   1000
 {% endhighlight %}
 

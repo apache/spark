@@ -70,11 +70,11 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   test("prints usage on empty input") {
-    testPrematureExit(Array[String](), "Usage: spark-submit")
+    testPrematureExit(Array[String](), "Usage:\n  spark-submit")
   }
 
   test("prints usage with only --help") {
-    testPrematureExit(Array("--help"), "Usage: spark-submit")
+    testPrematureExit(Array("--help"), "Usage:\n  spark-submit")
   }
 
   test("prints error with unrecognized options") {
@@ -104,6 +104,50 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.childArgs should be (Seq("some", "--weird", "args"))
+  }
+
+  test("handles arguments to user program with --primary and --") {
+    val clArgs =
+      """--name myApp
+        |--class Foo
+        |--primary userjar.jar
+        |--master local
+        |--
+        |some
+        |--weird args
+      """.stripMargin.split("\\s+").toSeq
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.master should be ("local")
+    appArgs.mainClass should be ("Foo")
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
+  }
+
+  test("handles arguments to user program with --primary but no --") {
+    val clArgs =
+      """--name myApp
+        |--class Foo
+        |--primary userjar.jar
+        |--master local
+        |some
+        |--weird args
+      """.stripMargin.split("\\s+")
+    testPrematureExit(clArgs, "Unrecognized option 'some'")
+  }
+
+  test("handles arguments to user program with empty string") {
+    val clArgs =
+      """--name myApp
+        |--class Foo
+        |--primary userjar.jar
+        |--master local
+        |--
+      """.stripMargin.split("\\s+").toSeq :+ ""
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val xx = clArgs.map(arg => s"[$arg]")
+    println(s"### $xx")
+    appArgs.master should be ("local")
+    appArgs.mainClass should be ("Foo")
+    appArgs.childArgs should be (Seq(""))
   }
 
   test("handles YARN cluster mode") {

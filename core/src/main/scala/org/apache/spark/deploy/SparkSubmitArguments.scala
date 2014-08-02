@@ -322,6 +322,27 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         verbose = true
         parse(tail)
 
+      case ("--primary" | "-p") :: value :: tail =>
+        primaryResource = if (!SparkSubmit.isShell(value) && !SparkSubmit.isInternal(value)) {
+          Utils.resolveURI(value).toString
+        } else {
+          value
+        }
+        isPython = SparkSubmit.isPython(value)
+        parse(tail)
+
+      case "--" :: tail =>
+        if (inSparkOpts) {
+          // Primary resource is specified with "--primary", "--" is considered as the separator of
+          // spark-submit options and user application options.
+          childArgs ++= tail
+        } else {
+          // Primary resource is specified as a positional argument, "--" is passed to the
+          // application as a normal argument.
+          childArgs += "--"
+          parse(tail)
+        }
+
       case value :: tail =>
         if (inSparkOpts) {
           value match {
@@ -333,6 +354,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
+              if (primaryResource != null) {
+                // Primary resource has already been specified by --primary. It's more likely that
+                // user forgot using -- to separate application options from spark-submit options.
+                SparkSubmit.printErrorAndExit(
+                  s"Unrecognized option '$value', " +
+                  "note that application options must appear after \"--\".")
+              }
+
               primaryResource =
                 if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
                   Utils.resolveURI(v).toString
@@ -360,7 +389,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     outStream.println(
-      """Usage: spark-submit [options] <app jar | python file> [app options]
+      """Usage:
+        |  spark-submit [options] <app jar | python file> [app options]
+        |  spark-submit [options] --primary <app jar | python file> -- [app options]
+        |
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
@@ -388,8 +420,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
-        |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
+        |  --help, -h                  Show this help message and exit.
+        |  --verbose, -v               Print additional debug output.
+        |
+        |  --primary                   The primary jar file or Python file of the application. Used
+        |                              in conjunction with "--" to pass arbitrary arguments to the
+        |                              application if any.
+        |  --                          A "--" signals the end of spark-submit options, everything
+        |                              after "--" are passed as command line arguments to the
+        |                              application. Only used in conjunction with "--primary".
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
