@@ -259,13 +259,14 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
-    if (regType == "l2")
+    if (regType == "l2") {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
-    else if (regType == "l1")
+    } else if (regType == "l1") {
       lrAlg.optimizer.setUpdater(new L1Updater)
-    else if (regType != "none")
+    } else if (regType != "none") {
       throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
         + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
         lrAlg.run(data, initialWeights),
