@@ -19,10 +19,14 @@ package org.apache.spark.mllib.tree;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.rdd.DatasetInfo;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.configuration.DTClassifierParams;
-import org.apache.spark.mllib.tree.model.DecisionTreeClassifierModel;
+import org.apache.spark.mllib.tree.DecisionTree;
+import org.apache.spark.mllib.tree.configuration.Algo;
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy;
+import org.apache.spark.mllib.tree.configuration.Strategy;
+import org.apache.spark.mllib.tree.impurity.Gini;
+import org.apache.spark.mllib.tree.impurity.Impurity;
+import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -45,7 +49,7 @@ public class JavaDecisionTreeSuite implements Serializable {
     sc = null;
   }
 
-  int validatePrediction(List<LabeledPoint> validationData, DecisionTreeClassifierModel model) {
+  int validatePrediction(List<LabeledPoint> validationData, DecisionTreeModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
       Double prediction = model.predict(point.features());
@@ -58,12 +62,25 @@ public class JavaDecisionTreeSuite implements Serializable {
 
   @Test
   public void runDTUsingConstructor() {
-    scala.Tuple2<java.util.List<LabeledPoint>, DatasetInfo> arr_datasetInfo =
-        DecisionTreeSuite.generateCategoricalDataPointsAsList();
-    JavaRDD<LabeledPoint> rdd = sc.parallelize(arr_datasetInfo._1());
-    DatasetInfo datasetInfo = arr_datasetInfo._2();
+    List<LabeledPoint> arr = DecisionTreeSuite.generateCategoricalDataPointsAsJavaList();
+    JavaRDD<LabeledPoint> rdd = sc.parallelize(arr);
 
-    DTClassifierParams dtParams = DecisionTreeClassifier.defaultParams();
+    int maxDepth = 4;
+    int numClasses = 2;
+
+    Strategy strategy = new Strategy(Algo.Classification(), Gini(), maxDepth, numClasses, maxBins, QuantileStrategy.Sort(), categoricalFeaturesInfo);
+
+    val algo: Algo,
+        val impurity: Impurity,
+        val maxDepth: Int,
+        val numClassesForClassification: Int = 2,
+        val maxBins: Int = 100,
+        val quantileCalculationStrategy: QuantileStrategy = Sort,
+        val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+        val maxMemoryInMB: Int = 128) extends Serializable {
+
+
+      DTClassifierParams dtParams = DecisionTreeClassifier.defaultParams();
     dtParams.setMaxBins(200);
     dtParams.setImpurity("entropy");
     DecisionTreeClassifier dtLearner = new DecisionTreeClassifier(dtParams);

@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.collection.JavaConversions._
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
@@ -812,6 +814,10 @@ object DecisionTreeSuite {
       }
     }
     arr
+  }
+
+  def generateCategoricalDataPointsAsJavaList(): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateCategoricalDataPoints().toSeq)
   }
 
   def generateCategoricalDataPointsForMulticlass(): Array[LabeledPoint] = {
