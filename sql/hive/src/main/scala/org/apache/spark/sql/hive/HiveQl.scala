@@ -119,6 +119,7 @@ private[hive] object HiveQl {
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
     "TOK_CREATETABLE",
+    "TOK_CREATEEXTTABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
 
@@ -268,7 +269,6 @@ private[hive] object HiveQl {
         case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
           throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
       }
-    assert(tree.asInstanceOf[ASTNode].getText == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
     val tableOps = tree.getChildren
     val colList =
       tableOps
@@ -470,10 +470,10 @@ private[hive] object HiveQl {
 
       val (db, tableName) = extractDbNameTableName(tableNameParts)
 
-      InsertIntoCreatedTable(db, tableName, nodeToPlan(query))
+      InsertIntoCreatedTable(db, tableName, classOf[MetastoreFormat], nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
-    case Token("TOK_CREATETABLE", _) => NativePlaceholder
+    case Token("TOK_CREATETABLE" | "TOK_CREATEEXTTABLE", _) => NativePlaceholder
 
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::

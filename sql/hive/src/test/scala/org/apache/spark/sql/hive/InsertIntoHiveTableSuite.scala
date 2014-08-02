@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.parquet.{ParquetRelation, ParquetFormat}
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
@@ -72,5 +73,48 @@ class InsertIntoHiveTableSuite extends QueryTest {
   test("Double create does not fail when allowExisting = true") {
     createTable[TestData]("createAndInsertTest")
     createTable[TestData]("createAndInsertTest")
+  }
+
+  test("Metastore default format") {
+    createTable[TestData]("metastoreTest", format = classOf[MetastoreFormat])
+    testData.insertInto("metastoreTest", overwrite = true)
+    table("metastoreTest").queryExecution.analyzed match {
+      case _: MetastoreRelation => // yay!
+      case notParquet => fail("Table is not metastore default format: " + notParquet)
+    }
+    checkAnswer(
+      sql("SELECT * FROM metastoreTest"),
+      testData.collect().toSeq
+    )
+  }
+
+  test("Parquet format") {
+    createTable[TestData]("parquetDataTest", format = classOf[ParquetFormat])
+    testData.insertInto("parquetDataTest", overwrite = true)
+    table("parquetDataTest").queryExecution.analyzed match {
+      case _: ParquetRelation => // yay!
+      case notParquet => fail("Table is not parquet: " + notParquet)
+    }
+    checkAnswer(
+      sql("SELECT * FROM parquetDataTest"),
+      testData.collect().toSeq
+    )
+  }
+
+  test("External tables") {
+    createTable[TestData]("warehouseTable", format = classOf[ParquetFormat])
+    testData.insertInto("warehouseTable", overwrite = true)
+
+    val location = table("warehouseTable").queryExecution.analyzed match {
+      case parquet: ParquetRelation => parquet.location.asString
+      case notParquet => fail("Table is not parquet: " + notParquet)
+    }
+
+    createTable[TestData]("externalTable", format = classOf[ParquetFormat],
+      existingLocation = Some(location))
+    checkAnswer(
+      sql("SELECT * FROM externalTable"),
+      testData.collect().toSeq
+    )
   }
 }

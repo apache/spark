@@ -266,7 +266,8 @@ package object dsl {
 
   object plans {  // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions {
-      def writeToFile(path: String) = WriteToFile(path, logicalPlan)
+    // Writing to files doesn't make sense without Hadoop in scope (unless we assume local fs)
+//      def writeToFile(path: String) = WriteToFile(path, classOf[??], logicalPlan)
     }
   }
 }

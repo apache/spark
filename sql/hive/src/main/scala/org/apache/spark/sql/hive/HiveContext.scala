@@ -41,6 +41,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{OverrideFunctionRegistry, Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.TableFormat
 import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
@@ -81,6 +82,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
+  override protected[sql] def defaultTableFormat = classOf[MetastoreFormat]
+
   override def sql(sqlText: String): SchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
     if (dialect == "sql") {
@@ -105,10 +108,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *
    * @param tableName The name of the table to create.
    * @param allowExisting When false, an exception will be thrown if the table already exists.
+   * @param format When specified, this will create a table with a special format (e.g., Parquet)
+   * @param existingLocation When specified, this will only create a new entry in the Metastore,
+   *                         pointed at an existing Hadoop path. This acts like a "CREATE EXTERNAL".
    * @tparam A A case class that is used to describe the schema of the table to be created.
    */
-  def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
-    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+  def createTable[A <: Product : TypeTag](
+      tableName: String,
+      allowExisting: Boolean = true,
+      format: Class[_ <: TableFormat] = classOf[MetastoreFormat],
+      existingLocation: Option[String] = None): Unit = {
+    val schema = ScalaReflection.attributesFor[A]
+    catalog.createTable("default", tableName, schema, format,
+      existingLocation.map(loc => new HadoopDirectory(loc)), allowExisting)
   }
 
   /**

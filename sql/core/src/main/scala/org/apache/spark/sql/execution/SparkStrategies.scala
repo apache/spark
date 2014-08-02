@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{HadoopDirectory, SQLContext, execution}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -192,11 +193,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object ParquetOperations extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // TODO: need to support writing to other types of files.  Unify the below code paths.
-      case logical.WriteToFile(path, child) =>
-        val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
+      case logical.WriteToFile(pathString, formatClass, child) =>
+        if (!child.resolved) {
+          throw new UnresolvedException[LogicalPlan](
+            child,
+            "Attempted to create relation with unresolved child (when schema is not available)")
+        }
+        val path = HadoopDirectory.createChecked(pathString, sparkContext.hadoopConfiguration)
+        val format = sqlContext.instantiateTableFormat(formatClass)
+        val relation = format.createEmptyRelation(path, child.output)
         // Note: overwrite=false because otherwise the metadata we just created will be deleted
-        InsertIntoParquetTable(relation, planLater(child), overwrite = false) :: Nil
+        planLater(logical.InsertIntoTable(relation, Map.empty, child, overwrite = false)) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>

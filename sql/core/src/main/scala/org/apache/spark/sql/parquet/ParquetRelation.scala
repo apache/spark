@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.IOException
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.permission.FsAction
-
+import org.apache.spark.sql.catalyst.plans.physical.{TableFormat, TableLocation}
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
+import org.apache.spark.sql.{HadoopDirectory, HadoopDirectoryLike, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -42,11 +38,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  *   val parquetRDD = sqlContext.parquetFile("path/to/parquet.file")
  * }}}
  *
- * @param path The path to the Parquet file.
+ * @param location The path to the Parquet file.
  */
 private[sql] case class ParquetRelation(
-    path: String,
-    @transient conf: Option[Configuration],
+    location: HadoopDirectory,
+    @transient conf: Configuration,
     @transient sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation {
 
@@ -55,20 +51,20 @@ private[sql] case class ParquetRelation(
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
-      .readMetaData(new Path(path), conf)
+      .readMetaData(location.asPath, conf)
       .getFileMetaData
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
+  override val output = ParquetTypesConverter.readSchemaFromFile(location.asPath, conf)
 
-  override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance = ParquetRelation(location, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
   override def equals(other: Any) = other match {
     case p: ParquetRelation =>
-      p.path == path && p.output == output
+      p.location == location && p.output == output
     case _ => false
   }
 
@@ -98,76 +94,59 @@ private[sql] object ParquetRelation {
   val defaultCompression = CompressionCodecName.GZIP
 
   /**
-   * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
-   * this is used inside [[org.apache.spark.sql.execution.SparkStrategies SparkStrategies]] to
-   * create a resolved relation as a data sink for writing to a Parquetfile. The relation is empty
-   * but is initialized with ParquetMetadata and can be inserted into.
-   *
-   * @param pathString The directory the Parquetfile will be stored in.
-   * @param child The child node that will be used for extracting the schema.
-   * @param conf A configuration to be used.
-   * @return An empty ParquetRelation with inferred metadata.
-   */
-  def create(pathString: String,
-             child: LogicalPlan,
-             conf: Configuration,
-             sqlContext: SQLContext): ParquetRelation = {
-    if (!child.resolved) {
-      throw new UnresolvedException[LogicalPlan](
-        child,
-        "Attempt to create Parquet table from unresolved child (when schema is not available)")
-    }
-    createEmpty(pathString, child.output, false, conf, sqlContext)
-  }
-
-  /**
    * Creates an empty ParquetRelation and underlying Parquetfile that only
    * consists of the Metadata for the given schema.
    *
-   * @param pathString The directory the Parquetfile will be stored in.
+   * @param path The directory the Parquetfile will be stored in.
    * @param attributes The schema of the relation.
    * @param conf A configuration to be used.
    * @return An empty ParquetRelation.
    */
-  def createEmpty(pathString: String,
+  def createEmpty(path: HadoopDirectory,
                   attributes: Seq[Attribute],
-                  allowExisting: Boolean,
                   conf: Configuration,
                   sqlContext: SQLContext): ParquetRelation = {
-    val path = checkPath(pathString, allowExisting, conf)
     if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
       conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
     }
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
-    new ParquetRelation(path.toString, Some(conf), sqlContext) {
+    new ParquetRelation(path, conf, sqlContext) {
       override val output = attributes
     }
   }
+}
 
-  private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
-    if (pathStr == null) {
-      throw new IllegalArgumentException("Unable to create ParquetRelation: path is null")
-    }
-    val origPath = new Path(pathStr)
-    val fs = origPath.getFileSystem(conf)
-    if (fs == null) {
-      throw new IllegalArgumentException(
-        s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
-    }
-    val path = origPath.makeQualified(fs)
-    if (!allowExisting && fs.exists(path)) {
-      sys.error(s"File $pathStr already exists.")
-    }
+/**
+ * Format for creating and loading Parquet tables.
+ * Parquet tables can currently only be created within a single Hadoop directory.
+ */
+class ParquetFormat(sqlContext: SQLContext, conf: Configuration) extends TableFormat {
 
-    if (fs.exists(path) &&
-        !fs.getFileStatus(path)
-        .getPermission
-        .getUserAction
-        .implies(FsAction.READ_WRITE)) {
-      throw new IOException(
-        s"Unable to create ParquetRelation: path $path not read-writable")
+  /**
+   * Creates a new ParquetRelation and underlying Parquet file for the given LogicalPlan. Note that
+   * this is used inside [[org.apache.spark.sql.execution.SparkStrategies SparkStrategies]] to
+   * create a resolved relation as a data sink for writing to a Parquetfile. The relation is empty
+   * but is initialized with ParquetMetadata and can be inserted into.
+   *
+   * @return An empty ParquetRelation with inferred metadata.
+   */
+  override def createEmptyRelation(
+      location: TableLocation, schema: Seq[Attribute]): ParquetRelation = {
+    location match {
+      case dir: HadoopDirectoryLike =>
+        ParquetRelation.createEmpty(dir.asHadoopDirectory, schema, conf, sqlContext)
+      case _ =>
+        sys.error(s"Parquet relation only supports Hadoop directories, found: $location")
     }
-    path
+  }
+
+  override def loadExistingRelation(location: TableLocation): ParquetRelation = {
+    location match {
+      case dir: HadoopDirectoryLike =>
+        new ParquetRelation(dir.asHadoopDirectory, conf, sqlContext)
+      case _ =>
+        sys.error(s"Parquet relation only supports Hadoop directories, found: $location")
+    }
   }
 }

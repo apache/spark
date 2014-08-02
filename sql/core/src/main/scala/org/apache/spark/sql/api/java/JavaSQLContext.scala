@@ -23,11 +23,10 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
 
@@ -78,9 +77,8 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       path: String,
       allowExisting: Boolean = true,
       conf: Configuration = new Configuration()): JavaSchemaRDD = {
-    new JavaSchemaRDD(
-      sqlContext,
-      ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf, sqlContext))
+    val schemaRDD = sqlContext.createParquetFile(getSchema(beanClass), path, allowExisting, conf)
+    new JavaSchemaRDD(sqlContext, schemaRDD.logicalPlan)
   }
 
   /**
@@ -121,10 +119,10 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
-  def parquetFile(path: String): JavaSchemaRDD =
-    new JavaSchemaRDD(
-      sqlContext,
-      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext))
+  def parquetFile(path: String): JavaSchemaRDD = {
+    val schemaRDD = sqlContext.parquetFile(path)
+    new JavaSchemaRDD(sqlContext, schemaRDD.logicalPlan)
+  }
 
   /**
    * Loads a JSON file (one object per line), returning the result as a JavaSchemaRDD.

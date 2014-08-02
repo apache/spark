@@ -214,7 +214,7 @@ case class InsertIntoHiveTable(
     // TODO: Handle dynamic partitioning.
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.
-    val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
+    val qualifiedTableName = s"${table.location.databaseName}.${table.location.tableName}"
     // TODO: Correctly set holdDDLTime.
     // In most of the time, we should have holdDDLTime = false.
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
