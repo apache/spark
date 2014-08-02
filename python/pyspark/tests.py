@@ -46,7 +46,7 @@ except:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
-    from numpy import array
+    import numpy as np
     _have_numpy = True
 except:
     # No NumPy, but that's okay, we'll skip those tests
@@ -926,8 +926,7 @@ class NumPyTests(PySparkTestCase):
     """General PySpark tests that depend on numpy """
 
     def test_statcounter_array(self):
-        from numpy import array
-        x = self.sc.parallelize([array([1.0,1.0]), array([2.0,2.0]), array([3.0,3.0])])
+        x = self.sc.parallelize([np.array([1.0,1.0]), np.array([2.0,2.0]), np.array([3.0,3.0])])
         s = x.stats()
         self.assertSequenceEqual([2.0,2.0], s.mean().tolist())
         self.assertSequenceEqual([1.0,1.0], s.min().tolist())
