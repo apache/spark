@@ -111,12 +111,13 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
           ) ++
-           Seq(ProblemFilters.exclude[IncompatibleResultTypeProblem]
+           Seq(
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
                ("org.apache.spark.bagel.Bagel.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
                ("org.apache.spark.streaming.StreamingContext.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
-               ("org.apache.spark.streaming.dstream.DStream.log") ,
+               ("org.apache.spark.streaming.dstream.DStream.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
                ("org.apache.spark.mllib.recommendation.ALS.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
@@ -140,11 +141,62 @@ object MimaExcludes {
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
                ("org.apache.spark.streaming.zeromq.ZeroMQReceiver.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
-               ("org.apache.spark.streaming.flume.FlumeReceiver.log") ,
+               ("org.apache.spark.streaming.flume.FlumeReceiver.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
                ("org.apache.spark.rdd.RDD.log"),
              ProblemFilters.exclude[IncompatibleResultTypeProblem]
-               ("org.apache.spark.SparkConf.log")
+               ("org.apache.spark.SparkConf.log"),
+
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.SparkConf.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.bagel.Bagel.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.StreamingContext.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.dstream.DStream.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.mllib.recommendation.ALS.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.mllib.clustering.KMeans.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.mllib.classification.NaiveBayes.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.twitter.TwitterReceiver.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.zeromq.ZeroMQReceiver.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.SparkContext.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.rdd.RDD.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.rdd.SequenceFileRDDFunctions.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.rdd.OrderedRDDFunctions.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.kafka.KafkaReceiver.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.rdd.DoubleRDDFunctions.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.flume.FlumeReceiver.org$apache$spark$Logging$$log__="),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.kafka.KafkaReceiver.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleMethTypeProblem]
+               ("org.apache.spark.streaming.twitter.TwitterReceiver.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.streaming.twitter.TwitterReceiver.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.streaming.zeromq.ZeroMQReceiver.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.bagel.Bagel.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.bagel.Bagel.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.streaming.flume.FlumeReceiver.org$apache$spark$Logging$$log_"),
+             ProblemFilters.exclude[IncompatibleResultTypeProblem]
+               ("org.apache.spark.streaming.kafka.KafkaReceiver.org$apache$spark$Logging$$log_")
            )
         case v if v.startsWith("1.0") =>
           Seq(
