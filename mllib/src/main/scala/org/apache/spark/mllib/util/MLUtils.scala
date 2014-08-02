@@ -30,6 +30,8 @@ import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.{LabeledPointParser, LabeledPoint}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream.DStream
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -191,6 +193,19 @@ object MLUtils {
    */
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
+
+  /**
+   * Loads streaming labeled points from a stream of text files
+   * where points are in the same format as used in `RDD[LabeledPoint].saveAsTextFile`.
+   * See `StreamingContext.textFileStream` for more details on how to
+   * generate a stream from files
+   *
+   * @param ssc Streaming context
+   * @param dir Directory path in any Hadoop-supported file system URI
+   * @return Labeled points stored as a DStream[LabeledPoint]
+   */
+  def loadStreamingLabeledPoints(ssc: StreamingContext, dir: String): DStream[LabeledPoint] =
+    ssc.textFileStream(dir).map(LabeledPointParser.parse)
 
   /**
    * Load labeled data from a file. The data format used here is

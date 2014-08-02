@@ -162,6 +162,14 @@ object GradientDescent extends Logging {
     val numExamples = data.count()
     val miniBatchSize = numExamples * miniBatchFraction
 
+    // if no data, return initial weights to avoid NaNs
+    if (numExamples == 0) {
+
+      logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
+      return (initialWeights, stochasticLossHistory.toArray)
+
+    }
+
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
     val n = weights.size
@@ -202,5 +210,6 @@ object GradientDescent extends Logging {
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights, stochasticLossHistory.toArray)
+
   }
 }
