@@ -142,10 +142,8 @@ def manager():
                             os._exit(1)
                         else:
                             os._exit(0)
-                    elif pid > 0:
-                        sock.close()
                     else:
-                        raise OSError("fork failed")
+                        sock.close()
 
                 except OSError as e:
                     print >> sys.stderr, "Daemon failed to fork PySpark worker: %s" % e
