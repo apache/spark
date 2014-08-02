@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
@@ -40,7 +40,7 @@ private[hive] object HiveThriftServer2 extends Logging {
     val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
 
     if (!optionsProcessor.process(args)) {
-      logger.warn("Error starting HiveThriftServer2 with given arguments")
+      log.warn("Error starting HiveThriftServer2 with given arguments")
       System.exit(-1)
     }
 
@@ -49,12 +49,12 @@ private[hive] object HiveThriftServer2 extends Logging {
     // Set all properties specified via command line.
     val hiveConf: HiveConf = ss.getConf
     hiveConf.getAllProperties.toSeq.sortBy(_._1).foreach { case (k, v) =>
-      logger.debug(s"HiveConf var: $k=$v")
+      log.debug(s"HiveConf var: $k=$v")
     }
 
     SessionState.start(ss)
 
-    logger.info("Starting SparkContext")
+    log.info("Starting SparkContext")
     SparkSQLEnv.init()
     SessionState.start(ss)
 
@@ -70,10 +70,10 @@ private[hive] object HiveThriftServer2 extends Logging {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
       server.init(hiveConf)
       server.start()
-      logger.info("HiveThriftServer2 started")
+      log.info("HiveThriftServer2 started")
     } catch {
       case e: Exception =>
-        logger.error("Error starting HiveThriftServer2", e)
+        log.error("Error starting HiveThriftServer2", e)
         System.exit(-1)
     }
   }
