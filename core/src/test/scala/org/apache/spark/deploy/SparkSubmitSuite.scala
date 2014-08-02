@@ -295,7 +295,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String]): String = {
-    val sparkHome = sys.props("spark.test.home")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     Utils.executeAndGetOutput(
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),

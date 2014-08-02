@@ -75,7 +75,7 @@ trait HiveTypeCoercion {
             // Leave the same if the dataTypes match.
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
-              logger.debug(s"Promoting $a to $newType in ${q.simpleString}}")
+              logDebug(s"Promoting $a to $newType in ${q.simpleString}}")
               newType
           }
       }
@@ -154,7 +154,7 @@ trait HiveTypeCoercion {
             (Alias(Cast(l, StringType), l.name)(), r)
 
           case (l, r) if l.dataType != r.dataType =>
-            logger.debug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
+            logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
             findTightestCommonType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
@@ -170,7 +170,7 @@ trait HiveTypeCoercion {
 
         val newLeft =
           if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            logger.debug(s"Widening numeric types in union $castedLeft ${left.output}")
+            logDebug(s"Widening numeric types in union $castedLeft ${left.output}")
             Project(castedLeft, left)
           } else {
             left
@@ -178,7 +178,7 @@ trait HiveTypeCoercion {
 
         val newRight =
           if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            logger.debug(s"Widening numeric types in union $castedRight ${right.output}")
+            logDebug(s"Widening numeric types in union $castedRight ${right.output}")
             Project(castedRight, right)
           } else {
             right

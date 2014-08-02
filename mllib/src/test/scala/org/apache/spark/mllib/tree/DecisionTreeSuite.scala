@@ -48,7 +48,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       requiredMSE: Double) {
     val predictions = input.map(x => model.predict(x.features))
     val squaredError = predictions.zip(input).map { case (prediction, expected) =>
-      (prediction - expected.label) * (prediction - expected.label)
+      val err = prediction - expected.label
+      err * err
     }.sum
     val mse = squaredError / input.length
     assert(mse <= requiredMSE)
