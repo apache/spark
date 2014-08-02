@@ -120,7 +120,7 @@ def manager():
             try:
                 ready_fds = select.select([0, listen_sock], [], [])[0]
             except select.error as ex:
-                if ex[0] == 4:
+                if ex[0] == EINTR:
                     continue
                 else:
                     raise
