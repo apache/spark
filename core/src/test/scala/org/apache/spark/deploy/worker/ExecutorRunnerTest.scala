@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {
     def f(s:String) = new File(s)
-    val sparkHome = sys.props("spark.test.home")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,
       Command("foo", Seq(), Map(), Seq(), Seq(), Seq()), "appUiUrl")
     val appId = "12345-worker321-9876"
