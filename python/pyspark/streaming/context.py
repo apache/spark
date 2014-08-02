@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import time
+
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -60,6 +62,12 @@ class StreamingContext(object):
         @param duration: A L{Duration} Duration for SparkStreaming
 
         """
+
+        # launch call back server
+        if not gateway:
+            gateway = launch_gateway()
+#        gateway.restart_callback_server()
+
         # Create the Python Sparkcontext
         self._sc = SparkContext(master=master, appName=appName, sparkHome=sparkHome,
                         pyFiles=pyFiles, environment=environment, batchSize=batchSize,
