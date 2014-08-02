@@ -21,12 +21,15 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.TimestampWritable
@@ -90,6 +93,62 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+  }
+
+  /**
+   * Analyzes the given table in the current database to generate statistics, which will be
+   * used in query optimizations.
+   * Right now, it only supports retrieving the size of a Hive table.
+   */
+  def analyze(tableName: String) {
+    val relation = catalog.lookupRelation(None, tableName) match {
+      case LowerCaseSchema(r) => r
+      case o => o
+    }
+
+    relation match {
+      case relation: MetastoreRelation => {
+        // This method is borrowed from
+        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
+        // in Hive 0.13.
+        // TODO: Generalize statistics collection.
+        def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
+          val path = table.getPath()
+          var size: Long = 0L
+          try {
+            val fs = path.getFileSystem(conf)
+            size = fs.getContentSummary(path).getLength()
+          } catch {
+            case e: Exception =>
+              logger.warn(
+                s"Failed to get the size of table ${table.getTableName} in the " +
+                s"database ${table.getDbName} because of ${e.toString}", e)
+              size = 0L
+          }
+
+          size
+        }
+
+        val tableParameters = relation.hiveQlTable.getParameters
+        val oldTotalSize =
+          Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE)).map(_.toLong).getOrElse(0L)
+        val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
+        // Update the Hive metastore if the total size of the table is different than the size
+        // recorded in the Hive metastore.
+        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
+        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+          tableParameters.put(StatsSetupConst.TOTAL_SIZE, newTotalSize.toString)
+          val hiveTTable = relation.hiveQlTable.getTTable
+          hiveTTable.setParameters(tableParameters)
+          val tableFullName =
+            relation.hiveQlTable.getDbName() + "." + relation.hiveQlTable.getTableName()
+
+          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+        }
+      }
+      case otherRelation =>
+        throw new NotImplementedError(s"Analyzing a ${otherRelation} has not been implemented")
+    }
   }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
