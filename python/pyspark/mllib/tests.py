@@ -100,6 +100,7 @@ class ListTests(PySparkTestCase):
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
+        from pyspark.mllib.tree import DecisionTree
         data = [
             LabeledPoint(0.0, [1, 0, 0]),
             LabeledPoint(1.0, [0, 1, 1]),
@@ -127,9 +128,19 @@ class ListTests(PySparkTestCase):
         self.assertTrue(nb_model.predict(features[2]) <= 0)
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
+        categoricalFeaturesInfo = {0: 3} # feature 0 has 3 categories
+        dt_model = \
+            DecisionTree.trainClassifier(rdd, numClasses=2,
+                                         categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(dt_model.predict(features[0]) <= 0)
+        self.assertTrue(dt_model.predict(features[1]) > 0)
+        self.assertTrue(dt_model.predict(features[2]) <= 0)
+        self.assertTrue(dt_model.predict(features[3]) > 0)
+
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
             RidgeRegressionWithSGD
+        from pyspark.mllib.tree import DecisionTree
         data = [
             LabeledPoint(-1.0, [0, -1]),
             LabeledPoint(1.0, [0, 1]),
@@ -156,6 +167,14 @@ class ListTests(PySparkTestCase):
         self.assertTrue(rr_model.predict(features[1]) > 0)
         self.assertTrue(rr_model.predict(features[2]) <= 0)
         self.assertTrue(rr_model.predict(features[3]) > 0)
+
+        categoricalFeaturesInfo = {0: 2} # feature 0 has 2 categories
+        dt_model = \
+            DecisionTree.trainRegressor(rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(dt_model.predict(features[0]) <= 0)
+        self.assertTrue(dt_model.predict(features[1]) > 0)
+        self.assertTrue(dt_model.predict(features[2]) <= 0)
+        self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
@@ -229,6 +248,7 @@ class SciPyTests(PySparkTestCase):
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
+        from pyspark.mllib.tree import DecisionTree
         data = [
             LabeledPoint(0.0, self.scipy_matrix(2, {0: 1.0})),
             LabeledPoint(1.0, self.scipy_matrix(2, {1: 1.0})),
@@ -256,9 +276,18 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(nb_model.predict(features[2]) <= 0)
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
+        categoricalFeaturesInfo = {0: 3} # feature 0 has 3 categories
+        dt_model = DecisionTree.trainClassifier(rdd, numClasses=2,
+                                                categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(dt_model.predict(features[0]) <= 0)
+        self.assertTrue(dt_model.predict(features[1]) > 0)
+        self.assertTrue(dt_model.predict(features[2]) <= 0)
+        self.assertTrue(dt_model.predict(features[3]) > 0)
+
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
             RidgeRegressionWithSGD
+        from pyspark.mllib.tree import DecisionTree
         data = [
             LabeledPoint(-1.0, self.scipy_matrix(2, {1: -1.0})),
             LabeledPoint(1.0, self.scipy_matrix(2, {1: 1.0})),
@@ -285,6 +314,13 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(rr_model.predict(features[1]) > 0)
         self.assertTrue(rr_model.predict(features[2]) <= 0)
         self.assertTrue(rr_model.predict(features[3]) > 0)
+
+        categoricalFeaturesInfo = {0: 2} # feature 0 has 2 categories
+        dt_model = DecisionTree.trainRegressor(rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(dt_model.predict(features[0]) <= 0)
+        self.assertTrue(dt_model.predict(features[1]) > 0)
+        self.assertTrue(dt_model.predict(features[2]) <= 0)
+        self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
 if __name__ == "__main__":
