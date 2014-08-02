@@ -151,7 +151,7 @@ class ExternalAppendOnlyMap[K, V, C](
           val availableMemory = maxMemoryThreshold - shuffleMemoryMap.values.sum
 
           // Use growth rate to predict if need to spill
-          shouldSpill = availableMemory < （currentSize - lastSize) * SparkEnv.get.conf.get("spark.executor.cores").toInt
+          shouldSpill = availableMemory < (currentSize - lastSize) * SparkEnv.get.conf.get("spark.executor.cores").toInt * 2
           if (!shouldSpill) {
             shuffleMemoryMap(threadId) = currentSize * 2
             myMemoryThreshold = currentSize * 2
