@@ -30,5 +30,5 @@ if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
     exit 1
 else
-    echo -e "Scalastyle checks passed.\n"
+    echo -e "Scalastyle checks passed."
 fi
