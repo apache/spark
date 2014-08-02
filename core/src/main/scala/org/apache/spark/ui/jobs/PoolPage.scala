@@ -40,6 +40,7 @@ private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
         case Some(s) => s.values.toSeq
         case None => Seq[StageInfo]()
       }
+
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse, parent)
 

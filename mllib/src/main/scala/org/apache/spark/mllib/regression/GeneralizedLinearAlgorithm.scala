@@ -155,7 +155,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     val intercept = if (addIntercept) weightsWithIntercept(weightsWithIntercept.size - 1) else 0.0
     val weights =
       if (addIntercept) {
-        Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
+        Vectors.dense(weightsWithIntercept.toArray.tail)
       } else {
         weightsWithIntercept
       }
