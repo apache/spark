@@ -34,6 +34,13 @@ class SQLQuerySuite extends QueryTest {
       "test")
   }
 
+  test("SQRT") {
+    checkAnswer(
+      sql("SELECT SQRT(key) FROM testData"),
+      (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
+    )
+  }
+  
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),
