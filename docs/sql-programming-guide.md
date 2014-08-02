@@ -495,11 +495,11 @@ directory.
 // sc is an existing SparkContext.
 val hiveContext = new org.apache.spark.sql.hive.HiveContext(sc)
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-hiveContext.hql("FROM src SELECT key, value").collect().foreach(println)
+hiveContext.sql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
@@ -515,11 +515,11 @@ expressed in HiveQL.
 // sc is an existing JavaSparkContext.
 JavaHiveContext hiveContext = new org.apache.spark.sql.hive.api.java.HiveContext(sc);
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
 // Queries are expressed in HiveQL.
-Row[] results = hiveContext.hql("FROM src SELECT key, value").collect();
+Row[] results = hiveContext.sql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
@@ -537,11 +537,11 @@ expressed in HiveQL.
 from pyspark.sql import HiveContext
 hiveContext = HiveContext(sc)
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = hiveContext.hql("FROM src SELECT key, value").collect()
+results = hiveContext.sql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
