@@ -81,7 +81,8 @@ private[spark] class Worker(
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
-  val sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
+  val sparkHome =
+    new File(sys.props.get("spark.test.home").orElse(sys.env.get("SPARK_HOME")).getOrElse("."))
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]

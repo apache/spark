@@ -30,7 +30,7 @@ u'My app'
 u'local'
 >>> sc.appName
 u'My app'
->>> sc.sparkHome is None
+>>> sc.sparkHome is not None
 True
 
 >>> conf = SparkConf(loadDefaults=False)
