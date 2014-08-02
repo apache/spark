@@ -78,6 +78,11 @@ abstract class StreamingLinearAlgorithm[
         logInfo("Model updated at time %s".format(time.toString))
         logInfo("Current model: weights, %s".format(
           model.weights.toArray.take(100).mkString("[", ",", "]")))
+        val display = model.weights.size match {
+          case x if x > 100 => model.weights.toArray.take(100).mkString("[", ",", "...")
+          case _ => model.weights.toArray.mkString("[", ",", "]")
+        }
+        logInfo("Current model: weights, %s".format (display))
     }
   }
 
