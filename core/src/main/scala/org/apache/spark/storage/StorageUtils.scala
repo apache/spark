@@ -159,7 +159,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
    */
-  def numRddBlocks: Int = _rddBlocks.values.map(_.size).fold(0)(_ + _)
+  def numRddBlocks: Int = _rddBlocks.values.map(_.size).sum
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
@@ -173,15 +173,15 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /** Return the memory used by this block manager. */
   def memUsed: Long =
-    _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).fold(0L)(_ + _)
+    _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long =
-    _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).fold(0L)(_ + _)
+    _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
 
   /** Return the off-heap space used by this block manager. */
   def offHeapUsed: Long =
-    _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(offHeapUsedByRdd).fold(0L)(_ + _)
+    _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(offHeapUsedByRdd).sum
 
   /** Return the memory used by the given RDD in this block manager in O(1) time. */
   def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
@@ -247,10 +247,10 @@ private[spark] object StorageUtils {
       // Assume all blocks belonging to the same RDD have the same storage level
       val storageLevel = statuses
         .map(_.rddStorageLevel(rddId)).flatMap(s => s).headOption.getOrElse(StorageLevel.NONE)
-      val numCachedPartitions = statuses.map(_.numRddBlocksById(rddId)).fold(0)(_ + _)
-      val memSize = statuses.map(_.memUsedByRdd(rddId)).fold(0L)(_ + _)
-      val diskSize = statuses.map(_.diskUsedByRdd(rddId)).fold(0L)(_ + _)
-      val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).fold(0L)(_ + _)
+      val numCachedPartitions = statuses.map(_.numRddBlocksById(rddId)).sum
+      val memSize = statuses.map(_.memUsedByRdd(rddId)).sum
+      val diskSize = statuses.map(_.diskUsedByRdd(rddId)).sum
+      val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).sum
 
       rddInfo.storageLevel = storageLevel
       rddInfo.numCachedPartitions = numCachedPartitions

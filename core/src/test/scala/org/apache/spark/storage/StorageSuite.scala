@@ -242,9 +242,9 @@ class StorageSuite extends FunSuite {
 
   test("storage status memUsed, diskUsed, tachyonUsed") {
     val status = storageStatus2
-    def actualMemUsed: Long = status.blocks.values.map(_.memSize).fold(0L)(_ + _)
-    def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).fold(0L)(_ + _)
-    def actualOffHeapUsed: Long = status.blocks.values.map(_.tachyonSize).fold(0L)(_ + _)
+    def actualMemUsed: Long = status.blocks.values.map(_.memSize).sum
+    def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).sum
+    def actualOffHeapUsed: Long = status.blocks.values.map(_.tachyonSize).sum
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
     assert(status.offHeapUsed === actualOffHeapUsed)

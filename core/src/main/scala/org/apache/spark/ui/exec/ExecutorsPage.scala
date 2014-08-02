@@ -49,9 +49,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
-    val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
-    val memUsed = storageStatusList.map(_.memUsed).fold(0L)(_ + _)
-    val diskUsed = storageStatusList.map(_.diskUsed).fold(0L)(_ + _)
+    val maxMem = storageStatusList.map(_.maxMem).sum
+    val memUsed = storageStatusList.map(_.memUsed).sum
+    val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
 
