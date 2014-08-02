@@ -25,4 +25,5 @@ package object catalyst {
    */
   protected[catalyst] object ScalaReflectionLock
 
+  protected[catalyst] type Logging = com.typesafe.scalalogging.slf4j.Logging
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 
@@ -60,7 +60,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           case (plan, rule) =>
             val result = rule(plan)
             if (!result.fastEquals(plan)) {
-              log.trace(
+              logger.trace(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
                   |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
@@ -73,26 +73,26 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            log.info(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            logger.info(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
           }
           continue = false
         }
 
         if (curPlan.fastEquals(lastPlan)) {
-          log.trace(s"Fixed point reached for batch ${batch.name} after $iteration iterations.")
+          logger.trace(s"Fixed point reached for batch ${batch.name} after $iteration iterations.")
           continue = false
         }
         lastPlan = curPlan
       }
 
       if (!batchStartPlan.fastEquals(curPlan)) {
-        log.debug(
+        logger.debug(
           s"""
           |=== Result of Batch ${batch.name} ===
           |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
         """.stripMargin)
       } else {
-        log.trace(s"Batch ${batch.name} has no effect.")
+        logger.trace(s"Batch ${batch.name} has no effect.")
       }
     }
 

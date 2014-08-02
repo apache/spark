@@ -55,6 +55,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.typesafe</groupId>
+      <artifactId>scalalogging-slf4j_${scala.binary.version}</artifactId>
+      <version>1.0.1</version>
+    </dependency>
+    <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>

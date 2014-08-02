@@ -19,8 +19,7 @@ package org.apache.spark.sql.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Logging, Row}
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
 
@@ -102,7 +101,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
     copyColumnHeader(rawBuffer, compressedBuffer)
 
-    log.info(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
+    logger.info(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
     encoder.compress(rawBuffer, compressedBuffer, columnType)
   }
 }
