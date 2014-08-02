@@ -32,9 +32,8 @@ private[kinesis] class KinesisCheckpointState(
     checkpointInterval: Duration, 
     currentClock: Clock = new SystemClock())
   extends Logging {
-  /**
-   * Initialize the checkpoint clock using the given currentClock + checkpointInterval millis
-   */
+  
+  /* Initialize the checkpoint clock using the given currentClock + checkpointInterval millis */
   val checkpointClock = new ManualClock()
   checkpointClock.setTime(currentClock.currentTime() + checkpointInterval.milliseconds)
 

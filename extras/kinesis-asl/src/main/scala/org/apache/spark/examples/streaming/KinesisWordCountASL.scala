@@ -18,9 +18,7 @@
 package org.apache.spark.examples.streaming
 
 import java.nio.ByteBuffer
-
 import scala.util.Random
-
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
@@ -28,11 +26,12 @@ import org.apache.spark.streaming.Milliseconds
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
 import org.apache.spark.streaming.kinesis.KinesisUtils
-
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.PutRecordRequest
+import org.apache.log4j.Logger
+import org.apache.log4j.Level
 
 /**
  * Kinesis Spark Streaming WordCount example.
@@ -72,9 +71,7 @@ import com.amazonaws.services.kinesis.model.PutRecordRequest
  */
 object KinesisWordCountASL extends Logging {
   def main(args: Array[String]) {
-/**
- * Check that all required args were passed in.
- */
+    /* Check that all required args were passed in. */
     if (args.length < 2) {
       System.err.println(
         """
@@ -87,57 +84,57 @@ object KinesisWordCountASL extends Logging {
     }
 
     StreamingExamples.setStreamingLogLevels()
-    
-    /** Populate the appropriate variables from the given args */
+
+    /* Populate the appropriate variables from the given args */
     val Array(streamName, endpointUrl) = args
 
-    /** Determine the number of shards from the stream */
+    /* Determine the number of shards from the stream */
     val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
     kinesisClient.setEndpoint(endpointUrl)
     val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards()
       .size()
 
-    /** In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard. */
+    /* In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard. */
     val numStreams = numShards
 
-    /** 
+    /* 
      *  numSparkThreads should be 1 more thread than the number of receivers.
      *  This leaves one thread available for actually processing the data.
      */
     val numSparkThreads = numStreams + 1
 
-    /** Setup the and SparkConfig and StreamingContext */
-    /** Spark Streaming batch interval */
+    /* Setup the and SparkConfig and StreamingContext */
+    /* Spark Streaming batch interval */
     val batchInterval = Milliseconds(2000)    
     val sparkConfig = new SparkConf().setAppName("KinesisWordCount")
       .setMaster(s"local[$numSparkThreads]")
     val ssc = new StreamingContext(sparkConfig, batchInterval)
-    /** Setup the checkpoint directory used by Spark Streaming */
+    /* Setup the checkpoint directory used by Spark Streaming */
     ssc.checkpoint("/tmp/checkpoint");
 
-    /** Kinesis checkpoint interval.  Same as batchInterval for this example. */
+    /* Kinesis checkpoint interval.  Same as batchInterval for this example. */
     val kinesisCheckpointInterval = batchInterval
 
-    /** Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
+    /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
     val kinesisStreams = (0 until numStreams).map { i =>
       KinesisUtils.createStream(ssc, streamName, endpointUrl, kinesisCheckpointInterval,
           InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
     }
 
-    /** Union all the streams */
+    /* Union all the streams */
     val unionStreams = ssc.union(kinesisStreams)
 
-    /** Convert each line of Array[Byte] to String, split into words, and count them */
+    /* Convert each line of Array[Byte] to String, split into words, and count them */
     val words = unionStreams.flatMap(byteArray => new String(byteArray)
       .split(" "))
 
-    /** Map each word to a (word, 1) tuple so we can reduce/aggregate by key. */
+    /* Map each word to a (word, 1) tuple so we can reduce/aggregate by key. */
     val wordCounts = words.map(word => (word, 1)).reduceByKey(_ + _)
 
-    /** Print the first 10 wordCounts by key */
+    /* Print the first 10 wordCounts by key */
     wordCounts.print()
 
-    /** Start the streaming context and await termination */
+    /* Start the streaming context and await termination */
     ssc.start()
     ssc.awaitTermination()
   }
@@ -169,13 +166,13 @@ object KinesisWordCountProducerASL {
 
     StreamingExamples.setStreamingLogLevels()
 
-    /** Populate the appropriate variables from the given args */
+    /* Populate the appropriate variables from the given args */
     val Array(stream, endpoint, recordsPerSecond, wordsPerRecord) = args
 
-    /** Generate the records and return the totals */
+    /* Generate the records and return the totals */
     val totals = generate(stream, endpoint, recordsPerSecond.toInt, wordsPerRecord.toInt)
 
-    /** Print the array of (index, total) tuples */
+    /* Print the array of (index, total) tuples */
     println("Totals")
     totals.foreach(total => println(total.toString()))
   }
@@ -187,7 +184,7 @@ object KinesisWordCountProducerASL {
 
     val MaxRandomInts = 10
 
-    /** Create the Kinesis client */
+    /* Create the Kinesis client */
     val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
     kinesisClient.setEndpoint(endpoint)
 
@@ -195,43 +192,62 @@ object KinesisWordCountProducerASL {
       s" $recordsPerSecond records per second and $wordsPerRecord words per record");
 
     val totals = new Array[Int](MaxRandomInts)
-    /** Put String records onto the stream per the given recordPerSec and wordsPerRecord */
+    /* Put String records onto the stream per the given recordPerSec and wordsPerRecord */
     for (i <- 1 to 5) {
 
-      /** Generate recordsPerSec records to put onto the stream */
+      /* Generate recordsPerSec records to put onto the stream */
       val records = (1 to recordsPerSecond.toInt).map { recordNum =>
-        /** 
+        /* 
          *  Randomly generate each wordsPerRec words between 0 (inclusive)
          *  and MAX_RANDOM_INTS (exclusive) 
          */
         val data = (1 to wordsPerRecord.toInt).map(x => {
-          /** Generate the random int */
+          /* Generate the random int */
           val randomInt = Random.nextInt(MaxRandomInts)
 
-          /** Keep track of the totals */
+          /* Keep track of the totals */
           totals(randomInt) += 1
 
           randomInt.toString()
         }).mkString(" ")
 
-        /** Create a partitionKey based on recordNum */
+        /* Create a partitionKey based on recordNum */
         val partitionKey = s"partitionKey-$recordNum"
 
-        /** Create a PutRecordRequest with an Array[Byte] version of the data */
+        /* Create a PutRecordRequest with an Array[Byte] version of the data */
         val putRecordRequest = new PutRecordRequest().withStreamName(stream)
             .withPartitionKey(partitionKey)
             .withData(ByteBuffer.wrap(data.getBytes()));
 
-        /** Put the record onto the stream and capture the PutRecordResult */
+        /* Put the record onto the stream and capture the PutRecordResult */
         val putRecordResult = kinesisClient.putRecord(putRecordRequest);
       }
 
-      /** Sleep for a second */
+      /* Sleep for a second */
       Thread.sleep(1000)
       println("Sent " + recordsPerSecond + " records")
     }
 
-    /** Convert the totals to (index, total) tuple */
+    /* Convert the totals to (index, total) tuple */
     (0 to (MaxRandomInts - 1)).zip(totals)
+  }
+}
+
+/** 
+ *  Utility functions for Spark Streaming examples. 
+ *  This has been lifted from the examples/ project to remove the circular dependency.
+ */
+object StreamingExamples extends Logging {
+
+  /** Set reasonable logging levels for streaming if the user has not configured log4j. */
+  def setStreamingLogLevels() {
+    val log4jInitialized = Logger.getRootLogger.getAllAppenders.hasMoreElements
+    if (!log4jInitialized) {
+      // We first log something to initialize Spark's default logging, then we override the
+      // logging level.
+      logInfo("Setting log level to [WARN] for streaming example." +
+        " To override add a custom log4j.properties to the classpath.")
+      Logger.getRootLogger.setLevel(Level.WARN)
+    }
   }
 }

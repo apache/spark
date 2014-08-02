@@ -70,18 +70,18 @@ private[kinesis] class KinesisReceiver(
     storageLevel: StorageLevel)
   extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
 
-  /**
+  /*
    * The following vars are built in the onStart() method which executes in the Spark Worker after
    *   this code is serialized and shipped remotely.
    */
 
-  /**
+  /*
    *  workerId should be based on the ip address of the actual Spark Worker where this code runs
    *   (not the Driver's ip address.)
    */
   var workerId: String = null
 
-  /**
+  /*
    * This impl uses the DefaultAWSCredentialsProviderChain and searches for credentials 
    *   in the following order of precedence:
    * Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
@@ -92,10 +92,10 @@ private[kinesis] class KinesisReceiver(
    */
   var credentialsProvider: AWSCredentialsProvider = null
 
-  /** KCL config instance. */
+  /* KCL config instance. */
   var kinesisClientLibConfiguration: KinesisClientLibConfiguration = null
 
-  /**
+  /*
    *  RecordProcessorFactory creates impls of IRecordProcessor.
    *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the 
    *    IRecordProcessor.processRecords() method.
@@ -103,7 +103,7 @@ private[kinesis] class KinesisReceiver(
    */
   var recordProcessorFactory: IRecordProcessorFactory = null
 
-  /**
+  /*
    * Create a Kinesis Worker.
    * This is the core client abstraction from the Kinesis Client Library (KCL).
    * We pass the RecordProcessorFactory from above as well as the KCL config instance.

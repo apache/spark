@@ -79,14 +79,14 @@ public final class JavaKinesisWordCountASL {
     private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
     private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
-    /**
+    /*
      * Make the constructor private to enforce singleton
      */
     private JavaKinesisWordCountASL() {
     }
 
     public static void main(String[] args) {
-        /**
+        /*
          * Check that all required args were passed in.
          */
         if (args.length < 2) {
@@ -100,41 +100,41 @@ public final class JavaKinesisWordCountASL {
 
         StreamingExamples.setStreamingLogLevels();
 
-        /** Populate the appropriate variables from the given args */
+        /* Populate the appropriate variables from the given args */
         String streamName = args[0];
         String endpointUrl = args[1];
-        /** Set the batch interval to a fixed 2000 millis (2 seconds) */
+        /* Set the batch interval to a fixed 2000 millis (2 seconds) */
         Duration batchInterval = new Duration(2000);
 
-        /** Create a Kinesis client in order to determine the number of shards for the given stream */
+        /* Create a Kinesis client in order to determine the number of shards for the given stream */
         AmazonKinesisClient kinesisClient = new AmazonKinesisClient(
                 new DefaultAWSCredentialsProviderChain());
         kinesisClient.setEndpoint(endpointUrl);
 
-        /** Determine the number of shards from the stream */
+        /* Determine the number of shards from the stream */
         int numShards = kinesisClient.describeStream(streamName)
                 .getStreamDescription().getShards().size();
 
-        /** In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard */ 
+        /* In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard */ 
         int numStreams = numShards;
 
-        /** Must add 1 more thread than the number of receivers or the output won't show properly from the driver */
+        /* Must add 1 more thread than the number of receivers or the output won't show properly from the driver */
         int numSparkThreads = numStreams + 1;
 
-        /** Setup the Spark config. */
+        /* Setup the Spark config. */
         SparkConf sparkConfig = new SparkConf().setAppName("KinesisWordCount").setMaster(
                 "local[" + numSparkThreads + "]");
 
-        /** Kinesis checkpoint interval.  Same as batchInterval for this example. */
+        /* Kinesis checkpoint interval.  Same as batchInterval for this example. */
         Duration checkpointInterval = batchInterval;
 
-        /** Setup the StreamingContext */
+        /* Setup the StreamingContext */
         JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
 
-        /** Setup the checkpoint directory used by Spark Streaming */
+        /* Setup the checkpoint directory used by Spark Streaming */
         jssc.checkpoint("/tmp/checkpoint");
 
-        /** Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
+        /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
         	streamsList.add(
@@ -143,19 +143,19 @@ public final class JavaKinesisWordCountASL {
             );
         }
 
-        /** Union all the streams if there is more than 1 stream */
+        /* Union all the streams if there is more than 1 stream */
         JavaDStream<byte[]> unionStreams;
         if (streamsList.size() > 1) {
             unionStreams = jssc.union(streamsList.get(0), streamsList.subList(1, streamsList.size()));
         } else {
-            /** Otherwise, just use the 1 stream */
+            /* Otherwise, just use the 1 stream */
             unionStreams = streamsList.get(0);
         }
 
-        /**
-          * Split each line of the union'd DStreams into multiple words using flatMap to produce the collection.
-          * Convert lines of byte[] to multiple Strings by first converting to String, then splitting on WORD_SEPARATOR.
-          */
+        /*
+         * Split each line of the union'd DStreams into multiple words using flatMap to produce the collection.
+         * Convert lines of byte[] to multiple Strings by first converting to String, then splitting on WORD_SEPARATOR.
+         */
         JavaDStream<String> words = unionStreams.flatMap(new FlatMapFunction<byte[], String>() {
                 @Override
                 public Iterable<String> call(byte[] line) {
@@ -163,7 +163,7 @@ public final class JavaKinesisWordCountASL {
                 }
             });
 
-        /** Map each word to a (word, 1) tuple, then reduce/aggregate by key. */
+        /* Map each word to a (word, 1) tuple, then reduce/aggregate by key. */
         JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
             new PairFunction<String, String, Integer>() {
                 @Override
@@ -177,10 +177,10 @@ public final class JavaKinesisWordCountASL {
                 }
             });
 
-        /** Print the first 10 wordCounts by key */
+        /* Print the first 10 wordCounts by key */
         wordCounts.print();
 
-        /** Start the streaming context and await termination */
+        /* Start the streaming context and await termination */
         jssc.start();
         jssc.awaitTermination();
     }
