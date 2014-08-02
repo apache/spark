@@ -20,9 +20,16 @@ package org.apache.spark.mllib.stat
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class HypothesisTestSuite extends FunSuite with LocalSparkContext {
   test("chi squared") {
-    
+    val x = sc.parallelize(Array(2.0, 23.0, 53.0))
+    val y = sc.parallelize(Array(53.0, 76.0, 1.0))
+    val c = Statistics.chiSquared(x, y)
+    assert(c.statistic ~= 120.2546 absTol 1e-3)
+
+    val bad = sc.parallelize(Array(2.0, -23.0, 53.0))
+    intercept[Exception](Statistics.chiSquared(bad, y))
   }
 }

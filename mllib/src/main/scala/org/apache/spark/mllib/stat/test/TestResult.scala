@@ -38,7 +38,7 @@ trait TestResult {
    */
   override def toString: String = {
     s"pValue = $pValue \n" + // TODO explain what pValue is
-    s"degrees of freedom = $degreesOfFreedom \n" +
+    s"degrees of freedom = ${degreesOfFreedom.mkString} \n" +
     s"statistic = $statistic"
   }
 }

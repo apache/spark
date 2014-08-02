@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat.test
 
-import cern.jet.stat.Probability.chiSquareComplemented
+import cern.jet.stat.Probability.chiSquare
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
@@ -35,7 +35,7 @@ private[stat] object ChiSquaredTest {
     }
   }
 
-  def chiSquared(counts: RDD[Vector], method: String = PEARSON): ChiSquaredTestResult = {
+  def chiSquaredMatrix(counts: RDD[Vector], method: String = PEARSON): ChiSquaredTestResult = {
     method match {
       case PEARSON => chiSquaredPearson(counts)
       case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
@@ -48,23 +48,29 @@ private[stat] object ChiSquaredTest {
     chiSquaredPearson(mat)
   }
 
+  // Makes two passes over the RDD total
   private def chiSquaredPearson(counts: RDD[Vector]): ChiSquaredTestResult = {
     val numCols = counts.first.size
-    val colSums = new Array[Double](numCols)
-    var result = (colSums, 0) // second value is for count of vectors in the RDD
 
-    // Make two passes over the RDD with the first pass for collecting column sums
-    // TODO check that the counts are all non-negative in this pass
-    counts.aggregate(result)(
-      (sums, vector) => ((sums._1, vector.toArray).zipped.map(_ + _), sums._2 + 1),    // seqOp
+    // first pass for collecting column sums
+    val result = counts.aggregate((new Array[Double](numCols), 0))(
+      (sums, vector) => {
+        val arr = vector.toArray
+        // check that the counts are all non-negative and finite in this pass
+        if (!arr.forall( i => !i.isNaN && !i.isInfinite && i >= 0.0)) {
+          throw new IllegalArgumentException("All input entries must be nonnegative and finite.")
+        }
+        ((sums._1, arr).zipped.map(_ + _), sums._2 + 1)
+      },  //seqOp
       (sums1, sums2) => ((sums1._1, sums2._1).zipped.map(_ + _), sums1._2 + sums2._2)) // combOp
 
+    val colSums = result._1
     val total = colSums.sum
 
     // Second pass to compute chi-squared statistic
     val statistic = counts.aggregate(0.0)(rowStatistic(colSums, total), _ + _)
     val df = (numCols - 1) * (result._2 - 1)
-    val pValue = chiSquareComplemented(statistic, df)
+    val pValue = chiSquare(statistic, df)
 
     new ChiSquaredTestResult(pValue, Array(df), statistic, PEARSON)
   }
@@ -76,7 +82,8 @@ private[stat] object ChiSquaredTest {
       val rowSum = arr.sum
       (arr, colSums).zipped.foldLeft(statistic) { case (stat, (observed, colSum)) =>
         val expected = rowSum * colSum / total
-        stat + (observed - expected) * (observed - expected) / expected
+        val r = stat + (observed - expected) * (observed - expected) / expected
+        r
       }
     }
   }
