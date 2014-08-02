@@ -34,9 +34,9 @@ if [ $pep8_status ]
     then
         echo "PEP8 checks failed."
         cat "$PEP8_REPORT_PATH"
-        exit 1
     else
         echo "PEP8 checks passed."
 fi
 
 rm -f "$PEP8_REPORT_PATH"
+exit $pep8_status
