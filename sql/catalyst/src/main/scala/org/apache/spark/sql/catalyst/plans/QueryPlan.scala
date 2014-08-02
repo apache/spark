@@ -125,51 +125,10 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }.toSeq
   }
 
-  protected def generateSchemaString(schema: Seq[Attribute]): String = {
-    val builder = new StringBuilder
-    builder.append("root\n")
-    val prefix = " |"
-    schema.foreach { attribute =>
-      val name = attribute.name
-      val dataType = attribute.dataType
-      dataType match {
-        case fields: StructType =>
-          builder.append(s"$prefix-- $name: $StructType\n")
-          generateSchemaString(fields, s"$prefix    |", builder)
-        case ArrayType(fields: StructType) =>
-          builder.append(s"$prefix-- $name: $ArrayType[$StructType]\n")
-          generateSchemaString(fields, s"$prefix    |", builder)
-        case ArrayType(elementType: DataType) =>
-          builder.append(s"$prefix-- $name: $ArrayType[$elementType]\n")
-        case _ => builder.append(s"$prefix-- $name: $dataType\n")
-      }
-    }
-
-    builder.toString()
-  }
-
-  protected def generateSchemaString(
-      schema: StructType,
-      prefix: String,
-      builder: StringBuilder): StringBuilder = {
-    schema.fields.foreach {
-      case StructField(name, fields: StructType, _) =>
-        builder.append(s"$prefix-- $name: $StructType\n")
-        generateSchemaString(fields, s"$prefix    |", builder)
-      case StructField(name, ArrayType(fields: StructType), _) =>
-        builder.append(s"$prefix-- $name: $ArrayType[$StructType]\n")
-        generateSchemaString(fields, s"$prefix    |", builder)
-      case StructField(name, ArrayType(elementType: DataType), _) =>
-        builder.append(s"$prefix-- $name: $ArrayType[$elementType]\n")
-      case StructField(name, fieldType: DataType, _) =>
-        builder.append(s"$prefix-- $name: $fieldType\n")
-    }
-
-    builder
-  }
+  def schema: StructType = StructType.fromAttributes(output)
 
   /** Returns the output schema in the tree format. */
-  def schemaString: String = generateSchemaString(output)
+  def schemaString: String = schema.treeString
 
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)

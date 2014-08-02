@@ -120,6 +120,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
       "--name", "beauty",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -139,6 +140,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
     sysProps("spark.app.name") should be ("beauty")
+    sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
   }
 
@@ -156,6 +158,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
       "--name", "trill",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -176,6 +179,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
     sysProps("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps("spark.shuffle.spill") should be ("false")
   }
 
   test("handles standalone cluster mode") {
@@ -186,6 +190,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--supervise",
       "--driver-memory", "4g",
       "--driver-cores", "5",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -195,9 +200,13 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have size (0)
-    sysProps should have size (2)
-    sysProps.keys should contain ("spark.jars")
+    sysProps should have size (5)
     sysProps.keys should contain ("SPARK_SUBMIT")
+    sysProps.keys should contain ("spark.master")
+    sysProps.keys should contain ("spark.app.name")
+    sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("spark.shuffle.spill")
+    sysProps("spark.shuffle.spill") should be ("false")
   }
 
   test("handles standalone client mode") {
@@ -208,6 +217,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--total-executor-cores", "5",
       "--class", "org.SomeClass",
       "--driver-memory", "4g",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -218,6 +228,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
+    sysProps("spark.shuffle.spill") should be ("false")
   }
 
   test("handles mesos client mode") {
@@ -228,6 +239,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--total-executor-cores", "5",
       "--class", "org.SomeClass",
       "--driver-memory", "4g",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -238,6 +250,23 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
+    sysProps("spark.shuffle.spill") should be ("false")
+  }
+
+  test("handles confs with flag equivalents") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--conf", "spark.executor.memory=4g",
+      "--conf", "spark.master=yarn",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sysProps, mainClass) = createLaunchEnv(appArgs)
+    sysProps("spark.executor.memory") should be ("5g")
+    sysProps("spark.master") should be ("yarn-cluster")
+    mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
   test("launch simple application with spark-submit") {

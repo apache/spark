@@ -46,6 +46,10 @@ object SparkSubmit {
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
 
+  // A special jar name that indicates the class being run is inside of Spark itself, and therefore
+  // no user jar is needed.
+  private val SPARK_INTERNAL = "spark-internal"
+
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
@@ -132,8 +136,6 @@ object SparkSubmit {
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
-      case (STANDALONE, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Standalone clusters.")
       case (_, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -166,9 +168,9 @@ object SparkSubmit {
     val options = List[OptionAssigner](
 
       // All cluster managers
-      OptionAssigner(args.master, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.master"),
-      OptionAssigner(args.name, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
+      OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
+      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
+      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
 
       // Standalone cluster only
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
@@ -182,7 +184,7 @@ object SparkSubmit {
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
 
       // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name", sysProp = "spark.app.name"),
+      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
@@ -199,9 +201,9 @@ object SparkSubmit {
         sysProp = "spark.driver.extraJavaOptions"),
       OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, CLUSTER,
         sysProp = "spark.driver.extraLibraryPath"),
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, CLIENT,
+      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, CLIENT,
+      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.files")
@@ -257,11 +259,19 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (clusterManager == YARN && deployMode == CLUSTER) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      childArgs += ("--jar", args.primaryResource)
+      if (args.primaryResource != SPARK_INTERNAL) {
+        childArgs += ("--jar", args.primaryResource)
+      }
       childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }
+    }
+
+    // Properties given with --conf are superceded by other options, but take precedence over
+    // properties in the defaults file.
+    for ((k, v) <- args.sparkProperties) {
+      sysProps.getOrElseUpdate(k, v)
     }
 
     // Read from default spark properties, if any
@@ -329,7 +339,7 @@ object SparkSubmit {
    * Return whether the given primary resource represents a user jar.
    */
   private def isUserJar(primaryResource: String): Boolean = {
-    !isShell(primaryResource) && !isPython(primaryResource)
+    !isShell(primaryResource) && !isPython(primaryResource) && !isInternal(primaryResource)
   }
 
   /**
@@ -344,6 +354,10 @@ object SparkSubmit {
    */
   private[spark] def isPython(primaryResource: String): Boolean = {
     primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
+  }
+
+  private[spark] def isInternal(primaryResource: String): Boolean = {
+    primaryResource == SPARK_INTERNAL
   }
 
   /**
