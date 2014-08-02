@@ -382,7 +382,7 @@ object SparkBuild extends Build {
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.7.0" excludeAll(excludeFastutil), // Only HyperLogLogPlus is used, which does not depend on fastutil.
         "org.spark-project"          % "pyrolite"         % "2.0.1",
-        "net.sf.py4j"                % "py4j"             % "0.8.1"
+        "net.sf.py4j"                % "py4j"             % "0.8.2.1"
       ),
     libraryDependencies ++= maybeAvro,
     assembleDeps,
