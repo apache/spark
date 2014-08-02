@@ -24,8 +24,6 @@ import org.scalatest.FunSuite
  */
 class StorageSuite extends FunSuite {
   private val memAndDisk = StorageLevel.MEMORY_AND_DISK
-  private val memOnly = StorageLevel.MEMORY_ONLY
-  private val diskOnly = StorageLevel.DISK_ONLY
 
   // For testing add, update, and remove (for non-RDD blocks)
   private def storageStatus1: StorageStatus = {
@@ -242,52 +240,33 @@ class StorageSuite extends FunSuite {
     assert(status.rddBlocksById(1000).size === status.numRddBlocksById(1000))
   }
 
-  test("storage status updateRddStorageInfo") {
+  test("storage status memUsed, diskUsed, tachyonUsed") {
     val status = storageStatus2
-    // Positive delta
-    status.updateRddStorageInfo(0, 1000L, 1000L, 1000L, memOnly)
-    status.updateRddStorageInfo(1, 2000L, 2000L, 2000L, diskOnly)
-    status.updateRddStorageInfo(2, 3000L, 3000L, 3000L, memAndDisk)
-    assert(status.memUsedByRdd(0) === 1010L)
-    assert(status.memUsedByRdd(1) === 2100L)
-    assert(status.memUsedByRdd(2) === 3030L)
-    assert(status.diskUsedByRdd(0) === 1020L)
-    assert(status.diskUsedByRdd(1) === 2200L)
-    assert(status.diskUsedByRdd(2) === 3080L)
-    assert(status.offHeapUsedByRdd(0) === 1001L)
-    assert(status.offHeapUsedByRdd(1) === 2001L)
-    assert(status.offHeapUsedByRdd(2) === 3001L)
-    assert(status.rddStorageLevel(0) === Some(memOnly))
-    assert(status.rddStorageLevel(1) === Some(diskOnly))
-    assert(status.rddStorageLevel(2) === Some(memAndDisk))
-
-    // Negative delta
-    status.updateRddStorageInfo(0, -100L, -100L, -100L, memOnly)
-    status.updateRddStorageInfo(1, -200L, -200L, -200L, diskOnly)
-    status.updateRddStorageInfo(2, -300L, -300L, -300L, memAndDisk)
-    assert(status.memUsedByRdd(0) === 910L)
-    assert(status.memUsedByRdd(1) === 1900L)
-    assert(status.memUsedByRdd(2) === 2730L)
-    assert(status.diskUsedByRdd(0) === 920L)
-    assert(status.diskUsedByRdd(1) === 2000L)
-    assert(status.diskUsedByRdd(2) === 2780L)
-    assert(status.offHeapUsedByRdd(0) === 901L)
-    assert(status.offHeapUsedByRdd(1) === 1801L)
-    assert(status.offHeapUsedByRdd(2) === 2701L)
-
-    // Negative delta so large that the RDDs are no longer persisted
-    status.updateRddStorageInfo(0, -10000L, -10000L, -10000L, memOnly)
-    status.updateRddStorageInfo(1, -20000L, -20000L, -20000L, diskOnly)
-    status.updateRddStorageInfo(2, -30000L, -30000L, -30000L, memAndDisk)
-    assert(status.memUsedByRdd(0) === 0L)
-    assert(status.memUsedByRdd(1) === 0L)
-    assert(status.memUsedByRdd(2) === 0L)
-    assert(status.diskUsedByRdd(0) === 0L)
-    assert(status.diskUsedByRdd(1) === 0L)
-    assert(status.diskUsedByRdd(2) === 0L)
-    assert(status.offHeapUsedByRdd(0) === 0L)
-    assert(status.offHeapUsedByRdd(1) === 0L)
-    assert(status.offHeapUsedByRdd(2) === 0L)
+    def actualMemUsed: Long = status.blocks.values.map(_.memSize).fold(0L)(_ + _)
+    def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).fold(0L)(_ + _)
+    def actualOffHeapUsed: Long = status.blocks.values.map(_.tachyonSize).fold(0L)(_ + _)
+    assert(status.memUsed === actualMemUsed)
+    assert(status.diskUsed === actualDiskUsed)
+    assert(status.offHeapUsed === actualOffHeapUsed)
+    status.addBlock(TestBlockId("fire"), BlockStatus(memAndDisk, 4000L, 5000L, 6000L))
+    status.addBlock(TestBlockId("wire"), BlockStatus(memAndDisk, 400L, 500L, 600L))
+    status.addBlock(RDDBlockId(25, 25), BlockStatus(memAndDisk, 40L, 50L, 60L))
+    assert(status.memUsed === actualMemUsed)
+    assert(status.diskUsed === actualDiskUsed)
+    assert(status.offHeapUsed === actualOffHeapUsed)
+    status.updateBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 4L, 5L, 6L))
+    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 4L, 5L, 6L))
+    status.updateBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 4L, 5L, 6L))
+    assert(status.memUsed === actualMemUsed)
+    assert(status.diskUsed === actualDiskUsed)
+    assert(status.offHeapUsed === actualOffHeapUsed)
+    status.removeBlock(TestBlockId("fire"))
+    status.removeBlock(TestBlockId("man"))
+    status.removeBlock(RDDBlockId(2, 2))
+    status.removeBlock(RDDBlockId(2, 3))
+    assert(status.memUsed === actualMemUsed)
+    assert(status.diskUsed === actualDiskUsed)
+    assert(status.offHeapUsed === actualOffHeapUsed)
   }
 
   // For testing StorageUtils.updateRddInfo and StorageUtils.getRddBlockLocations

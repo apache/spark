@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import scala.collection.Map
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -48,16 +47,20 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private val _nonRddBlocks = new mutable.HashMap[BlockId, BlockStatus]
 
   /**
-   * A map of storage information associated with each RDD.
+   * Storage information of the blocks that entails memory, disk, and off-heap memory usage.
    *
-   * The key is the ID of the RDD, and the value is a 4-tuple of the following:
-   *   (size in memory, size on disk, size in tachyon, storage level)
+   * As with the block maps, we store the storage information separately for RDD blocks and
+   * non-RDD blocks for the same reason. In particular, RDD storage information is stored
+   * in a map indexed by the RDD ID to the following 4-tuple:
    *
-   * This is updated incrementally on each block added, updated or removed, so as to avoid
-   * linearly scanning through all the blocks within an RDD if we're only interested in a
-   * given RDD's storage information.
+   *   (memory size, disk size, off-heap size, storage level)
+   *
+   * We assume that all the blocks that belong to the same RDD have the same storage level.
+   * This field is not relevant to non-RDD blocks, however, so the storage information for
+   * non-RDD blocks contains only the first 3 fields (in the same order).
    */
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
+  private var _nonRddStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
   /**
    * Instantiate a StorageStatus with the given initial blocks. This essentially makes a copy of
@@ -93,16 +96,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+    updateStorageInfo(blockId, blockStatus)
     blockId match {
       case RDDBlockId(rddId, _) =>
-        // Update the storage info of the RDD, keeping track of any existing status for this block
-        val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
-        val changeInMem = blockStatus.memSize - oldBlockStatus.memSize
-        val changeInDisk = blockStatus.diskSize - oldBlockStatus.diskSize
-        val changeInTachyon = blockStatus.tachyonSize - oldBlockStatus.tachyonSize
-        val level = blockStatus.storageLevel
-        updateRddStorageInfo(rddId, changeInMem, changeInDisk, changeInTachyon, level)
-        // Actually add the block itself
         _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
       case _ =>
         _nonRddBlocks(blockId) = blockStatus
@@ -116,12 +112,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /** Remove the given block from this storage status. */
   def removeBlock(blockId: BlockId): Option[BlockStatus] = {
+    updateStorageInfo(blockId, BlockStatus.empty)
     blockId match {
       case RDDBlockId(rddId, _) =>
-        // Update the storage info of the RDD if the block to remove exists
-        getBlock(blockId).foreach { s =>
-          updateRddStorageInfo(rddId, -s.memSize, -s.diskSize, -s.tachyonSize, StorageLevel.NONE)
-        }
         // Actually remove the block, if it exists
         if (_rddBlocks.contains(rddId)) {
           val removed = _rddBlocks(rddId).remove(blockId)
@@ -145,7 +138,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def containsBlock(blockId: BlockId): Boolean = {
     blockId match {
       case RDDBlockId(rddId, _) =>
-        _rddBlocks.get(rddId).filter(_.contains(blockId)).isDefined
+        _rddBlocks.get(rddId).exists(_.contains(blockId))
       case _ =>
         _nonRddBlocks.contains(blockId)
     }
@@ -174,7 +167,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
    */
-  def numRddBlocks: Int = _rddBlocks.values.map(_.size).reduceOption(_ + _).getOrElse(0)
+  def numRddBlocks: Int = _rddBlocks.values.map(_.size).fold(0)(_ + _)
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
@@ -183,17 +176,20 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
-  /** Return the memory used by this block manager. */
-  def memUsed: Long = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
-
   /** Return the memory remaining in this block manager. */
   def memRemaining: Long = maxMem - memUsed
 
+  /** Return the memory used by this block manager. */
+  def memUsed: Long =
+    _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).fold(0L)(_ + _)
+
   /** Return the disk space used by this block manager. */
-  def diskUsed: Long = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
+  def diskUsed: Long =
+    _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).fold(0L)(_ + _)
 
   /** Return the off-heap space used by this block manager. */
-  def offHeapUsed: Long = blocks.values.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
+  def offHeapUsed: Long =
+    _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(offHeapUsedByRdd).fold(0L)(_ + _)
 
   /** Return the memory used by the given RDD in this block manager in O(1) time. */
   def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
@@ -208,34 +204,50 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def rddStorageLevel(rddId: Int): Option[StorageLevel] = _rddStorageInfo.get(rddId).map(_._4)
 
   /**
-   * Helper function to update the given RDD's storage information based on the (possibly
-   * negative) changes in memory, disk, and off-heap memory usages. This is exposed for testing.
+   * Update the relevant storage info, taking into account any existing status for this block.
+   * This is exposed for testing.
    */
-  private[spark] def updateRddStorageInfo(
-      rddId: Int,
-      changeInMem: Long,
-      changeInDisk: Long,
-      changeInTachyon: Long,
-      storageLevel: StorageLevel): Unit = {
-    val emptyRddInfo = (0L, 0L, 0L, StorageLevel.NONE)
-    val oldRddInfo = _rddStorageInfo.getOrElse(rddId, emptyRddInfo)
-    val newRddInfo = oldRddInfo match {
-      case (oldRddMem, oldRddDisk, oldRddTachyon, _) =>
-        val newRddMem = math.max(oldRddMem + changeInMem, 0L)
-        val newRddDisk = math.max(oldRddDisk + changeInDisk, 0L)
-        val newRddTachyon = math.max(oldRddTachyon + changeInTachyon, 0L)
-        (newRddMem, newRddDisk, newRddTachyon, storageLevel)
+  private[spark] def updateStorageInfo(blockId: BlockId, newBlockStatus: BlockStatus): Unit = {
+    val oldBlockStatus = getBlock(blockId).getOrElse(BlockStatus.empty)
+    val changeInMem = newBlockStatus.memSize - oldBlockStatus.memSize
+    val changeInDisk = newBlockStatus.diskSize - oldBlockStatus.diskSize
+    val changeInTachyon = newBlockStatus.tachyonSize - oldBlockStatus.tachyonSize
+    val level = newBlockStatus.storageLevel
+
+    // Compute new info from old info
+    val oldInfo: (Long, Long, Long) = blockId match {
+      case RDDBlockId(rddId, _) =>
+        _rddStorageInfo.get(rddId)
+          .map { case (mem, disk, tachyon, _) => (mem, disk, tachyon) }
+          .getOrElse((0L, 0L, 0L))
       case _ =>
-        // Should never happen
-        throw new SparkException(s"Existing information for $rddId is not of expected type")
+        _nonRddStorageInfo
     }
-    // If this RDD is no longer persisted, remove it
-    if (newRddInfo._1 + newRddInfo._2 + newRddInfo._3 == 0) {
-      _rddStorageInfo.remove(rddId)
-    } else {
-      _rddStorageInfo(rddId) = newRddInfo
+    val newInfo: (Long, Long, Long) = oldInfo match {
+      case (oldMem, oldDisk, oldTachyon) =>
+        val newMem = math.max(oldMem + changeInMem, 0L)
+        val newDisk = math.max(oldDisk + changeInDisk, 0L)
+        val newTachyon = math.max(oldTachyon + changeInTachyon, 0L)
+        (newMem, newDisk, newTachyon)
+    }
+
+    // Set the correct info
+    blockId match {
+      case RDDBlockId(rddId, _) =>
+        newInfo match {
+          case (mem, disk, tachyon) =>
+            // If this RDD is no longer persisted, remove it
+            if (mem + disk + tachyon == 0) {
+              _rddStorageInfo.remove(rddId)
+            } else {
+              _rddStorageInfo(rddId) = (mem, disk, tachyon, level)
+            }
+        }
+      case _ =>
+        _nonRddStorageInfo = newInfo
     }
   }
+
 }
 
 /** Helper methods for storage-related objects. */
@@ -251,11 +263,10 @@ private[spark] object StorageUtils {
       // Assume all blocks belonging to the same RDD have the same storage level
       val storageLevel = statuses
         .map(_.rddStorageLevel(rddId)).flatMap(s => s).headOption.getOrElse(StorageLevel.NONE)
-      val numCachedPartitions = statuses
-        .map(_.numRddBlocksById(rddId)).reduceOption(_ + _).getOrElse(0)
-      val memSize = statuses.map(_.memUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
-      val diskSize = statuses.map(_.diskUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
-      val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).reduceOption(_ + _).getOrElse(0L)
+      val numCachedPartitions = statuses.map(_.numRddBlocksById(rddId)).fold(0)(_ + _)
+      val memSize = statuses.map(_.memUsedByRdd(rddId)).fold(0L)(_ + _)
+      val diskSize = statuses.map(_.diskUsedByRdd(rddId)).fold(0L)(_ + _)
+      val tachyonSize = statuses.map(_.offHeapUsedByRdd(rddId)).fold(0L)(_ + _)
 
       rddInfo.storageLevel = storageLevel
       rddInfo.numCachedPartitions = numCachedPartitions
