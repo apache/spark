@@ -21,7 +21,7 @@ import java.io._
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
-import org.apache.spark.Logging
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
@@ -197,7 +197,7 @@ abstract class HiveComparisonTest
     // If test sharding is enable, skip tests that are not in the correct shard.
     shardInfo.foreach {
       case (shardId, numShards) if testCaseName.hashCode % numShards != shardId => return
-      case (shardId, _) => log.debug(s"Shard $shardId includes test '$testCaseName'")
+      case (shardId, _) => logger.debug(s"Shard $shardId includes test '$testCaseName'")
     }
 
     // Skip tests found in directories specified by user.
@@ -213,13 +213,13 @@ abstract class HiveComparisonTest
         .map(new File(_, testCaseName))
         .filter(_.exists)
     if (runOnlyDirectories.nonEmpty && runIndicators.isEmpty) {
-      log.debug(
+      logger.debug(
         s"Skipping test '$testCaseName' not found in ${runOnlyDirectories.map(_.getCanonicalPath)}")
       return
     }
 
     test(testCaseName) {
-      log.debug(s"=== HIVE TEST: $testCaseName ===")
+      logger.debug(s"=== HIVE TEST: $testCaseName ===")
 
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
@@ -235,7 +235,7 @@ abstract class HiveComparisonTest
           .filterNot(_ contains "hive.outerjoin.supports.filters")
 
       if (allQueries != queryList)
-        log.warn(s"Simplifications made on unsupported operations for test $testCaseName")
+        logger.warn(s"Simplifications made on unsupported operations for test $testCaseName")
 
       lazy val consoleTestCase = {
         val quotes = "\"\"\""
@@ -257,11 +257,11 @@ abstract class HiveComparisonTest
         }
 
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
-          log.debug(s"Looking for cached answer file $cachedAnswerFile.")
+          logger.debug(s"Looking for cached answer file $cachedAnswerFile.")
           if (cachedAnswerFile.exists) {
             Some(fileToString(cachedAnswerFile))
           } else {
-            log.debug(s"File $cachedAnswerFile not found")
+            logger.debug(s"File $cachedAnswerFile not found")
             None
           }
         }.map {
@@ -272,7 +272,7 @@ abstract class HiveComparisonTest
 
         val hiveResults: Seq[Seq[String]] =
           if (hiveCachedResults.size == queryList.size) {
-            log.info(s"Using answer cache for test: $testCaseName")
+            logger.info(s"Using answer cache for test: $testCaseName")
             hiveCachedResults
           } else {
 
@@ -287,7 +287,7 @@ abstract class HiveComparisonTest
                   if (installHooksCommand.findAllMatchIn(queryString).nonEmpty)
                     sys.error("hive exec hooks not supported for tests.")
 
-                  log.warn(s"Running query ${i+1}/${queryList.size} with hive.")
+                  logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
                   // Analyze the query with catalyst to ensure test tables are loaded.
                   val answer = hiveQuery.analyzed match {
                     case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
@@ -351,7 +351,7 @@ abstract class HiveComparisonTest
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
 
               if (recomputeCache) {
-                log.warn(s"Clearing cache files for failed test $testCaseName")
+                logger.warn(s"Clearing cache files for failed test $testCaseName")
                 hiveCacheFiles.foreach(_.delete())
               }
 
@@ -380,7 +380,7 @@ abstract class HiveComparisonTest
               TestHive.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
-                log.error(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
+                logger.error(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
                 // The testing setup traps exits so wait here for a long time so the developer can see when things started
                 // to go wrong.
                 Thread.sleep(1000000)

@@ -148,7 +148,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         describedTables ++
         logical.collect { case UnresolvedRelation(databaseName, name, _) => name }
       val referencedTestTables = referencedTables.filter(testTables.contains)
-      log.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
+      logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
       analyzer(logical)
@@ -273,7 +273,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infite mutually recursive table loading.
       loadedTables += name
-      log.info(s"Loading test table $name")
+      logger.info(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
@@ -312,7 +312,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
-        log.debug(s"Deleting table $t")
+        logger.debug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
         catalog.client.getIndexes("default", t, 255).foreach { index =>
@@ -325,7 +325,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       }
 
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
-        log.debug(s"Dropping Database: $db")
+        logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
 
@@ -347,7 +347,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       loadTestTable("srcpart")
     } catch {
       case e: Exception =>
-        log.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
         // At this point there is really no reason to continue, but the test framework traps exits.
         // So instead we just pause forever so that at least the developer can see where things
         // started to go wrong.

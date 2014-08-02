@@ -27,7 +27,7 @@ import java.sql.{Connection, DriverManager, Statement}
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.Logging
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 /**

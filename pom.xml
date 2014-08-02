@@ -280,11 +280,6 @@
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.scala-logging</groupId>
-        <artifactId>scala-logging-slf4j_${scala.binary.version}</artifactId>
-        <version>2.1.2</version>
-      </dependency>
-      <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>jul-to-slf4j</artifactId>
         <version>${slf4j.version}</version>
