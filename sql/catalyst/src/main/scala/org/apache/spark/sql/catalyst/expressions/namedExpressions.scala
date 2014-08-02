@@ -134,7 +134,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
-  override def withNullability(newNullability: Boolean) = {
+  override def withNullability(newNullability: Boolean): AttributeReference = {
     if (nullable == newNullability) {
       this
     } else {
