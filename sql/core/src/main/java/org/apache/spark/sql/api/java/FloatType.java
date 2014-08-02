@@ -15,22 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.api.java;
 
 /**
- * Allows the execution of relational queries, including those expressed in SQL using Spark.
+ * The data type representing float and Float values.
  *
- * Note that this package is located in catalyst instead of in core so that all subprojects can
- * inherit the settings from this package object.
+ * {@code FloatType} is represented by the singleton object {@link DataType#FloatType}.
  */
-package object sql {
-
-  protected[sql] def Logger(name: String) =
-    com.typesafe.scalalogging.slf4j.Logger(org.slf4j.LoggerFactory.getLogger(name))
-
-  protected[sql] type Logging = com.typesafe.scalalogging.slf4j.Logging
-
-  type Row = catalyst.expressions.Row
-
-  val Row = catalyst.expressions.Row
+public class FloatType extends DataType {
+  protected FloatType() {}
 }

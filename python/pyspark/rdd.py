@@ -231,6 +231,13 @@ class RDD(object):
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
 
+    def _toPickleSerialization(self):
+        if (self._jrdd_deserializer == PickleSerializer() or
+            self._jrdd_deserializer == BatchedSerializer(PickleSerializer())):
+            return self
+        else:
+            return self._reserialize(BatchedSerializer(PickleSerializer(), 10))
+
     def id(self):
         """
         A unique ID for this RDD (within its SparkContext).
@@ -311,9 +318,9 @@ class RDD(object):
         >>> sorted(rdd.map(lambda x: (x, 1)).collect())
         [('a', 1), ('b', 1), ('c', 1)]
         """
-        def func(split, iterator):
+        def func(_, iterator):
             return imap(f, iterator)
-        return PipelinedRDD(self, func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -1030,6 +1037,113 @@ class RDD(object):
         """
         return self.take(1)[0]
 
+    def saveAsNewAPIHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
+        """
+        Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
+        system, using the new Hadoop OutputFormat API (mapreduce package). Keys/values are
+        converted for output using either user specified converters or, by default,
+        L{org.apache.spark.api.python.JavaToWritableConverter}.
+
+        @param conf: Hadoop job configuration, passed in as a dict
+        @param keyConverter: (None by default)
+        @param valueConverter: (None by default)
+        """
+        jconf = self.ctx._dictToJavaMap(conf)
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
+                                                    keyConverter, valueConverter, True)
+
+    def saveAsNewAPIHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
+                               keyConverter=None, valueConverter=None, conf=None):
+        """
+        Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
+        system, using the new Hadoop OutputFormat API (mapreduce package). Key and value types
+        will be inferred if not specified. Keys and values are converted for output using either
+        user specified converters or L{org.apache.spark.api.python.JavaToWritableConverter}. The
+        C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
+        of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
+
+        @param path: path to Hadoop file
+        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+               (e.g. "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
+        @param keyClass: fully qualified classname of key Writable class
+               (e.g. "org.apache.hadoop.io.IntWritable", None by default)
+        @param valueClass: fully qualified classname of value Writable class
+               (e.g. "org.apache.hadoop.io.Text", None by default)
+        @param keyConverter: (None by default)
+        @param valueConverter: (None by default)
+        @param conf: Hadoop job configuration, passed in as a dict (None by default)
+        """
+        jconf = self.ctx._dictToJavaMap(conf)
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, batched, path,
+            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter, jconf)
+
+    def saveAsHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
+        """
+        Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
+        system, using the old Hadoop OutputFormat API (mapred package). Keys/values are
+        converted for output using either user specified converters or, by default,
+        L{org.apache.spark.api.python.JavaToWritableConverter}.
+
+        @param conf: Hadoop job configuration, passed in as a dict
+        @param keyConverter: (None by default)
+        @param valueConverter: (None by default)
+        """
+        jconf = self.ctx._dictToJavaMap(conf)
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
+                                                    keyConverter, valueConverter, False)
+
+    def saveAsHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
+                         keyConverter=None, valueConverter=None, conf=None,
+                         compressionCodecClass=None):
+        """
+        Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
+        system, using the old Hadoop OutputFormat API (mapred package). Key and value types
+        will be inferred if not specified. Keys and values are converted for output using either
+        user specified converters or L{org.apache.spark.api.python.JavaToWritableConverter}. The
+        C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
+        of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
+
+        @param path: path to Hadoop file
+        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+               (e.g. "org.apache.hadoop.mapred.SequenceFileOutputFormat")
+        @param keyClass: fully qualified classname of key Writable class
+               (e.g. "org.apache.hadoop.io.IntWritable", None by default)
+        @param valueClass: fully qualified classname of value Writable class
+               (e.g. "org.apache.hadoop.io.Text", None by default)
+        @param keyConverter: (None by default)
+        @param valueConverter: (None by default)
+        @param conf: (None by default)
+        @param compressionCodecClass: (None by default)
+        """
+        jconf = self.ctx._dictToJavaMap(conf)
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched, path,
+            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter,
+            jconf, compressionCodecClass)
+
+    def saveAsSequenceFile(self, path, compressionCodecClass=None):
+        """
+        Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
+        system, using the L{org.apache.hadoop.io.Writable} types that we convert from the
+        RDD's key and value types. The mechanism is as follows:
+            1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
+            2. Keys and values of this Java RDD are converted to Writables and written out.
+
+        @param path: path to sequence file
+        @param compressionCodecClass: (None by default)
+        """
+        pickledRDD = self._toPickleSerialization()
+        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
+        self.ctx._jvm.PythonRDD.saveAsSequenceFile(pickledRDD._jrdd, batched,
+                                                   path, compressionCodecClass)
+
     def saveAsPickleFile(self, path, batchSize=10):
         """
         Save this RDD as a SequenceFile of serialized objects. The serializer
@@ -1070,7 +1184,7 @@ class RDD(object):
                 if not isinstance(x, basestring):
                     x = unicode(x)
                 yield x.encode("utf-8")
-        keyed = PipelinedRDD(self, func)
+        keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
@@ -1268,7 +1382,7 @@ class RDD(object):
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
-        keyed = PipelinedRDD(self, add_shuffle_key)
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
             pairRDD = self.ctx._jvm.PairwiseRDD(

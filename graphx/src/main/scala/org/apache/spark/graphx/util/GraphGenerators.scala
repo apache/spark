@@ -100,8 +100,10 @@ object GraphGenerators {
    */
   private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
     val rand = new Random()
-    val m = math.exp(mu + (sigma * sigma) / 2.0)
-    val s = math.sqrt((math.exp(sigma*sigma) - 1) * math.exp(2*mu + sigma*sigma))
+    val sigmaSq = sigma * sigma
+    val m = math.exp(mu + sigmaSq / 2.0)
+    // expm1 is exp(m)-1 with better accuracy for tiny m
+    val s = math.sqrt(math.expm1(sigmaSq) * math.exp(2*mu + sigmaSq))
     // Z ~ N(0, 1)
     var X: Double = maxVal
 

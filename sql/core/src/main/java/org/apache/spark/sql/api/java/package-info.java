@@ -15,27 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
-
-import org.scalatest.FunSuite
-
-class LabelParsersSuite extends FunSuite {
-  test("binary label parser") {
-    for (parser <- Seq(BinaryLabelParser, BinaryLabelParser.getInstance())) {
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("0") === 0.0)
-      assert(parser.parse("-1") === 0.0)
-    }
-  }
-
-  test("multiclass label parser") {
-    for (parser <- Seq(MulticlassLabelParser, MulticlassLabelParser.getInstance())) {
-      assert(parser.parse("0") == 0.0)
-      assert(parser.parse("+1") === 1.0)
-      assert(parser.parse("1") === 1.0)
-      assert(parser.parse("2") === 2.0)
-      assert(parser.parse("3") === 3.0)
-    }
-  }
-}
+/**
+ * Allows the execution of relational queries, including those expressed in SQL using Spark.
+ */
+package org.apache.spark.sql.api.java;

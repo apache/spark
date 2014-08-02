@@ -24,11 +24,10 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -86,7 +85,45 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a [[SchemaRDD]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+   *
+   *  val schema =
+   *    StructType(
+   *      StructField("name", StringType, false) ::
+   *      StructField("age", IntegerType, true) :: Nil)
+   *
+   *  val people =
+   *    sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val peopleSchemaRDD = sqlContext. applySchema(people, schema)
+   *  peopleSchemaRDD.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   *
+   *    peopleSchemaRDD.registerAsTable("people")
+   *  sqlContext.sql("select name from people").collect.foreach(println)
+   * }}}
+   *
+   * @group userf
+   */
+  @DeveloperApi
+  def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
+    // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
+    // schema differs from the existing schema on any field data type.
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))(self)
+    new SchemaRDD(this, logicalPlan)
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
@@ -94,7 +131,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration)))
+    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
@@ -103,6 +140,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
+
+  /**
+   * :: Experimental ::
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
+   */
+  @Experimental
+  def jsonFile(path: String, schema: StructType): SchemaRDD = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, schema)
+  }
 
   /**
    * :: Experimental ::
@@ -124,10 +174,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
    */
   @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
+  def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
+    val appliedSchema =
+      Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    applySchema(rowRDD, appliedSchema)
+  }
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
+    val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    applySchema(rowRDD, appliedSchema)
+  }
 
   /**
    * :: Experimental ::
@@ -160,7 +228,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       conf: Configuration = new Configuration()): SchemaRDD = {
     new SchemaRDD(
       this,
-      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+      ParquetRelation.createEmpty(
+        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
   /**
@@ -170,11 +239,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    val name = tableName
-    val newPlan = rdd.logicalPlan transform {
-      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
-    }
-    catalog.registerTable(None, tableName, newPlan)
+    catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
   /**
@@ -196,8 +261,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
         currentTable.logicalPlan
 
       case _ =>
-        val useCompression =
-          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
         InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
     }
 
@@ -212,7 +275,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
+        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
       case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
@@ -234,12 +297,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
+    def codegenEnabled = self.codegenEnabled
+
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
       TakeOrdered ::
-      PartialAggregation ::
+      HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
@@ -297,27 +362,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
-   * inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) ::
-      Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
+      Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
+  @DeveloperApi
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = planner(optimizedPlan).next()
+    lazy val sparkPlan = {
+      SparkPlan.currentContext.set(self)
+      planner(optimizedPlan).next()
+    }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
@@ -337,75 +405,99 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
+         |Code Generation: ${executedPlan.codegenEnabled}
+         |== RDD ==
+         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 
   /**
-   * Peek at the first row of the RDD and infer its schema.
-   * TODO: consolidate this with the type system developed in SPARK-2060.
+   * Parses the data type in our internal string representation. The data type string should
+   * have the same format as the one generated by `toString` in scala.
+   * It is only used by PySpark.
    */
-  private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
-    import scala.collection.JavaConversions._
-    def typeFor(obj: Any): DataType = obj match {
-      case c: java.lang.String => StringType
-      case c: java.lang.Integer => IntegerType
-      case c: java.lang.Long => LongType
-      case c: java.lang.Double => DoubleType
-      case c: java.lang.Boolean => BooleanType
-      case c: java.math.BigDecimal => DecimalType
-      case c: java.sql.Timestamp => TimestampType
-      case c: java.util.Calendar => TimestampType
-      case c: java.util.List[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Map[_, _] =>
-        val (key, value) = c.head
-        MapType(typeFor(key), typeFor(value))
-      case c if c.getClass.isArray =>
-        val elem = c.asInstanceOf[Array[_]].head
-        ArrayType(typeFor(elem))
-      case c => throw new Exception(s"Object of type $c cannot be used")
-    }
-    val firstRow = rdd.first()
-    val schema = firstRow.map { case (fieldName, obj) =>
-      AttributeReference(fieldName, typeFor(obj), true)()
-    }.toSeq
-
-    def needTransform(obj: Any): Boolean = obj match {
-      case c: java.util.List[_] => true
-      case c: java.util.Map[_, _] => true
-      case c if c.getClass.isArray => true
-      case c: java.util.Calendar => true
-      case c => false
-    }
-
-    // convert JList, JArray into Seq, convert JMap into Map
-    // convert Calendar into Timestamp
-    def transform(obj: Any): Any = obj match {
-      case c: java.util.List[_] => c.map(transform).toSeq
-      case c: java.util.Map[_, _] => c.map {
-        case (key, value) => (key, transform(value))
-      }.toMap
-      case c if c.getClass.isArray =>
-        c.asInstanceOf[Array[_]].map(transform).toSeq
-      case c: java.util.Calendar =>
-        new java.sql.Timestamp(c.getTime().getTime())
-      case c => c
-    }
-
-    val need = firstRow.exists {case (key, value) => needTransform(value)}
-    val transformed = if (need) {
-      rdd.mapPartitions { iter =>
-        iter.map {
-          m => m.map {case (key, value) => (key, transform(value))}
-        }
-      }
-    } else rdd
-
-    val rowRdd = transformed.mapPartitions { iter =>
-      iter.map { map =>
-        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
-      }
-    }
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  private[sql] def parseDataType(dataTypeString: String): DataType = {
+    val parser = org.apache.spark.sql.catalyst.types.DataType
+    parser(dataTypeString)
   }
 
+  /**
+   * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
+   */
+  private[sql] def applySchemaToPythonRDD(
+      rdd: RDD[Array[Any]],
+      schemaString: String): SchemaRDD = {
+    val schema = parseDataType(schemaString).asInstanceOf[StructType]
+    applySchemaToPythonRDD(rdd, schema)
+  }
+
+  /**
+   * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
+   */
+  private[sql] def applySchemaToPythonRDD(
+      rdd: RDD[Array[Any]],
+      schema: StructType): SchemaRDD = {
+    import scala.collection.JavaConversions._
+    import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
+
+    def needsConversion(dataType: DataType): Boolean = dataType match {
+      case ByteType => true
+      case ShortType => true
+      case FloatType => true
+      case TimestampType => true
+      case ArrayType(_, _) => true
+      case MapType(_, _, _) => true
+      case StructType(_) => true
+      case other => false
+    }
+
+    // Converts value to the type specified by the data type.
+    // Because Python does not have data types for TimestampType, FloatType, ShortType, and
+    // ByteType, we need to explicitly convert values in columns of these data types to the desired
+    // JVM data types.
+    def convert(obj: Any, dataType: DataType): Any = (obj, dataType) match {
+      // TODO: We should check nullable
+      case (null, _) => null
+
+      case (c: java.util.List[_], ArrayType(elementType, _)) =>
+        val converted = c.map { e => convert(e, elementType)}
+        JListWrapper(converted)
+
+      case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
+        c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]
+
+      case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
+          case (key, value) => (convert(key, keyType), convert(value, valueType))
+        }.toMap
+
+      case (c, StructType(fields)) if c.getClass.isArray =>
+        new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
+          case (e, f) => convert(e, f.dataType)
+        }): Row
+
+      case (c: java.util.Calendar, TimestampType) =>
+        new java.sql.Timestamp(c.getTime().getTime())
+
+      case (c: Int, ByteType) => c.toByte
+      case (c: Int, ShortType) => c.toShort
+      case (c: Double, FloatType) => c.toFloat
+      case (c, StringType) if !c.isInstanceOf[String] => c.toString
+
+      case (c, _) => c
+    }
+
+    val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
+      rdd.map(m => m.zip(schema.fields).map {
+        case (value, field) => convert(value, field.dataType)
+      })
+    } else {
+      rdd
+    }
+
+    val rowRdd = convertedRdd.mapPartitions { iter =>
+      iter.map { m => new GenericRow(m): Row}
+    }
+
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
+  }
 }

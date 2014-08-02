@@ -15,10 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark
 
-abstract class BaseRelation extends LeafNode {
-  self: Product =>
+import org.scalatest.BeforeAndAfterAll
 
-  def tableName: String
+class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+
+  // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
+
+  override def beforeAll() {
+    System.setProperty("spark.shuffle.manager",
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
+  }
+
+  override def afterAll() {
+    System.clearProperty("spark.shuffle.manager")
+  }
 }
