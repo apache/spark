@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import scala.reflect._
+import com.google.common.hash.Hashing
 
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
@@ -114,10 +115,10 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * The caller is responsible for calling rehashIfNeeded.
    *
    * Use (retval & POSITION_MASK) to get the actual position, and
-   * (retval & EXISTENCE_MASK) != 0 for prior existence.
+   * (retval & NONEXISTENCE_MASK) == 0 for prior existence.
    *
    * @return The position where the key is placed, plus the highest order bit is set if the key
-   *         exists previously.
+   *         does not exists previously.
    */
   def addWithoutResize(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
@@ -256,9 +257,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
 
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
-   * We use the Murmur Hash 3 finalization step that's also used in fastutil.
    */
-  private def hashcode(h: Int): Int = it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
+  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)

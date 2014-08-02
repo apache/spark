@@ -24,7 +24,11 @@ import org.apache.spark.streaming.Time
   * belong to the same batch.
   */
 private[streaming]
-case class JobSet(time: Time, jobs: Seq[Job]) {
+case class JobSet(
+    time: Time,
+    jobs: Seq[Job],
+    receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]] = Map.empty
+  ) {
 
   private val incompleteJobs = new HashSet[Job]()
   private val submissionTime = System.currentTimeMillis() // when this jobset was submitted
@@ -60,6 +64,7 @@ case class JobSet(time: Time, jobs: Seq[Job]) {
   def toBatchInfo: BatchInfo = {
     new BatchInfo(
       time,
+      receivedBlockInfo,
       submissionTime,
       if (processingStartTime >= 0 ) Some(processingStartTime) else None,
       if (processingEndTime >= 0 ) Some(processingEndTime) else None

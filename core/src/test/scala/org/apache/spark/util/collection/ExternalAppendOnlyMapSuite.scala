@@ -63,12 +63,13 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
       mergeValue, mergeCombiners)
 
-    map.insert(1, 10)
-    map.insert(2, 20)
-    map.insert(3, 30)
-    map.insert(1, 100)
-    map.insert(2, 200)
-    map.insert(1, 1000)
+    map.insertAll(Seq(
+      (1, 10),
+      (2, 20),
+      (3, 30),
+      (1, 100),
+      (2, 200),
+      (1, 1000)))
     val it = map.iterator
     assert(it.hasNext)
     val result = it.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.toSet))
@@ -174,9 +175,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     assert(result1.toSet == Set[(Int, Int)]((0, 5), (1, 5)))
 
     // groupByKey
-    val result2 = rdd.groupByKey().collect()
+    val result2 = rdd.groupByKey().collect().map(x => (x._1, x._2.toList)).toSet
     assert(result2.toSet == Set[(Int, Seq[Int])]
-      ((0, ArrayBuffer[Int](1, 1, 1, 1, 1)), (1, ArrayBuffer[Int](1, 1, 1, 1, 1))))
+      ((0, List[Int](1, 1, 1, 1, 1)), (1, List[Int](1, 1, 1, 1, 1))))
   }
 
   test("simple cogroup") {
@@ -207,11 +208,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val resultA = rddA.reduceByKey(math.max).collect()
     assert(resultA.length == 50000)
     resultA.foreach { case(k, v) =>
-      k match {
-        case 0 => assert(v == 1)
-        case 25000 => assert(v == 50001)
-        case 49999 => assert(v == 99999)
-        case _ =>
+      if (v != k * 2 + 1) {
+        fail(s"Value for ${k} was wrong: expected ${k * 2 + 1}, got ${v}")
       }
     }
 
@@ -220,11 +218,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val resultB = rddB.groupByKey().collect()
     assert(resultB.length == 25000)
     resultB.foreach { case(i, seq) =>
-      i match {
-        case 0 => assert(seq.toSet == Set[Int](0, 1, 2, 3))
-        case 12500 => assert(seq.toSet == Set[Int](50000, 50001, 50002, 50003))
-        case 24999 => assert(seq.toSet == Set[Int](99996, 99997, 99998, 99999))
-        case _ =>
+      val expected = Set(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3)
+      if (seq.toSet != expected) {
+        fail(s"Value for ${i} was wrong: expected ${expected}, got ${seq.toSet}")
       }
     }
 
@@ -238,6 +234,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
         case 0 =>
           assert(seq1.toSet == Set[Int](0))
           assert(seq2.toSet == Set[Int](0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000))
+        case 1 =>
+          assert(seq1.toSet == Set[Int](1))
+          assert(seq2.toSet == Set[Int](1, 1001, 2001, 3001, 4001, 5001, 6001, 7001, 8001, 9001))
         case 5000 =>
           assert(seq1.toSet == Set[Int](5000))
           assert(seq2.toSet == Set[Int]())
@@ -277,7 +276,12 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       ("pomatoes", "eructation")      // 568647356
     )
 
-    (1 to 100000).map(_.toString).foreach { i => map.insert(i, i) }
+    collisionPairs.foreach { case (w1, w2) =>
+      // String.hashCode is documented to use a specific algorithm, but check just in case
+      assert(w1.hashCode === w2.hashCode)
+    }
+
+    map.insertAll((1 to 100000).iterator.map(_.toString).map(i => (i, i)))
     collisionPairs.foreach { case (w1, w2) =>
       map.insert(w1, w2)
       map.insert(w2, w1)
@@ -296,7 +300,32 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       assert(kv._2.equals(expectedValue))
       count += 1
     }
-    assert(count == 100000 + collisionPairs.size * 2)
+    assert(count === 100000 + collisionPairs.size * 2)
+  }
+
+  test("spilling with many hash collisions") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.0001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    val map = new ExternalAppendOnlyMap[FixedHashObject, Int, Int](_ => 1, _ + _, _ + _)
+
+    // Insert 10 copies each of lots of objects whose hash codes are either 0 or 1. This causes
+    // problems if the map fails to group together the objects with the same code (SPARK-2043).
+    for (i <- 1 to 10) {
+      for (j <- 1 to 10000) {
+        map.insert(FixedHashObject(j, j % 2), 1)
+      }
+    }
+
+    val it = map.iterator
+    var count = 0
+    while (it.hasNext) {
+      val kv = it.next()
+      assert(kv._2 === 10)
+      count += 1
+    }
+    assert(count === 10000)
   }
 
   test("spilling with hash collisions using the Int.MaxValue key") {
@@ -304,8 +333,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
-      mergeValue, mergeCombiners)
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](
+      createCombiner, mergeValue, mergeCombiners)
 
     (1 to 100000).foreach { i => map.insert(i, i) }
     map.insert(Int.MaxValue, Int.MaxValue)
@@ -316,4 +345,25 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       it.next()
     }
   }
+
+  test("spilling with null keys and values") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    map.insertAll((1 to 100000).iterator.map(i => (i, i)))
+    map.insert(null.asInstanceOf[Int], 1)
+    map.insert(1, null.asInstanceOf[Int])
+    map.insert(null.asInstanceOf[Int], null.asInstanceOf[Int])
+
+    val it = map.iterator
+    while (it.hasNext) {
+      // Should not throw NullPointerException
+      it.next()
+    }
+  }
+
 }

@@ -31,18 +31,31 @@ import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{TestOutputStream, StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.streaming.api.java.JavaReceiverInputDStream
+
+import org.jboss.netty.channel.ChannelPipeline
+import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+import org.jboss.netty.channel.socket.SocketChannel
+import org.jboss.netty.handler.codec.compression._
 
 class FlumeStreamSuite extends TestSuiteBase {
 
-  val testPort = 9999
-
   test("flume input stream") {
+    runFlumeStreamTest(false, 9998)
+  }
+
+  test("flume input compressed stream") {
+    runFlumeStreamTest(true, 9997)
+  }
+  
+  def runFlumeStreamTest(enableDecompression: Boolean, testPort: Int) {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream = FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK)
+    val flumeStream: JavaReceiverInputDStream[SparkFlumeEvent] =
+      FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, enableDecompression)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    val outputStream = new TestOutputStream(flumeStream.receiverInputDStream, outputBuffer)
     outputStream.register()
     ssc.start()
 
@@ -50,17 +63,28 @@ class FlumeStreamSuite extends TestSuiteBase {
     val input = Seq(1, 2, 3, 4, 5)
     Thread.sleep(1000)
     val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", testPort))
-    val client = SpecificRequestor.getClient(
-      classOf[AvroSourceProtocol], transceiver)
+    var client: AvroSourceProtocol = null;
+  
+    if (enableDecompression) {
+      client = SpecificRequestor.getClient(
+          classOf[AvroSourceProtocol], 
+          new NettyTransceiver(new InetSocketAddress("localhost", testPort), 
+          new CompressionChannelFactory(6)));
+    } else {
+      client = SpecificRequestor.getClient(
+        classOf[AvroSourceProtocol], transceiver)
+    }
 
     for (i <- 0 until input.size) {
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(input(i).toString.getBytes()))
+      event.setBody(ByteBuffer.wrap(input(i).toString.getBytes("utf-8")))
       event.setHeaders(Map[CharSequence, CharSequence]("test" -> "header"))
       client.append(event)
       Thread.sleep(500)
       clock.addToTime(batchDuration.milliseconds)
     }
+
+    Thread.sleep(1000)
 
     val startTime = System.currentTimeMillis()
     while (outputBuffer.size < input.size && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
@@ -81,6 +105,15 @@ class FlumeStreamSuite extends TestSuiteBase {
       val str = decoder.decode(outputBuffer(i).head.event.getBody)
       assert(str.toString === input(i).toString)
       assert(outputBuffer(i).head.event.getHeaders.get("test") === "header")
+    }
+  }
+
+  class CompressionChannelFactory(compressionLevel: Int) extends NioClientSocketChannelFactory {
+    override def newChannel(pipeline:ChannelPipeline) : SocketChannel = {
+      var encoder : ZlibEncoder = new ZlibEncoder(compressionLevel);
+      pipeline.addFirst("deflater", encoder);
+      pipeline.addFirst("inflater", new ZlibDecoder());
+      super.newChannel(pipeline);
     }
   }
 }

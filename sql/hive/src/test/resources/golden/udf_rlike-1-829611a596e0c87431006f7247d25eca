@@ -1,0 +1,5 @@
+str rlike regexp - Returns true if str matches regexp and false otherwise
+Synonyms: regexp
+Example:
+  > SELECT 'fb' rlike '.*' FROM src LIMIT 1;
+  true

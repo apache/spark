@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.PrintStream
 
+import scala.collection.immutable.IndexedSeq
+
 /**
  * Util for getting some stats from a small sample of numeric values, with some handy
  * summary functions.
@@ -27,7 +29,7 @@ import java.io.PrintStream
  *
  * Assumes you are giving it a non-empty set of data
  */
-class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
+private[spark] class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
   require(startIdx < endIdx)
   def this(data: Traversable[Double]) = this(data.toArray, 0, data.size)
   java.util.Arrays.sort(data, startIdx, endIdx)
@@ -40,7 +42,8 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
    * given from 0 to 1
    * @param probabilities
    */
-  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities) = {
+  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
+      : IndexedSeq[Double] = {
     probabilities.toIndexedSeq.map{p:Double => data(closestIndex(p))}
   }
 
@@ -48,7 +51,7 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
     math.min((p * length).toInt + startIdx, endIdx - 1)
   }
 
-  def showQuantiles(out: PrintStream = System.out) = {
+  def showQuantiles(out: PrintStream = System.out): Unit = {
     out.println("min\t25%\t50%\t75%\tmax")
     getQuantiles(defaultProbabilities).foreach{q => out.print(q + "\t")}
     out.println
@@ -66,7 +69,7 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
   }
 }
 
-object Distribution {
+private[spark] object Distribution {
 
   def apply(data: Traversable[Double]): Option[Distribution] = {
     if (data.size > 0) {

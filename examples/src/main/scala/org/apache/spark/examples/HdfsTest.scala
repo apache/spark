@@ -19,19 +19,25 @@ package org.apache.spark.examples
 
 import org.apache.spark._
 
+
 object HdfsTest {
+
+  /** Usage: HdfsTest [file] */
   def main(args: Array[String]) {
-    val sc = new SparkContext(args(0), "HdfsTest",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    val file = sc.textFile(args(1))
+    if (args.length < 1) {
+      System.err.println("Usage: HdfsTest <file>")
+      System.exit(1)
+    }
+    val sparkConf = new SparkConf().setAppName("HdfsTest")
+    val sc = new SparkContext(sparkConf)
+    val file = sc.textFile(args(0))
     val mapped = file.map(s => s.length).cache()
     for (iter <- 1 to 10) {
       val start = System.currentTimeMillis()
       for (x <- mapped) { x + 2 }
-      //  println("Processing: " + x)
       val end = System.currentTimeMillis()
       println("Iteration " + iter + " took " + (end-start) + " ms")
     }
-    System.exit(0)
+    sc.stop()
   }
 }

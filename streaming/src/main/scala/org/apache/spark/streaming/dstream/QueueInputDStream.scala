@@ -31,17 +31,17 @@ class QueueInputDStream[T: ClassTag](
     oneAtATime: Boolean,
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
-  
+
   override def start() { }
-  
+
   override def stop() { }
-  
+
   override def compute(validTime: Time): Option[RDD[T]] = {
     val buffer = new ArrayBuffer[RDD[T]]()
     if (oneAtATime && queue.size > 0) {
       buffer += queue.dequeue()
     } else {
-      buffer ++= queue
+      buffer ++= queue.dequeueAll(_ => true)
     }
     if (buffer.size > 0) {
       if (oneAtATime) {
@@ -55,5 +55,5 @@ class QueueInputDStream[T: ClassTag](
       None
     }
   }
-  
+
 }

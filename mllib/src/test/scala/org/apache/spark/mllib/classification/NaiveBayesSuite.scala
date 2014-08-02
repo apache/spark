@@ -19,11 +19,11 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 object NaiveBayesSuite {
 
@@ -54,7 +54,7 @@ object NaiveBayesSuite {
         if (rnd.nextDouble() < _theta(y)(j)) 1 else 0
       }
 
-      LabeledPoint(y, xi)
+      LabeledPoint(y, Vectors.dense(xi))
     }
   }
 }
@@ -94,5 +94,23 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+}
+
+class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 10
+    val n = 200000
+    val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map { i =>
+        LabeledPoint(random.nextInt(2), Vectors.dense(Array.fill(n)(random.nextDouble())))
+      }
+    }
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = NaiveBayes.train(examples)
+    val predictions = model.predict(examples.map(_.features))
   }
 }

@@ -1,0 +1,197 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<configuration>
+
+<!-- Hive Configuration can either be stored in this file or in the hadoop configuration files  -->
+<!-- that are implied by Hadoop setup variables.                                                -->
+<!-- Aside from Hadoop setup variables - this file is provided as a convenience so that Hive    -->
+<!-- users do not have to edit hadoop configuration files (that may be managed as a centralized -->
+<!-- resource).                                                                                 -->
+
+<!-- Hive Execution Parameters -->
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>${build.dir.hive}/test/hadoop-${user.name}</value>
+  <description>A base for other temporary directories.</description>
+</property>
+
+<!--
+<property>
+  <name>hive.exec.reducers.max</name>
+  <value>1</value>
+  <description>maximum number of reducers</description>
+</property>
+-->
+
+<property>
+  <name>hive.exec.scratchdir</name>
+  <value>${build.dir}/scratchdir</value>
+  <description>Scratch space for Hive jobs</description>
+</property>
+
+<property>
+  <name>hive.exec.local.scratchdir</name>
+  <value>${build.dir}/localscratchdir/</value>
+  <description>Local scratch space for Hive jobs</description>
+</property>
+
+<property>
+  <name>javax.jdo.option.ConnectionURL</name>
+  <!-- note: variable substituion not working here because it's loaded by jdo, not Hive -->
+  <value>jdbc:derby:;databaseName=../build/test/junit_metastore_db;create=true</value>
+</property>
+
+<property>
+  <name>javax.jdo.option.ConnectionDriverName</name>
+  <value>org.apache.derby.jdbc.EmbeddedDriver</value>
+</property>
+
+<property>
+  <name>javax.jdo.option.ConnectionUserName</name>
+  <value>APP</value>
+</property>
+
+<property>
+  <name>javax.jdo.option.ConnectionPassword</name>
+  <value>mine</value>
+</property>
+
+<property>
+  <!--  this should eventually be deprecated since the metastore should supply this -->
+  <name>hive.metastore.warehouse.dir</name>
+  <value>${test.warehouse.dir}</value>
+  <description></description>
+</property>
+
+<property>
+  <name>hive.metastore.metadb.dir</name>
+  <value>file://${build.dir}/test/data/metadb/</value>
+  <description>
+  Required by metastore server or if the uris argument below is not supplied
+  </description>
+</property>
+
+<property>
+  <name>test.log.dir</name>
+  <value>${build.dir}/test/logs</value>
+  <description></description>
+</property>
+
+<property>
+  <name>test.src.dir</name>
+  <value>file://${build.dir}/src/test</value>
+  <description></description>
+</property>
+
+<property>
+  <name>test.data.files</name>
+  <value>${user.dir}/../data/files</value>
+  <description></description>
+</property>
+
+<property>
+  <name>test.query.file1</name>
+  <value>file://${user.dir}/../ql/src/test/org/apache/hadoop/hive/ql/input2.q</value>
+  <value></value>
+  <description></description>
+</property>
+
+<property>
+  <name>hive.jar.path</name>
+  <value>${build.dir.hive}/ql/hive-exec-${version}.jar</value>
+  <description></description>
+</property>
+
+<property>
+  <name>hive.metastore.rawstore.impl</name>
+  <value>org.apache.hadoop.hive.metastore.ObjectStore</value>
+  <description>Name of the class that implements org.apache.hadoop.hive.metastore.rawstore interface. This class is used to store and retrieval of raw metadata objects such as table, database</description>
+</property>
+
+<property>
+  <name>hive.querylog.location</name>
+  <value>${build.dir}/tmp</value>
+  <description>Location of the structured hive logs</description>
+</property>
+
+<property>
+  <name>hive.exec.pre.hooks</name>
+  <value>org.apache.hadoop.hive.ql.hooks.PreExecutePrinter, org.apache.hadoop.hive.ql.hooks.EnforceReadOnlyTables</value>
+  <description>Pre Execute Hook for Tests</description>
+</property>
+
+<property>
+  <name>hive.exec.post.hooks</name>
+  <value>org.apache.hadoop.hive.ql.hooks.PostExecutePrinter</value>
+  <description>Post Execute Hook for Tests</description>
+</property>
+
+<property>
+  <name>hive.task.progress</name>
+  <value>false</value>
+  <description>Track progress of a task</description>
+</property>
+
+<property>
+  <name>hive.support.concurrency</name>
+  <value>true</value>
+  <description>Whether hive supports concurrency or not. A zookeeper instance must be up and running for the default hive lock manager to support read-write locks.</description>
+</property>
+
+<property>
+  <name>fs.pfile.impl</name>
+  <value>org.apache.hadoop.fs.ProxyLocalFileSystem</value>
+  <description>A proxy for local file system used for cross file system testing</description>
+</property>
+
+<property>
+  <name>hive.exec.mode.local.auto</name>
+  <value>false</value>
+  <description>
+    Let hive determine whether to run in local mode automatically
+    Disabling this for tests so that minimr is not affected
+  </description>
+</property>
+
+<property>
+  <name>hive.auto.convert.join</name>
+  <value>false</value>
+  <description>Whether Hive enable the optimization about converting common join into mapjoin based on the input file size</description>
+</property>
+
+<property>
+  <name>hive.ignore.mapjoin.hint</name>
+  <value>false</value>
+  <description>Whether Hive ignores the mapjoin hint</description>
+</property>
+
+<property>
+  <name>hive.input.format</name>
+  <value>org.apache.hadoop.hive.ql.io.CombineHiveInputFormat</value>
+  <description>The default input format, if it is not specified, the system assigns it. It is set to HiveInputFormat for hadoop versions 17, 18 and 19, whereas it is set to CombineHiveInputFormat for hadoop 20. The user can always overwrite it - if there is a bug in CombineHiveInputFormat, it can always be manually set to HiveInputFormat. </description>
+</property>
+
+<property>
+  <name>hive.default.rcfile.serde</name>
+  <value>org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe</value>
+  <description>The default SerDe hive will use for the rcfile format</description>
+</property>
+
+</configuration>

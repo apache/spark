@@ -1,0 +1,12 @@
+col_name                          data_type     comment	 	 
+	 	 
+col1                              int           col1 one line comment	 	 
+col2_abcdefghiklmnopqrstuvxyz     string        col2	 	 
+                                                two lines comment	 	 
+col3                              string        col3	 	 
+                                                three lines	 	 
+                                                comment	 	 
+col4                              string        col4 very long comment that is	 	 
+                                                greater than 80 chars and is	 	 
+                                                likely to spill into multiple	 	 
+                                                lines	 	 

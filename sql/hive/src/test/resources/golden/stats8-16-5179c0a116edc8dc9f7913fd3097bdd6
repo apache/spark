@@ -1,0 +1,19 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ANALYZE (TOK_TAB (TOK_TABNAME analyze_srcpart) (TOK_PARTSPEC (TOK_PARTVAL ds '2008-04-09') (TOK_PARTVAL hr 12))))
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 depends on stages: Stage-0
+
+STAGE PLANS:
+  Stage: Stage-0
+    Map Reduce
+      Alias -> Map Operator Tree:
+        analyze_srcpart 
+          TableScan
+            alias: analyze_srcpart
+
+  Stage: Stage-1
+    Stats-Aggr Operator
+
+

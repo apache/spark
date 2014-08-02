@@ -1,0 +1,30 @@
+DESCRIBE FUNCTION abs;
+DESCRIBE FUNCTION EXTENDED abs;
+
+EXPLAIN SELECT
+  abs(0),
+  abs(-1),
+  abs(123),
+  abs(-9223372036854775807),
+  abs(9223372036854775807)
+FROM src LIMIT 1;
+
+SELECT
+  abs(0),
+  abs(-1),
+  abs(123),
+  abs(-9223372036854775807),
+  abs(9223372036854775807)
+FROM src LIMIT 1;
+
+EXPLAIN SELECT
+  abs(0.0),
+  abs(-3.14159265),
+  abs(3.14159265)
+FROM src LIMIT 1;
+
+SELECT
+  abs(0.0),
+  abs(-3.14159265),
+  abs(3.14159265)
+FROM src LIMIT 1;

@@ -1,0 +1,4 @@
+nvl(value,default_value) - Returns default value if value is null else returns value
+Example:
+  > SELECT nvl(null,'bla') FROM src LIMIT 1;
+  bla

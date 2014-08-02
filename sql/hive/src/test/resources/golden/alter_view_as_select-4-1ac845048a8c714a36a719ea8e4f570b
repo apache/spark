@@ -1,0 +1,27 @@
+# col_name            	data_type           	comment             
+	 	 
+value               	string              	None                
+	 	 
+# Detailed Table Information	 	 
+Database:           	default             	 
+Owner:              	marmbrus            	 
+CreateTime:         	Fri Feb 07 14:47:52 PST 2014	 
+LastAccessTime:     	UNKNOWN             	 
+Protect Mode:       	None                	 
+Retention:          	0                   	 
+Table Type:         	VIRTUAL_VIEW        	 
+Table Parameters:	 	 
+	transient_lastDdlTime	1391813272          
+	 	 
+# Storage Information	 	 
+SerDe Library:      	null                	 
+InputFormat:        	org.apache.hadoop.mapred.SequenceFileInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+	 	 
+# View Information	 	 
+View Original Text: 	SELECT value FROM src WHERE key=86	 
+View Expanded Text: 	SELECT `src`.`value` FROM `default`.`src` WHERE `src`.`key`=86	 

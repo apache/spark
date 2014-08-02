@@ -17,19 +17,49 @@
 
 package org.apache.spark.graphx.impl
 
+import scala.language.existentials
+
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkConf
-import org.apache.spark.graphx._
+import scala.reflect.ClassTag
+
 import org.apache.spark.serializer._
 
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
+
 private[graphx]
-class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
+class RoutingTableMessageSerializer extends Serializer with Serializable {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream): SerializationStream =
+      new ShuffleSerializationStream(s) {
+        def writeObject[T: ClassTag](t: T): SerializationStream = {
+          val msg = t.asInstanceOf[RoutingTableMessage]
+          writeVarLong(msg._1, optimizePositive = false)
+          writeInt(msg._2)
+          this
+        }
+      }
+
+    override def deserializeStream(s: InputStream): DeserializationStream =
+      new ShuffleDeserializationStream(s) {
+        override def readObject[T: ClassTag](): T = {
+          val a = readVarLong(optimizePositive = false)
+          val b = readInt()
+          (a, b).asInstanceOf[T]
+        }
+      }
+  }
+}
+
+private[graphx]
+class VertexIdMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
+      def writeObject[T: ClassTag](t: T) = {
         val msg = t.asInstanceOf[(VertexId, _)]
         writeVarLong(msg._1, optimizePositive = false)
         this
@@ -37,80 +67,8 @@ class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T](): T = {
+      override def readObject[T: ClassTag](): T = {
         (readVarLong(optimizePositive = false), null).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Int]. */
-private[graphx]
-class IntVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Int]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeInt(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readInt()
-        new VertexBroadcastMsg[Int](0, a, b).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Long]. */
-private[graphx]
-class LongVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Long]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeLong(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readLong()
-        new VertexBroadcastMsg[Long](0, a, b).asInstanceOf[T]
-      }
-    }
-  }
-}
-
-/** A special shuffle serializer for VertexBroadcastMessage[Double]. */
-private[graphx]
-class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
-  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
-
-    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[VertexBroadcastMsg[Double]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeDouble(msg.data)
-        this
-      }
-    }
-
-    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      def readObject[T](): T = {
-        val a = readVarLong(optimizePositive = false)
-        val b = readDouble()
-        new VertexBroadcastMsg[Double](0, a, b).asInstanceOf[T]
       }
     }
   }
@@ -118,11 +76,11 @@ class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Int]. */
 private[graphx]
-class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
+class IntAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
+      def writeObject[T: ClassTag](t: T) = {
         val msg = t.asInstanceOf[(VertexId, Int)]
         writeVarLong(msg._1, optimizePositive = false)
         writeUnsignedVarInt(msg._2)
@@ -131,7 +89,7 @@ class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T](): T = {
+      override def readObject[T: ClassTag](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readUnsignedVarInt()
         (a, b).asInstanceOf[T]
@@ -142,11 +100,11 @@ class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Long]. */
 private[graphx]
-class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
+class LongAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
+      def writeObject[T: ClassTag](t: T) = {
         val msg = t.asInstanceOf[(VertexId, Long)]
         writeVarLong(msg._1, optimizePositive = false)
         writeVarLong(msg._2, optimizePositive = true)
@@ -155,7 +113,7 @@ class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      override def readObject[T](): T = {
+      override def readObject[T: ClassTag](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readVarLong(optimizePositive = true)
         (a, b).asInstanceOf[T]
@@ -166,11 +124,11 @@ class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Double]. */
 private[graphx]
-class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
+class DoubleAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
-      def writeObject[T](t: T) = {
+      def writeObject[T: ClassTag](t: T) = {
         val msg = t.asInstanceOf[(VertexId, Double)]
         writeVarLong(msg._1, optimizePositive = false)
         writeDouble(msg._2)
@@ -179,7 +137,7 @@ class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
-      def readObject[T](): T = {
+      def readObject[T: ClassTag](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readDouble()
         (a, b).asInstanceOf[T]
@@ -195,7 +153,7 @@ class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
 private[graphx]
 abstract class ShuffleSerializationStream(s: OutputStream) extends SerializationStream {
   // The implementation should override this one.
-  def writeObject[T](t: T): SerializationStream
+  def writeObject[T: ClassTag](t: T): SerializationStream
 
   def writeInt(v: Int) {
     s.write(v >> 24)
@@ -298,7 +256,6 @@ abstract class ShuffleSerializationStream(s: OutputStream) extends Serialization
     s.write(v.toInt)
   }
 
-  //def writeDouble(v: Double): Unit = writeUnsignedVarLong(java.lang.Double.doubleToLongBits(v))
   def writeDouble(v: Double): Unit = writeLong(java.lang.Double.doubleToLongBits(v))
 
   override def flush(): Unit = s.flush()
@@ -309,7 +266,7 @@ abstract class ShuffleSerializationStream(s: OutputStream) extends Serialization
 private[graphx]
 abstract class ShuffleDeserializationStream(s: InputStream) extends DeserializationStream {
   // The implementation should override this one.
-  def readObject[T](): T
+  def readObject[T: ClassTag](): T
 
   def readInt(): Int = {
     val first = s.read()
@@ -391,7 +348,6 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
       (s.read() & 0xFF)
   }
 
-  //def readDouble(): Double = java.lang.Double.longBitsToDouble(readUnsignedVarLong())
   def readDouble(): Double = java.lang.Double.longBitsToDouble(readLong())
 
   override def close(): Unit = s.close()
@@ -399,11 +355,12 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
 
 private[graphx] sealed trait ShuffleSerializerInstance extends SerializerInstance {
 
-  override def serialize[T](t: T): ByteBuffer = throw new UnsupportedOperationException
+  override def serialize[T: ClassTag](t: T): ByteBuffer = throw new UnsupportedOperationException
 
-  override def deserialize[T](bytes: ByteBuffer): T = throw new UnsupportedOperationException
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
+    throw new UnsupportedOperationException
 
-  override def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 
   // The implementation should override the following two.

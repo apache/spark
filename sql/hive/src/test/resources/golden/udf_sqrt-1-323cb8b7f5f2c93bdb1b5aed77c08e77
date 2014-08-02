@@ -1,0 +1,4 @@
+sqrt(x) - returns the square root of x
+Example:
+   > SELECT sqrt(4) FROM src LIMIT 1;
+  2

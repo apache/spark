@@ -21,7 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import akka.actor.ActorRef
 
-private[storage] object BlockManagerMessages {
+private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
@@ -33,6 +33,13 @@ private[storage] object BlockManagerMessages {
 
   // Remove all blocks belonging to a specific RDD.
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
+
+  // Remove all blocks belonging to a specific shuffle.
+  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
+
+  // Remove all blocks belonging to a specific broadcast.
+  case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
+    extends ToBlockManagerSlave
 
 
   //////////////////////////////////////////////////////////////////////////////////
@@ -46,18 +53,17 @@ private[storage] object BlockManagerMessages {
       sender: ActorRef)
     extends ToBlockManagerMaster
 
-  case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
   class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
       var blockId: BlockId,
       var storageLevel: StorageLevel,
       var memSize: Long,
-      var diskSize: Long)
+      var diskSize: Long,
+      var tachyonSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
-    def this() = this(null, null, null, 0, 0)  // For deserialization only
+    def this() = this(null, null, null, 0, 0, 0)  // For deserialization only
 
     override def writeExternal(out: ObjectOutput) {
       blockManagerId.writeExternal(out)
@@ -65,6 +71,7 @@ private[storage] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
+      out.writeLong(tachyonSize)
     }
 
     override def readExternal(in: ObjectInput) {
@@ -73,21 +80,25 @@ private[storage] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
+      tachyonSize = in.readLong()
     }
   }
 
   object UpdateBlockInfo {
-    def apply(blockManagerId: BlockManagerId,
+    def apply(
+        blockManagerId: BlockManagerId,
         blockId: BlockId,
         storageLevel: StorageLevel,
         memSize: Long,
-        diskSize: Long): UpdateBlockInfo = {
-      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
+        diskSize: Long,
+        tachyonSize: Long): UpdateBlockInfo = {
+      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize)
     }
 
     // For pattern-matching
-    def unapply(h: UpdateBlockInfo): Option[(BlockManagerId, BlockId, StorageLevel, Long, Long)] = {
-      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
+    def unapply(h: UpdateBlockInfo)
+      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
+      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
     }
   }
 
@@ -103,7 +114,15 @@ private[storage] object BlockManagerMessages {
 
   case object GetMemoryStatus extends ToBlockManagerMaster
 
-  case object ExpireDeadHosts extends ToBlockManagerMaster
-
   case object GetStorageStatus extends ToBlockManagerMaster
+
+  case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
+
+  case object ExpireDeadHosts extends ToBlockManagerMaster
 }

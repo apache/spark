@@ -1,0 +1,10 @@
+key                 	string              	None                
+value               	string              	None                
+dt                  	string              	None                
+ts                  	double              	None                
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+	 	 
+dt                  	string              	None                
+ts                  	double              	None                
