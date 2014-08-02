@@ -14,26 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.streaming.kinesis
 
-package main.scala
+/**
+ * Convert custom types to/from Array[Byte].
+ * @tparam type to serialize/deserialize
+ */
+private[streaming] trait KinesisRecordSerializer[T] extends Serializable {
+  /**
+   * Convert type to Array[Byte]
+   *
+   * @param type to serialize
+   * @return byte array
+   */
+  def serialize(t: T): Array[Byte]
 
-import scala.util.Try
-
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-
-object SimpleApp {
-  def main(args: Array[String]) {
-    // Regression test for SPARK-1167: Remove metrics-ganglia from default build due to LGPL issue
-    val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
-    val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
-    if (!foundConsole) {
-      println("Console sink not loaded via ganglia-lgpl")
-      System.exit(-1)
-    }
-    if (!foundGanglia) {
-      println("Ganglia sink not loaded via ganglia-lgpl")
-      System.exit(-1)
-    }
-  }
+  /**
+   * Convert Array[Byte] to type
+   *
+   * @param byte array
+   * @return deserialized type
+   */
+  def deserialize(array: Array[Byte]): T
 }

@@ -24,15 +24,9 @@ import org.apache.spark.SparkContext._
 
 object SimpleApp {
   def main(args: Array[String]) {
-    // Regression test for SPARK-1167: Remove metrics-ganglia from default build due to LGPL issue
-    val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
-    val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
-    if (!foundConsole) {
-      println("Console sink not loaded via ganglia-lgpl")
-      System.exit(-1)
-    }
-    if (!foundGanglia) {
-      println("Ganglia sink not loaded via ganglia-lgpl")
+    val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisUtils")).isSuccess
+    if (!foundKinesis) {
+      println("Kinesis not loaded via kinesis-asl")
       System.exit(-1)
     }
   }

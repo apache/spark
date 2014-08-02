@@ -37,8 +37,8 @@ object BuildCommons {
       "spark", "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
       "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl) =
-    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl")
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
+    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl", "kinesis-asl")
       .map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
@@ -63,7 +63,7 @@ object SparkBuild extends PomBuild {
     var profiles: mutable.Seq[String] = mutable.Seq.empty
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
       println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pganglia-lgpl flag.")
-      profiles ++= Seq("spark-ganglia-lgpl")
+      profiles ++= Seq("ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
       println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")

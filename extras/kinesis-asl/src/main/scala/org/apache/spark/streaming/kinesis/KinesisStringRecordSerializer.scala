@@ -14,26 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.streaming.kinesis
 
-package main.scala
+import org.apache.spark.Logging
 
-import scala.util.Try
+/**
+ * Implementation of KinesisRecordSerializer to convert Array[Byte] to/from String.
+ */
+class KinesisStringRecordSerializer extends KinesisRecordSerializer[String] with Logging {
+  /**
+   * Convert String to Array[Byte]
+   *
+   * @param string to serialize
+   * @return byte array
+   */
+  def serialize(string: String): Array[Byte] = {
+    string.getBytes()
+  }
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-
-object SimpleApp {
-  def main(args: Array[String]) {
-    // Regression test for SPARK-1167: Remove metrics-ganglia from default build due to LGPL issue
-    val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
-    val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
-    if (!foundConsole) {
-      println("Console sink not loaded via ganglia-lgpl")
-      System.exit(-1)
-    }
-    if (!foundGanglia) {
-      println("Ganglia sink not loaded via ganglia-lgpl")
-      System.exit(-1)
-    }
+  /**
+   * Convert Array[Byte] to String
+   *
+   * @param byte array
+   * @return deserialized string
+   */
+  def deserialize(array: Array[Byte]): String = {
+    new String(array)
   }
 }
