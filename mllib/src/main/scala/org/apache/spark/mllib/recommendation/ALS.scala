@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
@@ -40,7 +40,8 @@ import org.apache.spark.mllib.optimization.NNLS
  * of the elements within this block, and the list of destination blocks that each user or
  * product will need to send its feature vector to.
  */
-private[recommendation] case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[BitSet])
+private[recommendation]
+case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[mutable.BitSet])
 
 
 /**
@@ -383,7 +384,7 @@ class ALS private (
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
-    val shouldSend = Array.fill(numUsers)(new BitSet(numProductBlocks))
+    val shouldSend = Array.fill(numUsers)(new mutable.BitSet(numProductBlocks))
     for (r <- ratings) {
       shouldSend(userIdToPos(r.user))(productPartitioner.getPartition(r.product)) = true
     }
@@ -801,93 +802,94 @@ object ALS {
 
   /**
    * :: DeveloperApi ::
-   * Represents the cost attributable to a partition of a single ALS iteration.
-   * `inboundVectors` and `outboundVectors` are the number of feature vectors sent in and out,
-   * respectively, from a block in each iteration.  `outerProducts` is the number of outer products
-   * that need to be accumulated in each iteration.  `subproblems` is the number of least-squares
-   * subproblems solved in each iteration.
+   * Statistics of a block in ALS computation.
+   *
+   * @param category type of this block, "user" or "product"
+   * @param index index of this block
+   * @param count number of users or products inside this block, the same as the number of
+   *              least-squares problems to solve on this block in each iteration
+   * @param numRatings total number of ratings inside this block, the same as the number of outer
+   *                   products we need to make on this block in each iteration
+   * @param numInLinks total number of incoming links, the same as the number of vectors to retrieve
+   *                   before each iteration
+   * @param numOutLinks total number of outgoing links, the same as the number of vectors to send
+   *                    for the next iteration
    */
   @DeveloperApi
-  case class IterationCost(inboundVectors: Double, outerProducts: Double, subproblems: Double,
-      outboundVectors: Double)
+  case class BlockStats(
+      category: String,
+      index: Int,
+      count: Long,
+      numRatings: Long,
+      numInLinks: Long,
+      numOutLinks: Long)
 
   /**
    * :: DeveloperApi ::
-   * Given an RDD of ratings, a rank, and two partitioners, compute rough estimates of the
-   * computation time and communication cost of one iteration of ALS.  Returns a pair of
-   * `Seq[IterationCost]`s.  The first `Seq` represents user partitions and the second `Seq`
-   * represents product partitions.  These `Seq`s are indexed by partition numbers, and the `i`th
-   * member contains details for the `i`th partition.
+   * Given an RDD of ratings, number of user blocks, and number of product blocks, computes the
+   * statistics of each block in ALS computation. This is useful for estimating cost and diagnosing
+   * load balance.
    *
-   * @param ratings             RDD of Rating objects
-   * @param userPartitioner     partitioner for partitioning users
-   * @param productPartitioner  partitioner for partitioning products
+   * @param ratings an RDD of ratings
+   * @param numUserBlocks number of user blocks
+   * @param numProductBlocks number of product blocks
+   * @return statistics of user blocks and product blocks
    */
   @DeveloperApi
-  def estimateCost(
+  def analyzeBlocks(
       ratings: RDD[Rating],
-      userPartitioner: Partitioner,
-      productPartitioner: Partitioner
-    ): (Seq[IterationCost], Seq[IterationCost]) = {
-    val numUserPartitions = userPartitioner.numPartitions
-    val numProdPartitions = productPartitioner.numPartitions
+      numUserBlocks: Int,
+      numProductBlocks: Int): Array[BlockStats] = {
 
-    val ratingsByUserBlock = ratings.map{ rating =>
+    val userPartitioner = new ALSPartitioner(numUserBlocks)
+    val productPartitioner = new ALSPartitioner(numProductBlocks)
+
+    val ratingsByUserBlock = ratings.map { rating =>
       (userPartitioner.getPartition(rating.user), rating)
     }
-    val ratingsByProductBlock = ratings.map{ rating =>
+    val ratingsByProductBlock = ratings.map { rating =>
       (productPartitioner.getPartition(rating.product),
         Rating(rating.product, rating.user, rating.rating))
     }
 
     val als = new ALS()
-    val (userIn, userOut) = als.makeLinkRDDs(userPartitioner.numPartitions,
-        ratingsByUserBlock, userPartitioner)
-    val (prodIn, prodOut) = als.makeLinkRDDs(productPartitioner.numPartitions,
-        ratingsByProductBlock, productPartitioner)
+    val (userIn, userOut) =
+      als.makeLinkRDDs(numUserBlocks, numProductBlocks, ratingsByUserBlock, userPartitioner)
+    val (prodIn, prodOut) =
+      als.makeLinkRDDs(numProductBlocks, numUserBlocks, ratingsByProductBlock, productPartitioner)
 
-    def sendGrid(outLinks: RDD[(Int, OutLinkBlock)]): Map[(Int, Int), Double] = {
+    def sendGrid(outLinks: RDD[(Int, OutLinkBlock)]): Map[(Int, Int), Long] = {
       outLinks.map { x =>
-        val grid = new mutable.HashMap[(Int, Int), Double]()
+        val grid = new mutable.HashMap[(Int, Int), Long]()
         val uPartition = x._1
         x._2.shouldSend.foreach { ss =>
           ss.foreach { pPartition =>
             val pair = (uPartition, pPartition)
-            grid.put(pair, grid.getOrElse(pair, 0.0) + 1.0)
+            grid.put(pair, grid.getOrElse(pair, 0L) + 1L)
           }
         }
         grid
       }.reduce { (grid1, grid2) =>
         grid2.foreach { x =>
-          grid1.put(x._1, grid1.getOrElse(x._1, 0.0) + x._2)
+          grid1.put(x._1, grid1.getOrElse(x._1, 0L) + x._2)
         }
         grid1
       }.toMap
     }
 
-    def countRatings(inLinks: RDD[(Int, InLinkBlock)]): Map[Int, Double] = {
-      inLinks.mapValues { ilb =>
-        var numRatings = 0.0
-        ilb.ratingsForBlock.foreach { ar =>
-          ar.foreach { p => numRatings += p._1.length }
-        }
-        numRatings
-      }.collectAsMap().toMap
-    }
-
     val userSendGrid = sendGrid(userOut)
     val prodSendGrid = sendGrid(prodOut)
 
-    val userInbound = new Array[Double](numUserPartitions)
-    val prodInbound = new Array[Double](numProdPartitions)
-    val userOutbound = new Array[Double](numUserPartitions)
-    val prodOutbound = new Array[Double](numProdPartitions)
+    val userInbound = new Array[Long](numUserBlocks)
+    val prodInbound = new Array[Long](numProductBlocks)
+    val userOutbound = new Array[Long](numUserBlocks)
+    val prodOutbound = new Array[Long](numProductBlocks)
 
-    for (u <- 0 until numUserPartitions; p <- 0 until numProdPartitions) {
-      userOutbound(u) += userSendGrid.getOrElse((u, p), 0.0)
-      prodInbound(p) += userSendGrid.getOrElse((u, p), 0.0)
-      userInbound(u) += prodSendGrid.getOrElse((p, u), 0.0)
-      prodOutbound(p) += prodSendGrid.getOrElse((p, u), 0.0)
+    for (u <- 0 until numUserBlocks; p <- 0 until numProductBlocks) {
+      userOutbound(u) += userSendGrid.getOrElse((u, p), 0L)
+      prodInbound(p) += userSendGrid.getOrElse((u, p), 0L)
+      userInbound(u) += prodSendGrid.getOrElse((p, u), 0L)
+      prodOutbound(p) += prodSendGrid.getOrElse((p, u), 0L)
     }
 
     val userCounts = userOut.mapValues(x => x.elementIds.length).collectAsMap()
@@ -896,58 +898,21 @@ object ALS {
     val userRatings = countRatings(userIn)
     val prodRatings = countRatings(prodIn)
 
-    val userCosts = new Array[IterationCost](numUserPartitions)
-    val prodCosts = new Array[IterationCost](numProdPartitions)
+    val userStats = Array.tabulate(numUserBlocks)(
+      u => BlockStats("user", u, userCounts(u), userRatings(u), userInbound(u), userOutbound(u)))
+    val productStatus = Array.tabulate(numProductBlocks)(
+      p => BlockStats("product", p, prodCounts(p), prodRatings(p), prodInbound(p), prodOutbound(p)))
 
-    for (u <- 0 until numUserPartitions) {
-      userCosts(u) = IterationCost(userInbound(u), userRatings(u), userCounts(u), userOutbound(u))
-    }
-
-    for (p <- 0 until numProdPartitions) {
-      prodCosts(p) = IterationCost(prodInbound(p), prodRatings(p), prodCounts(p), prodOutbound(p))
-    }
-
-    (userCosts, prodCosts)
+    (userStats ++ productStatus).toArray
   }
 
-  private class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-    }
-  }
-
-  def main(args: Array[String]) {
-    if (args.length < 5 || args.length > 9) {
-      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir> " +
-        "[<lambda>] [<implicitPrefs>] [<alpha>] [<blocks>]")
-      System.exit(1)
-    }
-    val (master, ratingsFile, rank, iters, outputDir) =
-      (args(0), args(1), args(2).toInt, args(3).toInt, args(4))
-    val lambda = if (args.length >= 6) args(5).toDouble else 0.01
-    val implicitPrefs = if (args.length >= 7) args(6).toBoolean else false
-    val alpha = if (args.length >= 8) args(7).toDouble else 1
-    val blocks = if (args.length == 9) args(8).toInt else -1
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
-      .set("spark.kryo.referenceTracking", "false")
-      .set("spark.kryoserializer.buffer.mb", "8")
-      .set("spark.locality.wait", "10000")
-    val sc = new SparkContext(master, "ALS", conf)
-
-    val ratings = sc.textFile(ratingsFile).map { line =>
-      val fields = line.split(',')
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
-    }
-    val model = new ALS(rank = rank, iterations = iters, lambda = lambda,
-      numBlocks = blocks, implicitPrefs = implicitPrefs, alpha = alpha).run(ratings)
-
-    model.userFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                      .saveAsTextFile(outputDir + "/userFeatures")
-    model.productFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                         .saveAsTextFile(outputDir + "/productFeatures")
-    println("Final user/product features written to " + outputDir)
-    sc.stop()
+  private def countRatings(inLinks: RDD[(Int, InLinkBlock)]): Map[Int, Long] = {
+    inLinks.mapValues { ilb =>
+      var numRatings = 0L
+      ilb.ratingsForBlock.foreach { ar =>
+        ar.foreach { p => numRatings += p._1.length }
+      }
+      numRatings
+    }.collectAsMap().toMap
   }
 }
