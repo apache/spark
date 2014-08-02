@@ -17,9 +17,11 @@
 
 package org.apache.spark.api.python
 
+import java.lang.Runtime
 import java.io.{DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
+import scala.collection.mutable
 import scala.collection.JavaConversions._
 
 import org.apache.spark._
@@ -39,6 +41,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
+  var daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
+
+  var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
   val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
@@ -65,10 +70,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       // Attempt to connect, restart and retry once if it fails
       try {
         val socket = new Socket(daemonHost, daemonPort)
-        val launchStatus = new DataInputStream(socket.getInputStream).readInt()
-        if (launchStatus != 0) {
+        val pid = new DataInputStream(socket.getInputStream).readInt()
+        if (pid < 0) {
           throw new IllegalStateException("Python daemon failed to launch worker")
         }
+        daemonWorkers.put(socket, pid)
         socket
       } catch {
         case exc: SocketException =>
@@ -107,7 +113,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       // Wait for it to connect to our socket
       serverSocket.setSoTimeout(10000)
       try {
-        return serverSocket.accept()
+        val socket = serverSocket.accept()
+        simpleWorkers.put(socket, pb)
+        return socket
       } catch {
         case e: Exception =>
           throw new SparkException("Python worker did not connect back in time", e)
@@ -189,18 +197,33 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   private def stopDaemon() {
     synchronized {
-      // Request shutdown of existing daemon by sending SIGTERM
-      if (daemon != null) {
-        daemon.destroy()
-      }
+      if (useDaemon) {
+        // Request shutdown of existing daemon by sending SIGTERM
+        if (daemon != null) {
+          daemon.destroy()
+        }
 
-      daemon = null
-      daemonPort = 0
+        daemon = null
+        daemonPort = 0
+      } else {
+        simpleWorkers.mapValues(_.destroy())
+      }
     }
   }
 
   def stop() {
     stopDaemon()
+  }
+
+  def stopWorker(worker: Socket) {
+    if (useDaemon) {
+      daemonWorkers.get(worker).foreach {
+        pid => Runtime.getRuntime.exec("kill " + pid.toString)
+      }
+    } else {
+      simpleWorkers.get(worker).foreach(_.destroy())
+    }
+    worker.close()
   }
 }
 

@@ -241,7 +241,7 @@ private[spark] class PythonRDD(
       if (!context.completed) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.toMap)
+          env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
@@ -685,9 +685,8 @@ private[spark] object PythonRDD extends Logging {
 
   /**
    * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
-   * This function is outdated, PySpark does not use it anymore
    */
-  @deprecated
+  @deprecated("PySpark does not use it anymore", "1.1")
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
