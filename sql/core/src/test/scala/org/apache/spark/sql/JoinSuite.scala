@@ -197,6 +197,31 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "d") ::
       (5, "E", null, null) ::
       (6, "F", null, null) :: Nil)
+
+    // Make sure we are choosing left.outputPartitioning as the
+    // outputPartitioning for the outer join operator.
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.N, count(*)
+          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+          |GROUP BY l.N
+        """.stripMargin),
+      (1, 1) ::
+      (2, 1) ::
+      (3, 1) ::
+      (4, 1) ::
+      (5, 1) ::
+      (6, 1) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.a, count(*)
+          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+          |GROUP BY r.a
+        """.stripMargin),
+      (null, 6) :: Nil)
   }
 
   test("right outer join") {
@@ -232,6 +257,31 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "d", 4, "D") ::
       (null, null, 5, "E") ::
       (null, null, 6, "F") :: Nil)
+
+    // Make sure we are choosing right.outputPartitioning as the
+    // outputPartitioning for the outer join operator.
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.a, count(*)
+          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
+          |GROUP BY l.a
+        """.stripMargin),
+      (null, 6) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.N, count(*)
+          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
+          |GROUP BY r.N
+        """.stripMargin),
+      (1, 1) ::
+      (2, 1) ::
+      (3, 1) ::
+      (4, 1) ::
+      (5, 1) ::
+      (6, 1) :: Nil)
   }
 
   test("full outer join") {
@@ -269,5 +319,54 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "D") ::
       (null, null, 5, "E") ::
       (null, null, 6, "F") :: Nil)
+
+    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.a, count(*)
+          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+          |GROUP BY l.a
+        """.stripMargin),
+      (null, 10) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.N, count(*)
+          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+          |GROUP BY r.N
+        """.stripMargin),
+      (1, 1) ::
+      (2, 1) ::
+      (3, 1) ::
+      (4, 1) ::
+      (5, 1) ::
+      (6, 1) ::
+      (null, 4) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.N, count(*)
+          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+          |GROUP BY l.N
+        """.stripMargin),
+      (1, 1) ::
+      (2, 1) ::
+      (3, 1) ::
+      (4, 1) ::
+      (5, 1) ::
+      (6, 1) ::
+      (null, 4) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.a, count(*)
+          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+          |GROUP BY r.a
+        """.stripMargin),
+      (null, 10) :: Nil)
   }
 }
