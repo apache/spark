@@ -56,7 +56,8 @@ class Strategy (
   if (algo == Classification) {
     require(numClassesForClassification >= 2)
   }
-  val isMulticlassClassification = numClassesForClassification > 2
+  val isMulticlassClassification =
+    algo == Classification && numClassesForClassification > 2
   val isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 

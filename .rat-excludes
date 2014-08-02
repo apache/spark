@@ -55,3 +55,4 @@ dist/*
 .*ipr
 .*iws
 logs
+.*scalastyle-output.xml

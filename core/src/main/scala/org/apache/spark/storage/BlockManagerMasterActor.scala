@@ -267,9 +267,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
-      val blockMap = mutable.Map[BlockId, BlockStatus](info.blocks.toSeq: _*)
-      new StorageStatus(blockManagerId, info.maxMem, blockMap)
+    blockManagerInfo.map { case (blockManagerId, info) =>
+      new StorageStatus(blockManagerId, info.maxMem, info.blocks)
     }.toArray
   }
 
@@ -424,7 +423,14 @@ case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    tachyonSize: Long)
+    tachyonSize: Long) {
+  def isCached: Boolean = memSize + diskSize + tachyonSize > 0
+}
+
+@DeveloperApi
+object BlockStatus {
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+}
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
