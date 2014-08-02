@@ -1000,7 +1000,7 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
     case Token("TOK_FUNCTION", Token(OCTET_LENGTH(), Nil) :: string :: Nil) =>
-      OctetLength(nodeToExpr(string), Literal(StrlenConstants.DefaultEncoding))
+      OctetLength(nodeToExpr(string), Literal(OctetLengthConstants.DefaultEncoding))
     case Token("TOK_FUNCTION", Token(OCTET_LENGTH(), Nil) :: string :: encoding :: Nil) =>
       OctetLength(nodeToExpr(string), nodeToExpr(encoding))
 

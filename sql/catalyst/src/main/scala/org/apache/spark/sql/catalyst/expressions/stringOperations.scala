@@ -241,7 +241,7 @@ case class Length(child: Expression) extends UnaryExpression {
 }
 
 object OctetLengthConstants {
-  val DefaultEncoding = "ISO-8859-1"
+  val DefaultEncoding = "UTF-8"
 }
 
 object OctetLenUtils {
@@ -294,7 +294,8 @@ case class OctetLength(child: Expression, encoding : Expression) extends UnaryEx
         evalInput.asInstanceOf[String].getBytes(strEncoding).length
       } catch {
         case ue : UnsupportedEncodingException => {
-          throw new UnsupportedEncodingException(s"OctetLen: Caught UnsupportedEncodingException for encoding=[$strEncoding]")
+          throw new UnsupportedEncodingException(
+            s"OctetLen: Caught UnsupportedEncodingException for encoding=[$strEncoding]")
         }
       }
       }
