@@ -31,7 +31,13 @@ import org.apache.zookeeper.CreateMode
 import org.I0Itec.zkclient.DataUpdater
 
 @serializable
-class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, partition: Int, maxBatchByteSize: Int) extends Logging {
+class KafkaSimpleConsumer(
+    zkQuorum: String, 
+    groupId: String, 
+    topic: String, 
+    partition: Int, 
+    maxBatchByteSize: Int
+  ) extends Logging {
   private var brokers: Seq[String] = _
   private var leader: String = _
   private var consumer: SimpleConsumer = null
@@ -70,7 +76,10 @@ class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, part
     return getOffset(consumer, topic, partition, kafka.api.OffsetRequest.LatestTime, 1)
   }
 
-  private def findNewLeader(oldLeader: String, replicaBrokers: Seq[String]): (String, Seq[String]) = {
+  private def findNewLeader(
+      oldLeader: String, 
+      replicaBrokers: Seq[String]
+    ): (String, Seq[String]) = {
     for (i <- 0 until 3) {
       var goToSleep = false
       try {
@@ -139,7 +148,8 @@ class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, part
       ) {
         part.leader match {
           case Some(leader) => {
-            result = (leader.host + ":" + leader.port, part.replicas.map(brk => (brk.host + ":" + brk.port)))
+            result = (leader.host + ":" + leader.port, part.replicas.map(brk => (brk.host + ":" 
+                + brk.port)))
           }
           case None =>
         }
@@ -149,8 +159,9 @@ class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, part
       case e: Throwable => throw new Exception("Error communicating with Broker [" + broker
         + "] to find Leader for [" + topic + "] Reason: " + e)
     } finally {
-      if (consumer != null)
+      if (consumer != null) {
         consumer.close
+      }
     }
   }
 
@@ -159,10 +170,11 @@ class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, part
     for (broker <- brokers if (result == null)) {
       result = findLeaderAndReplicaBrokers(broker)
     }
-    if (result == null)
+    if (result == null) {
     	throw new Exception("not found leader.")
-    else
+    } else {
       result
+    }
   }
 
   def close: Unit = {
@@ -175,8 +187,9 @@ class KafkaSimpleConsumer(zkQuorum: String, groupId: String, topic: String, part
     val dir = "/consumers/" + groupId + "/offsets/" + topic + "/" + partition
     val zk = new ZkClient(zkQuorum, 30 * 1000, 30 * 1000, ZKStringSerializer)
     try {
-      if (zk.exists(dir) == false)
+      if (zk.exists(dir) == false) {
         zk.createPersistent(dir,true)
+      }
       zk.writeData(dir, offset.toString)
     } catch {
       case e: Throwable => logWarning("Error saving Kafka offset to Zookeeper dir: " + dir, e)
@@ -218,7 +231,8 @@ object KafkaSimpleConsumer extends Logging {
     list.toSeq
   }
 
-  def getEndOffsetPositionFromZookeeper(groupId: String, zkQuorum: String, topic: String, partition: Int): Long = {
+  def getEndOffsetPositionFromZookeeper(groupId: String, zkQuorum: String, topic: String, 
+      partition: Int): Long = {
     val dir = "/consumers/" + groupId + "/offsets/" + topic + "/" + partition
     val zk = new ZkClient(zkQuorum, 30 * 1000, 30 * 1000, ZKStringSerializer)
     try {
@@ -232,5 +246,25 @@ object KafkaSimpleConsumer extends Logging {
       zk.close()
     }
     0L
+  }
+
+  def getTopicPartitionList(zkQuorum: String, topic: String): Seq[Int] = {
+    val list = new ArrayBuffer[Int]()
+    val dir = "/brokers/topics/" + topic+"/partitions"
+    val zk = new ZkClient(zkQuorum, 30 * 1000, 30 * 1000, ZKStringSerializer)
+    try {
+      if (zk.exists(dir)) {
+        val ids = zk.getChildren(dir)
+        import scala.collection.JavaConversions._
+        for (id <- ids) {
+          list.append(id.toInt)
+        }
+      }
+    } catch {
+      case e: Throwable => logWarning("Error reading Kafka partitions list Zookeeper data", e)
+    } finally {
+      zk.close()
+    }
+    list.toSeq
   }
 }

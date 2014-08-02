@@ -26,31 +26,34 @@ import org.apache.spark.streaming.receiver.Receiver
 import kafka.serializer.Decoder
 
 class KafkaSimpleInputDStream[U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
-  @transient ssc_ : StreamingContext,
-  zkQuorum: String,
-  groupId: String,
-  topic: String,
-  partition: Integer,
-  startPositionOffset: Long,
-  autoCommitOffset:Boolean,
-  maxBatchByteSize: Int = 1024 * 1024,
-  storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2) extends ReceiverInputDStream[(Long, Array[Byte])](ssc_) with Logging {
+    @transient ssc_ : StreamingContext,
+    zkQuorum: String,
+    groupId: String,
+    topic: String,
+    partition: Integer,
+    startPositionOffset: Long,
+    autoCommitOffset: Boolean,
+    maxBatchByteSize: Int = 1024 * 1024,
+    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+  ) extends ReceiverInputDStream[(Long, Array[Byte])](ssc_) with Logging {
 
   def getReceiver(): Receiver[(Long, Array[Byte])] = {
-    new KafkaSimpleReceiver[U, T](zkQuorum, groupId, topic, partition, startPositionOffset, autoCommitOffset, maxBatchByteSize, storageLevel)
+    new KafkaSimpleReceiver[U, T](zkQuorum, groupId, topic, partition, startPositionOffset,
+        autoCommitOffset, maxBatchByteSize, storageLevel)
       .asInstanceOf[Receiver[(Long, Array[Byte])]]
   }
 }
 
 class KafkaSimpleReceiver[U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
-  zkQuorum: String,
-  groupId: String,
-  topic: String,
-  partition: Integer,
-  startPositionOffset: Long,
-  autoCommitOffset: Boolean,
-  maxBatchByteSize: Int = 1024 * 1024,
-  storageLevel: StorageLevel) extends Receiver[Any](storageLevel) with Logging {
+    zkQuorum: String,
+    groupId: String,
+    topic: String,
+    partition: Integer,
+    startPositionOffset: Long,
+    autoCommitOffset: Boolean,
+    maxBatchByteSize: Int = 1024 * 1024,
+    storageLevel: StorageLevel
+  ) extends Receiver[Any](storageLevel) with Logging {
 
   var currentOffset = startPositionOffset
   val kac = new KafkaSimpleConsumer(zkQuorum, groupId, topic, partition, maxBatchByteSize)
@@ -64,7 +67,8 @@ class KafkaSimpleReceiver[U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
     logInfo("Starting Kafka Consumer Stream")
     val firstOffset = kac.getEarliestOffset()
     if (currentOffset < firstOffset) {
-      logWarning(s"at present, the first offset is ${firstOffset}, the messages which is from ${currentOffset} to ${firstOffset} might been pruned.")
+      logWarning(s"""at present, the first offset is ${firstOffset}, the messages which is 
+      	|from ${currentOffset} to ${firstOffset} might been pruned.""".stripMargin)
       currentOffset = firstOffset
     }
     while (true) {
