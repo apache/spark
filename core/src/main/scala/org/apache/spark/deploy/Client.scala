@@ -67,16 +67,13 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
           driverArgs.driverOptions, sys.env, classPathEntries, libraryPathEntries, javaOpts)
-        // TODO: document this once standalone-cluster mode is fixed (SPARK-2260)
-        val driverSparkHome = conf.getOption("spark.driver.home")
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
           driverArgs.memory,
           driverArgs.cores,
           driverArgs.supervise,
-          command,
-          driverSparkHome)
+          command)
 
         masterActor ! RequestSubmitDriver(driverDescription)
 

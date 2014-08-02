@@ -81,7 +81,7 @@ private[spark] class Worker(
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
-  val workerSparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
+  val sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
@@ -106,7 +106,7 @@ private[spark] class Worker(
   def memoryFree: Int = memory - memoryUsed
 
   def createWorkDir() {
-    workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(workerSparkHome, "work"))
+    workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
       // So attempting to create and then check if directory was created or not.
@@ -127,7 +127,7 @@ private[spark] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
-    logInfo("Worker Spark home: " + workerSparkHome)
+    logInfo("Spark home: " + sparkHome)
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
@@ -232,9 +232,8 @@ private[spark] class Worker(
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-          val execSparkHome = appDesc.executorSparkHome.map(new File(_)).getOrElse(workerSparkHome)
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_, self,
-            workerId, host, execSparkHome, workDir, akkaUrl, conf, ExecutorState.RUNNING)
+            workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -294,8 +293,7 @@ private[spark] class Worker(
 
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driverSparkHome = driverDesc.driverSparkHome.map(new File(_)).getOrElse(workerSparkHome)
-      val driver = new DriverRunner(driverId, workDir, driverSparkHome, driverDesc, self, akkaUrl)
+      val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
       drivers(driverId) = driver
       driver.start()
 
