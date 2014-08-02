@@ -30,12 +30,14 @@ CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 
 if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
   echo "Usage: ./sbin/start-thriftserver.sh [options] [--] [thrift server options]"
-  exec "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exec "$FWDIR"/bin/spark-submit --help 2>&1 | tail -n +5 1>&2
   echo
   echo "Thrift server options:"
-  exec "$FWDIR"/bin/spark-submit spark-internal --class $CLASS -- -H 2>&1 | tail -n +3
+  exec "$FWDIR"/bin/spark-submit\
+    --primary spark-internal --class $CLASS\
+    -- --help 2>&1 | grep -v usage | tail -n +3 1>&2
   echo
   exit 0
 fi
 
-exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@
+exec "$FWDIR"/bin/spark-submit --class $CLASS --primary spark-internal $@
