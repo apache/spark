@@ -375,7 +375,7 @@ private[spark] class Executor(
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
-            if (!taskRunner.attemptedTask.isEmpty) {
+            if (taskRunner.attemptedTask.nonEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 tasksMetrics += ((taskRunner.taskId, metrics))
               }

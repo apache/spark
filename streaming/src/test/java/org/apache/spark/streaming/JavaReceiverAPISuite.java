@@ -36,7 +36,6 @@ import java.io.InputStreamReader;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {

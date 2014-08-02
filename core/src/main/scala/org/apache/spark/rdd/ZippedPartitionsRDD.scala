@@ -59,7 +59,7 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
       val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i)))
       // Check whether there are any hosts that match all RDDs; otherwise return the union
       val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
-      val locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct
+      val locs = if (exactMatchLocations.nonEmpty) exactMatchLocations else prefs.flatten.distinct
       new ZippedPartitionsPartition(i, rdds, locs)
     }
   }

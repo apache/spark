@@ -294,8 +294,7 @@ object JavaAPICompletenessChecker {
       """^org\.apache\.spark\.SparkContext\..*WritableConverter""",
       """^org\.apache\.spark\.SparkContext\..*To.*Writable"""
     ).map(_.r)
-    lazy val excludedByPattern =
-      !excludedPatterns.map(_.findFirstIn(name)).filter(_.isDefined).isEmpty
+    lazy val excludedByPattern = excludedPatterns.exists(_.findFirstIn(name).isDefined)
     name.contains("$") || excludedNames.contains(name) || excludedByPattern
   }
 

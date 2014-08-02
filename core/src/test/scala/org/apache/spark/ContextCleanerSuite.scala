@@ -414,7 +414,7 @@ class CleanerTester(
       )
 
       assert(
-        !getRDDBlocks(rddId).isEmpty,
+        getRDDBlocks(rddId).nonEmpty,
         "Blocks of RDD " + rddId + " cannot be found in block manager, " +
           "cannot start cleaner test"
       )
@@ -428,7 +428,7 @@ class CleanerTester(
       )
 
       assert(
-        !getShuffleBlocks(shuffleId).isEmpty,
+        getShuffleBlocks(shuffleId).nonEmpty,
         "Blocks of shuffle " + shuffleId + " cannot be found in block manager, " +
           "cannot start cleaner test"
       )
@@ -437,7 +437,7 @@ class CleanerTester(
     // Verify that the broadcast blocks are present
     broadcastIds.foreach { broadcastId =>
       assert(
-        !getBroadcastBlocks(broadcastId).isEmpty,
+        getBroadcastBlocks(broadcastId).nonEmpty,
         "Blocks of broadcast " + broadcastId + "cannot be found in block manager, " +
           "cannot start cleaner test"
       )

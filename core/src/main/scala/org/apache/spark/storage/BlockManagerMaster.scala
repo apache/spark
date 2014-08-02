@@ -76,7 +76,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
    * those blocks that are reported to block manager master.
    */
   def contains(blockId: BlockId) = {
-    !getLocations(blockId).isEmpty
+    getLocations(blockId).nonEmpty
   }
 
   /** Get ids of other nodes in the cluster from the driver */

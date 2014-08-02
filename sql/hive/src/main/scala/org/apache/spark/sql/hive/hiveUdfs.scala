@@ -167,7 +167,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   }
 
   override def foldable = {
-    isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
+    isUDFDeterministic && children.forall(_.foldable)
   }
 
   protected lazy val deferedObjects = Array.fill[DeferredObject](children.length)({

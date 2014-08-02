@@ -67,7 +67,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   test("from no conf + spark home + env") {
     ssc = new StreamingContext(master, appName, batchDuration,
       sparkHome, Nil, Map(envPair))
-    assert(ssc.conf.getExecutorEnv.exists(_ == envPair))
+    assert(ssc.conf.getExecutorEnv.contains(envPair))
   }
 
   test("from conf with settings") {

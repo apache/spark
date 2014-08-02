@@ -372,7 +372,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String =
-    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
+    Option(localProperties.get).map(_.getProperty(key)).orNull
 
   /** Set a human readable description of the current job. */
   @deprecated("use setJobGroup", "0.8.1")
@@ -1448,7 +1448,7 @@ object SparkContext extends Logging {
     if (sparkHome != null) {
       res.setSparkHome(sparkHome)
     }
-    if (jars != null && !jars.isEmpty) {
+    if (jars != null && jars.nonEmpty) {
       res.setJars(jars)
     }
     res.setExecutorEnv(environment.toSeq)

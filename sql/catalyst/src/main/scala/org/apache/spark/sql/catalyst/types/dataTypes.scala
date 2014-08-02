@@ -327,7 +327,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.get(name).getOrElse(
+    nameToField.getOrElse(name,
       throw new IllegalArgumentException(s"Field ${name} does not exist."))
   }
 
@@ -337,7 +337,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
-    if (!nonExistFields.isEmpty) {
+    if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
         s"Field ${nonExistFields.mkString(",")} does not exist.")
     }

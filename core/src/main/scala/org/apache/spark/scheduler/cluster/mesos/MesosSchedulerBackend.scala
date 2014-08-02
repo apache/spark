@@ -208,7 +208,7 @@ private[spark] class MesosSchedulerBackend(
         // Build a list of Mesos tasks for each slave
         val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
         for ((taskList, index) <- taskLists.zipWithIndex) {
-          if (!taskList.isEmpty) {
+          if (taskList.nonEmpty) {
             for (taskDesc <- taskList) {
               val slaveId = taskDesc.executorId
               val offerNum = offerableIndices(slaveId)

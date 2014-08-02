@@ -215,7 +215,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
     def getChunk(): Option[MessageChunk] = {
       messages.synchronized {
-        while (!messages.isEmpty) {
+        while (messages.nonEmpty) {
           /* nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
           /* val message = messages(nextMessageToBeUsed) */
           val message = messages.dequeue()

@@ -91,7 +91,7 @@ object MasterFailureTest extends Logging {
     // Input: time=1 ==> [ a ] , time=2 ==> [ a, a ] , time=3 ==> [ a, a, a ] , ...
     val input = (1 to numBatches).map(i => (1 to i).map(_ => "a").mkString(" ")).toSeq
     // Expected output: time=1 ==> [ (a, 1) ] , time=2 ==> [ (a, 3) ] , time=3 ==> [ (a,6) ] , ...
-    val expectedOutput = (1L to numBatches).map(i => (1L to i).reduce(_ + _)).map(j => ("a", j))
+    val expectedOutput = (1L to numBatches).map(i => (1L to i).sum).map(j => ("a", j))
 
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Long], state: Option[Long]) => {
@@ -239,7 +239,7 @@ object MasterFailureTest extends Logging {
         while (!killed && !isLastOutputGenerated && !isTimedOut) {
           Thread.sleep(100)
           timeRan = System.currentTimeMillis() - startTime
-          isLastOutputGenerated = (!output.isEmpty && output.last == lastExpectedOutput)
+          isLastOutputGenerated = (output.nonEmpty && output.last == lastExpectedOutput)
           isTimedOut = (timeRan + totalTimeRan > maxTimeToRun)
         }
       } catch {

@@ -156,7 +156,7 @@ private[yarn] class YarnAllocationHandler(
         val maxExpectedHostCount = preferredHostToCount.getOrElse(candidateHost, 0)
         val requiredHostCount = maxExpectedHostCount - allocatedContainersOnHost(candidateHost)
 
-        var remainingContainers = hostToContainers.get(candidateHost).getOrElse(null)
+        var remainingContainers = hostToContainers.get(candidateHost).orNull
         assert(remainingContainers != null)
 
         if (requiredHostCount >= remainingContainers.size){
@@ -187,7 +187,7 @@ private[yarn] class YarnAllocationHandler(
           if (rack != null){
             val maxExpectedRackCount = preferredRackToCount.getOrElse(rack, 0)
             val requiredRackCount = maxExpectedRackCount - allocatedContainersOnRack(rack) -
-              rackLocalContainers.get(rack).getOrElse(List()).size
+              rackLocalContainers.getOrElse(rack, List()).size
 
 
             if (requiredRackCount >= remainingContainers.size){
@@ -313,10 +313,10 @@ private[yarn] class YarnAllocationHandler(
 
         allocatedHostToContainersMap.synchronized {
           if (allocatedContainerToHostMap.containsKey(containerId)) {
-            val host = allocatedContainerToHostMap.get(containerId).getOrElse(null)
+            val host = allocatedContainerToHostMap.get(containerId).orNull
             assert (host != null)
 
-            val containerSet = allocatedHostToContainersMap.get(host).getOrElse(null)
+            val containerSet = allocatedHostToContainersMap.get(host).orNull
             assert (containerSet != null)
 
             containerSet -= containerId
@@ -530,7 +530,7 @@ private[yarn] class YarnAllocationHandler(
       retval += container
     }
     // Remove from the original list.
-    if (! retval.isEmpty) {
+    if (retval.nonEmpty) {
       releasedContainerList.removeAll(retval)
       for (v <- retval) pendingReleaseContainers.put(v, true)
       logInfo("Releasing " + retval.size + " containers. pendingReleaseContainers : " +

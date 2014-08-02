@@ -185,7 +185,7 @@ object BlockFetcherIterator {
             }
           }
           // Add in the final request
-          if (!curBlocks.isEmpty) {
+          if (curBlocks.nonEmpty) {
             remoteRequests += new FetchRequest(address, curBlocks)
           }
         }
@@ -223,7 +223,7 @@ object BlockFetcherIterator {
       fetchRequests ++= Utils.randomize(remoteRequests)
 
       // Send out initial requests for blocks, up to our maxBytesInFlight
-      while (!fetchRequests.isEmpty &&
+      while (fetchRequests.nonEmpty &&
         (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
         sendRequest(fetchRequests.dequeue())
       }
@@ -256,7 +256,7 @@ object BlockFetcherIterator {
       val stopFetchWait = System.currentTimeMillis()
       _fetchWaitTime += (stopFetchWait - startFetchWait)
       if (! result.failed) bytesInFlight -= result.size
-      while (!fetchRequests.isEmpty &&
+      while (fetchRequests.nonEmpty &&
         (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
         sendRequest(fetchRequests.dequeue())
       }

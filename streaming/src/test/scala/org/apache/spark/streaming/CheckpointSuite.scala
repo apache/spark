@@ -85,7 +85,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     advanceTimeWithRealDelay(ssc, firstNumBatches)
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
-    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+    assert(stateStream.checkpointData.currentCheckpointFiles.nonEmpty,
       "No checkpointed RDDs in state stream before first failure")
     stateStream.checkpointData.currentCheckpointFiles.foreach {
       case (time, file) => {
@@ -107,7 +107,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(checkpointDir)
     stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
     logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStream.generatedRDDs.isEmpty,
+    assert(stateStream.generatedRDDs.nonEmpty,
       "No restored RDDs in state stream after recovery from first failure")
 
 
@@ -115,7 +115,7 @@ class CheckpointSuite extends TestSuiteBase {
     // is present in the checkpoint data or not
     ssc.start()
     advanceTimeWithRealDelay(ssc, 1)
-    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+    assert(stateStream.checkpointData.currentCheckpointFiles.nonEmpty,
       "No checkpointed RDDs in state stream before second failure")
     stateStream.checkpointData.currentCheckpointFiles.foreach {
       case (time, file) => {
@@ -130,7 +130,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(checkpointDir)
     stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
     logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStream.generatedRDDs.isEmpty,
+    assert(stateStream.generatedRDDs.nonEmpty,
       "No restored RDDs in state stream after recovery from second failure")
 
     // Adjust manual clock time as if it is being restarted after a delay; this is a hack because
@@ -267,9 +267,9 @@ class CheckpointSuite extends TestSuiteBase {
     // Verify whether files created have been recorded correctly or not
     var fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
     def recordedFiles = fileInputDStream.files.values.flatMap(x => x)
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
@@ -282,9 +282,9 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("*********** RESTARTING ************")
     ssc = new StreamingContext(checkpointDir)
     fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Restart stream computation
     ssc.start()
@@ -298,14 +298,14 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.stop()
 
     // Verify whether files created while the driver was down have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("4")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("5")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("6")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("4")))
+    assert(recordedFiles.exists(_.endsWith("5")))
+    assert(recordedFiles.exists(_.endsWith("6")))
 
     // Verify whether new files created after recover have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("7")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("8")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("9")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("7")))
+    assert(recordedFiles.exists(_.endsWith("8")))
+    assert(recordedFiles.exists(_.endsWith("9")))
 
     // Append the new output to the old buffer
     outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]

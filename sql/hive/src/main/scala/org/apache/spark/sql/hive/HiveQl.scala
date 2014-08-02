@@ -460,7 +460,7 @@ private[hive] object HiveQl {
             "TOK_TABLELOCATION",
             "TOK_TABLEPROPERTIES"),
           children)
-      if (notImplemented.exists(token => !token.isEmpty)) {
+      if (notImplemented.exists(token => token.nonEmpty)) {
         throw new NotImplementedError(
           s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
       }

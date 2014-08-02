@@ -199,7 +199,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private def getModificationTime(dir: FileStatus): Long = {
     try {
       val logFiles = fs.listStatus(dir.getPath)
-      if (logFiles != null && !logFiles.isEmpty) {
+      if (logFiles != null && logFiles.nonEmpty) {
         logFiles.map(_.getModificationTime).max
       } else {
         dir.getModificationTime

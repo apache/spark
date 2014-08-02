@@ -26,7 +26,7 @@ import org.apache.spark.metrics.source.Source
 
 private[spark] class ExecutorSource(val executor: Executor, executorId: String) extends Source {
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
-    FileSystem.getAllStatistics().filter(s => s.getScheme.equals(scheme)).headOption
+    FileSystem.getAllStatistics().find(_.getScheme.equals(scheme))
 
   private def registerFileSystemStat[T](
         scheme: String, name: String, f: FileSystem.Statistics => T, defaultValue: T) = {

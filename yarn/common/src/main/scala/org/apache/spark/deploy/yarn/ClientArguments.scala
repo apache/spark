@@ -62,7 +62,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
     var args = inputArgs
 
-    while (!args.isEmpty) {
+    while (args.nonEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
           userJar = value
