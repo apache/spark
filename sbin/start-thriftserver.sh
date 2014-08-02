@@ -30,7 +30,7 @@ CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 
 if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
   echo "Usage: ./sbin/start-thriftserver.sh [options] [--] [thrift server options]"
-  exec "$FWDIR"/bin/spark-submit --help 2>&1 | tail -n +5 1>&2
+  exec "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v "^Usage\|\(  spark-submit\)" 1>&2
   echo
   echo "Thrift server options:"
   exec "$FWDIR"/bin/spark-submit\

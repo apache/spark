@@ -40,10 +40,11 @@ dependencies, and can support different cluster managers and deploy modes that S
   [application-arguments]
 {% endhighlight %}
 
-(**NOTE** Prior to Spark 1.1, `--primary` and `--` are not required. The old application option
-passing mode is still supported. Start from Spark 1.1, `--` is used as user application option
-separator, to let user application receive arbitrary command line option, including those are once
-swallowed by `spark-submit`, like `--master`.)
+(**NOTE** As of Spark 1.1, `--` is used as a separator for user application options, such that
+anything that follows will be passed to the application as command line arguments. This includes
+those that were once swallowed by `spark-submit`, e.g. `--help` and `--conf`. Note that this must be
+used in conjunction with `--primary` to specify the main application jar. The old way of setting
+application jars and passing arguments to applications is still supported.)
 
 Some of the commonly used options are:
 

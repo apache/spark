@@ -412,10 +412,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --help, -h                  Show this help message and exit.
         |  --verbose, -v               Print additional debug output.
         |
-        |  --primary                   The primary jar file or Python file of the application.
-        |  --                          Used together with "--primary".  A "--" signals the end of
-        |                              spark-submit options, everything after "--" are passed as
-        |                              command line arguments to the application.
+        |  --primary                   The primary jar file or Python file of the application. Used
+        |                              in conjunction with "--" to pass arbitrary arguments to the
+        |                              application if any.
+        |  --                          A "--" signals the end of spark-submit options, everything
+        |                              after "--" are passed as command line arguments to the
+        |                              application. Only used in conjunction with "--primary".
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
