@@ -234,28 +234,14 @@ case class Length(child: Expression) extends UnaryExpression {
     } else if (!inputVal.isInstanceOf[String]) {
       inputVal.toString.length
     } else {
-      OctetLenUtils.len(inputVal.asInstanceOf[String])
+      val str = inputVal.asInstanceOf[String]
+      str.codePointCount(0, str.length)
     }
   }
-
 }
 
 object OctetLengthConstants {
   val DefaultEncoding = "UTF-8"
-}
-
-object OctetLenUtils {
-  def len(s : String)  = {
-    if (s == null) {
-      null
-    } else {
-      @inline def isUtfStartByte(b : Byte) = (b & 0xC0) != 0x80
-      s.getBytes.foldLeft(0) { case (cnt, b) => {
-        cnt + (if (isUtfStartByte(b)) 1 else 0)
-      }
-      }
-    }
-  }
 }
 
 /**
