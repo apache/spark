@@ -88,6 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
@@ -98,8 +99,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-    workerUrl: Option[String]) {
+
+  private def run(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      workerUrl: Option[String]) {
 
     SignalLogger.register(log)
 

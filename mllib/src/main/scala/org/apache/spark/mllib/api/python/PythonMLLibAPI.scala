@@ -20,15 +20,20 @@ package org.apache.spark.mllib.api.python
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.linalg.{Matrix, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.random.{RandomRDDGenerators => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -226,7 +231,7 @@ class PythonMLLibAPI extends Serializable {
       jsc: JavaSparkContext,
       path: String,
       minPartitions: Int): JavaRDD[Array[Byte]] =
-    MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions).map(serializeLabeledPoint).toJavaRDD()
+    MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions).map(serializeLabeledPoint)
 
   private def trainRegressionModel(
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
@@ -465,5 +470,131 @@ class PythonMLLibAPI extends Serializable {
       alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+  }
+
+  /**
+   * Java stub for mllib Statistics.corr(X: RDD[Vector], method: String).
+   * Returns the correlation matrix serialized into a byte array understood by deserializers in
+   * pyspark.
+   */
+  def corr(X: JavaRDD[Array[Byte]], method: String): Array[Byte] = {
+    val inputMatrix = X.rdd.map(deserializeDoubleVector(_))
+    val result = Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
+    serializeDoubleMatrix(to2dArray(result))
+  }
+
+  /**
+   * Java stub for mllib Statistics.corr(x: RDD[Double], y: RDD[Double], method: String).
+   */
+  def corr(x: JavaRDD[Array[Byte]], y: JavaRDD[Array[Byte]], method: String): Double = {
+    val xDeser = x.rdd.map(deserializeDouble(_))
+    val yDeser = y.rdd.map(deserializeDouble(_))
+    Statistics.corr(xDeser, yDeser, getCorrNameOrDefault(method))
+  }
+
+  // used by the corr methods to retrieve the name of the correlation method passed in via pyspark
+  private def getCorrNameOrDefault(method: String) = {
+    if (method == null) CorrelationNames.defaultCorrName else method
+  }
+
+  // Reformat a Matrix into Array[Array[Double]] for serialization
+  private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
+    val values = matrix.toArray
+    Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
+  }
+
+  // Used by the *RDD methods to get default seed if not passed in from pyspark
+  private def getSeedOrDefault(seed: java.lang.Long): Long = {
+    if (seed == null) Utils.random.nextLong else seed
+  }
+
+  // Used by *RDD methods to get default numPartitions if not passed in from pyspark
+  private def getNumPartitionsOrDefault(numPartitions: java.lang.Integer,
+      jsc: JavaSparkContext): Int = {
+    if (numPartitions == null) {
+      jsc.sc.defaultParallelism
+    } else {
+      numPartitions
+    }
+  }
+
+  // Note: for the following methods, numPartitions and seed are boxed to allow nulls to be passed
+  // in for either argument from pyspark
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformRDD()
+   */
+  def uniformRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.uniformRDD(jsc.sc, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalRDD()
+   */
+  def normalRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.normalRDD(jsc.sc, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
+   */
+  def poissonRDD(jsc: JavaSparkContext,
+      mean: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.poissonRDD(jsc.sc, mean, size, parts, s).map(serializeDouble)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.uniformVectorRDD()
+   */
+  def uniformVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.uniformVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.normalVectorRDD()
+   */
+  def normalVectorRDD(jsc: JavaSparkContext,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.normalVectorRDD(jsc.sc, numRows, numCols, parts, s).map(serializeDoubleVector)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
+   */
+  def poissonVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Array[Byte]] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s).map(serializeDoubleVector)
   }
 }

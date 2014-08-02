@@ -38,7 +38,7 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
@@ -286,17 +286,23 @@ private[spark] object Utils extends Logging {
                  out: OutputStream,
                  closeStreams: Boolean = false)
   {
-    val buf = new Array[Byte](8192)
-    var n = 0
-    while (n != -1) {
-      n = in.read(buf)
-      if (n != -1) {
-        out.write(buf, 0, n)
+    try {
+      val buf = new Array[Byte](8192)
+      var n = 0
+      while (n != -1) {
+        n = in.read(buf)
+        if (n != -1) {
+          out.write(buf, 0, n)
+        }
       }
-    }
-    if (closeStreams) {
-      in.close()
-      out.close()
+    } finally {
+      if (closeStreams) {
+        try {
+          in.close()
+        } finally {
+          out.close()
+        }
+      }
     }
   }
 
@@ -868,9 +874,12 @@ private[spark] object Utils extends Logging {
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(effectiveStart)
-    stream.read(buff)
-    stream.close()
+    try {
+      stream.skip(effectiveStart)
+      stream.read(buff)
+    } finally {
+      stream.close()
+    }
     Source.fromBytes(buff).mkString
   }
 
@@ -1311,6 +1320,15 @@ private[spark] object Utils extends Logging {
     val desc = if (description == null) "" else description
     val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
     s"$className: $desc\n$st"
+  }
+
+  /**
+   * Convert all spark properties set in the given SparkConf to a sequence of java options.
+   */
+  def sparkJavaOpts(conf: SparkConf, filterKey: (String => Boolean) = _ => true): Seq[String] = {
+    conf.getAll
+      .filter { case (k, _) => filterKey(k) }
+      .map { case (k, v) => s"-D$k=$v" }
   }
 
 }

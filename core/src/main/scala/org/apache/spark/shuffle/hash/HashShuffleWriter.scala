@@ -24,7 +24,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 
-class HashShuffleWriter[K, V](
+private[spark] class HashShuffleWriter[K, V](
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
     context: TaskContext)
@@ -33,6 +33,10 @@ class HashShuffleWriter[K, V](
   private val dep = handle.dependency
   private val numOutputSplits = dep.partitioner.numPartitions
   private val metrics = context.taskMetrics
+
+  // Are we in the process of stopping? Because map tasks can call stop() with success = true
+  // and then call stop() with success = false if they get an exception, we want to make sure
+  // we don't try deleting files, etc twice.
   private var stopping = false
 
   private val blockManager = SparkEnv.get.blockManager
@@ -61,7 +65,8 @@ class HashShuffleWriter[K, V](
   }
 
   /** Close this writer, passing along whether the map completed */
-  override def stop(success: Boolean): Option[MapStatus] = {
+  override def stop(initiallySuccess: Boolean): Option[MapStatus] = {
+    var success = initiallySuccess
     try {
       if (stopping) {
         return None
@@ -69,15 +74,16 @@ class HashShuffleWriter[K, V](
       stopping = true
       if (success) {
         try {
-          return Some(commitWritesAndBuildStatus())
+          Some(commitWritesAndBuildStatus())
         } catch {
           case e: Exception =>
+            success = false
             revertWrites()
             throw e
         }
       } else {
         revertWrites()
-        return None
+        None
       }
     } finally {
       // Release the writers back to the shuffle block manager.
@@ -96,8 +102,7 @@ class HashShuffleWriter[K, V](
     var totalBytes = 0L
     var totalTime = 0L
     val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
-      writer.commit()
-      writer.close()
+      writer.commitAndClose()
       val size = writer.fileSegment().length
       totalBytes += size
       totalTime += writer.timeWriting()
@@ -116,8 +121,7 @@ class HashShuffleWriter[K, V](
   private def revertWrites(): Unit = {
     if (shuffle != null && shuffle.writers != null) {
       for (writer <- shuffle.writers) {
-        writer.revertPartialWrites()
-        writer.close()
+        writer.revertPartialWritesAndClose()
       }
     }
   }

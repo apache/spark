@@ -23,16 +23,13 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
 
 /**
- * A JVM-global lock that should be used to prevent thread safety issues when using things in
- * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
- * 2.10.* builds.  See SI-6240 for more details.
+ * Utility functions for working with DataTypes.
  */
-protected[catalyst] object ScalaReflectionLock
-
 object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "StringType" ^^^ StringType |
@@ -48,11 +45,13 @@ object DataType extends RegexParsers {
     "TimestampType" ^^^ TimestampType
 
   protected lazy val arrayType: Parser[DataType] =
-    "ArrayType" ~> "(" ~> dataType <~ ")" ^^ ArrayType
+    "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
+      case tpe ~ _ ~ containsNull => ArrayType(tpe, containsNull)
+    }
 
   protected lazy val mapType: Parser[DataType] =
-    "MapType" ~> "(" ~> dataType ~ "," ~ dataType <~ ")" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
+    "MapType" ~> "(" ~> dataType ~ "," ~ dataType ~ "," ~ boolVal <~ ")" ^^ {
+      case t1 ~ _ ~ t2 ~ _ ~ valueContainsNull => MapType(t1, t2, valueContainsNull)
     }
 
   protected lazy val structField: Parser[StructField] =
@@ -85,6 +84,21 @@ object DataType extends RegexParsers {
     case Success(result, _) => result
     case failure: NoSuccess => sys.error(s"Unsupported dataType: $asString, $failure")
   }
+
+  protected[types] def buildFormattedString(
+      dataType: DataType,
+      prefix: String,
+      builder: StringBuilder): Unit = {
+    dataType match {
+      case array: ArrayType =>
+        array.buildFormattedString(prefix, builder)
+      case struct: StructType =>
+        struct.buildFormattedString(prefix, builder)
+      case map: MapType =>
+        map.buildFormattedString(prefix, builder)
+      case _ =>
+    }
+  }
 }
 
 abstract class DataType {
@@ -95,49 +109,65 @@ abstract class DataType {
   }
 
   def isPrimitive: Boolean = false
+
+  def simpleString: String
 }
 
-case object NullType extends DataType
+case object NullType extends DataType {
+  def simpleString: String = "null"
+}
+
+object NativeType {
+  def all = Seq(
+    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+
+  def unapply(dt: DataType): Boolean = all.contains(dt)
+}
 
 trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
 
 abstract class NativeType extends DataType {
-  type JvmType
-  @transient val tag: TypeTag[JvmType]
-  val ordering: Ordering[JvmType]
+  private[sql] type JvmType
+  @transient private[sql] val tag: TypeTag[JvmType]
+  private[sql] val ordering: Ordering[JvmType]
 
-  @transient val classTag = ScalaReflectionLock.synchronized {
+  @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
     val mirror = runtimeMirror(Utils.getSparkClassLoader)
     ClassTag[JvmType](mirror.runtimeClass(tag.tpe))
   }
 }
 
 case object StringType extends NativeType with PrimitiveType {
-  type JvmType = String
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = String
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "string"
 }
 
 case object BinaryType extends DataType with PrimitiveType {
-  type JvmType = Array[Byte]
+  private[sql] type JvmType = Array[Byte]
+  def simpleString: String = "binary"
 }
 
 case object BooleanType extends NativeType with PrimitiveType {
-  type JvmType = Boolean
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Boolean
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "boolean"
 }
 
 case object TimestampType extends NativeType {
-  type JvmType = Timestamp
+  private[sql] type JvmType = Timestamp
 
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
-  val ordering = new Ordering[JvmType] {
+  private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
+
+  def simpleString: String = "timestamp"
 }
 
 abstract class NumericType extends NativeType with PrimitiveType {
@@ -146,7 +176,11 @@ abstract class NumericType extends NativeType with PrimitiveType {
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
-  val numeric: Numeric[JvmType]
+  private[sql] val numeric: Numeric[JvmType]
+}
+
+object NumericType {
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */
@@ -158,39 +192,43 @@ object IntegralType {
 }
 
 abstract class IntegralType extends NumericType {
-  val integral: Integral[JvmType]
+  private[sql] val integral: Integral[JvmType]
 }
 
 case object LongType extends IntegralType {
-  type JvmType = Long
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Long]]
-  val integral = implicitly[Integral[Long]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Long
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Long]]
+  private[sql] val integral = implicitly[Integral[Long]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "long"
 }
 
 case object IntegerType extends IntegralType {
-  type JvmType = Int
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Int]]
-  val integral = implicitly[Integral[Int]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Int
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Int]]
+  private[sql] val integral = implicitly[Integral[Int]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "integer"
 }
 
 case object ShortType extends IntegralType {
-  type JvmType = Short
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Short]]
-  val integral = implicitly[Integral[Short]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Short
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Short]]
+  private[sql] val integral = implicitly[Integral[Short]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "short"
 }
 
 case object ByteType extends IntegralType {
-  type JvmType = Byte
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Byte]]
-  val integral = implicitly[Integral[Byte]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Byte
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Byte]]
+  private[sql] val integral = implicitly[Integral[Byte]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "byte"
 }
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
@@ -201,47 +239,159 @@ object FractionalType {
   }
 }
 abstract class FractionalType extends NumericType {
-  val fractional: Fractional[JvmType]
+  private[sql] val fractional: Fractional[JvmType]
 }
 
 case object DecimalType extends FractionalType {
-  type JvmType = BigDecimal
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[BigDecimal]]
-  val fractional = implicitly[Fractional[BigDecimal]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = BigDecimal
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[BigDecimal]]
+  private[sql] val fractional = implicitly[Fractional[BigDecimal]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "decimal"
 }
 
 case object DoubleType extends FractionalType {
-  type JvmType = Double
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Double]]
-  val fractional = implicitly[Fractional[Double]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Double
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Double]]
+  private[sql] val fractional = implicitly[Fractional[Double]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "double"
 }
 
 case object FloatType extends FractionalType {
-  type JvmType = Float
-  @transient lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  val numeric = implicitly[Numeric[Float]]
-  val fractional = implicitly[Fractional[Float]]
-  val ordering = implicitly[Ordering[JvmType]]
+  private[sql] type JvmType = Float
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val numeric = implicitly[Numeric[Float]]
+  private[sql] val fractional = implicitly[Fractional[Float]]
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def simpleString: String = "float"
 }
 
-case class ArrayType(elementType: DataType) extends DataType
+object ArrayType {
+  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is false. */
+  def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
+}
 
-case class StructField(name: String, dataType: DataType, nullable: Boolean)
-
-object StructType {
-  def fromAttributes(attributes: Seq[Attribute]): StructType = {
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+/**
+ * The data type for collections of multiple values.
+ * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+ *
+ * @param elementType The data type of values.
+ * @param containsNull Indicates if values have `null` values
+ */
+case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
+    builder.append(
+      s"${prefix}-- element: ${elementType.simpleString} (containsNull = ${containsNull})\n")
+    DataType.buildFormattedString(elementType, s"$prefix    |", builder)
   }
 
-  // def apply(fields: Seq[StructField]) = new StructType(fields.toIndexedSeq)
+  def simpleString: String = "array"
+}
+
+/**
+ * A field inside a StructType.
+ * @param name The name of this field.
+ * @param dataType The data type of this field.
+ * @param nullable Indicates if values of this field can be `null` values.
+ */
+case class StructField(name: String, dataType: DataType, nullable: Boolean) {
+
+  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
+    builder.append(s"${prefix}-- ${name}: ${dataType.simpleString} (nullable = ${nullable})\n")
+    DataType.buildFormattedString(dataType, s"$prefix    |", builder)
+  }
+}
+
+object StructType {
+  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+
+  private def validateFields(fields: Seq[StructField]): Boolean =
+    fields.map(field => field.name).distinct.size == fields.size
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
-  def toAttributes = fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+  require(StructType.validateFields(fields), "Found fields with the same name.")
+
+  /**
+   * Returns all field names in a [[Seq]].
+   */
+  lazy val fieldNames: Seq[String] = fields.map(_.name)
+  private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
+  private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+  /**
+   * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
+   * have a name matching the given name, `null` will be returned.
+   */
+  def apply(name: String): StructField = {
+    nameToField.get(name).getOrElse(
+      throw new IllegalArgumentException(s"Field ${name} does not exist."))
+  }
+
+  /**
+   * Returns a [[StructType]] containing [[StructField]]s of the given names.
+   * Those names which do not have matching fields will be ignored.
+   */
+  def apply(names: Set[String]): StructType = {
+    val nonExistFields = names -- fieldNamesSet
+    if (!nonExistFields.isEmpty) {
+      throw new IllegalArgumentException(
+        s"Field ${nonExistFields.mkString(",")} does not exist.")
+    }
+    // Preserve the original order of fields.
+    StructType(fields.filter(f => names.contains(f.name)))
+  }
+
+  protected[sql] def toAttributes =
+    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+
+  def treeString: String = {
+    val builder = new StringBuilder
+    builder.append("root\n")
+    val prefix = " |"
+    fields.foreach(field => field.buildFormattedString(prefix, builder))
+
+    builder.toString()
+  }
+
+  def printTreeString(): Unit = println(treeString)
+
+  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
+    fields.foreach(field => field.buildFormattedString(prefix, builder))
+  }
+
+  def simpleString: String = "struct"
 }
 
-case class MapType(keyType: DataType, valueType: DataType) extends DataType
+object MapType {
+  /**
+   * Construct a [[MapType]] object with the given key type and value type.
+   * The `valueContainsNull` is true.
+   */
+  def apply(keyType: DataType, valueType: DataType): MapType =
+    MapType(keyType: DataType, valueType: DataType, true)
+}
+
+/**
+ * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ * @param keyType The data type of map keys.
+ * @param valueType The data type of map values.
+ * @param valueContainsNull Indicates if map values have `null` values.
+ */
+case class MapType(
+    keyType: DataType,
+    valueType: DataType,
+    valueContainsNull: Boolean) extends DataType {
+  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
+    builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
+    builder.append(s"${prefix}-- value: ${valueType.simpleString} " +
+      s"(valueContainsNull = ${valueContainsNull})\n")
+    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
+    DataType.buildFormattedString(valueType, s"$prefix    |", builder)
+  }
+
+  def simpleString: String = "map"
+}

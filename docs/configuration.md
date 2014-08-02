@@ -414,10 +414,18 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>2</td>
   <td>
-    Maximum object size to allow within Kryo (the library needs to create a buffer at least as
-    large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
-    worker.
+    Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
+     <i>per core</i> on each worker. This buffer will grow up to
+     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
+  <td>64</td>
+  <td>
+    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
+    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
+    inside Kryo.
   </td>
 </tr>
 </table>
@@ -532,6 +540,13 @@ Apart from these, the following properties are also available, and may be useful
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
+    <td>spark.executor.heartbeatInterval</td>
+    <td>10000</td>
+    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
 </tr>
 </table>
 

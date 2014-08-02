@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
@@ -27,6 +29,8 @@ import org.apache.spark.util.Utils
 // Implicits
 import org.apache.spark.sql.hive.test.TestHive._
 
+case class Cases(lower: String, UPPER: String)
+
 class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val dirname = Utils.createTempDir()
@@ -35,7 +39,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   override def beforeAll() {
     // write test data
-    ParquetTestData.writeFile
+    ParquetTestData.writeFile()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
   }
@@ -53,6 +57,19 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   override def afterEach() {
     Utils.deleteRecursively(dirname)
+  }
+
+  test("Case insensitive attribute names") {
+    val tempFile = File.createTempFile("parquet", "")
+    tempFile.delete()
+    sparkContext.parallelize(1 to 10)
+      .map(_.toString)
+      .map(i => Cases(i, i))
+      .saveAsParquetFile(tempFile.getCanonicalPath)
+
+    parquetFile(tempFile.getCanonicalPath).registerAsTable("cases")
+    hql("SELECT upper FROM cases").collect().map(_.getString(0)) === (1 to 10).map(_.toString)
+    hql("SELECT LOWER FROM cases").collect().map(_.getString(0)) === (1 to 10).map(_.toString)
   }
 
   test("SELECT on Parquet table") {
