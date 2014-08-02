@@ -43,17 +43,16 @@ object DataType extends RegexParsers {
     "BooleanType" ^^^ BooleanType |
     "DecimalType" ^^^ DecimalType |
     "TimestampType" ^^^ TimestampType |
-    fixedLenBinaryType
+    fixedLenByteArrayType
 
+  protected lazy val fixedLenByteArrayType: Parser[DataType] =
+    "FixedLenByteArrayType" ~> "(" ~> intVal <~ ")" ^^ { 
+       case t => FixedLenByteArrayType(t) 
+    }
 
   protected lazy val arrayType: Parser[DataType] =
     "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
       case tpe ~ _ ~ containsNull => ArrayType(tpe, containsNull)
-    }
-
-  protected lazy val fixedLenBinaryType: Parser[DataType] =
-    "FixedLenBinaryType" ~> "(" ~> intVal <~ ")" ^^ { 
-       case t => FixedLenBinaryType(t) 
     }
 
   protected lazy val mapType: Parser[DataType] =
@@ -163,7 +162,7 @@ case object BinaryType extends DataType with PrimitiveType {
   def simpleString: String = "binary"
 }
 
-case class FixedLenBinaryType( length:Int ) extends DataType with PrimitiveType {
+case class FixedLenByteArrayType( length:Int ) extends DataType with PrimitiveType {
   type JvmType = Array[Byte]
 }
 

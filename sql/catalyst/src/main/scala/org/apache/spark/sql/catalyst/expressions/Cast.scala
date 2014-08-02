@@ -42,7 +42,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   // UDFToString
   private[this] def castToString: Any => Any = child.dataType match {
     case BinaryType => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
-    case FixedLenBinaryType(_) => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
+    case FixedLenByteArrayType(_) => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
     case TimestampType => buildCast[Timestamp](_, timestampToString)
     case _ => buildCast[Any](_, _.toString)
   }
@@ -50,7 +50,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   // BinaryConverter
   private[this] def castToBinary: Any => Any = child.dataType match {
     case StringType => buildCast[String](_, _.getBytes("UTF-8"))
-    case FixedLenBinaryType(_) => buildCast[Array[Byte]](_, a => a)
+    case FixedLenByteArrayType(_) => buildCast[Array[Byte]](_, a => a)
   }
 
   // FixedLenBinaryConverter
@@ -264,8 +264,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case FloatType => castToFloat
     case LongType => castToLong
     case DoubleType => castToDouble
-    case FixedLenBinaryType(_) => 
-      castToFixedLenBinary(dataType.asInstanceOf[FixedLenBinaryType].length)
+    case FixedLenByteArrayType(_) => 
+      castToFixedLenBinary(dataType.asInstanceOf[FixedLenByteArrayType].length)
   }
 
   override def eval(input: Row): Any = {
