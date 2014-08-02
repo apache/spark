@@ -189,6 +189,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.home</code></td>
+  <td>(none)</td>
+  <td>
+    Home directory of Spark installation to use when launching executors on the worker machines.
+    In standalone mode, the Worker's current working directory is used if this is not set. This
+    is not used in yarn mode.
+  </td>
+</tr>
+<tr>
   <td><code>spark.files.userClassPathFirst</code></td>
   <td>false</td>
   <td>

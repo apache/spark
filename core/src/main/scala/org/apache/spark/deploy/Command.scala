@@ -25,5 +25,4 @@ private[spark] case class Command(
     environment: Map[String, String],
     classPathEntries: Seq[String],
     libraryPathEntries: Seq[String],
-    javaOpts: Seq[String]) {
-}
+    javaOpts: Seq[String])

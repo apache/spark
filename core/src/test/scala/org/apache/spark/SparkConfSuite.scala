@@ -45,14 +45,12 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
 
     conf.setMaster("local[3]")
     conf.setAppName("My app")
-    conf.setSparkHome("/path")
     conf.setJars(Seq("a.jar", "b.jar"))
     conf.setExecutorEnv("VAR1", "value1")
     conf.setExecutorEnv(Seq(("VAR2", "value2"), ("VAR3", "value3")))
 
     assert(conf.get("spark.master") === "local[3]")
     assert(conf.get("spark.app.name") === "My app")
-    assert(conf.get("spark.home") === "/path")
     assert(conf.get("spark.jars") === "a.jar,b.jar")
     assert(conf.get("spark.executorEnv.VAR1") === "value1")
     assert(conf.get("spark.executorEnv.VAR2") === "value2")

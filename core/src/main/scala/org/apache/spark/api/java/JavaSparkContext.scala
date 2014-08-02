@@ -480,6 +480,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
+  @deprecated("spark.home is deprecated; use spark.{driver/executor}.home instead", "1.1.0")
   def getSparkHome(): Optional[String] = JavaUtils.optionToOptional(sc.getSparkHome())
 
   /**

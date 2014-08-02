@@ -22,7 +22,8 @@ private[spark] class DriverDescription(
     val mem: Int,
     val cores: Int,
     val supervise: Boolean,
-    val command: Command)
+    val command: Command,
+    val driverSparkHome: Option[String] = None)
   extends Serializable {
 
   override def toString: String = s"DriverDescription (${command.mainClass})"

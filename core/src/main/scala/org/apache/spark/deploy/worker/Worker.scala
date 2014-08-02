@@ -111,7 +111,7 @@ private[spark] class Worker(
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
       // So attempting to create and then check if directory was created or not.
       workDir.mkdirs()
-      if ( !workDir.exists() || !workDir.isDirectory) {
+      if (!workDir.exists() || !workDir.isDirectory) {
         logError("Failed to create work directory " + workDir)
         System.exit(1)
       }
@@ -232,10 +232,8 @@ private[spark] class Worker(
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host,
-            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
-            workDir, akkaUrl, conf, ExecutorState.RUNNING)
+          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_, self,
+            workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -264,7 +262,7 @@ private[spark] class Worker(
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         executors.get(fullId) match {
-          case Some(executor) => 
+          case Some(executor) =>
             logInfo("Executor " + fullId + " finished with state " + state +
               message.map(" message " + _).getOrElse("") +
               exitStatus.map(" exitStatus " + _).getOrElse(""))
@@ -382,7 +380,8 @@ private[spark] object Worker extends Logging {
       cores: Int,
       memory: Int,
       masterUrls: Array[String],
-      workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workDir: String,
+      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val conf = new SparkConf
@@ -392,7 +391,7 @@ private[spark] object Worker extends Logging {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterUrls, systemName, actorName, workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 
