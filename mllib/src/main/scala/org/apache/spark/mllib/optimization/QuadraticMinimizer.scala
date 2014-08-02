@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.mllib.optimization
 
 import org.jblas.DoubleMatrix
@@ -18,33 +35,29 @@ import org.jblas.SimpleBlas
 import org.netlib.util.intW
 import org.jblas.exceptions.LapackArgumentException
 import org.jblas.NativeBlas
-import com.github.ecos.QpSolver
-
-/*
- * Available with BSD license due to use of Proximal functions from BSD licensed code
- * 
- * Author @ Debasish Das
- * 
- * Reference: http://www.stanford.edu/~boyd/papers/admm/quadprog/quadprog.html
- * 
- * Extension for proximal operators that show up in Matrix Factorization using Alternating Least Squares
- *  
- */
 
 /*
  * Proximal operators and ADMM based Primal-Dual QP Solver 
  * 
+ * Reference: http://www.stanford.edu/~boyd/papers/admm/quadprog/quadprog.html
+ * 
+ * 
  * It solves problem that has the following structure
  * 
- * 1/2 x*'Hx + f*'x
- * s.t 	x >= 0
- * 	 lb <= x <= ub
- *   ax = b
- *   ax <= b
- *   
- * When constraints are much less than variables it should behave better than ECOS 
- * We have to see what's the threshold when larger constraints will break the primal solver	
+ * 1/2 x*'Hx + f*'x + g(x)
+ *
+ * 1/2 x'Hx + f'x + g(x) 
+ * s.t ax = b
+ *
+ * g(x) represents the following constraints which covers matrix factorization usecases
+ * 
+ * 1. x >= 0
+ * 2. lb <= x <= ub
+ * 3. L1(x)
+ * 4. L2(x)
+ * 5. Generic regularization on x
  */
+
 class QuadraticMinimizer(nGram: Int,
   lb: Option[DoubleMatrix] = None, ub: Option[DoubleMatrix] = None,
   Aeq: Option[DoubleMatrix] = None, beq: Option[DoubleMatrix] = None,
@@ -123,7 +136,7 @@ class QuadraticMinimizer(nGram: Int,
   def setProximal(prox: Int): QuadraticMinimizer = {
     this.proximal = prox
     //Splitting method for optimal control Boyd et al
-    //For all instances below we chose ρ = 50 and relaxation parameter α = 1.8
+    //For all instances below we chose �� = 50 and relaxation parameter �� = 1.8
     if (addEqualityToGram) {
       rho = 50
     } else {
@@ -527,18 +540,6 @@ object QuadraticMinimizer {
     val fml = new DoubleMatrix(Array[Double](-1219.296604, -1126.029219, -1202.257728, -1022.064083, -1047.414836, -1155.507387, -1169.502847, -1091.655366, -1063.832607, -1015.829142, -1075.864072, -1101.427162, -1058.907539, -1115.171116, -1205.015211, -1090.627084, -1143.206126, -1140.107801, -1100.285642, -1198.992795, -1246.276120, -1159.678276, -1194.177391, -1056.458015, -1058.791892))
     val ml = 25
 
-    val equalityBuilder = new CSCMatrix.Builder[Double](1, ml)
-    for (i <- 0 until ml) equalityBuilder.add(0, i, 1)
-    val qpMl = new QpSolver(ml, 0, false, Some(equalityBuilder.result), None, true, true)
-    qpMl.updateUb(Array.fill[Double](ml)(1.0))
-    qpMl.updateEquality(Array[Double](1.0))
-
-    val qpEqStart = System.nanoTime()
-    val (status, qpEqResult) = qpMl.solve(Hml, fml.data)
-    val qpEqTime = System.nanoTime() - qpEqStart
-
-    println("qpEqResult with bounds " + DenseVector(qpEqResult))
-
     val Aeq = DoubleMatrix.ones(1, ml)
     val beq = DoubleMatrix.ones(1, 1)
     val lbeq = DoubleMatrix.zeros(ml, 1)
@@ -552,9 +553,7 @@ object QuadraticMinimizer {
 
     println("Sum " + directQpResult._1.sum())
     println("directQpResult " + directQpResult)
-    println("qpEqTime " + qpEqTime / 1e3 + " directQpTime " + directQpTime / 1e3)
-
-    println("qp Equality result check " + (norm((DenseVector(directQpResult._1.data) - DenseVector(qpEqResult)), 2) < 1e-2))
+    println("directQpTime " + directQpTime / 1e3)
 
     println("Least Square Equality")
     val lsResult = Solve.solvePositive(Hml, fml)

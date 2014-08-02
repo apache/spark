@@ -1,33 +1,25 @@
-package org.apache.spark.mllib.optimization
-
 /*
- * Proximal.scala
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *  Created on: Jun 14, 2014
- *      Author: Debasish Das
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
- *      Adapted from https://github.com/cvxgrp/proximal
- *
- *      GSL libraries will be replaced by netlib-java routines
- * 
- * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-/* ------------------------------------------------------------- */
-/* proximal.c -- not slow implementations of proximal operators  */
-/*     by N. Parikh, E. Chu, S. Boyd                             */
-/*                                                               */
-/* For performance reasons, these methods do not do any error    */
-/* checking (e.g., array length). By compiling with the -fopenmp */
-/* flag, these will automatically parallelize across all         */
-/* available cores. The argument order is typically the point    */
-/* at which to evaluate, the parameter rho, and then any other   */
-/* parameters that are part of the definition of f. Where        */
-/* relevant, the functions should accept INFINITY arguments.     */
-/*                                                               */
-/* Operators that require linear algebra to evaluate are in a    */
-/* separate file (and require the GNU Scientific Library).       */
-/* ------------------------------------------------------------- */
+/* 
+ * Library of Proximal Algorithms adapted from https://github.com/cvxgrp/proximal
+ */
+
+package org.apache.spark.mllib.optimization
 
 import scala.math.max
 import scala.math.min
@@ -38,6 +30,7 @@ import scala.Double.PositiveInfinity
 import org.jblas.DoubleMatrix
 import org.jblas.Solve
 
+//TO DO : BLAS the functions
 object Proximal {
   // ==================== PROJECTIONS ====================
 
