@@ -22,7 +22,7 @@ import java.sql.Timestamp
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -166,7 +166,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
 
       buffer.rewind()
       seq.foreach { expected =>
-        logger.info("buffer = " + buffer + ", expected = " + expected)
+        logInfo("buffer = " + buffer + ", expected = " + expected)
         val extracted = columnType.extract(buffer)
         assert(
           expected === extracted,
