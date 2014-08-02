@@ -24,6 +24,8 @@ import org.apache.spark.mllib.rdd.{RandomVectorRDD, RandomRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
+import scala.reflect.ClassTag
+
 /**
  * :: Experimental ::
  * Generator methods for creating RDDs comprised of i.i.d. samples from some distribution.
@@ -200,12 +202,12 @@ object RandomRDDGenerators {
    * @return RDD[Double] comprised of i.i.d. samples produced by generator.
    */
   @Experimental
-  def randomRDD[T](sc: SparkContext,
+  def randomRDD[T: ClassTag](sc: SparkContext,
       generator: RandomDataGenerator[T],
       size: Long,
       numPartitions: Int,
       seed: Long): RDD[T] = {
-    new RandomRDD(sc, size, numPartitions, generator, seed)
+    new RandomRDD[T](sc, size, numPartitions, generator, seed)
   }
 
   /**
@@ -219,11 +221,11 @@ object RandomRDDGenerators {
    * @return RDD[Double] comprised of i.i.d. samples produced by generator.
    */
   @Experimental
-  def randomRDD[T](sc: SparkContext,
+  def randomRDD[T: ClassTag](sc: SparkContext,
       generator: RandomDataGenerator[T],
       size: Long,
       numPartitions: Int): RDD[T] = {
-    randomRDD(sc, generator, size, numPartitions, Utils.random.nextLong)
+    randomRDD[T](sc, generator, size, numPartitions, Utils.random.nextLong)
   }
 
   /**
@@ -237,10 +239,10 @@ object RandomRDDGenerators {
    * @return RDD[Double] comprised of i.i.d. samples produced by generator.
    */
   @Experimental
-  def randomRDD[T](sc: SparkContext,
+  def randomRDD[T: ClassTag](sc: SparkContext,
       generator: RandomDataGenerator[T],
       size: Long): RDD[T] = {
-    randomRDD(sc, generator, size, sc.defaultParallelism, Utils.random.nextLong)
+    randomRDD[T](sc, generator, size, sc.defaultParallelism, Utils.random.nextLong)
   }
 
   // TODO Generate RDD[Vector] from multivariate distributions.

@@ -39,7 +39,7 @@ trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
    * Returns a copy of the RandomDataGenerator with a new instance of the rng object used in the
    * class when applicable for non-locking concurrent usage.
    */
-  def copy(): RandomDataGenerator
+  def copy(): RandomDataGenerator[T]
 }
 
 /**
