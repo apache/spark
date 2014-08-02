@@ -18,8 +18,9 @@
 package org.apache.spark
 
 import org.apache.log4j.{LogManager, PropertyConfigurator}
-import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.LoggerFactory
 import org.slf4j.impl.StaticLoggerBinder
+import com.typesafe.scalalogging.slf4j.Logger
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
@@ -39,61 +40,69 @@ trait Logging {
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
 
+  // Method to get the logger name for this object
+  protected def logName = {
+    var className = this.getClass.getName
+    // Ignore trailing $'s in the class names for Scala objects
+    if (className.endsWith("$")) {
+      className = className.substring(0, className.length - 1)
+    }
+    className
+  }
+
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
       initializeIfNecessary()
-      var className = this.getClass.getName
-      // Ignore trailing $'s in the class names for Scala objects
-      log_ = LoggerFactory.getLogger(className.stripSuffix("$"))
+      log_ = Logger(LoggerFactory.getLogger(logName))
     }
     log_
   }
 
   // Log methods that take only a String
   protected def logInfo(msg: => String) {
-    if (log.isInfoEnabled) log.info(msg)
+    log.info(msg)
   }
 
   protected def logDebug(msg: => String) {
-    if (log.isDebugEnabled) log.debug(msg)
+    log.debug(msg)
   }
 
   protected def logTrace(msg: => String) {
-    if (log.isTraceEnabled) log.trace(msg)
+    log.trace(msg)
   }
 
   protected def logWarning(msg: => String) {
-    if (log.isWarnEnabled) log.warn(msg)
+    log.warn(msg)
   }
 
   protected def logError(msg: => String) {
-    if (log.isErrorEnabled) log.error(msg)
+    log.error(msg)
   }
 
   // Log methods that take Throwables (Exceptions/Errors) too
   protected def logInfo(msg: => String, throwable: Throwable) {
-    if (log.isInfoEnabled) log.info(msg, throwable)
+    log.info(msg, throwable)
   }
 
   protected def logDebug(msg: => String, throwable: Throwable) {
-    if (log.isDebugEnabled) log.debug(msg, throwable)
+    log.debug(msg, throwable)
   }
 
   protected def logTrace(msg: => String, throwable: Throwable) {
-    if (log.isTraceEnabled) log.trace(msg, throwable)
+    log.trace(msg, throwable)
   }
 
   protected def logWarning(msg: => String, throwable: Throwable) {
-    if (log.isWarnEnabled) log.warn(msg, throwable)
+    log.warn(msg, throwable)
   }
 
   protected def logError(msg: => String, throwable: Throwable) {
-    if (log.isErrorEnabled) log.error(msg, throwable)
+    log.error(msg, throwable)
   }
 
   protected def isTraceEnabled(): Boolean = {
-    log.isTraceEnabled
+    log.underlying.isTraceEnabled
   }
 
   private def initializeIfNecessary() {

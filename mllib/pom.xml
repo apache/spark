@@ -59,6 +59,10 @@
       <artifactId>breeze_${scala.binary.version}</artifactId>
       <version>0.7</version>
       <exclusions>
+        <exclusion>
+          <groupId>com.typesafe</groupId>
+          <artifactId>scalalogging-slf4j_${scala.binary.version}</artifactId>
+        </exclusion>  
         <!-- This is included as a compile-scoped dependency by jtransforms, which is
              a dependency of breeze. -->
         <exclusion>

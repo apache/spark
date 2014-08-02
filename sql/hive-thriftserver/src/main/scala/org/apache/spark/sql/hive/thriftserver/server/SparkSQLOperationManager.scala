@@ -30,10 +30,11 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{Logging, SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
@@ -55,7 +56,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
 
       def close(): Unit = {
         // RDDs will be cleaned automatically upon garbage collection.
-        logger.debug("CLOSING")
+        log.debug("CLOSING")
       }
 
       def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
@@ -112,7 +113,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
       }
 
       def getResultSetSchema: TableSchema = {
-        logger.warn(s"Result Schema: ${result.queryExecution.analyzed.output}")
+        log.warn(s"Result Schema: ${result.queryExecution.analyzed.output}")
         if (result.queryExecution.analyzed.output.size == 0) {
           new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
         } else {
@@ -124,11 +125,11 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
       }
 
       def run(): Unit = {
-        logger.info(s"Running query '$statement'")
+        log.info(s"Running query '$statement'")
         setState(OperationState.RUNNING)
         try {
           result = hiveContext.hql(statement)
-          logger.debug(result.queryExecution.toString())
+          log.debug(result.queryExecution.toString())
           val groupId = round(random * 1000000).toString
           hiveContext.sparkContext.setJobGroup(groupId, statement)
           iter = result.queryExecution.toRdd.toLocalIterator
@@ -138,7 +139,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
           // Actually do need to catch Throwable as some failures don't inherit from Exception and
           // HiveServer will silently swallow them.
           case e: Throwable =>
-            logger.error("Error executing query:",e)
+            log.error("Error executing query:",e)
             throw new HiveSQLException(e.toString)
         }
         setState(OperationState.FINISHED)
