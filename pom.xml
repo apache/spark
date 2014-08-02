@@ -868,10 +868,10 @@
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
-            <environmentVariables>
-              <SPARK_HOME>${session.executionRootDirectory}</SPARK_HOME>
-              <SPARK_TESTING>1</SPARK_TESTING>
-            </environmentVariables>
+            <systemProperties>
+              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.testing>1</spark.testing>
+            </systemProperties>
           </configuration>
           <executions>
             <execution>

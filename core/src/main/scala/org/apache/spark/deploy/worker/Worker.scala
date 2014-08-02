@@ -71,7 +71,7 @@ private[spark] class Worker(
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
-
+  val testing: Boolean = sys.props.contains("spark.testing")
   val masterLock: Object = new Object()
   var master: ActorSelection = null
   var masterAddress: Address = null
@@ -82,7 +82,12 @@ private[spark] class Worker(
   @volatile var connected = false
   val workerId = generateWorkerId()
   val sparkHome =
-    new File(sys.props.get("spark.test.home").orElse(sys.env.get("SPARK_HOME")).getOrElse("."))
+    if (testing) {
+      assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
+      new File(sys.props("spark.test.home"))
+    } else {
+      new File(sys.env.get("SPARK_HOME").getOrElse("."))
+    }
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
