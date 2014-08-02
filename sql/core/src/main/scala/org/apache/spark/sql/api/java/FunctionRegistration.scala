@@ -86,7 +86,7 @@ private[java] trait FunctionRegistration {
          |public interface UDF$i<$typeArgs, R> extends Serializable {
          |  public R call($args) throws Exception;
          |}
-      """.stripMargin
+         |""".stripMargin
 
       stringToFile(new File(directory, s"UDF$i.java"), contents)
   }

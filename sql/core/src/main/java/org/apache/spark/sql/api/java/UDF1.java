@@ -30,4 +30,3 @@ import java.io.Serializable;
 public interface UDF1<T1, R> extends Serializable {
   public R call(T1 t1) throws Exception;
 }
-      
