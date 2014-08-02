@@ -78,7 +78,10 @@ def launch_gateway():
         EchoOutputThread(proc.stdout).start()
 
     # Connect to the gateway
-    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False, start_callback_server=True)
+    # If start_callback_server is True, it looks like callback server is not killed
+    # process is hang up and test case does not move forward.
+    #gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False, start_callback_server=True)
+    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False, start_callback_server=False)
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
