@@ -107,7 +107,6 @@ class MLUtils:
         >>> tempFile.write("+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
         >>> tempFile.flush()
         >>> examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
-        >>> multiclass_examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
         >>> tempFile.close()
         >>> type(examples[0]) == LabeledPoint
         True
@@ -116,20 +115,18 @@ class MLUtils:
         >>> type(examples[1]) == LabeledPoint
         True
         >>> print examples[1]
-        (0.0,(6,[],[]))
+        (-1.0,(6,[],[]))
         >>> type(examples[2]) == LabeledPoint
         True
         >>> print examples[2]
-        (0.0,(6,[1,3,5],[4.0,5.0,6.0]))
-        >>> multiclass_examples[1].label
-        -1.0
+        (-1.0,(6,[1,3,5],[4.0,5.0,6.0]))
         """
 
         lines = sc.textFile(path, minPartitions)
         parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
         if numFeatures <= 0:
             parsed.cache()
-            numFeatures = parsed.map(lambda x: 0 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
+            numFeatures = parsed.map(lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
