@@ -21,8 +21,6 @@ version := "1.0"
 
 scalaVersion := System.getenv.get("SCALA_VERSION")
 
-libraryDependencies += "org.apache.spark" %% "spark-core" % System.getenv.get("SPARK_VERSION")
-libraryDependencies += "org.apache.spark" %% "spark-streaming" % System.getenv.get("SPARK_VERSION")
 libraryDependencies += "org.apache.spark" %% "spark-streaming-kinesis-asl" % System.getenv.get("SPARK_VERSION")
 
 resolvers ++= Seq(

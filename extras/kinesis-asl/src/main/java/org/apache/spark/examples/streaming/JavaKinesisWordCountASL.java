@@ -79,16 +79,12 @@ public final class JavaKinesisWordCountASL {
     private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
     private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
-    /*
-     * Make the constructor private to enforce singleton
-     */
+    /* Make the constructor private to enforce singleton */
     private JavaKinesisWordCountASL() {
     }
 
     public static void main(String[] args) {
-        /*
-         * Check that all required args were passed in.
-         */
+        /* Check that all required args were passed in. */
         if (args.length < 2) {
           System.err.println(
               "|Usage: KinesisWordCount <stream-name> <endpoint-url>\n" +
@@ -131,9 +127,6 @@ public final class JavaKinesisWordCountASL {
         /* Setup the StreamingContext */
         JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
 
-        /* Setup the checkpoint directory used by Spark Streaming */
-        jssc.checkpoint("/tmp/checkpoint");
-
         /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
@@ -163,7 +156,7 @@ public final class JavaKinesisWordCountASL {
                 }
             });
 
-        /* Map each word to a (word, 1) tuple, then reduce/aggregate by key. */
+        /* Map each word to a (word, 1) tuple, then reduce/aggregate by word. */
         JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
             new PairFunction<String, String, Integer>() {
                 @Override
@@ -177,7 +170,7 @@ public final class JavaKinesisWordCountASL {
                 }
             });
 
-        /* Print the first 10 wordCounts by key */
+        /* Print the first 10 wordCounts */
         wordCounts.print();
 
         /* Start the streaming context and await termination */

@@ -16,7 +16,6 @@
  */
 package org.apache.spark.streaming.kinesis
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Duration
@@ -33,7 +32,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
  * :: Experimental ::
  */
 @Experimental
-object KinesisUtils extends Logging {
+object KinesisUtils {
   /**
    * Create an InputDStream that pulls messages from a Kinesis stream.
    *
@@ -81,8 +80,6 @@ object KinesisUtils extends Logging {
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
    * @param storageLevel Storage level to use for storing the received objects
-   *
-   * @return JavaReceiverInputDStream[Array[Byte]]   
    *
    * @return JavaReceiverInputDStream[Array[Byte]]
    */

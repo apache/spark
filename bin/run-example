@@ -31,7 +31,6 @@ else
   echo "  - set MASTER=XX to use a specific master" 1>&2
   echo "  - can use abbreviated example class name relative to com.apache.spark.examples" 1>&2
   echo "     (e.g. SparkPi, mllib.LinearRegression, streaming.KinesisWordCountASL)" 1>&2
-  echo "  - to run the Kinesis Spark Streaming example, make sure you build with -Pkinesis-asl" 1>&2
   exit 1
 fi
 

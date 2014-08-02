@@ -197,7 +197,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
       receiverMock.isStopped().andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retryRandom(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -209,7 +209,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
         .andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retryRandom(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -221,7 +221,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
         .andReturn(expectedIsStopped).once()
     }
     whenExecuting(receiverMock) {
-      val actualVal = KinesisRecordProcessor.retry(receiverMock.isStopped(), 2, 100)
+      val actualVal = KinesisRecordProcessor.retryRandom(receiverMock.isStopped(), 2, 100)
       assert(actualVal == expectedIsStopped)
     }
   }
@@ -232,7 +232,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     }
     whenExecuting(checkpointerMock) {
       intercept[ShutdownException] {
-        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retryRandom(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -243,7 +243,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     }
     whenExecuting(checkpointerMock) {
       intercept[InvalidStateException] {
-        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retryRandom(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -254,7 +254,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     }
     whenExecuting(checkpointerMock) {
       intercept[RuntimeException] {
-        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retryRandom(checkpointerMock.checkpoint(), 2, 100)
       }
     }
   }
@@ -267,7 +267,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     }
     whenExecuting(checkpointerMock) {
       val exception = intercept[RuntimeException] {
-        KinesisRecordProcessor.retry(checkpointerMock.checkpoint(), 2, 100)
+        KinesisRecordProcessor.retryRandom(checkpointerMock.checkpoint(), 2, 100)
       }
       exception.getMessage().shouldBe(expectedErrorMessage)
     }

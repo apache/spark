@@ -79,9 +79,7 @@ private[kinesis] class KinesisRecordProcessor(
          * This is not desirable, so we instead store a raw Array[Byte] and decouple
          *   ourselves from Spark's internal serialization strategy.
          */
-        batch.foreach(record => 
-          KinesisRecordProcessor.retry(receiver.store(record.getData().array()), 4, 500)
-        )
+        batch.foreach(record => receiver.store(record.getData().array()))
         
         logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
 
@@ -98,7 +96,7 @@ private[kinesis] class KinesisRecordProcessor(
          */
         if (checkpointState.shouldCheckpoint()) {
           /* Perform the checkpoint */
-          KinesisRecordProcessor.retry(checkpointer.checkpoint(), 4, 500)
+          KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
 
           /* Update the next checkpoint time */
           checkpointState.advanceCheckpoint()
@@ -147,8 +145,8 @@ private[kinesis] class KinesisRecordProcessor(
        * Checkpoint to indicate that all records from the shard have been drained and processed.
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
-      case ShutdownReason.TERMINATE => KinesisRecordProcessor.retry(checkpointer.checkpoint(),
-          4, 500)
+      case ShutdownReason.TERMINATE => 
+        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
 
       /*
        * ZOMBIE Use Case.  NoOp.
@@ -178,7 +176,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
    *  or any exception that persists after numRetriesLeft reaches 0
    */
   @annotation.tailrec
-  def retry[T](expression: => T, numRetriesLeft: Int, maxBackOffMillis: Int): T = {
+  def retryRandom[T](expression: => T, numRetriesLeft: Int, maxBackOffMillis: Int): T = {
     util.Try { expression } match {
       /* If the function succeeded, evaluate to x. */
       case util.Success(x) => x
@@ -190,7 +188,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
                val backOffMillis = Random.nextInt(maxBackOffMillis)
                Thread.sleep(backOffMillis)
                logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
-               retry(expression, numRetriesLeft - 1, maxBackOffMillis)
+               retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
              }
         /* Throw:  Shutdown has been requested by the Kinesis Client Library.*/
         case _: ShutdownException => {

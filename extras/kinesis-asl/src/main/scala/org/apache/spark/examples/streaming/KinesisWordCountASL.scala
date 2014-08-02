@@ -109,8 +109,6 @@ object KinesisWordCountASL extends Logging {
     val sparkConfig = new SparkConf().setAppName("KinesisWordCount")
       .setMaster(s"local[$numSparkThreads]")
     val ssc = new StreamingContext(sparkConfig, batchInterval)
-    /* Setup the checkpoint directory used by Spark Streaming */
-    ssc.checkpoint("/tmp/checkpoint");
 
     /* Kinesis checkpoint interval.  Same as batchInterval for this example. */
     val kinesisCheckpointInterval = batchInterval
@@ -131,7 +129,7 @@ object KinesisWordCountASL extends Logging {
     /* Map each word to a (word, 1) tuple so we can reduce/aggregate by key. */
     val wordCounts = words.map(word => (word, 1)).reduceByKey(_ + _)
 
-    /* Print the first 10 wordCounts by key */
+    /* Print the first 10 wordCounts */
     wordCounts.print()
 
     /* Start the streaming context and await termination */
