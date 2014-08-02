@@ -330,6 +330,7 @@ class PickleSerializer(FramedSerializer):
 class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
+        self._hack_namedtuple()
         return cloudpickle.dumps(obj, 2)
 
 
