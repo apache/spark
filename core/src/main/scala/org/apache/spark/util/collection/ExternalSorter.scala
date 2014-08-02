@@ -618,23 +618,9 @@ private[spark] class ExternalSorter[K, V, C](
     def cleanup() {
       batchId = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
-      val fs = fileStream
       deserializeStream = null
       fileStream = null
-
-      if (ds != null) {
-        try {
-          ds.close()
-        } catch {
-          case e: IOException =>
-            // Make sure we at least close the file handle
-            if (fs != null) {
-              try { fs.close() } catch { case e2: IOException => }
-            }
-            throw e
-        }
-      }
-
+      ds.close()
       // NOTE: We don't do file.delete() here because that is done in ExternalSorter.stop().
       // This should also be fixed in ExternalAppendOnlyMap.
     }

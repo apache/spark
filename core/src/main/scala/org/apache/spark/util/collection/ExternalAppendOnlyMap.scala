@@ -497,23 +497,9 @@ class ExternalAppendOnlyMap[K, V, C](
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
-      val fs = fileStream
       deserializeStream = null
       fileStream = null
-
-      if (ds != null) {
-        try {
-          ds.close()
-        } catch {
-          case e: IOException =>
-            // Make sure we at least close the file handle
-            if (fs != null) {
-              try { fs.close() } catch { case e2: IOException => }
-            }
-            throw e
-        }
-      }
-
+      ds.close()
       file.delete()
     }
   }
