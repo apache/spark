@@ -66,4 +66,11 @@ object Entropy extends Impurity {
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
+
+  /**
+   * Get this impurity instance.
+   * This is useful for passing impurity parameters to a Strategy in Java.
+   */
+  def instance = this
+
 }
