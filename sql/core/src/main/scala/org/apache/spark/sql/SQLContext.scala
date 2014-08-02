@@ -51,7 +51,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
   with SQLConf
   with ExpressionConversions
-  with UdfRegistration
+  with UDFRegistration
   with Serializable {
 
   self =>

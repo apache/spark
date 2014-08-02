@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(val sqlContext: SQLContext) extends FunctionRegistration {
+class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
