@@ -64,10 +64,16 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       // Attempt to connect, restart and retry once if it fails
       try {
-        new Socket(daemonHost, daemonPort)
+        val socket = new Socket(daemonHost, daemonPort)
+        val launchStatus = new DataInputStream(socket.getInputStream).readInt()
+        if (launchStatus != 0) {
+          throw new IllegalStateException("Python daemon failed to launch worker")
+        }
+        socket
       } catch {
         case exc: SocketException =>
-          logWarning("Python daemon unexpectedly quit, attempting to restart")
+          logWarning("Failed to open socket to Python daemon:", exc)
+          logWarning("Assuming that daemon unexpectedly quit, attempting to restart")
           stopDaemon()
           startDaemon()
           new Socket(daemonHost, daemonPort)
