@@ -158,7 +158,12 @@ case class HashOuterJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+  }
 
   override def requiredChildDistribution =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -309,7 +314,7 @@ case class HashOuterJoin(
             leftHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST), 
             rightHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST))
         }
-        case x => throw new Exception(s"Need to add implementation for $x")
+        case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
       }
     }
   }
