@@ -122,7 +122,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
             size = fs.getContentSummary(path).getLength()
           } catch {
             case e: Exception =>
-              logger.warn(
+              logWarning(
                 s"Failed to get the size of table ${table.getTableName} in the " +
                 s"database ${table.getDbName} because of ${e.toString}", e)
               size = 0L
