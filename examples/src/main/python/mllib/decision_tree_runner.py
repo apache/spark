@@ -37,6 +37,8 @@ def getAccuracy(dtModel, data):
     predictions = dtModel.predict(data.map(lambda x: x.features))
     truth = data.map(lambda p: p.label)
     trainCorrect = predictions.zip(truth).aggregate(0, seqOp, add)
+    if data.count() == 0:
+        return 0
     return trainCorrect / (0.0 + data.count())
 
 
@@ -49,6 +51,8 @@ def getMSE(dtModel, data):
     predictions = dtModel.predict(data.map(lambda x: x.features))
     truth = data.map(lambda p: p.label)
     trainMSE = predictions.zip(truth).aggregate(0, seqOp, add)
+    if data.count() == 0:
+        return 0
     return trainMSE / (0.0 + data.count())
 
 
@@ -78,8 +82,8 @@ def reindexClassLabels(data):
         print >> sys.stderr, \
             "Dataset for classification should have at least 2 classes." + \
             " The given dataset had only %d classes." % numClasses
-        exit(-1)
-    origToNewLabels = dict([(sortedClasses[i], i) for i in range(0,numClasses)])
+        exit(1)
+    origToNewLabels = dict([(sortedClasses[i], i) for i in range(0, numClasses)])
 
     print "numClasses = %d" % numClasses
     print "Per-class example fractions, counts:"
@@ -98,9 +102,9 @@ def reindexClassLabels(data):
 
 def usage():
     print >> sys.stderr, \
-        "Usage: logistic_regression [libsvm format data filepath]\n" + \
+        "Usage: decision_tree_runner [libsvm format data filepath]\n" + \
         " Note: This only supports binary classification."
-    exit(-1)
+    exit(1)
 
 
 if __name__ == "__main__":

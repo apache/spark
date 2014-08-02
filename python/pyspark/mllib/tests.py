@@ -277,9 +277,8 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
         categoricalFeaturesInfo = {0: 3} # feature 0 has 3 categories
-        dt_model = \
-            DecisionTree.trainClassifier(rdd, numClasses=2,
-                                         categoricalFeaturesInfo=categoricalFeaturesInfo)
+        dt_model = DecisionTree.trainClassifier(rdd, numClasses=2,
+                                                categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
@@ -317,8 +316,7 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(rr_model.predict(features[3]) > 0)
 
         categoricalFeaturesInfo = {0: 2} # feature 0 has 2 categories
-        dt_model = \
-            DecisionTree.trainRegressor(rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        dt_model = DecisionTree.trainRegressor(rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
