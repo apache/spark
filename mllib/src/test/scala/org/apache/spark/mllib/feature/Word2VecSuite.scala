@@ -23,7 +23,27 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class Word2VecSuite extends FunSuite with LocalSparkContext {
-  test("word2vec") {
+  test("Word2Vec") {
+    val sentence = "a b " * 100 + "a c " * 10
+    val localDoc = Seq(sentence, sentence)
+    val doc = sc.parallelize(localDoc)
+      .map(line => line.split(" ").toSeq)
+    val size = 10
+    val startingAlpha = 0.025
+    val window = 2 
+    val minCount = 2
+    val num = 2
+    val word = "a"
+
+    val model = Word2Vec.train(doc, size, startingAlpha, window, minCount)
+    val synons = model.findSynonyms("a", 2)
+    assert(synons.length == num)
+    assert(synons(0)._1 == "b")
+    assert(synons(1)._1 == "c")
+  }
+
+
+  test("Word2VecModel") {
     val num = 2
     val localModel = Seq(
       ("china" ,  Array(0.50, 0.50, 0.50, 0.50)),
