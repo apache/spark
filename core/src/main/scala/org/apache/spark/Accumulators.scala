@@ -100,16 +100,6 @@ class Accumulable[R, T] (
   }
 
   /**
-   * Function to customize printing values of this accumulator.
-   */
-  def prettyValue(_value: R) = s"$value"
-
-  /**
-   * Function to customize printing partially accumulated (local) values of this accumulator.
-   */
-  def prettyPartialValue(_value: R) = prettyValue(_value)
-
-  /**
    * Get the current value of this accumulator from within a task.
    *
    * This is NOT the global value of the accumulator.  To get the global value after a
