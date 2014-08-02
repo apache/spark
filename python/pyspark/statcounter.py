@@ -20,6 +20,13 @@
 import copy
 import math
 
+try:
+    from numpy import maximum, minimum, sqrt
+except ImportError:
+    maximum = max
+    minimum = min
+    sqrt = math.sqrt
+
 
 class StatCounter(object):
 
@@ -39,10 +46,8 @@ class StatCounter(object):
         self.n += 1
         self.mu += delta / self.n
         self.m2 += delta * (value - self.mu)
-        if self.maxValue < value:
-            self.maxValue = value
-        if self.minValue > value:
-            self.minValue = value
+        self.maxValue = maximum(self.maxValue, value)
+        self.minValue = minimum(self.minValue, value)
 
         return self
 
@@ -70,8 +75,8 @@ class StatCounter(object):
                 else:
                     self.mu = (self.mu * self.n + other.mu * other.n) / (self.n + other.n)
 
-                    self.maxValue = max(self.maxValue, other.maxValue)
-                    self.minValue = min(self.minValue, other.minValue)
+                self.maxValue = maximum(self.maxValue, other.maxValue)
+                self.minValue = minimum(self.minValue, other.minValue)
 
                 self.m2 += other.m2 + (delta * delta * self.n * other.n) / (self.n + other.n)
                 self.n += other.n
@@ -115,14 +120,14 @@ class StatCounter(object):
 
     # Return the standard deviation of the values.
     def stdev(self):
-        return math.sqrt(self.variance())
+        return sqrt(self.variance())
 
     #
     # Return the sample standard deviation of the values, which corrects for bias in estimating the
     # variance by dividing by N-1 instead of N.
     #
     def sampleStdev(self):
-        return math.sqrt(self.sampleVariance())
+        return sqrt(self.sampleVariance())
 
     def __repr__(self):
         return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
