@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.lang.Runtime
-import java.io.{DataInputStream, InputStream, OutputStreamWriter}
+import java.io.{DataOutputStream, DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.mutable
@@ -63,26 +63,31 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
    * to avoid the high cost of forking from Java. This currently only works on UNIX-based systems.
    */
   private def createThroughDaemon(): Socket = {
+
+    def createSocket(): Socket = {
+      val socket = new Socket(daemonHost, daemonPort)
+      val pid = new DataInputStream(socket.getInputStream).readInt()
+      if (pid < 0) {
+        throw new IllegalStateException("Python daemon failed to launch worker")
+      }
+      daemonWorkers.put(socket, pid)
+      socket
+    }
+
     synchronized {
       // Start the daemon if it hasn't been started
       startDaemon()
 
       // Attempt to connect, restart and retry once if it fails
       try {
-        val socket = new Socket(daemonHost, daemonPort)
-        val pid = new DataInputStream(socket.getInputStream).readInt()
-        if (pid < 0) {
-          throw new IllegalStateException("Python daemon failed to launch worker")
-        }
-        daemonWorkers.put(socket, pid)
-        socket
+        createSocket()
       } catch {
         case exc: SocketException =>
           logWarning("Failed to open socket to Python daemon:", exc)
           logWarning("Assuming that daemon unexpectedly quit, attempting to restart")
           stopDaemon()
           startDaemon()
-          new Socket(daemonHost, daemonPort)
+          createSocket()
       }
     }
   }
@@ -114,7 +119,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket.setSoTimeout(10000)
       try {
         val socket = serverSocket.accept()
-        simpleWorkers.put(socket, pb)
+        simpleWorkers.put(socket, worker)
         return socket
       } catch {
         case e: Exception =>
@@ -217,8 +222,14 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   def stopWorker(worker: Socket) {
     if (useDaemon) {
-      daemonWorkers.get(worker).foreach {
-        pid => Runtime.getRuntime.exec("kill " + pid.toString)
+      if (daemon != null) {
+        daemonWorkers.get(worker).foreach { pid =>
+          // tell daemon to kill worker by pid
+          val output = new DataOutputStream(daemon.getOutputStream)
+          output.writeInt(pid)
+          output.flush()
+          daemon.getOutputStream.flush()
+        }
       }
     } else {
       simpleWorkers.get(worker).foreach(_.destroy())
