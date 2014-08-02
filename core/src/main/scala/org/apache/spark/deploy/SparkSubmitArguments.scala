@@ -58,7 +58,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   parseOpts(args.toList)
-  loadDefaults()
+  mergeSparkProperties()
   checkRequiredArguments()
 
   /** Return default present in the currently defined defaults file. */
@@ -79,10 +79,23 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     defaultProperties
   }
 
-  /** Fill in any undefined values based on the current properties file or built-in defaults. */
-  private def loadDefaults(): Unit = {
-
+  /**
+   * Fill in any undefined values based on the default properties file or options passed in through
+   * the '--conf' flag.
+   */
+  private def mergeSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
+    if (propertiesFile == null) {
+      sys.env.get("SPARK_CONF_DIR").foreach { sparkConfDir =>
+        val sep = File.separator
+        val defaultPath = s"${sparkConfDir}${sep}spark-defaults.conf"
+        val file = new File(defaultPath)
+        if (file.exists()) {
+          propertiesFile = file.getAbsolutePath
+        }
+      }
+    }
+
     if (propertiesFile == null) {
       sys.env.get("SPARK_HOME").foreach { sparkHome =>
         val sep = File.separator
@@ -94,18 +107,20 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       }
     }
 
-    val defaultProperties = getDefaultSparkProperties
+    val properties = getDefaultSparkProperties
+    properties.putAll(sparkProperties)
+
     // Use properties file as fallback for values which have a direct analog to
     // arguments in this script.
-    master = Option(master).getOrElse(defaultProperties.get("spark.master").orNull)
+    master = Option(master).getOrElse(properties.get("spark.master").orNull)
     executorMemory = Option(executorMemory)
-      .getOrElse(defaultProperties.get("spark.executor.memory").orNull)
+      .getOrElse(properties.get("spark.executor.memory").orNull)
     executorCores = Option(executorCores)
-      .getOrElse(defaultProperties.get("spark.executor.cores").orNull)
+      .getOrElse(properties.get("spark.executor.cores").orNull)
     totalExecutorCores = Option(totalExecutorCores)
-      .getOrElse(defaultProperties.get("spark.cores.max").orNull)
-    name = Option(name).getOrElse(defaultProperties.get("spark.app.name").orNull)
-    jars = Option(jars).getOrElse(defaultProperties.get("spark.jars").orNull)
+      .getOrElse(properties.get("spark.cores.max").orNull)
+    name = Option(name).getOrElse(properties.get("spark.app.name").orNull)
+    jars = Option(jars).getOrElse(properties.get("spark.jars").orNull)
 
     // This supports env vars in older versions of Spark
     master = Option(master).getOrElse(System.getenv("MASTER"))
@@ -204,8 +219,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    // Delineates parsing of Spark options from parsing of user options.
     var inSparkOpts = true
+
+    // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
     def parse(opts: Seq[String]): Unit = opts match {
@@ -318,7 +334,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
               primaryResource =
-                if (!SparkSubmit.isShell(v)) {
+                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
                   Utils.resolveURI(v).toString
                 } else {
                   v

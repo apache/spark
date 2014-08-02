@@ -50,6 +50,7 @@ trait HiveTypeCoercion {
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CastNulls ::
+    Division ::
     Nil
 
   /**
@@ -246,6 +247,8 @@ trait HiveTypeCoercion {
 
       // No need to change other EqualTo operators as that actually makes sense for boolean types.
       case e: EqualTo => e
+      // No need to change the EqualNullSafe operators, too
+      case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
@@ -312,6 +315,23 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
+    }
+  }
+
+  /**
+   * Hive only performs integral division with the DIV operator. The arguments to / are always
+   * converted to fractional types.
+   */
+  object Division extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      // Decimal and Double remain the same
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType == DecimalType => d
+
+      case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
   }
 

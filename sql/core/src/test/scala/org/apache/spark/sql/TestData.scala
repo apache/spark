@@ -118,6 +118,14 @@ object TestData {
     )
   nullInts.registerAsTable("nullInts")
 
+  val allNulls =
+    TestSQLContext.sparkContext.parallelize(
+      NullInts(null) ::
+      NullInts(null) ::
+      NullInts(null) ::
+      NullInts(null) :: Nil)
+  allNulls.registerAsTable("allNulls")
+
   case class NullStrings(n: Int, s: String)
   val nullStrings =
     TestSQLContext.sparkContext.parallelize(
@@ -128,4 +136,11 @@ object TestData {
 
   case class TableName(tableName: String)
   TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).registerAsTable("tableName")
+
+  val unparsedStrings =
+    TestSQLContext.sparkContext.parallelize(
+      "1, A1, true, null" ::
+      "2, B2, false, null" ::
+      "3, C3, true, null" ::
+      "4, D4, true, 2147483644" :: Nil)
 }

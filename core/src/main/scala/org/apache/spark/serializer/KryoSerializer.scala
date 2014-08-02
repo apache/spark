@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.CompactBuffer
 
 import scala.reflect.ClassTag
 
@@ -47,11 +48,12 @@ class KryoSerializer(conf: SparkConf)
   with Serializable {
 
   private val bufferSize = conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
+  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val registrator = conf.getOption("spark.kryo.registrator")
 
-  def newKryoOutput() = new KryoOutput(bufferSize)
+  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -185,6 +187,7 @@ private[serializer] object KryoSerializer {
     classOf[GotBlock],
     classOf[GetBlock],
     classOf[MapStatus],
+    classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
     classOf[BoundedPriorityQueue[_]],

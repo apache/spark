@@ -130,32 +130,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         new StageUIData
       })
 
-      // create executor summary map if necessary
-      val executorSummaryMap = stageData.executorSummary
-      executorSummaryMap.getOrElseUpdate(key = info.executorId, op = new ExecutorSummary)
+      val execSummaryMap = stageData.executorSummary
+      val execSummary = execSummaryMap.getOrElseUpdate(info.executorId, new ExecutorSummary)
 
-      executorSummaryMap.get(info.executorId).foreach { y =>
-        // first update failed-task, succeed-task
-        taskEnd.reason match {
-          case Success =>
-            y.succeededTasks += 1
-          case _ =>
-            y.failedTasks += 1
-        }
-
-        // update duration
-        y.taskTime += info.duration
-
-        val metrics = taskEnd.taskMetrics
-        if (metrics != null) {
-          metrics.inputMetrics.foreach { y.inputBytes += _.bytesRead }
-          metrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
-          metrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
-          y.memoryBytesSpilled += metrics.memoryBytesSpilled
-          y.diskBytesSpilled += metrics.diskBytesSpilled
-        }
+      taskEnd.reason match {
+        case Success =>
+          execSummary.succeededTasks += 1
+        case _ =>
+          execSummary.failedTasks += 1
       }
-
+      execSummary.taskTime += info.duration
       stageData.numActiveTasks -= 1
 
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
@@ -171,28 +155,75 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (Some(e.toErrorString), None)
         }
 
+      if (!metrics.isEmpty) {
+        val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
+        updateAggregateMetrics(stageData, info.executorId, metrics.get, oldMetrics)
+      }
 
-      val taskRunTime = metrics.map(_.executorRunTime).getOrElse(0L)
-      stageData.executorRunTime += taskRunTime
-      val inputBytes = metrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L)
-      stageData.inputBytes += inputBytes
-
-      val shuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L)
-      stageData.shuffleReadBytes += shuffleRead
-
-      val shuffleWrite =
-        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L)
-      stageData.shuffleWriteBytes += shuffleWrite
-
-      val memoryBytesSpilled = metrics.map(_.memoryBytesSpilled).getOrElse(0L)
-      stageData.memoryBytesSpilled += memoryBytesSpilled
-
-      val diskBytesSpilled = metrics.map(_.diskBytesSpilled).getOrElse(0L)
-      stageData.diskBytesSpilled += diskBytesSpilled
-
-      stageData.taskData(info.taskId) = new TaskUIData(info, metrics, errorMessage)
+      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
+      taskData.taskInfo = info
+      taskData.taskMetrics = metrics
+      taskData.errorMessage = errorMessage
     }
-  }  // end of onTaskEnd
+  }
+
+  /**
+   * Upon receiving new metrics for a task, updates the per-stage and per-executor-per-stage
+   * aggregate metrics by calculating deltas between the currently recorded metrics and the new
+   * metrics.
+   */
+  def updateAggregateMetrics(
+      stageData: StageUIData,
+      execId: String,
+      taskMetrics: TaskMetrics,
+      oldMetrics: Option[TaskMetrics]) {
+    val execSummary = stageData.executorSummary.getOrElseUpdate(execId, new ExecutorSummary)
+
+    val shuffleWriteDelta =
+      (taskMetrics.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L)
+      - oldMetrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L))
+    stageData.shuffleWriteBytes += shuffleWriteDelta
+    execSummary.shuffleWrite += shuffleWriteDelta
+
+    val shuffleReadDelta =
+      (taskMetrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L)
+      - oldMetrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L))
+    stageData.shuffleReadBytes += shuffleReadDelta
+    execSummary.shuffleRead += shuffleReadDelta
+
+    val diskSpillDelta =
+      taskMetrics.diskBytesSpilled - oldMetrics.map(_.diskBytesSpilled).getOrElse(0L)
+    stageData.diskBytesSpilled += diskSpillDelta
+    execSummary.diskBytesSpilled += diskSpillDelta
+
+    val memorySpillDelta =
+      taskMetrics.memoryBytesSpilled - oldMetrics.map(_.memoryBytesSpilled).getOrElse(0L)
+    stageData.memoryBytesSpilled += memorySpillDelta
+    execSummary.memoryBytesSpilled += memorySpillDelta
+
+    val timeDelta =
+      taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
+    stageData.executorRunTime += timeDelta
+  }
+
+  override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
+    for ((taskId, sid, taskMetrics) <- executorMetricsUpdate.taskMetrics) {
+      val stageData = stageIdToData.getOrElseUpdate(sid, {
+        logWarning("Metrics update for task in unknown stage " + sid)
+        new StageUIData
+      })
+      val taskData = stageData.taskData.get(taskId)
+      taskData.map { t =>
+        if (!t.taskInfo.finished) {
+          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, taskMetrics,
+            t.taskMetrics)
+
+          // Overwrite task metrics
+          t.taskMetrics = Some(taskMetrics)
+        }
+      }
+    }
+  }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {

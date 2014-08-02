@@ -74,16 +74,20 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
-    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.3)
+    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
-  // Number of pairs in the in-memory map
-  private var numPairsInMemory = 0L
+  // Number of pairs inserted since last spill; note that we count them even if a value is merged
+  // with a previous key in case we're doing something like groupBy where the result grows
+  private var elementsRead = 0L
 
   // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
   private val trackMemoryThreshold = 1000
+
+  // How much of the shared memory pool this collection has claimed
+  private var myMemoryThreshold = 0L
 
   /**
    * Size of object batches when reading/writing from serializers.
@@ -106,54 +110,85 @@ class ExternalAppendOnlyMap[K, V, C](
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
-  private val threadId = Thread.currentThread().getId
 
   /**
    * Insert the given key and value into the map.
+   */
+  def insert(key: K, value: V): Unit = {
+    insertAll(Iterator((key, value)))
+  }
+
+  /**
+   * Insert the given iterator of keys and values into the map.
    *
-   * If the underlying map is about to grow, check if the global pool of shuffle memory has
+   * When the underlying map needs to grow, check if the global pool of shuffle memory has
    * enough room for this to happen. If so, allocate the memory required to grow the map;
    * otherwise, spill the in-memory map to disk.
    *
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
    */
-  def insert(key: K, value: V) {
+  def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
+    // An update function for the map that we reuse across entries to avoid allocating
+    // a new closure each time
+    var curEntry: Product2[K, V] = null
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
-      if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
+      if (hadVal) mergeValue(oldVal, curEntry._2) else createCombiner(curEntry._2)
     }
-    if (numPairsInMemory > trackMemoryThreshold && currentMap.atGrowThreshold) {
-      val mapSize = currentMap.estimateSize()
-      var shouldSpill = false
-      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
-      // Atomically check whether there is sufficient memory in the global pool for
-      // this map to grow and, if possible, allocate the required amount
-      shuffleMemoryMap.synchronized {
-        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
-        val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+    while (entries.hasNext) {
+      curEntry = entries.next()
+      if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
+          currentMap.estimateSize() >= myMemoryThreshold)
+      {
+        val currentSize = currentMap.estimateSize()
+        var shouldSpill = false
+        val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
-        // Assume map growth factor is 2x
-        shouldSpill = availableMemory < mapSize * 2
-        if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = mapSize * 2
+        // Atomically check whether there is sufficient memory in the global pool for
+        // this map to grow and, if possible, allocate the required amount
+        shuffleMemoryMap.synchronized {
+          val threadId = Thread.currentThread().getId
+          val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+          val availableMemory = maxMemoryThreshold -
+            (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+
+          // Try to allocate at least 2x more memory, otherwise spill
+          shouldSpill = availableMemory < currentSize * 2
+          if (!shouldSpill) {
+            shuffleMemoryMap(threadId) = currentSize * 2
+            myMemoryThreshold = currentSize * 2
+          }
+        }
+        // Do not synchronize spills
+        if (shouldSpill) {
+          spill(currentSize)
         }
       }
-      // Do not synchronize spills
-      if (shouldSpill) {
-        spill(mapSize)
-      }
+      currentMap.changeValue(curEntry._1, update)
+      elementsRead += 1
     }
-    currentMap.changeValue(key, update)
-    numPairsInMemory += 1
+  }
+
+  /**
+   * Insert the given iterable of keys and values into the map.
+   *
+   * When the underlying map needs to grow, check if the global pool of shuffle memory has
+   * enough room for this to happen. If so, allocate the memory required to grow the map;
+   * otherwise, spill the in-memory map to disk.
+   *
+   * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
+   */
+  def insertAll(entries: Iterable[Product2[K, V]]): Unit = {
+    insertAll(entries.iterator)
   }
 
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  private def spill(mapSize: Long) {
+  private def spill(mapSize: Long): Unit = {
     spillCount += 1
-    logWarning("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
+    val threadId = Thread.currentThread().getId
+    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
       .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
@@ -164,7 +199,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush() = {
-      writer.commit()
+      writer.commitAndClose()
       val bytesWritten = writer.bytesWritten
       batchSizes.append(bytesWritten)
       _diskBytesSpilled += bytesWritten
@@ -200,7 +235,9 @@ class ExternalAppendOnlyMap[K, V, C](
     shuffleMemoryMap.synchronized {
       shuffleMemoryMap(Thread.currentThread().getId) = 0
     }
-    numPairsInMemory = 0
+    myMemoryThreshold = 0
+
+    elementsRead = 0
     _memoryBytesSpilled += mapSize
   }
 

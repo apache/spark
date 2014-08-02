@@ -31,7 +31,6 @@ import com.typesafe.tools.mima.core._
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
  */
 object MimaExcludes {
-
     def excludes(version: String) =
       version match {
         case v if v.startsWith("1.1") =>
@@ -63,7 +62,21 @@ object MimaExcludes {
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
+            // Renamed putValues -> putArray + putIterator
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.MemoryStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.DiskStore.putValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.TachyonStore.putValues")
+          ) ++
+          Seq(
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.flume.FlumeReceiver.this"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaUtils.createStream"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver.this")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
@@ -89,6 +102,14 @@ object MimaExcludes {
               "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Variance.calculate")
+          ) ++
+          Seq ( // Package-private classes removed in SPARK-2341
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
           )
         case v if v.startsWith("1.0") =>
           Seq(

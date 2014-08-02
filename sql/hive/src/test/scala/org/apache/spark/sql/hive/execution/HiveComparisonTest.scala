@@ -132,7 +132,7 @@ abstract class HiveComparisonTest
     answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: BaseRelation | _: Generate | _: Sample | _: Distinct => false
+      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case PhysicalOperation(_, _, Sort(_, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
@@ -349,12 +349,6 @@ abstract class HiveComparisonTest
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
 
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
-
-              println("hive output")
-              hive.foreach(println)
-
-              println("catalyst printout")
-              catalyst.foreach(println)
 
               if (recomputeCache) {
                 logger.warn(s"Clearing cache files for failed test $testCaseName")

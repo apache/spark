@@ -86,6 +86,7 @@ Traceback (most recent call last):
 Exception:...
 """
 
+import select
 import struct
 import SocketServer
 import threading
@@ -209,19 +210,38 @@ COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
 class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
+    """
+    This handler will keep polling updates from the same socket until the
+    server is shutdown.
+    """
+
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
-        num_updates = read_int(self.rfile)
-        for _ in range(num_updates):
-            (aid, update) = pickleSer._read_with_length(self.rfile)
-            _accumulatorRegistry[aid] += update
-        # Write a byte in acknowledgement
-        self.wfile.write(struct.pack("!b", 1))
+        while not self.server.server_shutdown:
+            # Poll every 1 second for new data -- don't block in case of shutdown.
+            r, _, _ = select.select([self.rfile], [], [], 1)
+            if self.rfile in r:
+                num_updates = read_int(self.rfile)
+                for _ in range(num_updates):
+                    (aid, update) = pickleSer._read_with_length(self.rfile)
+                    _accumulatorRegistry[aid] += update
+                # Write a byte in acknowledgement
+                self.wfile.write(struct.pack("!b", 1))
 
+class AccumulatorServer(SocketServer.TCPServer):
+    """
+    A simple TCP server that intercepts shutdown() in order to interrupt
+    our continuous polling on the handler.
+    """
+    server_shutdown = False
+
+    def shutdown(self):
+        self.server_shutdown = True
+        SocketServer.TCPServer.shutdown(self)
 
 def _start_update_server():
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
-    server = SocketServer.TCPServer(("localhost", 0), _UpdateRequestHandler)
+    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()

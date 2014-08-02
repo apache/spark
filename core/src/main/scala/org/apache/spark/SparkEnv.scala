@@ -67,7 +67,7 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val conf: SparkConf) extends Logging {
 
-  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
@@ -193,13 +193,7 @@ object SparkEnv extends Logging {
         logInfo("Registering " + name)
         actorSystem.actorOf(Props(newActor), name = name)
       } else {
-        val driverHost: String = conf.get("spark.driver.host", "localhost")
-        val driverPort: Int = conf.getInt("spark.driver.port", 7077)
-        Utils.checkHost(driverHost, "Expected hostname")
-        val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
-        val timeout = AkkaUtils.lookupTimeout(conf)
-        logInfo(s"Connecting to $name: $url")
-        Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+        AkkaUtils.makeDriverRef(name, conf, actorSystem)
       }
     }
 

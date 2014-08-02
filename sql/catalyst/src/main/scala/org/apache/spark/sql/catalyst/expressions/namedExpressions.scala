@@ -28,8 +28,8 @@ object NamedExpression {
 }
 
 /**
- * A globally (within this JVM) id for a given named expression.
- * Used to identify with attribute output by a relation is being
+ * A globally unique (within this JVM) id for a given named expression.
+ * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
  */
 case class ExprId(id: Long)
