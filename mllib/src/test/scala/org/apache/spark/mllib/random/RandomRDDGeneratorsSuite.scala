@@ -78,7 +78,9 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
       assert(rdd.partitions.size === numPartitions)
 
       // check that partition sizes are balanced
-      val partSizes = rdd.partitions.map(p => p.asInstanceOf[RandomRDDPartition].size.toDouble)
+      val partSizes = rdd.partitions.map(p =>
+        p.asInstanceOf[RandomRDDPartition[Double]].size.toDouble)
+
       val partStats = new StatCounter(partSizes)
       assert(partStats.max - partStats.min <= 1)
     }
@@ -89,7 +91,7 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
     val rdd = new RandomRDD(sc, size, numPartitions, new UniformGenerator, 0L)
     assert(rdd.partitions.size === numPartitions)
     val count = rdd.partitions.foldLeft(0L) { (count, part) =>
-      count + part.asInstanceOf[RandomRDDPartition].size
+      count + part.asInstanceOf[RandomRDDPartition[Double]].size
     }
     assert(count === size)
 
@@ -145,7 +147,7 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
   }
 }
 
-private[random] class MockDistro extends DistributionGenerator {
+private[random] class MockDistro extends RandomDataGenerator[Double] {
 
   var seed = 0L
 

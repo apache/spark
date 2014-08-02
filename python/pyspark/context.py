@@ -84,7 +84,7 @@ class SparkContext(object):
         @param serializer: The serializer for RDDs.
         @param conf: A L{SparkConf} object setting Spark properties.
         @param gateway: Use an existing gateway and JVM, otherwise a new JVM
-               will be instatiated.
+               will be instantiated.
 
 
         >>> from pyspark.context import SparkContext
