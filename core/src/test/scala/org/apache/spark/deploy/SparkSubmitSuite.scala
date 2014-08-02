@@ -134,6 +134,22 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     testPrematureExit(clArgs, "Unrecognized option 'some'")
   }
 
+  test("handles arguments to user program with empty string") {
+    val clArgs =
+      """--name myApp
+        |--class Foo
+        |--primary userjar.jar
+        |--master local
+        |--
+      """.stripMargin.split("\\s+").toSeq :+ ""
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val xx = clArgs.map(arg => s"[$arg]")
+    println(s"### $xx")
+    appArgs.master should be ("local")
+    appArgs.mainClass should be ("Foo")
+    appArgs.childArgs should be (Seq(""))
+  }
+
   test("handles YARN cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",

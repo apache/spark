@@ -324,7 +324,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         if (inSparkOpts) {
           // Primary resource is specified with "--primary", "--" is considered as the separator of
           // spark-submit options and user application options.
-          childArgs ++= tail.filter(_.nonEmpty)
+          childArgs ++= tail
         } else {
           // Primary resource is specified as a positional argument, "--" is passed to the
           // application as a normal argument.
