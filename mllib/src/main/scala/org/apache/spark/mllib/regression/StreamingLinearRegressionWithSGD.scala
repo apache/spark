@@ -51,9 +51,11 @@ class StreamingLinearRegressionWithSGD (
 
   /**
    * Construct a StreamingLinearRegression object with default parameters:
-   * {stepSize: 0.1, numIterations: 50, miniBatchFraction: 1.0, initialWeights: [0.0, 0.0]}.
+   * {stepSize: 0.1, numIterations: 50, miniBatchFraction: 1.0}.
+   * Initial weights must be set before using trainOn or predictOn
+   * (see `StreamingLinearAlgorithm`)
    */
-  def this() = this(0.1, 50, 1.0, Vectors.dense(0.0, 0.0))
+  def this() = this(0.1, 50, 1.0, null)
 
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
 

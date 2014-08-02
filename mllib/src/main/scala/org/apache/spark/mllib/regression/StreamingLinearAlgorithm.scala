@@ -29,9 +29,10 @@ import org.apache.spark.streaming.dstream.DStream
  *
  * This class takes as type parameters a GeneralizedLinearModel,
  * and a GeneralizedLinearAlgorithm, making it easy to extend to construct
- * streaming versions of any analyses using GLMs. Only weights will be updated,
- * not an intercept. If the model needs an intercept, it should be manually appended
- * to the input data.
+ * streaming versions of any analyses using GLMs.
+ * Initial weights must be set before calling trainOn or predictOn.
+ * Only weights will be updated, not an intercept. If the model needs
+ * an intercept, it should be manually appended to the input data.
  *
  * For example usage, see `StreamingLinearRegressionWithSGD`.
  *
@@ -73,11 +74,13 @@ abstract class StreamingLinearAlgorithm[
    * @param data DStream containing labeled data
    */
   def trainOn(data: DStream[LabeledPoint]) {
+    if (Option(model.weights) == None) {
+      logError("Initial weights must be set before starting training")
+      throw new IllegalArgumentException
+    }
     data.foreachRDD { (rdd, time) =>
         model = algorithm.run(rdd, model.weights)
         logInfo("Model updated at time %s".format(time.toString))
-        logInfo("Current model: weights, %s".format(
-          model.weights.toArray.take(100).mkString("[", ",", "]")))
         val display = model.weights.size match {
           case x if x > 100 => model.weights.toArray.take(100).mkString("[", ",", "...")
           case _ => model.weights.toArray.mkString("[", ",", "]")
@@ -93,6 +96,10 @@ abstract class StreamingLinearAlgorithm[
    * @return DStream containing predictions
    */
   def predictOn(data: DStream[LabeledPoint]): DStream[Double] = {
+    if (Option(model.weights) == None) {
+      logError("Initial weights must be set before starting prediction")
+      throw new IllegalArgumentException
+    }
     data.map(x => model.predict(x.features))
   }
 
