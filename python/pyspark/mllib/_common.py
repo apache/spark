@@ -343,22 +343,35 @@ def _copyto(array, buffer, offset, shape, dtype):
     temp_array[...] = array
 
 
-def _get_unmangled_rdd(data, serializer):
+def _get_unmangled_rdd(data, serializer, cache=True):
+    """
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
     dataBytes = data.map(serializer)
     dataBytes._bypass_serializer = True
-    dataBytes.cache()  # TODO: users should unpersist() this later!
+    if cache:
+        dataBytes.cache()
     return dataBytes
 
 
-# Map a pickled Python RDD of Python dense or sparse vectors to a Java RDD of
-# _serialized_double_vectors
-def _get_unmangled_double_vector_rdd(data):
-    return _get_unmangled_rdd(data, _serialize_double_vector)
+def _get_unmangled_double_vector_rdd(data, cache=True):
+    """
+    Map a pickled Python RDD of Python dense or sparse vectors to a Java RDD of
+    _serialized_double_vectors.
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
+    return _get_unmangled_rdd(data, _serialize_double_vector, cache)
 
 
-# Map a pickled Python RDD of LabeledPoint to a Java RDD of _serialized_labeled_points
-def _get_unmangled_labeled_point_rdd(data):
-    return _get_unmangled_rdd(data, _serialize_labeled_point)
+def _get_unmangled_labeled_point_rdd(data, cache=True):
+    """
+    Map a pickled Python RDD of LabeledPoint to a Java RDD of _serialized_labeled_points.
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
+    return _get_unmangled_rdd(data, _serialize_labeled_point, cache)
 
 
 # Common functions for dealing with and training linear models

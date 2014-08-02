@@ -16,6 +16,7 @@
 #
 
 import numpy as np
+import warnings
 
 from pyspark.mllib.linalg import Vectors, SparseVector
 from pyspark.mllib.regression import LabeledPoint
@@ -29,9 +30,9 @@ class MLUtils:
     Helper methods to load, save and pre-process data used in MLlib.
     """
 
-    @deprecated
     @staticmethod
     def _parse_libsvm_line(line, multiclass):
+        warnings.warn("deprecated", DeprecationWarning)
         return _parse_libsvm_line(line)
 
     @staticmethod
@@ -67,9 +68,9 @@ class MLUtils:
                             " but got " % type(v))
         return " ".join(items)
 
-    @deprecated
     @staticmethod
     def loadLibSVMFile(sc, path, multiclass=False, numFeatures=-1, minPartitions=None):
+        warnings.warn("deprecated", DeprecationWarning)
         return loadLibSVMFile(sc, path, numFeatures, minPartitions)
 
     @staticmethod

@@ -29,7 +29,8 @@ class DecisionTreeModel(object):
     """
     A decision tree model for classification or regression.
 
-    WARNING: This is an experimental API.  It will probably be modified for Spark v1.2.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified for Spark v1.2.
     """
 
     def __init__(self, sc, java_model):
@@ -46,29 +47,23 @@ class DecisionTreeModel(object):
     def predict(self, x):
         """
         Predict the label of one or more examples.
-        NOTE: This currently does NOT support batch prediction.
-
-        :param x:  Data point: feature vector, or a LabeledPoint (whose label is ignored).
+        :param x:  Data point (feature vector),
+                   or an RDD of data points (feature vectors).
         """
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
         if isinstance(x, RDD):
             # Bulk prediction
             if x.count() == 0:
-                raise RuntimeError("DecisionTreeModel.predict(x) given empty RDD x.")
-            elementType = type(x.take(1)[0])
-            if elementType == LabeledPoint:
-                x = x.map(lambda x: x.features)
-            dataBytes = _get_unmangled_double_vector_rdd(x)
-            jSerializedPreds = pythonAPI.predictDecisionTreeModel(self._java_model, dataBytes._jrdd)
-            dataBytes.unpersist()
+                return self._sc.parallelize([])
+            dataBytes = _get_unmangled_double_vector_rdd(x, cache=False)
+            jSerializedPreds = \
+                pythonAPI.predictDecisionTreeModel(self._java_model,
+                                                   dataBytes._jrdd)
             serializedPreds = RDD(jSerializedPreds, self._sc, NoOpSerializer())
             return serializedPreds.map(lambda bytes: _deserialize_double(bytearray(bytes)))
         else:
-            if type(x) == LabeledPoint:
-                x_ = _serialize_double_vector(x.features)
-            else:
-                # Assume x is a single data point.
-                x_ = _serialize_double_vector(x)
+            # Assume x is a single data point.
+            x_ = _serialize_double_vector(x)
             return pythonAPI.predictDecisionTreeModel(self._java_model, x_)
 
     def numNodes(self):
@@ -83,9 +78,11 @@ class DecisionTreeModel(object):
 
 class DecisionTree(object):
     """
-    Learning algorithm for a decision tree model for classification or regression.
+    Learning algorithm for a decision tree model
+    for classification or regression.
 
-    WARNING: This is an experimental API.  It will probably be modified for Spark v1.2.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified for Spark v1.2.
 
     Example usage:
     >>> from numpy import array, ndarray
@@ -136,12 +133,13 @@ class DecisionTree(object):
         """
         Train a DecisionTreeModel for classification.
 
-        :param data: RDD of NumPy vectors, one per element, where the first
-                     coordinate is the label and the rest is the feature vector.
+        :param data: Training data: RDD of LabeledPoint.
                      Labels are integers {0,1,...,numClasses}.
         :param numClasses: Number of classes for classification.
-        :param categoricalFeaturesInfo: Map from categorical feature index to number of categories.
-                                        Any feature not in this map is treated as continuous.
+        :param categoricalFeaturesInfo: Map from categorical feature index
+                                        to number of categories.
+                                        Any feature not in this map
+                                        is treated as continuous.
         :param impurity: Supported values: "entropy" or "gini"
         :param maxDepth: Max depth of tree.
                          E.g., depth 0 means 1 leaf node.
@@ -149,7 +147,8 @@ class DecisionTree(object):
         :param maxBins: Number of bins used for finding splits at each node.
         :return: DecisionTreeModel
         """
-        return DecisionTree.train(data, "classification", numClasses, categoricalFeaturesInfo,
+        return DecisionTree.train(data, "classification", numClasses,
+                                  categoricalFeaturesInfo,
                                   impurity, maxDepth, maxBins)
 
     @staticmethod
@@ -158,11 +157,12 @@ class DecisionTree(object):
         """
         Train a DecisionTreeModel for regression.
 
-        :param data: RDD of NumPy vectors, one per element, where the first
-                     coordinate is the label and the rest is the feature vector.
+        :param data: Training data: RDD of LabeledPoint.
                      Labels are real numbers.
-        :param categoricalFeaturesInfo: Map from categorical feature index to number of categories.
-                                        Any feature not in this map is treated as continuous.
+        :param categoricalFeaturesInfo: Map from categorical feature index
+                                        to number of categories.
+                                        Any feature not in this map
+                                        is treated as continuous.
         :param impurity: Supported values: "variance"
         :param maxDepth: Max depth of tree.
                          E.g., depth 0 means 1 leaf node.
@@ -170,24 +170,29 @@ class DecisionTree(object):
         :param maxBins: Number of bins used for finding splits at each node.
         :return: DecisionTreeModel
         """
-        return DecisionTree.train(data, "regression", 0, categoricalFeaturesInfo,
+        return DecisionTree.train(data, "regression", 0,
+                                  categoricalFeaturesInfo,
                                   impurity, maxDepth, maxBins)
 
 
     @staticmethod
-    def train(data, algo, numClasses, categoricalFeaturesInfo, impurity, maxDepth, maxBins=100):
+    def train(data, algo, numClasses, categoricalFeaturesInfo,
+              impurity, maxDepth, maxBins=100):
         """
         Train a DecisionTreeModel for classification or regression.
 
-        :param data: RDD of NumPy vectors, one per element, where the first
-                     coordinate is the label and the rest is the feature vector.
-                     For classification, labels are integers {0,1,...,numClasses}.
+        :param data: Training data: RDD of LabeledPoint.
+                     For classification, labels are integers
+                      {0,1,...,numClasses}.
                      For regression, labels are real numbers.
         :param algo: "classification" or "regression"
-        :param numClasses: Number of classes for classification.  0 or 1 indicates regression.
-        :param categoricalFeaturesInfo: Map from categorical feature index to number of categories.
-                                        Any feature not in this map is treated as continuous.
-        :param impurity: For classification: "entropy" or "gini".  For regression: "variance".
+        :param numClasses: Number of classes for classification.
+        :param categoricalFeaturesInfo: Map from categorical feature index
+                                        to number of categories.
+                                        Any feature not in this map
+                                        is treated as continuous.
+        :param impurity: For classification: "entropy" or "gini".
+                         For regression: "variance".
         :param maxDepth: Max depth of tree.
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
@@ -197,7 +202,8 @@ class DecisionTree(object):
         sc = data.context
         dataBytes = _get_unmangled_labeled_point_rdd(data)
         categoricalFeaturesInfoJMap = \
-            MapConverter().convert(categoricalFeaturesInfo, sc._gateway._gateway_client)
+            MapConverter().convert(categoricalFeaturesInfo,
+                                   sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
             dataBytes._jrdd, algo,
             numClasses, categoricalFeaturesInfoJMap,

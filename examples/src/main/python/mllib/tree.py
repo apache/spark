@@ -19,74 +19,111 @@
 Decision tree classification and regression using MLlib.
 """
 
-import sys, numpy
+import numpy, os, sys
 
 from operator import add
 
 from pyspark import SparkContext
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.util import MLUtils
 
 
-# Parse a line of text into an MLlib LabeledPoint object
-def parsePoint(line):
-    values = [float(s) for s in line.split(',')]
-    if values[0] == -1:   # Convert -1 labels to 0 for MLlib
-        values[0] = 0
-    return LabeledPoint(values[0], values[1:])
-
-# Return accuracy of DecisionTreeModel on the given RDD[LabeledPoint].
 def getAccuracy(dtModel, data):
+    """
+    Return accuracy of DecisionTreeModel on the given RDD[LabeledPoint].
+    """
     seqOp = (lambda acc, x: acc + (x[0] == x[1]))
-    predictions = dtModel.predict(data)
+    predictions = dtModel.predict(data.map(lambda x: x.features))
     truth = data.map(lambda p: p.label)
     trainCorrect = predictions.zip(truth).aggregate(0, seqOp, add)
     return trainCorrect / (0.0 + data.count())
 
-# Return mean squared error (MSE) of DecisionTreeModel on the given RDD[LabeledPoint].
+
 def getMSE(dtModel, data):
+    """
+    Return mean squared error (MSE) of DecisionTreeModel on the given
+    RDD[LabeledPoint].
+    """
     seqOp = (lambda acc, x: acc + numpy.square(x[0] - x[1]))
-    predictions = dtModel.predict(data)
+    predictions = dtModel.predict(data.map(lambda x: x.features))
     truth = data.map(lambda p: p.label)
     trainMSE = predictions.zip(truth).aggregate(0, seqOp, add)
     return trainMSE / (0.0 + data.count())
 
-# Return a new LabeledPoint with the label and feature 0 swapped.
-def swapLabelAndFeature0(labeledPoint):
-    newLabel = labeledPoint.label
-    newFeatures = labeledPoint.features
-    (newLabel, newFeatures[0]) = (newFeatures[0], newLabel)
-    return LabeledPoint(newLabel, newFeatures)
+
+def reindexClassLabels(data):
+    """
+    Re-index class labels in a dataset to the range {0,...,numClasses-1}.
+    If all labels in that range already appear at least once,
+     then the returned RDD is the same one (without a mapping).
+    Note: If a label simply does not appear in the data,
+          the index will not include it.
+          Be aware of this when reindexing subsampled data.
+    :param data: RDD of LabeledPoint where labels are integer values
+                 denoting labels for a classification problem.
+    :return: Pair (reindexedData, origToNewLabels) where
+             reindexedData is an RDD of LabeledPoint with labels in
+              the range {0,...,numClasses-1}, and
+             origToNewLabels is a dictionary mapping original labels
+              to new labels.
+    """
+    # classCounts: class --> # examples in class
+    classCounts = data.map(lambda x: x.label).countByValue()
+    numExamples = sum(classCounts.values())
+    sortedClasses = sorted(classCounts.keys())
+    numClasses = len(classCounts)
+    # origToNewLabels: class --> index in 0,...,numClasses-1
+    if (numClasses < 2):
+        print >> sys.stderr, \
+            "Dataset for classification should have at least 2 classes." + \
+            " The given dataset had only %d classes." % numClasses
+        exit(-1)
+    origToNewLabels = dict([(sortedClasses[i], i) for i in range(0,numClasses)])
+
+    print "numClasses = %d" % numClasses
+    print "Per-class example fractions, counts:"
+    print "Class\tFrac\tCount"
+    for c in sortedClasses:
+        frac = classCounts[c] / (numExamples + 0.0)
+        print "%g\t%g\t%d" % (c, frac, classCounts[c])
+
+    if (sortedClasses[0] == 0 and sortedClasses[-1] == numClasses - 1):
+        return (data, origToNewLabels)
+    else:
+        reindexedData = \
+            data.map(lambda x: LabeledPoint(origToNewLabels[x.label], x.features))
+        return (reindexedData, origToNewLabels)
+
+
+def usage():
+    print >> sys.stderr, \
+        "Usage: logistic_regression [libsvm format data filepath]\n" + \
+        " Note: This only supports binary classification."
+    exit(-1)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 1:
-        print >> sys.stderr, "Usage: logistic_regression"
-        exit(-1)
+    if len(sys.argv) > 2:
+        usage()
     sc = SparkContext(appName="PythonDT")
 
     # Load data.
-    dataPath = 'data/mllib/sample_tree_data.csv'
-    points = sc.textFile(dataPath).map(parsePoint)
+    dataPath = 'data/mllib/sample_libsvm_data.txt'
+    if len(sys.argv) == 2:
+        dataPath = sys.argv[1]
+    if not os.path.isfile(dataPath):
+        usage()
+    points = MLUtils.loadLibSVMFile(sc, dataPath)
+
+    # Re-index class labels if needed.
+    (reindexedData, origToNewLabels) = reindexClassLabels(points)
 
     # Train a classifier.
-    classificationModel = DecisionTree.trainClassifier(points, numClasses=2)
+    model = DecisionTree.trainClassifier(reindexedData, numClasses=2)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"
-    print "  Model numNodes: %d\n" % classificationModel.numNodes()
-    print "  Model depth: %d\n" % classificationModel.depth()
-    print "  Training accuracy: %g\n" % getAccuracy(classificationModel, points)
-    print classificationModel
-
-    # Switch labels and first feature to create a regression dataset with categorical features.
-    # Feature 0 is now categorical with 2 categories, and labels are real numbers.
-    regressionPoints = points.map(lambda labeledPoint: swapLabelAndFeature0(labeledPoint))
-    categoricalFeaturesInfo = {0: 2}
-    regressionModel = \
-        DecisionTree.trainRegressor(regressionPoints, categoricalFeaturesInfo=categoricalFeaturesInfo)
-    # Print learned tree and stats.
-    print "Trained DecisionTree for regression:"
-    print "  Model numNodes: %d\n" % regressionModel.numNodes()
-    print "  Model depth: %d\n" % regressionModel.depth()
-    print "  Training MSE: %g\n" % getMSE(regressionModel, regressionPoints)
-    print regressionModel
+    print "  Model numNodes: %d\n" % model.numNodes()
+    print "  Model depth: %d\n" % model.depth()
+    print "  Training accuracy: %g\n" % getAccuracy(model, reindexedData)
+    print model

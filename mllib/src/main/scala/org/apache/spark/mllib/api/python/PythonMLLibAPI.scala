@@ -19,7 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -477,7 +477,7 @@ class PythonMLLibAPI extends Serializable {
       dataBytesJRDD: JavaRDD[Array[Byte]],
       algoStr: String,
       numClasses: Int,
-      categoricalFeaturesInfoJMap: java.util.Map[Int,Int],
+      categoricalFeaturesInfoJMap: java.util.Map[Int, Int],
       impurityStr: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
@@ -502,7 +502,7 @@ class PythonMLLibAPI extends Serializable {
       maxDepth = maxDepth,
       numClassesForClassification = numClasses,
       maxBins = maxBins,
-      categoricalFeaturesInfo = categoricalFeaturesInfoJMap.toMap)
+      categoricalFeaturesInfo = categoricalFeaturesInfoJMap.asScala.toMap)
 
     DecisionTree.train(data, strategy)
   }
