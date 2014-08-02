@@ -18,10 +18,40 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.collection.mutable
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
+  type FunctionBuilder = Seq[Expression] => Expression
+
+  def registerFunction(name: String, builder: FunctionBuilder): Unit
+
   def lookupFunction(name: String, children: Seq[Expression]): Expression
+}
+
+trait OverrideFunctionRegistry extends FunctionRegistry {
+
+  val functionBuilders = new mutable.HashMap[String, FunctionBuilder]()
+
+  def registerFunction(name: String, builder: FunctionBuilder) = {
+    functionBuilders.put(name, builder)
+  }
+
+  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name,children))
+  }
+}
+
+class SimpleFunctionRegistry extends FunctionRegistry {
+  val functionBuilders = new mutable.HashMap[String, FunctionBuilder]()
+
+  def registerFunction(name: String, builder: FunctionBuilder) = {
+    functionBuilders.put(name, builder)
+  }
+
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionBuilders(name)(children)
+  }
 }
 
 /**
@@ -29,6 +59,8 @@ trait FunctionRegistry {
  * functions are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
+  def registerFunction(name: String, builder: FunctionBuilder) = ???
+
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
