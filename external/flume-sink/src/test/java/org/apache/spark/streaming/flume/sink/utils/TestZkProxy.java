@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink.utils;
+package org.apache.spark.streaming.flume.sink.utils;
 
 import com.google.common.io.Files;
 import org.junit.After;

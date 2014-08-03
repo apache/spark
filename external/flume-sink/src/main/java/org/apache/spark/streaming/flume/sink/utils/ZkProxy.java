@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.flume.sink.utils;
+package org.apache.spark.streaming.flume.sink.utils;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,30 +39,14 @@ public class ZkProxy {
     private static final byte[] BYTE_NULL = new byte[0];
     // use Conf as key ?
     private static final ConcurrentHashMap<String, ZkProxy> zkProxies = new ConcurrentHashMap<String, ZkProxy>();
-    private final Conf conf;
     private final ConcurrentHashMap<String, PathChildrenEventDispatch> listeners = new ConcurrentHashMap<String, PathChildrenEventDispatch>();
     private final AtomicInteger referenceNumber = new AtomicInteger(0);
+    private final Conf conf;
     private CuratorFramework curatorClient;
     private AtomicBoolean started = new AtomicBoolean(false);
-//    private static LoadingCache<Conf, ZkProxy> zkProxys = CacheBuilder.newBuilder()
-//            .weakValues().removalListener(new RemovalListener<Conf, ZkProxy>() {
-//                @Override
-//                public void onRemoval(RemovalNotification<Conf, ZkProxy> objectObjectRemovalNotification) {
-//                    objectObjectRemovalNotification.getValue().stop();
-//                }
-//            }).build(new CacheLoader<Conf, ZkProxy>() {
-//                @Override
-//                public ZkProxy load(Conf zkConf) throws Exception {
-//                    return new ZkProxy(zkConf);
-//                }
-//            });
 
     //initialize assignments cache
     public static class Conf {
-        public Conf(String zkAddress) {
-            this(zkAddress, 3, 1000);
-        }
-
         public Conf(String zkAddress, int retryTimes, int retryIntervalInMs) {
             this.address = zkAddress;
             this.retryTimes = retryTimes;
@@ -101,7 +86,7 @@ public class ZkProxy {
 
         public void start() throws Exception {
             if (started.compareAndSet(false, true)) {
-                pathCache.start();
+                pathCache.start(); // PathChildrenCache.StartMode.BUILD_INITIAL_CACHE);
                 logger.info("pathCache started");
             }
         }
@@ -110,7 +95,7 @@ public class ZkProxy {
             if (started.compareAndSet(true, false)) {
                 try {
                     pathCache.close();
-                } catch (Exception e) {
+                } catch (IOException e) {
                     logger.error(e.getMessage());
                 }
             }
@@ -158,31 +143,35 @@ public class ZkProxy {
         return zkProxies.get(conf.address);
     }
 
-    public synchronized void start() {
+    public void start() {
         logger.info("ZkProxy starting ...");
-        if (referenceNumber.getAndIncrement() == 0) {
-            curatorClient = CuratorFrameworkFactory.newClient(conf.address,
-                    new RetryNTimes(conf.retryTimes, conf.retryIntervalInMs));
-            curatorClient.start();
-            started.compareAndSet(false, true);
-            logger.info("ZkProxy started success!");
+        synchronized (started) {
+            if (referenceNumber.getAndIncrement() == 0) {
+                curatorClient = CuratorFrameworkFactory.newClient(conf.address,
+                        new RetryNTimes(conf.retryTimes, conf.retryIntervalInMs));
+                curatorClient.start();
+                started.set(true);
+            }
         }
+        logger.info("ZkProxy started success!");
     }
 
     public boolean isStarted() {
        return started.get();
     }
 
-    public synchronized void stop() {
-        logger.info("ZkProxy Stop called...");
-        if (referenceNumber.decrementAndGet() == 0) {
-            started.compareAndSet(true, false);
-            for (Map.Entry<String, PathChildrenEventDispatch> entry : listeners.entrySet()) {
-                entry.getValue().close();
+    public void stop() {
+        logger.info("ZkProxy stopping ...");
+        synchronized (started) {
+            if (referenceNumber.decrementAndGet() == 0) {
+                started.set(false);
+                for (Map.Entry<String, PathChildrenEventDispatch> entry : listeners.entrySet()) {
+                    entry.getValue().close();
+                }
+                listeners.clear();
+                curatorClient.close();
+                logger.info("ZkProxy has stopped!");
             }
-            listeners.clear();
-            curatorClient.close();
-            logger.info("ZkProxy is Stoped!");
         }
     }
 

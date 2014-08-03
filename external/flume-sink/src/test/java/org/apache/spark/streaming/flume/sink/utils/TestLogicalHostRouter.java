@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.flume.sink.utils;
+package org.apache.spark.streaming.flume.sink.utils;
 
 import com.google.common.io.Files;
 import org.apache.curator.test.TestingServer;

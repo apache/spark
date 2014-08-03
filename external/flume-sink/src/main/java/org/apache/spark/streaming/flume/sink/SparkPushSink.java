@@ -15,7 +15,7 @@
 * limitations under the License.
 */
 
-package org.apache.spark.flume.sink;
+package org.apache.spark.streaming.flume.sink;
 
 import org.apache.flume.api.*;
 import org.apache.flume.sink.AbstractRpcSink;

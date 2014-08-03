@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.flume.sink;
+package org.apache.spark.streaming.flume.sink;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -23,7 +23,7 @@ import org.apache.flume.Event;
 import org.apache.flume.EventDeliveryException;
 import org.apache.flume.FlumeException;
 import org.apache.flume.api.*;
-import org.apache.spark.flume.sink.utils.LogicalHostRouter;
+import org.apache.spark.streaming.flume.sink.utils.LogicalHostRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +35,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/*
+ * configuration example:
+ * agent.sinks.ls1.hostname = benchmark
+ * agent.sinks.ls1.router.path=192.168.59.128:2181/spark  [zookeeper path to logical host]
+ * agent.sinks.ls1.port = 0
+ * agent.sinks.ls1.router.retry.times=1  [optional]
+ * agent.sinks.ls1.router.retry.interval=1000 [optional]
+ */
 public class SparkRpcClient extends AbstractRpcClient implements RpcClient {
     private static final Logger logger = LoggerFactory.getLogger(SparkRpcClient.class);
     private static final String HOSTNAME_KEY = "hostname";
@@ -82,8 +90,6 @@ public class SparkRpcClient extends AbstractRpcClient implements RpcClient {
                 props.put(RpcClientConfigurationConstants.CONFIG_CLIENT_TYPE,
                         RpcClientConfigurationConstants.DEFAULT_CLIENT_TYPE);
                 client = RpcClientFactory.getInstance(props);
-//                    client = new NettyAvroRpcClient();
-//                    ((NettyAvroRpcClient) client).configure(props);
                 isConnected = true;
                 logger.debug("create new RpcClient:" + hostInfo.getHostName() + ":" + hostInfo.getPortNumber());
             }
@@ -337,7 +343,6 @@ public class SparkRpcClient extends AbstractRpcClient implements RpcClient {
         clientPool.close();
         this.router.unregisterListener(clientPool);
         this.router.stop();
-        this.router = null;
     }
 
     @Override

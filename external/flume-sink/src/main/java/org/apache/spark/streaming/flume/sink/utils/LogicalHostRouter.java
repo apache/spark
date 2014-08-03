@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.flume.sink.utils;
+package org.apache.spark.streaming.flume.sink.utils;
 
 import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * LogicalHostRouter supplies a map between logical host and physical host.
  * A physical host denotes a real socket address, which consists of one host and port. host:port
  * A logical host consists of several physical hosts. [host1:port1, host2:port2, ...]
- * user hold a logical host instead of a actual host:port.
+ * user config a logical host instead of a physical host:port.
  */
 public final class LogicalHostRouter {
     private static final Logger LOG = LoggerFactory.getLogger(LogicalHostRouter.class);
