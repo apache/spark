@@ -67,7 +67,7 @@ import org.apache.spark.api.java.JavaRDD
  *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
- *  rdd.registerAsTable("records")
+ *  rdd.registerTempTable("records")
  *
  *  val results: SchemaRDD = sql("SELECT * FROM records")
  * }}}
@@ -383,7 +383,7 @@ class SchemaRDD(
     import scala.collection.Map
 
     def toJava(obj: Any, dataType: DataType): Any = dataType match {
-      case struct: StructType => rowToMap(obj.asInstanceOf[Row], struct)
+      case struct: StructType => rowToArray(obj.asInstanceOf[Row], struct)
       case array: ArrayType => obj match {
         case seq: Seq[Any] => seq.map(x => toJava(x, array.elementType)).asJava
         case list: JList[_] => list.map(x => toJava(x, array.elementType)).asJava
@@ -397,21 +397,19 @@ class SchemaRDD(
       // Pyrolite can handle Timestamp
       case other => obj
     }
-    def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
-      val fields = structType.fields.map(field => (field.name, field.dataType))
-      val map: JMap[String, Any] = new java.util.HashMap
-      row.zip(fields).foreach {
-        case (obj, (attrName, dataType)) => map.put(attrName, toJava(obj, dataType))
-      }
-      map
+    def rowToArray(row: Row, structType: StructType): Array[Any] = {
+      val fields = structType.fields.map(field => field.dataType)
+      row.zip(fields).map {
+        case (obj, dataType) => toJava(obj, dataType)
+      }.toArray
     }
 
     val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToMap(row, rowSchema)
-      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
+        rowToArray(row, rowSchema)
+      }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
   }
 

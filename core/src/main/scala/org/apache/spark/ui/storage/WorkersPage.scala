@@ -58,10 +58,10 @@ private[ui] class WorkersPage(parent: StorageTab) extends WebUIPage("rdd/workers
   /** Render a JSON row representing a worker */
   private def workerRowJson(worker: (Int, StorageStatus)): JValue = {
     val (rddId, status) = worker
-    val memUsageString = {Utils.bytesToString(status.memUsedByRDD(rddId))} +
+    val memUsageString = {Utils.bytesToString(status.memUsedByRdd(rddId))} +
       " (" + {Utils.bytesToString(status.memRemaining)} + " Remaining)"
     ("Host" -> {status.blockManagerId.host + ":" + status.blockManagerId.port} ) ~
     ("Memory Usage" ->  memUsageString) ~
-    ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRDD(rddId))})
+    ("Disk Usage" -> {Utils.bytesToString(status.diskUsedByRdd(rddId))})
   }
 }

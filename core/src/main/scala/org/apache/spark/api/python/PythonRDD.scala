@@ -25,7 +25,7 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import scala.collection.JavaConversions._
 import scala.language.existentials
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Try, Success, Failure}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
@@ -536,25 +536,6 @@ private[spark] object PythonRDD extends Logging {
     file.close()
   }
 
-  /**
-   * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
-   * It is only used by pyspark.sql.
-   * TODO: Support more Python types.
-   */
-  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        unpickle.loads(row) match {
-          // in case of objects are pickled in batch mode
-          case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
-          // not in batch mode
-          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
-        }
-      }
-    }
-  }
-
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],
       baseConf: Configuration): Configuration = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
@@ -699,6 +680,54 @@ private[spark] object PythonRDD extends Logging {
     } else {
       converted.saveAsHadoopDataset(new JobConf(conf))
     }
+  }
+
+
+  /**
+   * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
+   * This function is outdated, PySpark does not use it anymore
+   */
+  @deprecated
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          // in case of objects are pickled in batch mode
+          case objs: JArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
+          // not in batch mode
+          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python tuple to Array (no recursive conversions).
+   * It is only used by pyspark.sql.
+   */
+  def pythonToJavaArray(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Array[_]] = {
+
+    def toArray(obj: Any): Array[_] = {
+      obj match {
+        case objs: JArrayList[_] =>
+          objs.toArray
+        case obj if obj.getClass.isArray =>
+          obj.asInstanceOf[Array[_]].toArray
+      }
+    }
+
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]].map(toArray)
+        } else {
+          Seq(toArray(obj))
+        }
+      }
+    }.toJavaRDD()
   }
 
   /**
