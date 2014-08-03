@@ -135,6 +135,10 @@ def parse_args():
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
              "(e.g -Dspark.worker.timeout=180)")
+    parser.add_option(
+        "--user-data", type="string", default="",
+        help="Path to a user-data file (most AMI's interpret this as an initialization script)")
+
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -274,6 +278,12 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
+
+    user_data_content = None
+    if opts.user_data:
+        with open(opts.user_data) as user_data_file:
+            user_data_content = user_data_file.read()
+
     print "Setting up security groups..."
     master_group = get_or_make_group(conn, cluster_name + "-master")
     slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -347,7 +357,8 @@ def launch_cluster(conn, opts, cluster_name):
                 key_name=opts.key_pair,
                 security_groups=[slave_group],
                 instance_type=opts.instance_type,
-                block_device_map=block_map)
+                block_device_map=block_map,
+                user_data=user_data_content)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -398,7 +409,8 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
                                       max_count=num_slaves_this_zone,
-                                      block_device_map=block_map)
+                                      block_device_map=block_map,
+                                      user_data=user_data_content)
                 slave_nodes += slave_res.instances
                 print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
                                                                 zone, slave_res.id)
