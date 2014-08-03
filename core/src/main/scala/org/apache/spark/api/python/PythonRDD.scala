@@ -62,8 +62,8 @@ private[spark] class PythonRDD(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
-    val worker: Socket = env.createPythonWorker(pythonExec,
-      envVars.toMap + ("SPARK_LOCAL_DIR" -> localdir))
+    envVars += ("SPARK_LOCAL_DIR" -> localdir) // it's also used in monitor thread
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
@@ -241,7 +241,7 @@ private[spark] class PythonRDD(
       if (!context.completed) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.toMap)
+          env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
@@ -685,9 +685,8 @@ private[spark] object PythonRDD extends Logging {
 
   /**
    * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
-   * This function is outdated, PySpark does not use it anymore
    */
-  @deprecated
+  @deprecated("PySpark does not use it anymore", "1.1")
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler

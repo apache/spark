@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.Socket
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -102,10 +103,10 @@ class SparkEnv (
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String]) {
+  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
     synchronized {
       val key = (pythonExec, envVars)
-      pythonWorkers(key).stop()
+      pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 }
