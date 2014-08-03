@@ -154,7 +154,19 @@ cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package -DskipTests $@"
+# Maven 3 allows for parallel builds, though the Scala plugins are not
+# marked as threadsafe. To enable this, set the environment variable
+# `SPARK_BUILD_THREADS` to the number of jobs to create. You can also
+# say `1.5C` to indicate 1.5 times the number of cores on the host. (The
+# coefficient can be any number.)
+if [ "x$SPARK_BUILD_THREADS" != 'x' ]; then
+    echo "Parallel Maven build enabled for $SPARK_BUILD_THREADS threads (experimental)"
+    PAR_BUILD_OPTS="-T $SPARK_BUILD_THREADS"
+else
+    PAR_BUILD_OPTS=''
+fi
+
+BUILD_COMMAND="mvn $PAR_BUILD_OPTS clean package -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
