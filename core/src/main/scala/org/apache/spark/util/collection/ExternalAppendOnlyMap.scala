@@ -134,15 +134,15 @@ class ExternalAppendOnlyMap[K, V, C](
       if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
           currentMap.estimateSize() >= myMemoryThreshold)
       {
-        val currentSize = currentMap.estimateSize()
-
-        // Try to grab double our currently used memory from the shuffle pool; if that fails,
-        // spill and release our claimed memory
-        val amountToGrab = 2 * currentSize - myMemoryThreshold
-        if (shuffleMemoryManager.tryToAcquire(amountToGrab)) {
-          myMemoryThreshold += amountToGrab
-        } else {
-          spill(currentSize)  // Also releases memory back to the ShuffleMemoryManager at the end
+        // Claim up to double our current memory from the shuffle memory pool
+        val currentMemory = currentMap.estimateSize()
+        val amountToGrab = 2 * currentMemory - myMemoryThreshold
+        val granted = shuffleMemoryManager.tryToAcquire(amountToGrab)
+        myMemoryThreshold += granted
+        if (myMemoryThreshold <= currentMemory) {
+          // We were granted too little memory to grow further (either tryToAcquire returned 0,
+          // or we already had more memory than myMemoryThreshold); spill the current collection
+          spill(currentMemory)  // Will also release memory back to ShuffleMemoryManager
         }
       }
       currentMap.changeValue(curEntry._1, update)

@@ -41,19 +41,20 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   def this(conf: SparkConf) = this(ShuffleMemoryManager.getMaxMemory(conf))
 
   /**
-   * Try to acquire numBytes memory for the current thread, or return false if the pool cannot
-   * allocate this much memory to it. This call may block until there is enough free memory in
-   * some situations, to make sure each thread has a chance to ramp up to a reasonable share of
-   * the available memory before being forced to spill.
+   * Try to acquire up to numBytes memory for the current thread, or return 0 if the pool cannot
+   * allocate any memory to it. This call may block until there is enough free memory in some
+   * situations, to make sure each thread has a chance to ramp up to at least 1 / 2N of the total
+   * memory pool (where N is the # of active threads) before it is forced to spill.
    */
-  def tryToAcquire(numBytes: Long): Boolean = synchronized {
+  def tryToAcquire(numBytes: Long): Long = synchronized {
     val threadId = Thread.currentThread().getId
+    assert(numBytes > 0, "invalid number of bytes requested: " + numBytes)
 
     // Add this thread to the threadMemory map just so we can keep an accurate count of the number
     // of active threads, to let other threads ramp down their memory in calls to tryToAcquire
     if (!threadMemory.contains(threadId)) {
       threadMemory(threadId) = 0L
-      notifyAll()  // Will later cause waiting threads to wake up and check numActiveThreads again
+      notifyAll()  // Will later cause waiting threads to wake up and check numThreads again
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -62,26 +63,29 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
     while (true) {
       val numActiveThreads = threadMemory.keys.size
       val curMem = threadMemory(threadId)
-      if (curMem + numBytes > maxMemory / numActiveThreads) {
-        // We'd get more than 1 / numActiveThreads of the total memory; don't allow that
-        return false
-      }
-      val bytesFree = maxMemory - threadMemory.values.sum
-      if (bytesFree >= numBytes) {
-        // Grant the request
-        threadMemory(threadId) = curMem + numBytes
-        return true
-      } else if (curMem + numBytes <= maxMemory / (2 * numActiveThreads)) {
-        // This thread has so little memory that we want it to block and acquire a bigger
-        // amount instead of cancelling the request. Wait on "this" for a thread to call notify.
-        logInfo(s"Thread ${threadId} blocking for shuffle memory pool to free up")
-        wait()
+      val freeMemory = maxMemory - threadMemory.values.sum
+
+      // How much we can grant this thread; don't let it grow to more than 1 / numActiveThreads
+      val maxToGrant = math.min(numBytes, (maxMemory / numActiveThreads) - curMem)
+
+      if (curMem < maxMemory / (2 * numActiveThreads)) {
+        // We want to let each thread get at least 1 / (2 * numActiveThreads) before blocking;
+        // if we can't give it this much now, wait for other threads to free up memory
+        if (freeMemory >= math.min(maxToGrant, maxMemory / (2 * numActiveThreads) - curMem)) {
+          val toGrant = math.min(maxToGrant, freeMemory)
+          threadMemory(threadId) += toGrant
+          return toGrant
+        } else {
+          wait()
+        }
       } else {
-        // Thread would have between 1 / (2 * numActiveThreads) and 1 / numActiveThreads memory
-        return false
+        // Only give it as much memory as is free, which might be none if it reached 1 / numThreads
+        val toGrant = math.min(maxToGrant, freeMemory)
+        threadMemory(threadId) += toGrant
+        return toGrant
       }
     }
-    false  // Never reached
+    0L  // Never reached
   }
 
   /** Release numBytes bytes for the current thread. */

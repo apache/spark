@@ -212,15 +212,15 @@ private[spark] class ExternalSorter[K, V, C](
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold)
     {
-      val currentSize = collection.estimateSize()
-
-      // Try to grab double our currently used memory from the shuffle pool; if that fails,
-      // spill and release our claimed memory
-      val amountToGrab = 2 * currentSize - myMemoryThreshold
-      if (shuffleMemoryManager.tryToAcquire(amountToGrab)) {
-        myMemoryThreshold += amountToGrab
-      } else {
-        spill(currentSize, usingMap)  // Also releases memory back to the ShuffleMemoryManager
+      // Claim up to double our current memory from the shuffle memory pool
+      val currentMemory = collection.estimateSize()
+      val amountToGrab = 2 * currentMemory - myMemoryThreshold
+      val granted = shuffleMemoryManager.tryToAcquire(amountToGrab)
+      myMemoryThreshold += granted
+      if (myMemoryThreshold <= currentMemory) {
+        // We were granted too little memory to grow further (either tryToAcquire returned 0,
+        // or we already had more memory than myMemoryThreshold); spill the current collection
+        spill(currentMemory, usingMap)  // Will also release memory back to ShuffleMemoryManager
       }
     }
   }

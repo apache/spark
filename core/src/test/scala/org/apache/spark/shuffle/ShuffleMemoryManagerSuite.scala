@@ -38,33 +38,60 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
   test("single thread requesting memory") {
     val manager = new ShuffleMemoryManager(1000L)
 
-    assert(manager.tryToAcquire(100L) === true)
-    assert(manager.tryToAcquire(400L) === true)
-    assert(manager.tryToAcquire(400L) === true)
-    assert(manager.tryToAcquire(200L) === false)
-    assert(manager.tryToAcquire(100L) === true)
-    assert(manager.tryToAcquire(100L) === false)
+    assert(manager.tryToAcquire(100L) === 100L)
+    assert(manager.tryToAcquire(400L) === 400L)
+    assert(manager.tryToAcquire(400L) === 400L)
+    assert(manager.tryToAcquire(200L) === 100L)
+    assert(manager.tryToAcquire(100L) === 0L)
+    assert(manager.tryToAcquire(100L) === 0L)
 
     manager.release(500L)
-    assert(manager.tryToAcquire(300L) === true)
-    assert(manager.tryToAcquire(300L) === false)
+    assert(manager.tryToAcquire(300L) === 300L)
+    assert(manager.tryToAcquire(300L) === 200L)
 
     manager.releaseMemoryForThisThread()
-    assert(manager.tryToAcquire(1000L) === true)
-    assert(manager.tryToAcquire(100L) === false)
+    assert(manager.tryToAcquire(1000L) === 1000L)
+    assert(manager.tryToAcquire(100L) === 0L)
   }
 
   test("two threads requesting full memory") {
+    // Two threads request 500 bytes first, wait for each other to get it, and then request
+    // 500 more; we should immediately return 0 as both are now at 1 / N
+
     val manager = new ShuffleMemoryManager(1000L)
-    val t1Succeeded = new AtomicBoolean(false)
-    val t2Succeeded = new AtomicBoolean(false)
+
+    class State {
+      var t1Result1 = -1L
+      var t2Result1 = -1L
+      var t1Result2 = -1L
+      var t2Result2 = -1L
+    }
+    val state = new State
 
     val t1 = startThread("t1") {
-      t1Succeeded.set(manager.tryToAcquire(1000L))
+      val r1 = manager.tryToAcquire(500L)
+      state.synchronized {
+        state.t1Result1 = r1
+        state.notifyAll()
+        while (state.t2Result1 === -1L) {
+          state.wait()
+        }
+      }
+      val r2 = manager.tryToAcquire(500L)
+      state.synchronized { state.t1Result2 = r2 }
     }
 
     val t2 = startThread("t2") {
-      t2Succeeded.set(manager.tryToAcquire(1000L))
+      val r1 = manager.tryToAcquire(500L)
+      state.synchronized {
+        state.t2Result1 = r1
+        state.notifyAll()
+        while (state.t1Result1 === -1L) {
+          state.wait()
+        }
+      }
+      val r2 = manager.tryToAcquire(500L)
+      state.synchronized { state.t2Result2 = r2 }
     }
 
     failAfter(20 seconds) {
@@ -72,15 +99,67 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
       t2.join()
     }
 
-    // Only one thread should've been able to grab memory: once it got it, the other one's request
-    // should not have been granted because it's asking for more than 1 / N (and N = 2)
-    assert(t1Succeeded.get() || t2Succeeded.get(), "neither thread succeeded")
-    assert(!t1Succeeded.get() || !t2Succeeded.get(), "both threads succeeded")
+    assert(state.t1Result1 === 500L)
+    assert(state.t2Result1 === 500L)
+    assert(state.t1Result2 === 0L)
+    assert(state.t2Result2 === 0L)
+  }
+
+
+  test("threads cannot grow past 1 / N") {
+    // Two threads request 250 bytes first, wait for each other to get it, and then request
+    // 500 more; we should only grant 250 bytes to each of them on this second request
+
+    val manager = new ShuffleMemoryManager(1000L)
+
+    class State {
+      var t1Result1 = -1L
+      var t2Result1 = -1L
+      var t1Result2 = -1L
+      var t2Result2 = -1L
+    }
+    val state = new State
+
+    val t1 = startThread("t1") {
+      val r1 = manager.tryToAcquire(250L)
+      state.synchronized {
+        state.t1Result1 = r1
+        state.notifyAll()
+        while (state.t2Result1 === -1L) {
+          state.wait()
+        }
+      }
+      val r2 = manager.tryToAcquire(500L)
+      state.synchronized { state.t1Result2 = r2 }
+    }
+
+    val t2 = startThread("t2") {
+      val r1 = manager.tryToAcquire(250L)
+      state.synchronized {
+        state.t2Result1 = r1
+        state.notifyAll()
+        while (state.t1Result1 === -1L) {
+          state.wait()
+        }
+      }
+      val r2 = manager.tryToAcquire(500L)
+      state.synchronized { state.t2Result2 = r2 }
+    }
+
+    failAfter(20 seconds) {
+      t1.join()
+      t2.join()
+    }
+
+    assert(state.t1Result1 === 250L)
+    assert(state.t2Result1 === 250L)
+    assert(state.t1Result2 === 250L)
+    assert(state.t2Result2 === 250L)
   }
 
   test("threads can block to get at least 1 / 2N memory") {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
-    // for a bit and releases 250 bytes, which should then be grabbed by t2. Further requests
+    // for a bit and releases 250 bytes, which should then be greanted to t2. Further requests
     // by t2 will return false right away because it now has 1 / 2N of the memory.
 
     val manager = new ShuffleMemoryManager(1000L)
@@ -88,16 +167,16 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     class State {
       var t1Requested = false
       var t2Requested = false
-      var t1Succeeded = false
-      var t2Succeeded = false
-      var t2SucceededSecondTime = false
+      var t1Result = -1L
+      var t2Result = -1L
+      var t2Result2 = -1L
       var t2WaitTime = 0L
     }
     val state = new State
 
     val t1 = startThread("t1") {
       state.synchronized {
-        state.t1Succeeded = manager.tryToAcquire(1000L)
+        state.t1Result = manager.tryToAcquire(1000L)
         state.t1Requested = true
         state.notifyAll()
         while (!state.t2Requested) {
@@ -119,12 +198,12 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
         state.notifyAll()
       }
       val startTime = System.currentTimeMillis()
-      val success = manager.tryToAcquire(250L)
+      val result = manager.tryToAcquire(250L)
       val endTime = System.currentTimeMillis()
       state.synchronized {
-        state.t2Succeeded = success
-        // A second call should not succeed because we're now already at 1 / 2N
-        state.t2SucceededSecondTime = manager.tryToAcquire(100L)
+        state.t2Result = result
+        // A second call should return 0 because we're now already at 1 / 2N
+        state.t2Result2 = manager.tryToAcquire(100L)
         state.t2WaitTime = endTime - startTime
       }
     }
@@ -137,36 +216,33 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     // Both threads should've been able to acquire their memory; the second one will have waited
     // until the first one acquired 1000 bytes and then released 250
     state.synchronized {
-      assert(state.t1Succeeded, "t1 could not allocate memory")
-      assert(state.t2Succeeded, "t2 could not allocate memory")
+      assert(state.t1Result === 1000L, "t1 could not allocate memory")
+      assert(state.t2Result === 250L, "t2 could not allocate memory")
       assert(state.t2WaitTime > 200, s"t2 waited less than 200 ms (${state.t2WaitTime})")
-      assert(!state.t2SucceededSecondTime, "t1 could allocate memory a second time")
+      assert(state.t2Result2 === 0L, "t1 got extra memory the second time")
     }
   }
 
-
   test("releaseMemoryForThisThread") {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
-    // for a bit and releases all its memory. t2 starts by requesting 500 bytes, which is too
-    // much to grab right away (more than 1 / 2N), so that fails. It then requests 250, which
-    // should block and work. Finally it requests 750, which will also work as t1 is all done.
+    // for a bit and releases all its memory. t2 should now be able to grab all the memory.
 
     val manager = new ShuffleMemoryManager(1000L)
 
     class State {
       var t1Requested = false
       var t2Requested = false
-      var t1Succeeded = false
-      var t2SucceededGrabbing500 = false
-      var t2SucceededGrabbing250 = false
-      var t2SucceededGrabbingAllSecondTime = false
+      var t1Result = -1L
+      var t2Result1 = -1L
+      var t2Result2 = -1L
+      var t2Result3 = -1L
       var t2WaitTime = 0L
     }
     val state = new State
 
     val t1 = startThread("t1") {
       state.synchronized {
-        state.t1Succeeded = manager.tryToAcquire(1000L)
+        state.t1Result = manager.tryToAcquire(1000L)
         state.t1Requested = true
         state.notifyAll()
         while (!state.t2Requested) {
@@ -184,17 +260,18 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
         while (!state.t1Requested) {
           state.wait()
         }
-        state.t2SucceededGrabbing500 = manager.tryToAcquire(500L)
         state.t2Requested = true
         state.notifyAll()
       }
       val startTime = System.currentTimeMillis()
-      val success = manager.tryToAcquire(250L)
+      val r1 = manager.tryToAcquire(500L)
       val endTime = System.currentTimeMillis()
+      val r2 = manager.tryToAcquire(500L)
+      val r3 = manager.tryToAcquire(500L)
       state.synchronized {
-        state.t2SucceededGrabbing250 = success
-        // Since t1 released its all memory, we should now be able to grab the 750 extra too
-        state.t2SucceededGrabbingAllSecondTime = manager.tryToAcquire(750L)
+        state.t2Result1 = r1
+        state.t2Result2 = r2
+        state.t2Result3 = r3
         state.t2WaitTime = endTime - startTime
       }
     }
@@ -205,12 +282,12 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
     }
 
     // Both threads should've been able to acquire their memory; the second one will have waited
-    // until the first one acquired 1000 bytes and then released 250
+    // until the first one acquired 1000 bytes and then released all of it
     state.synchronized {
-      assert(state.t1Succeeded, "t1 could not allocate memory")
-      assert(!state.t2SucceededGrabbing500, "t2 grabbed 500 bytes the first time")
-      assert(state.t2SucceededGrabbing250, "t2 could not grab 250 bytes")
-      assert(state.t2SucceededGrabbingAllSecondTime, "t2 could not grab everything second time")
+      assert(state.t1Result === 1000L, "t1 could not allocate memory")
+      assert(state.t2Result1 === 500L, "t2 didn't get 500 bytes the first time")
+      assert(state.t2Result2 === 500L, "t2 didn't get 500 bytes the second time")
+      assert(state.t2Result3 === 0L, s"t2 got more bytes a third time (${state.t2Result3})")
       assert(state.t2WaitTime > 200, s"t2 waited less than 200 ms (${state.t2WaitTime})")
     }
   }
