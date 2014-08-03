@@ -71,7 +71,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
   // Change the default SQL dialect to HiveQL
-  set(SQLConf.DIALECT, "hiveql")
+  override private[spark] def dialect: String = get(SQLConf.DIALECT, "hiveql")
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }

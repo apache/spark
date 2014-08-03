@@ -456,6 +456,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
+    // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
     assertResult(Array(s"$testKey=$testVal")) {
