@@ -368,6 +368,150 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
+    }
+    if (value == null) {
+      localProperties.get.remove(key)
+    } else {
+      localProperties.get.setProperty(key, value)
+    }
+  }
+
+  /**
+  /**
+  /**
+  /**
    * Get a local property set in this thread, or null if it is missing. See
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */

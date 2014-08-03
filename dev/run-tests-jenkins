@@ -70,16 +70,35 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
     | sed "s/\+ *//" \
     | tr "\n" "~" \
     | sed "s/~/<br>/g")
-  if [ "$new_public_classes" == "" ]; then
-    result_message="$result_message- This patch adds no public classes<br>"
-  else
+  if [ "$new_public_classes" != "" ]; then
     result_message="$result_message- This patch adds the following public classes (experimental):<br>"
     result_message="$result_message$new_public_classes"
+  fi 
+  source_line_delta=$(git diff master --shortstat -- \
+    *src/*.scala *src/*.py *src/*.java | awk '{ print $4 - $6 }')
+  test_line_delta=$(git diff master --shortstat -- \
+    *test/*.scala *test/*.py *test/*.java | awk '{ print ($4 - $6 > 0 ? $4 - $6 : 0) }')
+  echo "SOURCES: $source_line_delta"
+  echo "TESTS: $test_line_delta"
+  if [[ (-n "$source_line_delta") && ("$source_line_delta" -gt "10") ]]; then
+    test_coverage=$(echo "$test_line_delta $source_line_delta" | awk '{printf "%.1f \n", $1/$2}')
+    if [ "$test_line_delta" == "0" ]; then test_coverage_string="NON-EXISTENT"
+      elif [ "$test_coverage" == "0.1" ]; then test_coverage_string="MINIMAL"
+      elif [ "$test_coverage" == "0.2" ]; then test_coverage_string="MINOR"
+      elif [ "$test_coverage" == "0.3" ]; then test_coverage_string="MODEST"
+      elif [ "$test_coverage" == "0.4" ]; then test_coverage_string="MODERATE"
+      elif [ "$test_coverage" == "0.5" ]; then test_coverage_string="DECENT"
+      elif [ "$test_coverage" == "0.6" ]; then test_coverage_string="RESPECTABLE"
+      elif [ "$test_coverage" == "0.7" ]; then test_coverage_string="THOROUGH"
+      elif [ "$test_coverage" == "0.8" ]; then test_coverage_string="IMPRESSIVE"
+      elif [ "$test_coverage" == "0.9" ]; then test_coverage_string="EXCELLENT"
+      else test_coverage_string="FANTASTIC"
+    fi
+    result_message="$result_message- This patch has $test_coverage_string test coverage.<br>"
   fi
 fi
 result_message="${result_message}<br>For more information see test ouptut:"
 result_message="${result_message}<br>${BUILD_URL}consoleFull"
 
 post_message "$result_message"
-
 exit $test_result
