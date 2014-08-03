@@ -63,7 +63,7 @@ class JavaHiveQLSuite extends FunSuite {
       javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
     }
 
-    javaHiveCtx.sql("SHOW TABLES").registerAsTable("show_tables")
+    javaHiveCtx.sql("SHOW TABLES").registerTempTable("show_tables")
 
     assert(
       javaHiveCtx
@@ -73,7 +73,8 @@ class JavaHiveQLSuite extends FunSuite {
         .contains(tableName))
 
     assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      javaHiveCtx.sql(s"DESCRIBE $tableName").registerAsTable("describe_table")
+      javaHiveCtx.sql(s"DESCRIBE $tableName").registerTempTable("describe_table")
+
 
       javaHiveCtx
         .sql("SELECT result FROM describe_table")

@@ -249,7 +249,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
-    testData.registerAsTable("REGisteredTABle")
+    testData.registerTempTable("REGisteredTABle")
 
     assertResult(Array(Array(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
@@ -274,7 +274,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    TestHive.sparkContext.parallelize(fixture).registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
@@ -403,7 +403,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
-    testData.registerAsTable("test_describe_commands2")
+    testData.registerTempTable("test_describe_commands2")
 
     assertResult(
       Array(

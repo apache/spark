@@ -28,9 +28,13 @@ from array import array
 from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+
+from itertools import chain, ifilter, imap
 
 from py4j.protocol import Py4JError
+from py4j.java_collections import ListConverter, MapConverter
+
 
 __all__ = [
     "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
@@ -905,7 +909,7 @@ class SQLContext:
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> srdd = sqlCtx.inferSchema(allTypes)
-        >>> srdd.registerAsTable("allTypes")
+        >>> srdd.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
@@ -931,6 +935,39 @@ class SQLContext:
         if not hasattr(self, '_scala_SQLContext'):
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
+
+    def registerFunction(self, name, f, returnType=StringType()):
+        """Registers a lambda function as a UDF so it can be used in SQL statements.
+
+        In addition to a name and the function itself, the return type can be optionally specified.
+        When the return type is not given it default to a string and conversion will automatically
+        be done.  For any other return type, the produced object must match the specified type.
+
+        >>> sqlCtx.registerFunction("stringLengthString", lambda x: len(x))
+        >>> sqlCtx.sql("SELECT stringLengthString('test')").collect()
+        [Row(c0=u'4')]
+        >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
+        [Row(c0=4)]
+        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        [Row(c0=5)]
+        """
+        func = lambda _, it: imap(lambda x: f(*x), it)
+        command = (func,
+                   BatchedSerializer(PickleSerializer(), 1024),
+                   BatchedSerializer(PickleSerializer(), 1024))
+        env = MapConverter().convert(self._sc.environment,
+                                     self._sc._gateway._gateway_client)
+        includes = ListConverter().convert(self._sc._python_includes,
+                                     self._sc._gateway._gateway_client)
+        self._ssql_ctx.registerPython(name,
+                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      env,
+                                      includes,
+                                      self._sc.pythonExec,
+                                      self._sc._javaAccumulator,
+                                      str(returnType))
 
     def inferSchema(self, rdd):
         """Infer and apply a schema to an RDD of L{Row}s.
@@ -1453,19 +1490,23 @@ class SchemaRDD(RDD):
         """
         self._jschema_rdd.saveAsParquetFile(path)
 
-    def registerAsTable(self, name):
+    def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the L{SQLContext}
         that was used to create this SchemaRDD.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.registerAsTable("test")
+        >>> srdd.registerTempTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        self._jschema_rdd.registerAsTable(name)
+        self._jschema_rdd.registerTempTable(name)
+
+    def registerAsTable(self, name):
+        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this SchemaRDD into the specified table.
@@ -1556,9 +1597,9 @@ class SchemaRDD(RDD):
         self._jschema_rdd.persist(javaStorageLevel)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking=True):
         self.is_cached = False
-        self._jschema_rdd.unpersist()
+        self._jschema_rdd.unpersist(blocking)
         return self
 
     def checkpoint(self):

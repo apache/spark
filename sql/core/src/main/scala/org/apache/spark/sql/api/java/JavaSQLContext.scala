@@ -28,14 +28,13 @@ import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.types.util.DataTypeConversions
-import DataTypeConversions.asScalaDataType;
+import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
 
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(val sqlContext: SQLContext) {
+class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
@@ -61,7 +60,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * {{{
    *   JavaSQLContext sqlCtx = new JavaSQLContext(...)
    *
-   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerAsTable("people")
+   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerTempTable("people")
    *   sqlCtx.sql("INSERT INTO people SELECT 'michael', 29")
    * }}}
    *
