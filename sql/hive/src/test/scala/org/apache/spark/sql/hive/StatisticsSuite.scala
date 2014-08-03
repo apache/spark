@@ -26,6 +26,60 @@ import org.apache.spark.sql.hive.test.TestHive._
 
 class StatisticsSuite extends QueryTest {
 
+  test("analyze MetastoreRelations") {
+    def queryTotalSize(tableName: String): BigInt =
+      catalog.lookupRelation(None, tableName).statistics.sizeInBytes
+
+    // Non-partitioned table
+    sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+
+    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+
+    analyze("analyzeTable")
+
+    assert(queryTotalSize("analyzeTable") === BigInt(11624))
+
+    sql("DROP TABLE analyzeTable").collect()
+
+    // Partitioned table
+    sql(
+      """
+        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+
+    assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
+
+    analyze("analyzeTable_part")
+
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+
+    sql("DROP TABLE analyzeTable_part").collect()
+
+    // Try to analyze a temp table
+    sql("""SELECT * FROM src""").registerTempTable("tempTable")
+    intercept[NotImplementedError] {
+      analyze("tempTable")
+    }
+    catalog.unregisterTable(None, "tempTable")
+  }
+
   test("estimates the size of a test MetastoreRelation") {
     val rdd = sql("""SELECT * FROM src""")
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
