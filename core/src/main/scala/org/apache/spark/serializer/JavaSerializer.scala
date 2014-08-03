@@ -40,11 +40,10 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
    */
   def writeObject[T: ClassTag](t: T): SerializationStream = {
     objOut.writeObject(t)
-    if (counterReset >= 0 && counter >= counterReset) {
+    counter += 1
+    if (counterReset > 0 && counter >= counterReset) {
       objOut.reset()
       counter = 0
-    } else {
-      counter += 1
     }
     this
   }
