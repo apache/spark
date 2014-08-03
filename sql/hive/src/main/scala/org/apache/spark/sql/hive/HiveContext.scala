@@ -119,11 +119,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // TODO: Can we use fs.getContentSummary?
         // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
         // countFileSize to count the table size.
-        def countFileSize(fs: FileSystem, path: Path): Long = {
+        def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
           println(s"path: ${fileStatus.getPath}, size: ${fileStatus.getLen}")
           val size = if (fileStatus.isDir) {
-            fs.listStatus(path).map(status => countFileSize(fs, status.getPath)).sum
+            fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
           } else {
             fileStatus.getLen
           }
@@ -136,7 +136,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           var size: Long = 0L
           try {
             val fs = path.getFileSystem(conf)
-            size = countFileSize(fs, path)
+            size = calculateTableSize(fs, path)
           } catch {
             case e: Exception =>
               logWarning(
