@@ -128,7 +128,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
         logInfo(s"Running query '$statement'")
         setState(OperationState.RUNNING)
         try {
-          result = hiveContext.hql(statement)
+          result = hiveContext.sql(statement)
           logDebug(result.queryExecution.toString())
           val groupId = round(random * 1000000).toString
           hiveContext.sparkContext.setJobGroup(groupId, statement)
