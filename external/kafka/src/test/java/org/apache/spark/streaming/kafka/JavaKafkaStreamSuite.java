@@ -27,8 +27,11 @@ import scala.collection.JavaConverters;
 
 import junit.framework.Assert;
 
+import kafka.serializer.StringDecoder;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -65,17 +68,31 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     String topic = "topic1";
     HashMap<String, Integer> topics = new HashMap<String, Integer>();
     topics.put(topic, 1);
-    testSuite.createTopic(topic);
 
     HashMap<String, Integer> sent = new HashMap<String, Integer>();
     sent.put("a", 5);
     sent.put("b", 3);
     sent.put("c", 10);
 
+    testSuite.createTopic(topic);
+    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
+    testSuite.produceAndSendMessage(topic,
+      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
+        Predef.<Tuple2<String, Object>>conforms()));
+
+    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    kafkaParams.put("zookeeper.connect", testSuite.zkConnect());
+    kafkaParams.put("group.id", "test-consumer-" + testSuite.random().nextInt(10000));
+    kafkaParams.put("auto.offset.reset", "smallest");
+
     JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
-        testSuite.zkConnect(),
-        "group",
-        topics);
+      String.class,
+      String.class,
+      StringDecoder.class,
+      StringDecoder.class,
+      kafkaParams,
+      topics,
+      StorageLevel.MEMORY_ONLY_SER());
 
     final HashMap<String, Long> result = new HashMap<String, Long>();
 
@@ -107,15 +124,6 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     );
 
     ssc.start();
-
-    // Sleep to let Receiver start first
-    Thread.sleep(3000);
-
-    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    testSuite.produceAndSendMessage(topic,
-      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
-        Predef.<Tuple2<String, Object>>conforms()));
-
     ssc.awaitTermination(3000);
 
     Assert.assertEquals(sent.size(), result.size());
