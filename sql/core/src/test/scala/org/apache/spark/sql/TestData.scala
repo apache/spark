@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.test._
 
 /* Implicits */
-import TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestData(key: Int, value: String)
 
@@ -40,7 +42,7 @@ object TestData {
       LargeAndSmallInts(2147483646, 1) ::
       LargeAndSmallInts(3, 2) :: Nil)
   largeAndSmallInts.registerAsTable("largeAndSmallInts")
-  
+
   case class TestData2(a: Int, b: Int)
   val testData2: SchemaRDD =
     TestSQLContext.sparkContext.parallelize(
@@ -143,4 +145,10 @@ object TestData {
       "2, B2, false, null" ::
       "3, C3, true, null" ::
       "4, D4, true, 2147483644" :: Nil)
+
+  case class TimestampField(time: Timestamp)
+  val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
+    TimestampField(new Timestamp(i))
+  })
+  timestamps.registerAsTable("timestamps")
 }
