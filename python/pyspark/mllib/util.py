@@ -127,7 +127,8 @@ class MLUtils:
         parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
         if numFeatures <= 0:
             parsed.cache()
-            numFeatures = parsed.map(lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
+            numFeatures = parsed.map(
+                lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod

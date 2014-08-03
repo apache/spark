@@ -25,7 +25,9 @@ from pyspark.mllib._common import \
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
+
 class DecisionTreeModel(object):
+
     """
     A decision tree model for classification or regression.
 
@@ -77,6 +79,7 @@ class DecisionTreeModel(object):
 
 
 class DecisionTree(object):
+
     """
     Learning algorithm for a decision tree model
     for classification or regression.
@@ -174,7 +177,6 @@ class DecisionTree(object):
                                   categoricalFeaturesInfo,
                                   impurity, maxDepth, maxBins)
 
-
     @staticmethod
     def train(data, algo, numClasses, categoricalFeaturesInfo,
               impurity, maxDepth, maxBins=100):
@@ -216,7 +218,8 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

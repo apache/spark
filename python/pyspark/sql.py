@@ -981,9 +981,10 @@ class SQLContext:
         env = MapConverter().convert(self._sc.environment,
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
-                                     self._sc._gateway._gateway_client)
+                                           self._sc._gateway._gateway_client)
         self._ssql_ctx.registerPython(name,
-                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      bytearray(
+                                          CloudPickleSerializer().dumps(command)),
                                       env,
                                       includes,
                                       self._sc.pythonExec,
@@ -1525,7 +1526,8 @@ class SchemaRDD(RDD):
         self._jschema_rdd.registerTempTable(name)
 
     def registerAsTable(self, name):
-        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        warnings.warn(
+            "Use registerTempTable instead of registerAsTable.", DeprecationWarning)
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
