@@ -46,9 +46,8 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
   metricRegistry.register(MetricRegistry.name("memory", "memUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).sum
-      val remainingMem = storageStatusList.map(_.memRemaining).sum
-      (maxMem - remainingMem) / 1024 / 1024
+      val memUsed = storageStatusList.map(_.memUsed).sum
+      memUsed / 1024 / 1024
     }
   })
 
