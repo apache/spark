@@ -116,7 +116,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *    peopleSchemaRDD.registerAsTable("people")
+   *    peopleSchemaRDD.registerTempTable("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -212,7 +212,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *   import sqlContext._
    *
    *   case class Person(name: String, age: Int)
-   *   createParquetFile[Person]("path/to/file.parquet").registerAsTable("people")
+   *   createParquetFile[Person]("path/to/file.parquet").registerTempTable("people")
    *   sql("INSERT INTO people SELECT 'michael', 29")
    * }}}
    *
@@ -248,11 +248,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a SchemaRDD.
+   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
+  def sql(sqlText: String): SchemaRDD = {
+    if (dialect == "sql") {
+      new SchemaRDD(this, parseSql(sqlText))
+    } else {
+      sys.error(s"Unsupported SQL dialect: $dialect")
+    }
+  }
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =

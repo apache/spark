@@ -285,8 +285,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerAsTable("left")
-    upperCaseData.where('N >= 3).registerAsTable("right")
+    upperCaseData.where('N <= 4).registerTempTable("left")
+    upperCaseData.where('N >= 3).registerTempTable("right")
 
     val left = UnresolvedRelation(None, "left", None)
     val right = UnresolvedRelation(None, "right", None)
