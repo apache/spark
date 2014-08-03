@@ -30,7 +30,7 @@ pep8 ./python --exclude="cloudpickle.py" \
     > "$PEP8_REPORT_PATH"
 pep8_status=${PIPESTATUS[0]} #$?
 
-if [ $pep8_status ]
+if [ $pep8_status -ne 0 ]
     then
         echo "PEP8 checks failed."
         cat "$PEP8_REPORT_PATH"
