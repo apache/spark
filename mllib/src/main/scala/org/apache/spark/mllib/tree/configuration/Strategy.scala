@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -60,5 +62,32 @@ class Strategy (
     algo == Classification && numClassesForClassification > 2
   val isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+
+  /**
+   * Java-friendly constructor.
+   *
+   * @param algo classification or regression
+   * @param impurity criterion used for information gain calculation
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param numClassesForClassification number of classes for classification. Default value is 2
+   *                                    leads to binary classification
+   * @param maxBins maximum number of bins used for splitting features
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example, an entry
+   *                                (n -> k) implies the feature n is categorical with k categories
+   *                                0, 1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   */
+  def this(
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClassesForClassification: Int,
+      maxBins: Int,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
+    this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
 
 }
