@@ -31,9 +31,9 @@ class StatisticsSuite extends QueryTest {
       catalog.lookupRelation(None, tableName).statistics.sizeInBytes
 
     // Non-partitioned table
-    hql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
-    hql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
     assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
 
@@ -41,24 +41,24 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
-    hql("DROP TABLE analyzeTable").collect()
+    sql("DROP TABLE analyzeTable").collect()
 
     // Partitioned table
-    hql(
+    sql(
       """
         |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
       """.stripMargin).collect()
-    hql(
+    sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
         |SELECT * FROM src
       """.stripMargin).collect()
-    hql(
+    sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
         |SELECT * FROM src
       """.stripMargin).collect()
-    hql(
+    sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
         |SELECT * FROM src
@@ -70,10 +70,10 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
-    hql("DROP TABLE analyzeTable_part").collect()
+    sql("DROP TABLE analyzeTable_part").collect()
 
     // Try to analyze a temp table
-    hql("""SELECT * FROM src""").registerTempTable("tempTable")
+    sql("""SELECT * FROM src""").registerTempTable("tempTable")
     intercept[NotImplementedError] {
       analyze("tempTable")
     }

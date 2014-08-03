@@ -126,16 +126,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     relation match {
       case relation: MetastoreRelation => {
-        // This method is borrowed from
+        // This method is mainly based on
         // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13.
+        // in Hive 0.13 (except that we do not use fs.getContentSummary).
         // TODO: Generalize statistics collection.
-        // TODO: Can we use fs.getContentSummary?
+        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
+        // Can we use fs.getContentSummary in future?
         // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
         // countFileSize to count the table size.
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
-          println(s"path: ${fileStatus.getPath}, size: ${fileStatus.getLen}")
           val size = if (fileStatus.isDir) {
             fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
           } else {
@@ -166,8 +166,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         val oldTotalSize =
           Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE)).map(_.toLong).getOrElse(0L)
         val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
-        println(
-          s"newTotalSize: ${newTotalSize}")
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
