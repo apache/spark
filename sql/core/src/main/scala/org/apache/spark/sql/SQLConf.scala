@@ -29,6 +29,7 @@ object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
   val CODEGEN_ENABLED = "spark.sql.codegen"
+  val DIALECT = "spark.sql.dialect"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -39,7 +40,7 @@ object SQLConf {
  * A trait that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
- * into Spark SQL's query functions (sql(), hql(), etc.). Otherwise, users of this trait can
+ * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this trait can
  * modify the hints by programmatically calling the setters and getters of this trait.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
@@ -52,6 +53,20 @@ trait SQLConf {
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
+
+  /**
+   * The SQL dialect that is used when parsing queries.  This defaults to 'sql' which uses
+   * a simple SQL parser provided by Spark SQL.  This is currently the only option for users of
+   * SQLContext.
+   *
+   * When using a HiveContext, this value defaults to 'hiveql', which uses the Hive 0.12.0 HiveQL
+   * parser.  Users can change this to 'sql' if they want to run queries that aren't supported by
+   * HiveQL (e.g., SELECT 1).
+   *
+   * Note that the choice of dialect does not affect things like what tables are available or
+   * how query execution is performed.
+   */
+  private[spark] def dialect: String = get(DIALECT, "sql")
 
   /** When true tables cached using the in-memory columnar caching will be compressed. */
   private[spark] def useCompression: Boolean = get(COMPRESS_CACHED, "false").toBoolean

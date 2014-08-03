@@ -56,13 +56,13 @@ class HiveResolutionSuite extends HiveComparisonTest {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
       .registerTempTable("caseSensitivityTest")
 
-    hql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
   }
 
   test("nested repeated resolution") {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-     .registerTempTable("nestedRepeatedTest")
-    assert(hql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
+      .registerTempTable("nestedRepeatedTest")
+    assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }
 
   /**

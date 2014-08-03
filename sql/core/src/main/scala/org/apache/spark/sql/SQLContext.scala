@@ -248,11 +248,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a SchemaRDD.
+   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
+  def sql(sqlText: String): SchemaRDD = {
+    if (dialect == "sql") {
+      new SchemaRDD(this, parseSql(sqlText))
+    } else {
+      sys.error(s"Unsupported SQL dialect: $dialect")
+    }
+  }
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =

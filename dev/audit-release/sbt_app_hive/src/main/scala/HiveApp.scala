@@ -37,10 +37,10 @@ object SparkSqlExample {
     val hiveContext = new HiveContext(sc)
 
     import hiveContext._
-    hql("DROP TABLE IF EXISTS src")
-    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    hql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
-    val results = hql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
+    sql("DROP TABLE IF EXISTS src")
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    sql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
+    val results = sql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
     results.foreach(println)
     
     def test(f: => Boolean, failureMsg: String) = {
