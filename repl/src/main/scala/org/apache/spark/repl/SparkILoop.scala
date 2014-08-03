@@ -969,9 +969,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
-    if (System.getenv("SPARK_HOME") != null) {
-      conf.setSparkHome(System.getenv("SPARK_HOME"))
-    }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext

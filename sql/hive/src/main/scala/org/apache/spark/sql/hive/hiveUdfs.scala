@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
@@ -34,7 +34,8 @@ import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-private[hive] object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveInspectors {
+private[hive] abstract class HiveFunctionRegistry
+  extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
 
@@ -92,9 +93,8 @@ private[hive] abstract class HiveUdf extends Expression with Logging with HiveFu
 }
 
 private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[Expression])
-  extends HiveUdf {
+  extends HiveUdf with HiveInspectors {
 
-  import org.apache.spark.sql.hive.HiveFunctionRegistry._
   type UDFType = UDF
 
   @transient
@@ -119,7 +119,7 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
       sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
 
     (a: Any) => {
-      logger.debug(
+      logDebug(
         s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
       // We must make sure that primitives get boxed java style.
       if (a == null) {

@@ -45,12 +45,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
+    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
+    val blocks = storageStatusList
+      .flatMap(_.rddBlocksById(rddId))
+      .sortWith(_._1.name < _._1.name)
+      .map { case (blockId, status) =>
+        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+      }
     val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 
     val content =
@@ -119,10 +120,10 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.bytesToString(status.memUsedByRDD(rddId))}
+        {Utils.bytesToString(status.memUsedByRdd(rddId))}
         ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.bytesToString(status.diskUsedByRDD(rddId))}</td>
+      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
     </tr>
   }
 
