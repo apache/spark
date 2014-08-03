@@ -21,8 +21,6 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
-import org.apache.hadoop.hive.ql.stats.StatsSetupConst
-
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -32,6 +30,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.io.TimestampWritable
 
 import org.apache.spark.SparkContext
@@ -120,6 +119,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           var size: Long = 0L
           try {
             val fs = path.getFileSystem(conf)
+            // I am debugging jenkins. Need to remove the following logging entries!!!!
+            val fileStatus = fs.getFileStatus(path)
+            if (fileStatus.isDir) {
+              fs.listStatus(path).foreach(status =>
+                logInfo(s"${table.getTableName}, path: ${status.getPath}, size: ${status.getLen}"))
+            } else {
+              logInfo(
+                s"${table.getTableName}, path: ${fileStatus.getPath}, size: ${fileStatus.getLen}")
+            }
             size = fs.getContentSummary(path).getLength()
           } catch {
             case e: Exception =>
@@ -150,7 +158,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }
       }
       case otherRelation =>
-        throw new NotImplementedError(s"Analyzing a ${otherRelation} has not been implemented")
+        throw new NotImplementedError(
+          s"Analyzing a table other than a Hive table has not been implemented")
     }
   }
 
