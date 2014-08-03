@@ -41,7 +41,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     // write test data
     ParquetTestData.writeFile()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
-    testRDD.registerAsTable("testsource")
+    testRDD.registerTempTable("testsource")
   }
 
   override def afterAll() {
@@ -67,7 +67,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
       .map(i => Cases(i, i))
       .saveAsParquetFile(tempFile.getCanonicalPath)
 
-    parquetFile(tempFile.getCanonicalPath).registerAsTable("cases")
+    parquetFile(tempFile.getCanonicalPath).registerTempTable("cases")
     hql("SELECT upper FROM cases").collect().map(_.getString(0)) === (1 to 10).map(_.toString)
     hql("SELECT LOWER FROM cases").collect().map(_.getString(0)) === (1 to 10).map(_.toString)
   }
@@ -86,7 +86,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   test("Converting Hive to Parquet Table via saveAsParquetFile") {
     hql("SELECT * FROM src").saveAsParquetFile(dirname.getAbsolutePath)
-    parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
+    parquetFile(dirname.getAbsolutePath).registerTempTable("ptable")
     val rddOne = hql("SELECT * FROM src").collect().sortBy(_.getInt(0))
     val rddTwo = hql("SELECT * from ptable").collect().sortBy(_.getInt(0))
     compareRDDs(rddOne, rddTwo, "src (Hive)", Seq("key:Int", "value:String"))
@@ -94,7 +94,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   test("INSERT OVERWRITE TABLE Parquet table") {
     hql("SELECT * FROM testsource").saveAsParquetFile(dirname.getAbsolutePath)
-    parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
+    parquetFile(dirname.getAbsolutePath).registerTempTable("ptable")
     // let's do three overwrites for good measure
     hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
     hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()

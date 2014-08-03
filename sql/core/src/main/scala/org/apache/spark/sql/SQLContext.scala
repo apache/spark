@@ -116,7 +116,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *    peopleSchemaRDD.registerAsTable("people")
+   *    peopleSchemaRDD.registerTempTable("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -212,7 +212,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *   import sqlContext._
    *
    *   case class Person(name: String, age: Int)
-   *   createParquetFile[Person]("path/to/file.parquet").registerAsTable("people")
+   *   createParquetFile[Person]("path/to/file.parquet").registerTempTable("people")
    *   sql("INSERT INTO people SELECT 'michael', 29")
    * }}}
    *
