@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
@@ -38,8 +38,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{OverrideFunctionRegistry, Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
@@ -216,10 +217,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
+  // Note that HiveUDFs will be overridden by functions registered in this context.
+  override protected[sql] lazy val functionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry
+
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
+    new Analyzer(catalog, functionRegistry, caseSensitive = false)
 
   /**
    * Runs the specified SQL query using Hive.
@@ -311,7 +316,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
     // TODO: Create mixin for the analyzer instead of overriding things here.
     override lazy val optimizedPlan =
-      optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
+      optimizer(ExtractPythonUdfs(catalog.PreInsertionCasts(catalog.CreateTables(analyzed))))
 
     override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
