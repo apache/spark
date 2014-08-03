@@ -56,8 +56,10 @@ def main(infile, outfile):
         SparkFiles._root_directory = spark_files_dir
         SparkFiles._is_running_on_worker = True
 
-        # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-        sys.path.append(spark_files_dir)  # *.py files that were added will be copied here
+        # fetch names of includes (*.zip and *.egg files) and construct
+        # PYTHONPATH
+        # *.py files that were added will be copied here
+        sys.path.append(spark_files_dir)
         num_python_includes = read_int(infile)
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)

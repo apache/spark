@@ -97,7 +97,8 @@ from pyspark.serializers import read_int, PickleSerializer
 pickleSer = PickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
-# the local accumulator updates back to the driver program at the end of a task.
+# the local accumulator updates back to the driver program at the end of a
+# task.
 _accumulatorRegistry = {}
 
 
@@ -110,6 +111,7 @@ def _deserialize_accumulator(aid, zero_value, accum_param):
 
 
 class Accumulator(object):
+
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
     operation. Worker tasks on a Spark cluster can add values to an Accumulator with the C{+=}
@@ -139,14 +141,16 @@ class Accumulator(object):
     def value(self):
         """Get the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception("Accumulator.value cannot be accessed inside tasks")
+            raise Exception(
+                "Accumulator.value cannot be accessed inside tasks")
         return self._value
 
     @value.setter
     def value(self, value):
         """Sets the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception("Accumulator.value cannot be accessed inside tasks")
+            raise Exception(
+                "Accumulator.value cannot be accessed inside tasks")
         self._value = value
 
     def add(self, term):
@@ -166,6 +170,7 @@ class Accumulator(object):
 
 
 class AccumulatorParam(object):
+
     """
     Helper object that defines how to accumulate values of a given type.
     """
@@ -186,6 +191,7 @@ class AccumulatorParam(object):
 
 
 class AddingAccumulatorParam(AccumulatorParam):
+
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -210,6 +216,7 @@ COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
 class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
+
     """
     This handler will keep polling updates from the same socket until the
     server is shutdown.
@@ -218,7 +225,8 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
         while not self.server.server_shutdown:
-            # Poll every 1 second for new data -- don't block in case of shutdown.
+            # Poll every 1 second for new data -- don't block in case of
+            # shutdown.
             r, _, _ = select.select([self.rfile], [], [], 1)
             if self.rfile in r:
                 num_updates = read_int(self.rfile)
@@ -228,7 +236,9 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
                 # Write a byte in acknowledgement
                 self.wfile.write(struct.pack("!b", 1))
 
+
 class AccumulatorServer(SocketServer.TCPServer):
+
     """
     A simple TCP server that intercepts shutdown() in order to interrupt
     our continuous polling on the handler.
@@ -238,6 +248,7 @@ class AccumulatorServer(SocketServer.TCPServer):
     def shutdown(self):
         self.server_shutdown = True
         SocketServer.TCPServer.shutdown(self)
+
 
 def _start_update_server():
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""

@@ -20,6 +20,7 @@ import random
 
 
 class RDDSamplerBase(object):
+
     def __init__(self, withReplacement, seed=None):
         try:
             import numpy
@@ -30,7 +31,8 @@ class RDDSamplerBase(object):
                 "Falling back to default random generator for sampling.")
             self._use_numpy = False
 
-        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
+        self._seed = seed if seed is not None else random.randint(
+            0, sys.maxint)
         self._withReplacement = withReplacement
         self._random = None
         self._split = None
@@ -85,7 +87,8 @@ class RDDSamplerBase(object):
 
     def shuffle(self, vals):
         if self._random is None:
-            self.initRandomGenerator(0)  # this should only ever called on the master so
+            # this should only ever called on the master so
+            self.initRandomGenerator(0)
             # the split does not matter
 
         if self._use_numpy:
@@ -95,6 +98,7 @@ class RDDSamplerBase(object):
 
 
 class RDDSampler(RDDSamplerBase):
+
     def __init__(self, withReplacement, fraction, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
@@ -113,7 +117,9 @@ class RDDSampler(RDDSamplerBase):
                 if self.getUniformSample(split) <= self._fraction:
                     yield obj
 
+
 class RDDStratifiedSampler(RDDSamplerBase):
+
     def __init__(self, withReplacement, fractions, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fractions = fractions

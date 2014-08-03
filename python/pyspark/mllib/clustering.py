@@ -27,6 +27,7 @@ from pyspark.mllib.linalg import SparseVector
 
 
 class KMeansModel(object):
+
     """A clustering model derived from the k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
@@ -55,6 +56,7 @@ class KMeansModel(object):
     >>> type(model.clusterCenters)
     <type 'list'>
     """
+
     def __init__(self, centers):
         self.centers = centers
 
@@ -76,6 +78,7 @@ class KMeansModel(object):
 
 
 class KMeans(object):
+
     @classmethod
     def train(cls, data, k, maxIterations=100, runs=1, initializationMode="k-means||"):
         """Train a k-means clustering model."""
@@ -96,7 +99,8 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

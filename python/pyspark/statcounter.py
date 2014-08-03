@@ -51,13 +51,15 @@ class StatCounter(object):
 
         return self
 
-    # Merge another StatCounter into this one, adding up the internal statistics.
+    # Merge another StatCounter into this one, adding up the internal
+    # statistics.
     def mergeStats(self, other):
         if not isinstance(other, StatCounter):
             raise Exception("Can only merge Statcounters!")
 
         if other is self:  # reference equality holds
-            self.merge(copy.deepcopy(other))  # Avoid overwriting fields in a weird order
+            # Avoid overwriting fields in a weird order
+            self.merge(copy.deepcopy(other))
         else:
             if self.n == 0:
                 self.mu = other.mu
@@ -73,12 +75,14 @@ class StatCounter(object):
                 elif self.n * 10 < other.n:
                     self.mu = other.mu - (delta * self.n) / (self.n + other.n)
                 else:
-                    self.mu = (self.mu * self.n + other.mu * other.n) / (self.n + other.n)
+                    self.mu = (
+                        self.mu * self.n + other.mu * other.n) / (self.n + other.n)
 
                 self.maxValue = maximum(self.maxValue, other.maxValue)
                 self.minValue = minimum(self.minValue, other.minValue)
 
-                self.m2 += other.m2 + (delta * delta * self.n * other.n) / (self.n + other.n)
+                self.m2 += other.m2 + \
+                    (delta * delta * self.n * other.n) / (self.n + other.n)
                 self.n += other.n
         return self
 

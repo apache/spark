@@ -26,6 +26,7 @@ from pyspark.rdd import RDD
 
 
 class MatrixFactorizationModel(object):
+
     """A matrix factorisation model trained by regularized alternating
     least-squares.
 
@@ -58,6 +59,7 @@ class MatrixFactorizationModel(object):
 
 
 class ALS(object):
+
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
         sc = ratings.context
@@ -79,7 +81,8 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

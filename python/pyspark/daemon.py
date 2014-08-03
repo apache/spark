@@ -30,7 +30,8 @@ from pyspark.serializers import write_int
 
 
 def compute_real_exit_code(exit_code):
-    # SystemExit's code can be integer or string, but os._exit only accepts integers
+    # SystemExit's code can be integer or string, but os._exit only accepts
+    # integers
     if isinstance(exit_code, numbers.Integral):
         return exit_code
     else:
@@ -43,7 +44,8 @@ def worker(sock):
     """
     # Redirect stdout to stderr
     os.dup2(2, 1)
-    sys.stdout = sys.stderr   # The sys.stdout object is different from file descriptor 1
+    # The sys.stdout object is different from file descriptor 1
+    sys.stdout = sys.stderr
 
     signal.signal(SIGHUP, SIG_DFL)
     signal.signal(SIGCHLD, SIG_DFL)
@@ -62,7 +64,8 @@ def worker(sock):
 
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
-    # otherwise writes also cause a seek that makes us miss data on the read side.
+    # otherwise writes also cause a seek that makes us miss data on the read
+    # side.
     infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
     outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
     exit_code = 0
@@ -106,7 +109,8 @@ def manager():
         try:
             pid, status = os.waitpid(0, os.WNOHANG)
             if status != 0:
-                msg = "worker %s crashed abruptly with exit status %s" % (pid, status)
+                msg = "worker %s crashed abruptly with exit status %s" % (
+                    pid, status)
                 print >> sys.stderr, msg
         except EnvironmentError as err:
             if err.errno not in (ECHILD, EINTR):

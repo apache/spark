@@ -39,6 +39,7 @@ except:
 
 
 class VectorTests(unittest.TestCase):
+
     def test_serialize(self):
         sv = SparseVector(4, {1: 1, 3: 2})
         dv = array([1., 2., 3., 4.])
@@ -46,9 +47,12 @@ class VectorTests(unittest.TestCase):
         self.assertTrue(sv is _convert_vector(sv))
         self.assertTrue(dv is _convert_vector(dv))
         self.assertTrue(array_equal(dv, _convert_vector(lst)))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(sv)))
-        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(dv))))
-        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(lst))))
+        self.assertEquals(
+            sv, _deserialize_double_vector(_serialize_double_vector(sv)))
+        self.assertTrue(
+            array_equal(dv, _deserialize_double_vector(_serialize_double_vector(dv))))
+        self.assertTrue(
+            array_equal(dv, _deserialize_double_vector(_serialize_double_vector(lst))))
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -61,9 +65,11 @@ class VectorTests(unittest.TestCase):
         self.assertEquals(10.0, _dot(sv, dv))
         self.assertTrue(array_equal(array([3., 6., 9., 12.]), _dot(sv, mat)))
         self.assertEquals(30.0, _dot(dv, dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), _dot(dv, mat)))
+        self.assertTrue(
+            array_equal(array([10., 20., 30., 40.]), _dot(dv, mat)))
         self.assertEquals(30.0, _dot(lst, dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), _dot(lst, mat)))
+        self.assertTrue(
+            array_equal(array([10., 20., 30., 40.]), _dot(lst, mat)))
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -81,6 +87,7 @@ class VectorTests(unittest.TestCase):
 
 
 class ListTests(PySparkTestCase):
+
     """
     Test MLlib algorithms on plain lists, to make sure they're passed through
     as NumPy arrays.
@@ -94,7 +101,8 @@ class ListTests(PySparkTestCase):
             [1.1, 0],
             [1.2, 0],
         ]
-        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
+        clusters = KMeans.train(
+            self.sc.parallelize(data), 2, initializationMode="k-means||")
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
@@ -160,6 +168,7 @@ class ListTests(PySparkTestCase):
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
+
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
     if SciPy is available.
@@ -176,10 +185,14 @@ class SciPyTests(PySparkTestCase):
         self.assertEquals(sv, _convert_vector(lil.tocoo()))
         self.assertEquals(sv, _convert_vector(lil.tocsr()))
         self.assertEquals(sv, _convert_vector(lil.todok()))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil)))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsc())))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsr())))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.todok())))
+        self.assertEquals(
+            sv, _deserialize_double_vector(_serialize_double_vector(lil)))
+        self.assertEquals(
+            sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsc())))
+        self.assertEquals(
+            sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsr())))
+        self.assertEquals(
+            sv, _deserialize_double_vector(_serialize_double_vector(lil.todok())))
 
     def test_dot(self):
         from scipy.sparse import lil_matrix
@@ -223,7 +236,8 @@ class SciPyTests(PySparkTestCase):
             self.scipy_matrix(3, {2: 1.0}),
             self.scipy_matrix(3, {2: 1.1})
         ]
-        clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
+        clusters = KMeans.train(
+            self.sc.parallelize(data), 2, initializationMode="k-means||")
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 

@@ -53,7 +53,8 @@ Hive:
 # mllib that depend on top level pyspark packages, which transitively depend on python's random.
 # Since Python's import logic looks for modules in the current package first, we eliminate
 # mllib.random as a candidate for C{import random} by removing the first search path, the script's
-# location, in order to force the loader to look in Python's top-level modules for C{random}.
+# location, in order to force the loader to look in Python's top-level
+# modules for C{random}.
 import sys
 s = sys.path.pop(0)
 import random

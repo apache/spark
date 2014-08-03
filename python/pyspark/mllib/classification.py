@@ -31,6 +31,7 @@ from math import exp, log
 
 
 class LogisticRegressionModel(LinearModel):
+
     """A linear binary classification model derived from logistic regression.
 
     >>> data = [
@@ -60,6 +61,7 @@ class LogisticRegressionModel(LinearModel):
     >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
     True
     """
+
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
         margin = _dot(x, self._coeff) + self._intercept
@@ -72,6 +74,7 @@ class LogisticRegressionModel(LinearModel):
 
 
 class LogisticRegressionWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0, initialWeights=None):
         """Train a logistic regression model on the given data."""
@@ -83,6 +86,7 @@ class LogisticRegressionWithSGD(object):
 
 
 class SVMModel(LinearModel):
+
     """A support vector machine.
 
     >>> data = [
@@ -106,6 +110,7 @@ class SVMModel(LinearModel):
     >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
     True
     """
+
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
         margin = _dot(x, self._coeff) + self._intercept
@@ -113,6 +118,7 @@ class SVMModel(LinearModel):
 
 
 class SVMWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
@@ -124,6 +130,7 @@ class SVMWithSGD(object):
 
 
 class NaiveBayesModel(object):
+
     """
     Model for Naive Bayes classifiers.
 
@@ -164,6 +171,7 @@ class NaiveBayesModel(object):
 
 
 class NaiveBayes(object):
+
     @classmethod
     def train(cls, data, lambda_=1.0):
         """
@@ -182,7 +190,8 @@ class NaiveBayes(object):
         """
         sc = data.context
         dataBytes = _get_unmangled_labeled_point_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
+        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(
+            dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),
             _deserialize_double_vector(ans[1]),
@@ -193,7 +202,8 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

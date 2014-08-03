@@ -27,6 +27,7 @@ from numpy import array, array_equal, ndarray, float64, int32
 
 
 class SparseVector(object):
+
     """
     A simple sparse vector class for passing data to MLlib. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
@@ -59,7 +60,8 @@ class SparseVector(object):
             self.indices = array([p[0] for p in pairs], dtype=int32)
             self.values = array([p[1] for p in pairs], dtype=float64)
         else:
-            assert len(args[0]) == len(args[1]), "index and value arrays not same length"
+            assert len(args[0]) == len(
+                args[1]), "index and value arrays not same length"
             self.indices = array(args[0], dtype=int32)
             self.values = array(args[1], dtype=float64)
             for i in xrange(len(self.indices) - 1):
@@ -88,10 +90,12 @@ class SparseVector(object):
                     result += self.values[i] * other[self.indices[i]]
                 return result
             elif other.ndim == 2:
-                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
+                results = [self.dot(other[:, i])
+                           for i in xrange(other.shape[1])]
                 return array(results)
             else:
-                raise Exception("Cannot call dot with %d-dimensional array" % other.ndim)
+                raise Exception(
+                    "Cannot call dot with %d-dimensional array" % other.ndim)
         else:
             result = 0.0
             i, j = 0, 0
@@ -167,7 +171,8 @@ class SparseVector(object):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        entries = ", ".join(
+            ["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -192,6 +197,7 @@ class SparseVector(object):
 
 
 class Vectors(object):
+
     """
     Factory methods for working with vectors. Note that dense vectors
     are simply represented as NumPy array objects, so there is no need
@@ -256,7 +262,8 @@ def _test():
 
 if __name__ == "__main__":
     # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
+    # for C{import random}, which is done in an external dependency of pyspark
+    # during doctests.
     import sys
     sys.path.pop(0)
     _test()

@@ -108,6 +108,7 @@ class Serializer(object):
 
 
 class FramedSerializer(Serializer):
+
     """
     Serializer that writes objects as a stream of (length, data) pairs,
     where C{length} is a 32-bit integer and data is C{length} bytes.
@@ -159,6 +160,7 @@ class FramedSerializer(Serializer):
 
 
 class BatchedSerializer(Serializer):
+
     """
     Serializes a stream of objects in batches by calling its wrapped
     Serializer with streams of objects.
@@ -204,6 +206,7 @@ class BatchedSerializer(Serializer):
 
 
 class CartesianDeserializer(FramedSerializer):
+
     """
     Deserializes the JavaRDD cartesian() of two PythonRDDs.
     """
@@ -237,6 +240,7 @@ class CartesianDeserializer(FramedSerializer):
 
 
 class PairDeserializer(CartesianDeserializer):
+
     """
     Deserializes the JavaRDD zip() of two PythonRDDs.
     """
@@ -268,6 +272,7 @@ class NoOpSerializer(FramedSerializer):
 
 
 class PickleSerializer(FramedSerializer):
+
     """
     Serializes objects using Python's cPickle serializer:
 
@@ -290,6 +295,7 @@ class CloudPickleSerializer(PickleSerializer):
 
 
 class MarshalSerializer(FramedSerializer):
+
     """
     Serializes objects using Python's Marshal serializer:
 
@@ -303,9 +309,11 @@ class MarshalSerializer(FramedSerializer):
 
 
 class AutoSerializer(FramedSerializer):
+
     """
     Choose marshal or cPickle as serialization protocol autumatically
     """
+
     def __init__(self):
         FramedSerializer.__init__(self)
         self._type = None
@@ -330,6 +338,7 @@ class AutoSerializer(FramedSerializer):
 
 
 class UTF8Deserializer(Serializer):
+
     """
     Deserializes streams written by String.getBytes.
     """

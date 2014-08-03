@@ -24,7 +24,9 @@ from pyspark.rdd import RDD
 from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
 from pyspark.serializers import NoOpSerializer
 
+
 class RandomRDDGenerators:
+
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
@@ -52,8 +54,9 @@ class RandomRDDGenerators:
         >>> parts == sc.defaultParallelism
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
-        uniform =  RDD(jrdd, sc, NoOpSerializer())
+        jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(
+            sc._jsc, size, numPartitions, seed)
+        uniform = RDD(jrdd, sc, NoOpSerializer())
         return uniform.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -76,8 +79,9 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - 1.0) < 0.1
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
-        normal =  RDD(jrdd, sc, NoOpSerializer())
+        jrdd = sc._jvm.PythonMLLibAPI().normalRDD(
+            sc._jsc, size, numPartitions, seed)
+        normal = RDD(jrdd, sc, NoOpSerializer())
         return normal.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -97,8 +101,9 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - sqrt(mean)) < 0.5
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
-        poisson =  RDD(jrdd, sc, NoOpSerializer())
+        jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(
+            sc._jsc, mean, size, numPartitions, seed)
+        poisson = RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -118,7 +123,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .uniformVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        uniform =  RDD(jrdd, sc, NoOpSerializer())
+        uniform = RDD(jrdd, sc, NoOpSerializer())
         return uniform.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
@@ -138,7 +143,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .normalVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        normal =  RDD(jrdd, sc, NoOpSerializer())
+        normal = RDD(jrdd, sc, NoOpSerializer())
         return normal.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
@@ -161,7 +166,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .poissonVectorRDD(sc._jsc, mean, numRows, numCols, numPartitions, seed)
-        poisson =  RDD(jrdd, sc, NoOpSerializer())
+        poisson = RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
 
@@ -172,7 +177,8 @@ def _test():
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

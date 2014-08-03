@@ -56,6 +56,7 @@ spark.home=/path
 
 
 class SparkConf(object):
+
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.
@@ -124,7 +125,8 @@ class SparkConf(object):
     def setExecutorEnv(self, key=None, value=None, pairs=None):
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
-            raise Exception("Either pass one key-value pair or a list of pairs")
+            raise Exception(
+                "Either pass one key-value pair or a list of pairs")
         elif key is not None:
             self._jconf.setExecutorEnv(key, value)
         elif pairs is not None:
