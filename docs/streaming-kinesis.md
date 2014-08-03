@@ -26,10 +26,10 @@ title: Spark Streaming Kinesis Receiver
 <li>When running **locally**, the example automatically determines the number of threads and KinesisReceivers to spin up based on the number of shards configured for the stream.  Therefore, **local[n]** is not needed when starting the example as with other streaming examples.</li>
 <li>While this example could use a single KinesisReceiver which spins up multiple KinesisRecordProcessor threads to process multiple shards, I wanted to demonstrate unioning multiple KinesisReceivers as a single DStream.  (It's a bit confusing in local mode.)</li>
 <li>**KinesisWordCountProducerASL** is provided to generate random records into the Kinesis stream for testing.</li>
-<li>Spark checkpointing is disabled for simplicity.  This means that the example will not recover from a Spark driver failure.</li>
-<li>Kinesis checkpointing is enabled.  This means that the example will recover from a failure.</li>
-<li>The example uses InitialPositionInStream.LATEST strategy to pull from the latest tip of the stream if no checkpoint info exists.</li>
 <li>The example has been configured to immediately replicate incoming stream data to another node by using (StorageLevel.MEMORY_AND_DISK_2)
+<li>Spark checkpointing is disabled because the example does not use any stateful or window-based DStream operations such as updateStateByKey and reduceByWindow.  If those operations are introduced, you would need to enable checkpointing or risk losing data in the case of a failure.</li>
+<li>Kinesis checkpointing is enabled.  This means that the example will recover from a Kinesis failure.</li>
+<li>The example uses InitialPositionInStream.LATEST strategy to pull from the latest tip of the stream if no Kinesis checkpoint info exists.</li>
 <li>In our example, **KinesisWordCount** is the Kinesis application name for both the Scala and Java versions.  The use of this application name is described next.</li>
 
 ###Deployment and Runtime
