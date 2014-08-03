@@ -1589,9 +1589,9 @@ class SchemaRDD(RDD):
         self._jschema_rdd.persist(javaStorageLevel)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking=True):
         self.is_cached = False
-        self._jschema_rdd.unpersist()
+        self._jschema_rdd.unpersist(blocking)
         return self
 
     def checkpoint(self):
