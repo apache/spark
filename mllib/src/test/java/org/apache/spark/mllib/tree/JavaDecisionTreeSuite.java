@@ -17,31 +17,23 @@
 
 package org.apache.spark.mllib.tree;
 
-import scala.Int;
-import scala.collection.immutable.Map;
-import scala.collection.JavaConverters.*;
-import scala.Predef;
-import scala.Tuple2;
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.DecisionTree;
-import org.apache.spark.mllib.tree.configuration.Algo;
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy;
-import org.apache.spark.mllib.tree.configuration.Strategy;
-import org.apache.spark.mllib.tree.impurity.Gini;
-import org.apache.spark.mllib.tree.impurity.Gini$;
-import org.apache.spark.mllib.tree.impurity.Impurity;
-import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.Serializable;
-import java.util.HashMap;
-import java.util.List;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.tree.configuration.Algo;
+import org.apache.spark.mllib.tree.configuration.Strategy;
+import org.apache.spark.mllib.tree.impurity.Gini;
+import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+
 
 public class JavaDecisionTreeSuite implements Serializable {
   private transient JavaSparkContext sc;

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.scalatest.FunSuite
 
@@ -817,7 +817,7 @@ object DecisionTreeSuite {
   }
 
   def generateCategoricalDataPointsAsJavaList(): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateCategoricalDataPoints().toSeq)
+    generateCategoricalDataPoints().toList.asJava
   }
 
   def generateCategoricalDataPointsForMulticlass(): Array[LabeledPoint] = {
