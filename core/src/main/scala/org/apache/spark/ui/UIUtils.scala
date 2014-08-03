@@ -242,9 +242,13 @@ private[spark] object UIUtils extends Logging {
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
       data: Seq[T],
-      fixedWidth: Boolean = false): Seq[Node] = {
+      fixedWidth: Boolean = false,
+      simpleTable: Boolean = false): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
+    if (simpleTable) {
+      listingTableClass = "spark-simple-table sortable"
+    }
     if (fixedWidth) {
       listingTableClass += " table-fixed"
     }

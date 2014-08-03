@@ -34,6 +34,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener
+  private val jsRenderingEnabled = parent.jsRenderingEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
@@ -47,14 +48,22 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     // Worker table
     val workers = StorageUtils.workersFromRDDId(rddId, storageStatusList)
     val workerTableId = "workerTable"
-    val workerTable = UIUtils.listingEmptyTable(workerHeader, workerTableId, simpleTable = true)
+    val workerTable = if (jsRenderingEnabled) {
+      UIUtils.listingEmptyTable(workerHeader, workerTableId, simpleTable = true)
+    } else {
+      UIUtils.listingTable(workerHeader, workerRow, workers, simpleTable = true)
+    }
 
     // Block table
     val blocks = StorageUtils.blocksFromRDDId(rddId, storageStatusList)
     val blockTableId = "blockTable"
-    val blockTable = UIUtils.listingEmptyTable(blockHeader, blockTableId, simpleTable = true)
+    val blockTable = if (jsRenderingEnabled) {
+      UIUtils.listingEmptyTable(blockHeader, blockTableId, simpleTable = true)
+    } else {
+      UIUtils.listingTable(blockHeader, blockRow, blocks, simpleTable = true)
+    }
 
-    val content =
+    var content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
@@ -96,11 +105,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         </div>
       </div>;
 
-    val contentWithJavascript = content ++
-      UIUtils.fillTableJavascript(parent.prefix + "/rdd/workers", workerTableId, Some(rddId)) ++
-      UIUtils.fillTableJavascript(parent.prefix + "/rdd/blocks", blockTableId, Some(rddId))
-
-    UIUtils.headerSparkPage(contentWithJavascript, basePath, appName, "RDD Storage Info for " +
+    if (jsRenderingEnabled) {
+      content ++=
+        UIUtils.fillTableJavascript(parent.prefix + "/rdd/workers", workerTableId, Some(rddId)) ++
+          UIUtils.fillTableJavascript(parent.prefix + "/rdd/blocks", blockTableId, Some(rddId))
+    }
+    UIUtils.headerSparkPage(content, basePath, appName, "RDD Storage Info for " +
       rddInfo.name, parent.headerTabs, parent)
   }
 

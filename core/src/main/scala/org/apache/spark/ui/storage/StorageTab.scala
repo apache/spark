@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.storage
 
+import org.apache.spark.SparkConf
+
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
@@ -29,6 +31,10 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
   val appName = parent.appName
   val basePath = parent.basePath
   val listener = new StorageListener(parent.storageStatusListener)
+  val live = parent.live
+  val sc = parent.sc
+  val conf = if (live) sc.conf else new SparkConf
+  val jsRenderingEnabled = conf.getBoolean("spark.ui.jsRenderingEnabled", true)
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))

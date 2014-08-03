@@ -31,6 +31,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener
+  private val jsRenderingEnabled = parent.jsRenderingEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -106,8 +107,14 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         Seq("Errors")
 
       val taskTableId = "taskTable"
-      val taskTable = UIUtils.listingEmptyTable(taskHeaders, taskTableId, simpleTable = true)
-
+      val taskTable = if (jsRenderingEnabled) {
+         UIUtils.listingEmptyTable(taskHeaders, taskTableId, simpleTable = true)
+      }
+      else {
+        UIUtils.listingTable(
+          taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks,
+          simpleTable = true)
+      }
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 
@@ -208,13 +215,17 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
       val executorTable = new ExecutorTable(stageId, parent)
-      val content =
+      var content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
-        <h4>Tasks</h4> ++ taskTable ++
-        UIUtils.fillTableJavascript(parent.prefix + "/stage/tasks", taskTableId, Some(stageId))
+        <h4>Tasks</h4> ++ taskTable
+
+      if (jsRenderingEnabled) {
+        content ++=
+          UIUtils.fillTableJavascript(parent.prefix + "/stage/tasks", taskTableId, Some(stageId))
+      }
 
       UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
         parent.headerTabs, parent)
