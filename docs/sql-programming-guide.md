@@ -142,7 +142,7 @@ case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt))
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -210,7 +210,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
 JavaSchemaRDD schemaPeople = sqlContext.applySchema(people, Person.class);
-schemaPeople.registerAsTable("people");
+schemaPeople.registerTempTable("people");
 
 // SQL can be run over RDDs that have been registered as tables.
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -248,7 +248,7 @@ people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
 # In future versions of PySpark we would like to add support for registering RDDs with other
 # datatypes as tables
 schemaPeople = sqlContext.inferSchema(people)
-schemaPeople.registerAsTable("people")
+schemaPeople.registerTempTable("people")
 
 # SQL can be run over SchemaRDDs that have been registered as a table.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -292,7 +292,7 @@ people.saveAsParquetFile("people.parquet")
 val parquetFile = sqlContext.parquetFile("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile")
+parquetFile.registerTempTable("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
@@ -314,7 +314,7 @@ schemaPeople.saveAsParquetFile("people.parquet");
 JavaSchemaRDD parquetFile = sqlContext.parquetFile("people.parquet");
 
 //Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile");
+parquetFile.registerTempTable("parquetFile");
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
   public String call(Row row) {
@@ -340,7 +340,7 @@ schemaPeople.saveAsParquetFile("people.parquet")
 parquetFile = sqlContext.parquetFile("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile");
+parquetFile.registerTempTable("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
@@ -378,7 +378,7 @@ people.printSchema()
 //  |-- name: StringType
 
 // Register this SchemaRDD as a table.
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -416,7 +416,7 @@ people.printSchema();
 //  |-- name: StringType
 
 // Register this JavaSchemaRDD as a table.
-people.registerAsTable("people");
+people.registerTempTable("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -455,7 +455,7 @@ people.printSchema()
 #  |-- name: StringType
 
 # Register this SchemaRDD as a table.
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 # SQL statements can be run by using the sql methods provided by sqlContext.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")

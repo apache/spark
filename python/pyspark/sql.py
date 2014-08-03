@@ -909,7 +909,7 @@ class SQLContext:
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> srdd = sqlCtx.inferSchema(allTypes)
-        >>> srdd.registerAsTable("allTypes")
+        >>> srdd.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
@@ -1486,19 +1486,23 @@ class SchemaRDD(RDD):
         """
         self._jschema_rdd.saveAsParquetFile(path)
 
-    def registerAsTable(self, name):
+    def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the L{SQLContext}
         that was used to create this SchemaRDD.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.registerAsTable("test")
+        >>> srdd.registerTempTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        self._jschema_rdd.registerAsTable(name)
+        self._jschema_rdd.registerTempTable(name)
+
+    def registerAsTable(self, name):
+        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this SchemaRDD into the specified table.

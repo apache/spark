@@ -83,9 +83,12 @@ private[sql] trait SchemaRDDLike {
    *
    * @group schema
    */
-  def registerAsTable(tableName: String): Unit = {
+  def registerTempTable(tableName: String): Unit = {
     sqlContext.registerRDDAsTable(baseSchemaRDD, tableName)
   }
+
+  @deprecated("Use registerTempTable instead of registerAsTable.", "1.1")
+  def registerAsTable(tableName: String): Unit = registerTempTable(tableName)
 
   /**
    * :: Experimental ::

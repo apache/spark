@@ -98,7 +98,7 @@ public class JavaApplySchemaSuite implements Serializable {
     StructType schema = DataType.createStructType(fields);
 
     JavaSchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD, schema);
-    schemaRDD.registerAsTable("people");
+    schemaRDD.registerTempTable("people");
     List<Row> actual = javaSqlCtx.sql("SELECT * FROM people").collect();
 
     List<Row> expected = new ArrayList<Row>(2);
@@ -149,14 +149,14 @@ public class JavaApplySchemaSuite implements Serializable {
     JavaSchemaRDD schemaRDD1 = javaSqlCtx.jsonRDD(jsonRDD);
     StructType actualSchema1 = schemaRDD1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
-    schemaRDD1.registerAsTable("jsonTable1");
+    schemaRDD1.registerTempTable("jsonTable1");
     List<Row> actual1 = javaSqlCtx.sql("select * from jsonTable1").collect();
     Assert.assertEquals(expectedResult, actual1);
 
     JavaSchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD, expectedSchema);
     StructType actualSchema2 = schemaRDD2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    schemaRDD1.registerAsTable("jsonTable2");
+    schemaRDD1.registerTempTable("jsonTable2");
     List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collect();
     Assert.assertEquals(expectedResult, actual2);
   }

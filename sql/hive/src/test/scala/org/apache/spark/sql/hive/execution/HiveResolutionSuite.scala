@@ -54,14 +54,14 @@ class HiveResolutionSuite extends HiveComparisonTest {
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerAsTable("caseSensitivityTest")
+      .registerTempTable("caseSensitivityTest")
 
     hql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
   }
 
   test("nested repeated resolution") {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
-      .registerAsTable("nestedRepeatedTest")
+     .registerTempTable("nestedRepeatedTest")
     assert(hql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }
 

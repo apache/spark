@@ -36,7 +36,7 @@ object RDDRelation {
     val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
-    rdd.registerAsTable("records")
+    rdd.registerTempTable("records")
 
     // Once tables have been registered, you can run SQL queries over them.
     println("Result of SELECT *:")
@@ -66,7 +66,7 @@ object RDDRelation {
     parquetFile.where('key === 1).select('value as 'a).collect().foreach(println)
 
     // These files can also be registered as tables.
-    parquetFile.registerAsTable("parquetFile")
+    parquetFile.registerTempTable("parquetFile")
     sql("SELECT * FROM parquetFile").collect().foreach(println)
   }
 }

@@ -183,7 +183,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -223,7 +223,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     // Access elements of a primitive array.
     checkAnswer(
@@ -291,7 +291,7 @@ class JsonSuite extends QueryTest {
 
   ignore("Complex field and type inferring (Ignored)") {
     val jsonSchemaRDD = jsonRDD(complexFieldAndType)
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
@@ -320,7 +320,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -374,7 +374,7 @@ class JsonSuite extends QueryTest {
 
   ignore("Type conflict in primitive field values (Ignored)") {
     val jsonSchemaRDD = jsonRDD(primitiveFieldValueTypeConflict)
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     // Right now, the analyzer does not promote strings in a boolean expreesion.
     // Number and Boolean conflict: resolve the type as boolean in this query.
@@ -445,7 +445,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -466,7 +466,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -494,7 +494,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
   }
 
   test("Loading a JSON dataset from a text file") {
@@ -514,7 +514,7 @@ class JsonSuite extends QueryTest {
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
-    jsonSchemaRDD.registerAsTable("jsonTable")
+    jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -546,7 +546,7 @@ class JsonSuite extends QueryTest {
 
     assert(schema === jsonSchemaRDD1.schema)
 
-    jsonSchemaRDD1.registerAsTable("jsonTable1")
+    jsonSchemaRDD1.registerTempTable("jsonTable1")
 
     checkAnswer(
       sql("select * from jsonTable1"),
@@ -563,7 +563,7 @@ class JsonSuite extends QueryTest {
 
     assert(schema === jsonSchemaRDD2.schema)
 
-    jsonSchemaRDD2.registerAsTable("jsonTable2")
+    jsonSchemaRDD2.registerTempTable("jsonTable2")
 
     checkAnswer(
       sql("select * from jsonTable2"),
