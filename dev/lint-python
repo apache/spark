@@ -23,14 +23,23 @@ PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 
 cd $SPARK_ROOT_DIR
 
-# See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 # Get pep8 at runtime so that we don't rely on it being installed on the build server.
-# TODOs:
-#  - Dynamically determine latest release version of pep8 and use that.
-#  - Download this from a more reliable source. (GitHub raw can be flaky, apparently. (?))
+#+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
+#+ TODOs:
+#+  - Dynamically determine latest release version of pep8 and use that.
+#+  - Download this from a more reliable source. (GitHub raw can be flaky, apparently. (?))
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8.py"
-curl --silent -o "$PEP8_SCRIPT_PATH" \
-    "https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/pep8.py"
+PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/pep8.py"
+
+curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
+curl_status=$?
+
+if [ $curl_status -ne 0 ]
+    then
+        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
+        exit $curl_status
+fi
+
 
 # There is no need to write this output to a file
 #+ first, but we do so so that the check status can
