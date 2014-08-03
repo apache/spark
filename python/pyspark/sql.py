@@ -1291,16 +1291,20 @@ class HiveContext(SQLContext):
 
     def hiveql(self, hqlQuery):
         """
-        Runs a query expressed in HiveQL, returning the result as
-        a L{SchemaRDD}.
+        DEPRECATED: Use sql()
         """
+        warnings.warn("hiveql() is deprecated as the sql function now parses using HiveQL by" +
+                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
+                      DeprecationWarning)
         return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery), self)
 
     def hql(self, hqlQuery):
         """
-        Runs a query expressed in HiveQL, returning the result as
-        a L{SchemaRDD}.
+        DEPRECATED: Use sql()
         """
+        warnings.warn("hql() is deprecated as the sql function now parses using HiveQL by" +
+                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
+                      DeprecationWarning)
         return self.hiveql(hqlQuery)
 
 
@@ -1313,16 +1317,16 @@ class LocalHiveContext(HiveContext):
     >>> import os
     >>> hiveCtx = LocalHiveContext(sc)
     >>> try:
-    ...     supress = hiveCtx.hql("DROP TABLE src")
+    ...     supress = hiveCtx.sql("DROP TABLE src")
     ... except Exception:
     ...     pass
     >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
     ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.hql(
+    >>> supress = hiveCtx.sql(
     ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.hql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
+    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
     ...        % kv1)
-    >>> results = hiveCtx.hql("FROM src SELECT value"
+    >>> results = hiveCtx.sql("FROM src SELECT value"
     ...      ).map(lambda r: int(r.value.split('_')[1]))
     >>> num = results.count()
     >>> reduce_sum = results.reduce(lambda x, y: x + y)

@@ -71,15 +71,29 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
+  // Change the default SQL dialect to HiveQL
+  override private[spark] def dialect: String = get(SQLConf.DIALECT, "hiveql")
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
-  /**
-   * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
-   */
+  override def sql(sqlText: String): SchemaRDD = {
+    // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
+    if (dialect == "sql") {
+      super.sql(sqlText)
+    } else if (dialect == "hiveql") {
+      new SchemaRDD(this, HiveQl.parseSql(sqlText))
+    }  else {
+      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+    }
+  }
+
+  @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
+             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
   def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
 
-  /** An alias for `hiveql`. */
+  @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
+             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
 
   /**
@@ -95,7 +109,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
-  protected val outputBuffer =  new java.io.OutputStream {
+  protected lazy val outputBuffer =  new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
@@ -125,7 +139,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
    * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
-   * set() or a SET command inside hql() or sql() will be set in the SQLConf *as well as*
+   * set() or a SET command inside sql() will be set in the SQLConf *as well as*
    * in the HiveConf.
    */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])

@@ -27,7 +27,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 class StatisticsSuite extends QueryTest {
 
   test("estimates the size of a test MetastoreRelation") {
-    val rdd = hql("""SELECT * FROM src""")
+    val rdd = sql("""SELECT * FROM src""")
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
@@ -45,7 +45,7 @@ class StatisticsSuite extends QueryTest {
         ct: ClassTag[_]) = {
       before()
 
-      var rdd = hql(query)
+      var rdd = sql(query)
 
       // Assert src has a size smaller than the threshold.
       val sizes = rdd.queryExecution.analyzed.collect {
@@ -65,8 +65,8 @@ class StatisticsSuite extends QueryTest {
       TestHive.settings.synchronized {
         val tmp = autoBroadcastJoinThreshold
 
-        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
-        rdd = hql(query)
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        rdd = sql(query)
         bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
@@ -74,7 +74,7 @@ class StatisticsSuite extends QueryTest {
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }
 
       after()
