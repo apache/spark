@@ -48,12 +48,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
     // Cache input RDD for speedup during multiple passes.
-    input.cache()
+    val retaggedInput = input.retag(classOf[LabeledPoint]).cache()
     logDebug("algo = " + strategy.algo)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
-    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, strategy)
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
 
@@ -70,7 +70,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // dummy value for top node (updated during first split calculation)
     val nodes = new Array[Node](maxNumNodes)
     // num features
-    val numFeatures = input.take(1)(0).features.size
+    val numFeatures = retaggedInput.take(1)(0).features.size
 
     // Calculate level for single group construction
 
@@ -107,7 +107,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       logDebug("#####################################")
 
       // Find best split for all nodes at a level.
-      val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities,
+      val splitsStatsForLevel = DecisionTree.findBestSplits(retaggedInput, parentImpurities,
         strategy, level, filters, splits, bins, maxLevelForSingleGroup)
 
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
