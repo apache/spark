@@ -136,8 +136,8 @@ class ExternalAppendOnlyMap[K, V, C](
       {
         // Claim up to double our current memory from the shuffle memory pool
         val currentMemory = currentMap.estimateSize()
-        val amountToGrab = 2 * currentMemory - myMemoryThreshold
-        val granted = shuffleMemoryManager.tryToAcquire(amountToGrab)
+        val amountToRequest = 2 * currentMemory - myMemoryThreshold
+        val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
         myMemoryThreshold += granted
         if (myMemoryThreshold <= currentMemory) {
           // We were granted too little memory to grow further (either tryToAcquire returned 0,
