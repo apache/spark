@@ -25,6 +25,8 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -114,21 +116,27 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
         // in Hive 0.13.
         // TODO: Generalize statistics collection.
+        // TODO: Can we use fs.getContentSummary?
+        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
+        // countFileSize to count the table size.
+        def countFileSize(fs: FileSystem, path: Path): Long = {
+          val fileStatus = fs.getFileStatus(path)
+          println(s"path: ${fileStatus.getPath}, size: ${fileStatus.getLen}")
+          val size = if (fileStatus.isDir) {
+            fs.listStatus(path).map(status => countFileSize(fs, status.getPath)).sum
+          } else {
+            fileStatus.getLen
+          }
+
+          size
+        }
+
         def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
           val path = table.getPath()
           var size: Long = 0L
           try {
             val fs = path.getFileSystem(conf)
-            // I am debugging jenkins. Need to remove the following logging entries!!!!
-            val fileStatus = fs.getFileStatus(path)
-            if (fileStatus.isDir) {
-              fs.listStatus(path).foreach(status =>
-                logInfo(s"${table.getTableName}, path: ${status.getPath}, size: ${status.getLen}"))
-            } else {
-              logInfo(
-                s"${table.getTableName}, path: ${fileStatus.getPath}, size: ${fileStatus.getLen}")
-            }
-            size = fs.getContentSummary(path).getLength()
+            size = countFileSize(fs, path)
           } catch {
             case e: Exception =>
               logWarning(
@@ -144,6 +152,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         val oldTotalSize =
           Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE)).map(_.toLong).getOrElse(0L)
         val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
+        println(
+          s"newTotalSize: ${newTotalSize}")
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
@@ -159,7 +169,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       }
       case otherRelation =>
         throw new NotImplementedError(
-          s"Analyzing a table other than a Hive table has not been implemented")
+          s"Analyze has only implemented for Hive tables, " +
+            s"but ${tableName} is a ${otherRelation.nodeName}")
     }
   }
 

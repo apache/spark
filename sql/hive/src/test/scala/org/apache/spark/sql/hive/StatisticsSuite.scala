@@ -31,46 +31,53 @@ class StatisticsSuite extends QueryTest {
       catalog.lookupRelation(None, tableName).statistics.sizeInBytes
 
     // Non-partitioned table
-    hql("CREATE TABLE srcToBeAnalyzed (key STRING, value STRING)").collect()
-    hql("INSERT INTO TABLE srcToBeAnalyzed SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE srcToBeAnalyzed SELECT * FROM src").collect()
+    hql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
+    hql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    assert(queryTotalSize("srcToBeAnalyzed") === defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
 
-    analyze("srcTobeAnalyzed")
+    analyze("analyzeTable")
 
-    assert(queryTotalSize("srcToBeAnalyzed") === BigInt(11624))
+    assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
-    hql("DROP TABLE srcToBeAnalyzed").collect()
+    hql("DROP TABLE analyzeTable").collect()
 
     // Partitioned table
     hql(
       """
-        |CREATE TABLE srcToBeAnalyzed_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
+        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
       """.stripMargin).collect()
     hql(
       """
-        |INSERT INTO TABLE srcToBeAnalyzed_part PARTITION (ds='2010-01-01')
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
         |SELECT * FROM src
       """.stripMargin).collect()
     hql(
       """
-        |INSERT INTO TABLE srcToBeAnalyzed_part PARTITION (ds='2010-01-02')
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
         |SELECT * FROM src
       """.stripMargin).collect()
     hql(
       """
-        |INSERT INTO TABLE srcToBeAnalyzed_part PARTITION (ds='2010-01-03')
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("srcToBeAnalyzed_part") === defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
 
-    analyze("srcToBeAnalyzed_part")
+    analyze("analyzeTable_part")
 
-    assert(queryTotalSize("srcToBeAnalyzed_part") === BigInt(17436))
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
-    hql("DROP TABLE srcToBeAnalyzed_part").collect()
+    hql("DROP TABLE analyzeTable_part").collect()
+
+    // Try to analyze a temp table
+    hql("""SELECT * FROM src""").registerTempTable("tempTable")
+    intercept[NotImplementedError] {
+      analyze("tempTable")
+    }
+    catalog.unregisterTable(None, "tempTable")
   }
 
   test("estimates the size of a test MetastoreRelation") {
