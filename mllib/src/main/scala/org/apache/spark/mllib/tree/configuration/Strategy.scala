@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.impurity.Impurity
@@ -86,7 +86,7 @@ class Strategy (
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
     this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
-      categoricalFeaturesInfo.map{ case (a, b) => (a.toInt, b.toInt) }.toMap)
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
 }
