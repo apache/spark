@@ -105,7 +105,11 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
-  serverChannel.socket.bind(new InetSocketAddress(port))
+  private def startService(port: Int) = {
+    serverChannel.socket.bind(new InetSocketAddress(port))
+    (serverChannel, port)
+  }
+  PortManager.startWithIncrements(port, 3, startService)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)

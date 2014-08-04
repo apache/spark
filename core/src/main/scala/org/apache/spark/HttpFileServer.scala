@@ -31,14 +31,18 @@ private[spark] class HttpFileServer(securityManager: SecurityManager) extends Lo
   var httpServer : HttpServer = null
   var serverUri : String = null
 
-  def initialize() {
+  def initialize(port: Option[Int]) {
     baseDir = Utils.createTempDir()
     fileDir = new File(baseDir, "files")
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(baseDir, securityManager)
+    httpServer = if (port.isEmpty) {
+      new HttpServer(baseDir, securityManager)
+    } else {
+      new HttpServer(baseDir, securityManager, port.get)
+    }
     httpServer.start()
     serverUri = httpServer.uri
     logDebug("HTTP file server started at: " + serverUri)
