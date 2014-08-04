@@ -133,3 +133,8 @@ class StreamingContext(object):
         finally:
             # Stop Callback server
             SparkContext._gateway.shutdown()
+
+    def checkpoint(self, directory):
+        """
+        """
+        self._jssc.checkpoint(directory)

@@ -37,7 +37,6 @@ class RDDFunction():
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
 
 
-
 def msDurationToString(ms):
     """
     Returns a human-readable string representing a duration such as "35ms"
