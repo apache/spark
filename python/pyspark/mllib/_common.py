@@ -35,8 +35,7 @@ different data types. These include:
 
 
 # Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
-# such as _dot and _serialize_double_vector, start to support scipy.sparse
-# matrices.
+# such as _dot and _serialize_double_vector, start to support scipy.sparse matrices.
 
 _have_scipy = False
 _scipy_issparse = None
@@ -165,8 +164,7 @@ def _serialize_sparse_vector(v):
     header[1] = nonzeros
     _copyto(v.indices, buffer=ba, offset=9, shape=[nonzeros], dtype=int32)
     values_offset = 9 + 4 * nonzeros
-    _copyto(v.values, buffer=ba, offset=values_offset,
-            shape=[nonzeros], dtype=float64)
+    _copyto(v.values, buffer=ba, offset=values_offset, shape=[nonzeros], dtype=float64)
     return ba
 
 
@@ -190,11 +188,9 @@ def _deserialize_double(ba, offset=0):
     True
     """
     if type(ba) != bytearray:
-        raise TypeError(
-            "_deserialize_double called on a %s; wanted bytearray" % type(ba))
+        raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
     if len(ba) - offset != 8:
-        raise TypeError(
-            "_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
+        raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
     return struct.unpack("d", ba[offset:])[0]
 
 
@@ -250,8 +246,7 @@ def _deserialize_sparse_vector(ba, offset=0):
         raise TypeError("_deserialize_sparse_vector called on bytearray "
                         "with wrong length")
     indices = _deserialize_numpy_array([nonzeros], ba, offset + 9, dtype=int32)
-    values = _deserialize_numpy_array(
-        [nonzeros], ba, offset + 9 + 4 * nonzeros, dtype=float64)
+    values = _deserialize_numpy_array([nonzeros], ba, offset + 9 + 4 * nonzeros, dtype=float64)
     return SparseVector(int(size), indices, values)
 
 
@@ -330,8 +325,7 @@ def _deserialize_labeled_point(ba, offset=0):
     if type(ba) != bytearray:
         raise TypeError("Expecting a bytearray but got %s" % type(ba))
     if ba[offset] != LABELED_POINT_MAGIC:
-        raise TypeError("Expecting magic number %d but got %d" %
-                        (LABELED_POINT_MAGIC, ba[0]))
+        raise TypeError("Expecting magic number %d but got %d" % (LABELED_POINT_MAGIC, ba[0]))
     label = ndarray(shape=[1], buffer=ba, offset=offset + 1, dtype=float64)[0]
     features = _deserialize_double_vector(ba, offset + 9)
     return LabeledPoint(label, features)
@@ -345,8 +339,7 @@ def _copyto(array, buffer, offset, shape, dtype):
     TODO: In the future this could use numpy.copyto on NumPy 1.7+, but
     we should benchmark that to see whether it provides a benefit.
     """
-    temp_array = ndarray(
-        shape=shape, buffer=buffer, offset=offset, dtype=dtype, order='C')
+    temp_array = ndarray(shape=shape, buffer=buffer, offset=offset, dtype=dtype, order='C')
     temp_array[...] = array
 
 
@@ -403,8 +396,7 @@ def _linear_predictor_typecheck(x, coeffs):
     elif isinstance(x, RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
-        raise TypeError(
-            "Argument of type " + type(x).__name__ + " unsupported")
+        raise TypeError("Argument of type " + type(x).__name__ + " unsupported")
 
 
 # If we weren't given initial weights, take a zero vector of the appropriate
@@ -500,8 +492,7 @@ def _convert_vector(vec):
             assert vec.shape[1] == 1, "Expected column vector"
             csc = vec.tocsc()
             return SparseVector(vec.shape[0], csc.indices, csc.data)
-    raise TypeError(
-        "Expected NumPy array, SparseVector, or scipy.sparse matrix")
+    raise TypeError("Expected NumPy array, SparseVector, or scipy.sparse matrix")
 
 
 def _squared_distance(v1, v2):
@@ -554,8 +545,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

@@ -97,8 +97,7 @@ from pyspark.serializers import read_int, PickleSerializer
 pickleSer = PickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
-# the local accumulator updates back to the driver program at the end of a
-# task.
+# the local accumulator updates back to the driver program at the end of a task.
 _accumulatorRegistry = {}
 
 
@@ -141,16 +140,14 @@ class Accumulator(object):
     def value(self):
         """Get the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception(
-                "Accumulator.value cannot be accessed inside tasks")
+            raise Exception("Accumulator.value cannot be accessed inside tasks")
         return self._value
 
     @value.setter
     def value(self, value):
         """Sets the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception(
-                "Accumulator.value cannot be accessed inside tasks")
+            raise Exception("Accumulator.value cannot be accessed inside tasks")
         self._value = value
 
     def add(self, term):
@@ -225,8 +222,7 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
         while not self.server.server_shutdown:
-            # Poll every 1 second for new data -- don't block in case of
-            # shutdown.
+            # Poll every 1 second for new data -- don't block in case of shutdown.
             r, _, _ = select.select([self.rfile], [], [], 1)
             if self.rfile in r:
                 num_updates = read_int(self.rfile)

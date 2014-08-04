@@ -44,8 +44,7 @@ class LabeledPoint(object):
         elif type(features) == list:
             self.features = array(features)
         else:
-            raise TypeError(
-                "Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
+            raise TypeError("Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
 
     def __str__(self):
         return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
@@ -248,8 +247,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

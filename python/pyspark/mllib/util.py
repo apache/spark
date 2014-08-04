@@ -127,8 +127,7 @@ class MLUtils:
         parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
         if numFeatures <= 0:
             parsed.cache()
-            numFeatures = parsed.map(
-                lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
+            numFeatures = parsed.map(lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
@@ -183,8 +182,7 @@ class MLUtils:
         (0.0,[1.01,2.02,3.03])
         """
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
-        jSerialized = sc._jvm.PythonMLLibAPI().loadLabeledPoints(
-            sc._jsc, path, minPartitions)
+        jSerialized = sc._jvm.PythonMLLibAPI().loadLabeledPoints(sc._jsc, path, minPartitions)
         serialized = RDD(jSerialized, sc, NoOpSerializer())
         return serialized.map(lambda bytes: _deserialize_labeled_point(bytearray(bytes)))
 
@@ -196,8 +194,7 @@ def _test():
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

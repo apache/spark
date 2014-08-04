@@ -39,8 +39,7 @@ add_files = (os.environ.get("ADD_FILES").split(',')
              if os.environ.get("ADD_FILES") is not None else None)
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
-    SparkContext.setSystemProperty(
-        "spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
+    SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
 sc = SparkContext(appName="PySparkShell", pyFiles=add_files)
 

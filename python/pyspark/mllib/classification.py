@@ -190,8 +190,7 @@ class NaiveBayes(object):
         """
         sc = data.context
         dataBytes = _get_unmangled_labeled_point_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(
-            dataBytes._jrdd, lambda_)
+        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),
             _deserialize_double_vector(ans[1]),
@@ -202,8 +201,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

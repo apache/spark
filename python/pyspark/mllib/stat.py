@@ -80,15 +80,13 @@ class Statistics(object):
             try:
                 Xser = _get_unmangled_double_vector_rdd(x)
             except TypeError:
-                raise TypeError(
-                    "corr called on a single RDD not consisted of Vectors.")
+                raise TypeError("corr called on a single RDD not consisted of Vectors.")
             resultMat = sc._jvm.PythonMLLibAPI().corr(Xser._jrdd, method)
             return _deserialize_double_matrix(resultMat)
         else:
             xSer = _get_unmangled_rdd(x, _serialize_double)
             ySer = _get_unmangled_rdd(y, _serialize_double)
-            result = sc._jvm.PythonMLLibAPI().corr(
-                xSer._jrdd, ySer._jrdd, method)
+            result = sc._jvm.PythonMLLibAPI().corr(xSer._jrdd, ySer._jrdd, method)
             return result
 
 
@@ -97,8 +95,7 @@ def _test():
     from pyspark import SparkContext
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

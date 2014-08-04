@@ -227,12 +227,10 @@ class TestAddFile(PySparkTestCase):
         def func():
             from userlib import UserClass
         self.assertRaises(ImportError, func)
-        path = os.path.join(
-            SPARK_HOME, "python/test_support/userlib-0.1-py2.7.egg")
+        path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1-py2.7.egg")
         self.sc.addPyFile(path)
         from userlib import UserClass
-        self.assertEqual(
-            "Hello World from inside a package!", UserClass().hello())
+        self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
 
 class TestRDDFunctions(PySparkTestCase):
@@ -240,8 +238,7 @@ class TestRDDFunctions(PySparkTestCase):
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
         self.sc.stop()
-        self.assertRaises(
-            Exception, lambda: SparkContext("an-invalid-master-name"))
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
         self.sc = SparkContext("local")
 
     def test_save_as_textfile_with_unicode(self):
@@ -338,8 +335,7 @@ class TestInputFormat(PySparkTestCase):
         PySparkTestCase.setUp(self)
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
-        self.sc._jvm.WriteInputFormatTestDataGenerator.generateData(
-            self.tempdir.name, self.sc._jsc)
+        self.sc._jvm.WriteInputFormatTestDataGenerator.generateData(self.tempdir.name, self.sc._jsc)
 
     def tearDown(self):
         PySparkTestCase.tearDown(self)
@@ -350,15 +346,13 @@ class TestInputFormat(PySparkTestCase):
         ints = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfint/",
                                            "org.apache.hadoop.io.IntWritable",
                                            "org.apache.hadoop.io.Text").collect())
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'),
-              (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
         doubles = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfdouble/",
                                               "org.apache.hadoop.io.DoubleWritable",
                                               "org.apache.hadoop.io.Text").collect())
-        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'),
-              (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
+        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
         self.assertEqual(doubles, ed)
 
         bytes = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfbytes/",
@@ -386,8 +380,7 @@ class TestInputFormat(PySparkTestCase):
         bools = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfbool/",
                                             "org.apache.hadoop.io.IntWritable",
                                             "org.apache.hadoop.io.BooleanWritable").collect())
-        eb = [(1, False), (1, True), (2, False),
-              (2, False), (2, True), (3, True)]
+        eb = [(1, False), (1, True), (2, False), (2, False), (2, True), (3, True)]
         self.assertEqual(bools, eb)
 
         nulls = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfnull/",
@@ -447,8 +440,7 @@ class TestInputFormat(PySparkTestCase):
                                          "org.apache.hadoop.mapred.SequenceFileInputFormat",
                                          "org.apache.hadoop.io.IntWritable",
                                          "org.apache.hadoop.io.Text").collect())
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'),
-              (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
@@ -467,8 +459,7 @@ class TestInputFormat(PySparkTestCase):
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
             "org.apache.hadoop.io.Text").collect())
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'),
-              (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
@@ -541,21 +532,18 @@ class TestOutputFormat(PySparkTestCase):
 
     def test_sequencefiles(self):
         basepath = self.tempdir.name
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'),
-              (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.sc.parallelize(ei).saveAsSequenceFile(basepath + "/sfint/")
         ints = sorted(self.sc.sequenceFile(basepath + "/sfint/").collect())
         self.assertEqual(ints, ei)
 
-        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'),
-              (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
+        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
         self.sc.parallelize(ed).saveAsSequenceFile(basepath + "/sfdouble/")
         doubles = sorted(
             self.sc.sequenceFile(basepath + "/sfdouble/").collect())
         self.assertEqual(doubles, ed)
 
-        ebs = [(1, bytearray(b'\x00\x07spam\x08')),
-               (2, bytearray(b'\x00\x07spam\x08'))]
+        ebs = [(1, bytearray(b'\x00\x07spam\x08')), (2, bytearray(b'\x00\x07spam\x08'))]
         self.sc.parallelize(ebs).saveAsSequenceFile(basepath + "/sfbytes/")
         bytes = sorted(self.sc.sequenceFile(basepath + "/sfbytes/").collect())
         self.assertEqual(bytes, ebs)
@@ -567,8 +555,7 @@ class TestOutputFormat(PySparkTestCase):
         text = sorted(self.sc.sequenceFile(basepath + "/sftext/").collect())
         self.assertEqual(text, et)
 
-        eb = [(1, False), (1, True), (2, False),
-              (2, False), (2, True), (3, True)]
+        eb = [(1, False), (1, True), (2, False), (2, False), (2, True), (3, True)]
         self.sc.parallelize(eb).saveAsSequenceFile(basepath + "/sfbool/")
         bools = sorted(self.sc.sequenceFile(basepath + "/sfbool/").collect())
         self.assertEqual(bools, eb)
@@ -686,8 +673,7 @@ class TestOutputFormat(PySparkTestCase):
             "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
             keyConverter="org.apache.spark.api.python.TestOutputKeyConverter",
             valueConverter="org.apache.spark.api.python.TestOutputValueConverter")
-        converted = sorted(
-            self.sc.sequenceFile(basepath + "/converters/").collect())
+        converted = sorted(self.sc.sequenceFile(basepath + "/converters/").collect())
         expected = [(u'1', 3.0),
                     (u'2', 1.0),
                     (u'3', 2.0)]
@@ -700,21 +686,19 @@ class TestOutputFormat(PySparkTestCase):
         data = zip(x, y)
         rdd = self.sc.parallelize(x).zip(self.sc.parallelize(y))
         rdd.saveAsSequenceFile(basepath + "/reserialize/sequence")
-        result1 = sorted(
-            self.sc.sequenceFile(basepath + "/reserialize/sequence").collect())
+        result1 = sorted(self.sc.sequenceFile(basepath + "/reserialize/sequence").collect())
         self.assertEqual(result1, data)
 
-        rdd.saveAsHadoopFile(basepath + "/reserialize/hadoop",
-                             "org.apache.hadoop.mapred.SequenceFileOutputFormat")
-        result2 = sorted(
-            self.sc.sequenceFile(basepath + "/reserialize/hadoop").collect())
+        rdd.saveAsHadoopFile(
+            basepath + "/reserialize/hadoop",
+            "org.apache.hadoop.mapred.SequenceFileOutputFormat")
+        result2 = sorted(self.sc.sequenceFile(basepath + "/reserialize/hadoop").collect())
         self.assertEqual(result2, data)
 
         rdd.saveAsNewAPIHadoopFile(
             basepath + "/reserialize/newhadoop",
             "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
-        result3 = sorted(
-            self.sc.sequenceFile(basepath + "/reserialize/newhadoop").collect())
+        result3 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newhadoop").collect())
         self.assertEqual(result3, data)
 
         conf4 = {
@@ -723,8 +707,7 @@ class TestOutputFormat(PySparkTestCase):
             "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
             "mapred.output.dir": basepath + "/reserialize/dataset"}
         rdd.saveAsHadoopDataset(conf4)
-        result4 = sorted(
-            self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
+        result4 = sorted(self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
         self.assertEqual(result4, data)
 
         conf5 = {"mapreduce.outputformat.class":
@@ -733,14 +716,12 @@ class TestOutputFormat(PySparkTestCase):
                  "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
                  "mapred.output.dir": basepath + "/reserialize/newdataset"}
         rdd.saveAsNewAPIHadoopDataset(conf5)
-        result5 = sorted(
-            self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
+        result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
 
     def test_unbatched_save_and_read(self):
         basepath = self.tempdir.name
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'),
-              (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
@@ -897,8 +878,7 @@ class TestSparkSubmit(unittest.TestCase):
 
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
-        self.sparkSubmit = os.path.join(
-            os.environ.get("SPARK_HOME"), "bin", "spark-submit")
+        self.sparkSubmit = os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit")
 
     def tearDown(self):
         shutil.rmtree(self.programDir)
@@ -935,8 +915,7 @@ class TestSparkSubmit(unittest.TestCase):
             |sc = SparkContext()
             |print sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect()
             """)
-        proc = subprocess.Popen(
-            [self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out)
@@ -952,8 +931,7 @@ class TestSparkSubmit(unittest.TestCase):
             |sc = SparkContext()
             |print sc.parallelize([1, 2, 3]).map(foo).collect()
             """)
-        proc = subprocess.Popen(
-            [self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[3, 6, 9]", out)
@@ -971,8 +949,9 @@ class TestSparkSubmit(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
-                                stdout=subprocess.PIPE)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--py-files", zip, script],
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)

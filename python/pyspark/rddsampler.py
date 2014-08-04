@@ -31,8 +31,7 @@ class RDDSamplerBase(object):
                 "Falling back to default random generator for sampling.")
             self._use_numpy = False
 
-        self._seed = seed if seed is not None else random.randint(
-            0, sys.maxint)
+        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
         self._withReplacement = withReplacement
         self._random = None
         self._split = None
@@ -87,8 +86,7 @@ class RDDSamplerBase(object):
 
     def shuffle(self, vals):
         if self._random is None:
-            # this should only ever called on the master so
-            self.initRandomGenerator(0)
+            self.initRandomGenerator(0)  # this should only ever called on the master so
             # the split does not matter
 
         if self._use_numpy:
