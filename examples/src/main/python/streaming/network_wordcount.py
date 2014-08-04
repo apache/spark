@@ -14,12 +14,10 @@ if __name__ == "__main__":
     ssc = StreamingContext(conf=conf, duration=Seconds(1))
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
-    fm_lines = lines.flatMap(lambda x: x.split(" "))
-    mapped_lines = fm_lines.map(lambda x: (x, 1))
-    reduced_lines = mapped_lines.reduceByKey(add)
+    words = lines.flatMap(lambda line: line.split(" "))
+    mapped_words = words.map(lambda word: (word, 1))
+    count = mapped_words.reduceByKey(add)
 
-    reduced_lines.pyprint()
-    count_lines = mapped_lines.count()
-    count_lines.pyprint()
+    count.pyprint()
     ssc.start()
     ssc.awaitTermination()
