@@ -109,7 +109,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     serverChannel.socket.bind(new InetSocketAddress(port))
     (serverChannel, port)
   }
-  PortManager.startWithIncrements(port, 3, startService)
+  Utils.startServiceOnPort(port, 3, startService)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)

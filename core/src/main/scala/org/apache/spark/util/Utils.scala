@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL, URLConnection}
+import java.net._
 import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
@@ -1329,6 +1329,38 @@ private[spark] object Utils extends Logging {
     conf.getAll
       .filter { case (k, _) => filterKey(k) }
       .map { case (k, v) => s"-D$k=$v" }
+  }
+
+  /**
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt.
+   *
+   * @param startPort The initial port to start the service on.
+   * @param maxRetries Maximum number of retries to attempt.
+   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   * @throws SparkException When unable to start service in the given number of attempts
+   * @return
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
+      maxRetries: Int,
+      startService: Int => (T, Int)): (T, Int) = {
+    for (offset <- 0 to maxRetries) {
+      val tryPort = (startPort + offset) % 65536
+      try {
+        return startService(tryPort)
+      } catch {
+        case e: BindException =>
+          if (!e.getMessage.contains("Address already in use") || offset >= maxRetries) {
+            throw e
+          }
+          logInfo("Could not bind on port: " + tryPort + ". Attempting port " + (tryPort + 1))
+      }
+    }
+    // Should never happen
+    throw new SparkException(s"Couldn't start service on port $startPort")
   }
 
 }
