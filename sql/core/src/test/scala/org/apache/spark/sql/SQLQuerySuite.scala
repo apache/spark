@@ -54,7 +54,7 @@ class SQLQuerySuite extends QueryTest {
 
   test("SPARK-2686 Added Parser of SQL LENGTH()") {
     checkAnswer(
-       sql("SELECT char_length(key) as keylen from testData where key = 100"), 3)
+       sql("SELECT char_len(key) as keylen from testData where key = 100"), 3)
     checkAnswer(
       sql("SELECT len(key), count(*) as cnt from testData where key <= 100 group by len(key)"),
       Seq(Seq(1,9),Seq(2,90), Seq(3,1)))
@@ -66,15 +66,15 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT max(LENGTH(s)) FROM nullableRepeatedData"), 4)
   }
 
-  test("SPARK-2686 Added Parser of SQL OCTET_LENGTH()") {
+  test("SPARK-2686 Added Parser of SQL OCTET_LEN()") {
     checkAnswer(
-      sql("SELECT octet_length(s) from repeatedData"), Seq(Seq(4),Seq(4)))
+      sql("SELECT octet_len(s) from repeatedData"), Seq(Seq(4),Seq(4)))
     checkAnswer(
-      sql("SELECT octet_length(s,'UTF-8') from repeatedData"), Seq(Seq(4),Seq(4)))
+      sql("SELECT octet_len(s,'UTF-8') from repeatedData"), Seq(Seq(4),Seq(4)))
     checkAnswer(
-      sql("SELECT max(octet_length(s,'UTF-8')) from nullStrings"), 3)
+      sql("SELECT max(octet_len(s,'UTF-8')) from nullStrings"), 3)
     checkAnswer(
-      sql("SELECT octet_length('a','ISO-8859-1') + octet_length('abcde','ISO-8859-1') FROM testData limit 1"), 6)
+      sql("SELECT octet_len('a','ISO-8859-1') + octet_len('abcde','ISO-8859-1') FROM testData limit 1"), 6)
   }
 
   test("index into array") {
