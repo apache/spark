@@ -560,7 +560,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.emittedTaskSizeWarning)
   }
 
-  test("speculative and noPref task should be scheduled after node-local but before rack-local") {
+  test("speculative and noPref task should be scheduled after node-local") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
     val taskSet = FakeTask.createTaskSet(4,
@@ -584,6 +584,27 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     clock.advance(LOCALITY_WAIT * 3)
     // schedule non-local tasks
     assert(manager.resourceOffer("execB", "host2", ANY).get.index === 3)
+  }
+
+  test("node-local tasks should be scheduled right away when there are only node-local and no-preference tasks") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(),
+      Seq(TaskLocation("host3")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // node-local tasks are scheduled without delay
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execA", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL).get.index === 3)
+    assert(manager.resourceOffer("execA", "host3", NODE_LOCAL) === None)
+
+    // schedule no-preference after node local ones
+    assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

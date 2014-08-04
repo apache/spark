@@ -114,8 +114,6 @@ private[spark] class TaskSetManager(
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
-  private var hasNodeLocalOnlyTasks = false
-
   // Set of pending tasks for each rack -- similar to the above.
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
@@ -191,9 +189,6 @@ private[spark] class TaskSetManager(
         hadAliveLocations = true
       }
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
-      if (loc.executorId == None) {
-        hasNodeLocalOnlyTasks = true
-      }
       for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
         if(sched.hasHostAliveOnRack(rack)){
