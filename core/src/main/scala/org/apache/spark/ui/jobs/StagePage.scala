@@ -52,7 +52,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = listener.stageIdToAccumulables(stageId)
+      val accumulables = listener.stageIdToData(stageId).accumulables
       val hasInput = stageData.inputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0

@@ -920,7 +920,7 @@ class DAGScheduler(
               val name = acc.name.get
               val stringPartialValue = "%s".format(partialValue)
               val stringValue = "%s".format(acc.value)
-              stageToInfos(stage).accumulables(id) = AccumulableInfo(id, name, stringValue)
+              stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
               event.taskInfo.accumulables +=
                 AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
             }

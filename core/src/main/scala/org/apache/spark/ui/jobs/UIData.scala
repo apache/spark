@@ -51,7 +51,7 @@ private[jobs] object UIData {
     var schedulingPool: String = ""
     var description: Option[String] = None
 
-    var accumulables = HashMap[Long, AccumulableInfo]
+    var accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
   }
