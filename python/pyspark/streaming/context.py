@@ -17,11 +17,7 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
-<<<<<<< HEAD
 
-import time
-=======
->>>>>>> Kill py4j callback server properly
 
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
