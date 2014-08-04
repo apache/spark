@@ -138,8 +138,7 @@ def manager():
                 try:
                     os.kill(worker_pid, signal.SIGKILL)
                 except OSError:
-                    pass # process already died
-
+                    pass  # process already died
 
             if listen_sock in ready_fds:
                 sock, addr = listen_sock.accept()

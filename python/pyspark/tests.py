@@ -840,12 +840,15 @@ class TestDaemon(unittest.TestCase):
 
 
 class TestWorker(PySparkTestCase):
+
     def test_cancel_task(self):
         temp = tempfile.NamedTemporaryFile(delete=True)
         temp.close()
         path = temp.name
+
         def sleep(x):
-            import os, time
+            import os
+            import time
             with open(path, 'w') as f:
                 f.write("%d %d" % (os.getppid(), os.getpid()))
             time.sleep(100)
@@ -875,7 +878,7 @@ class TestWorker(PySparkTestCase):
                 os.kill(worker_pid, 0)
                 time.sleep(0.1)
             except OSError:
-                break # worker was killed
+                break  # worker was killed
         else:
             self.fail("worker has not been killed after 5 seconds")
 
@@ -885,7 +888,7 @@ class TestWorker(PySparkTestCase):
             self.fail("daemon had been killed")
 
     def test_fd_leak(self):
-        N = 1100 # fd limit is 1024 by default
+        N = 1100  # fd limit is 1024 by default
         rdd = self.sc.parallelize(range(N), N)
         self.assertEquals(N, rdd.count())
 
