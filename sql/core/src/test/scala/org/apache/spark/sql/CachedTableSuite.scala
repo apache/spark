@@ -78,7 +78,7 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("SELECT Star Cached Table") {
-    TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
+    TestSQLContext.sql("SELECT * FROM testData").registerTempTable("selectStar")
     TestSQLContext.cacheTable("selectStar")
     TestSQLContext.sql("SELECT * FROM selectStar WHERE key = 1").collect()
     TestSQLContext.uncacheTable("selectStar")

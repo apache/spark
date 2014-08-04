@@ -32,7 +32,8 @@ rem Test that an argument was given
 if not "x%1"=="x" goto arg_given
   echo Usage: run-example ^<example-class^> [example-args]
   echo   - set MASTER=XX to use a specific master
-  echo   - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)
+  echo   - can use abbreviated example class name relative to com.apache.spark.examples
+  echo      (e.g. SparkPi, mllib.LinearRegression, streaming.KinesisWordCountASL)
   goto exit
 :arg_given
 

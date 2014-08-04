@@ -28,8 +28,8 @@ object NamedExpression {
 }
 
 /**
- * A globally (within this JVM) id for a given named expression.
- * Used to identify with attribute output by a relation is being
+ * A globally unique (within this JVM) id for a given named expression.
+ * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
  */
 case class ExprId(id: Long)
@@ -134,7 +134,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
-  override def withNullability(newNullability: Boolean) = {
+  override def withNullability(newNullability: Boolean): AttributeReference = {
     if (nullable == newNullability) {
       this
     } else {

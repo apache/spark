@@ -56,7 +56,7 @@ private[sql] trait SchemaRDDLike {
     // happen right away to let these side effects take place eagerly.
     case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
       queryExecution.toRdd
-      SparkLogicalPlan(queryExecution.executedPlan)
+      SparkLogicalPlan(queryExecution.executedPlan)(sqlContext)
     case _ =>
       baseLogicalPlan
   }
@@ -83,9 +83,12 @@ private[sql] trait SchemaRDDLike {
    *
    * @group schema
    */
-  def registerAsTable(tableName: String): Unit = {
+  def registerTempTable(tableName: String): Unit = {
     sqlContext.registerRDDAsTable(baseSchemaRDD, tableName)
   }
+
+  @deprecated("Use registerTempTable instead of registerAsTable.", "1.1")
+  def registerAsTable(tableName: String): Unit = registerTempTable(tableName)
 
   /**
    * :: Experimental ::
@@ -123,9 +126,15 @@ private[sql] trait SchemaRDDLike {
   def saveAsTable(tableName: String): Unit =
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
 
-  /** Returns the output schema in the tree format. */
-  def schemaString: String = queryExecution.analyzed.schemaString
+  /** Returns the schema as a string in the tree format.
+   *
+   * @group schema
+   */
+  def schemaString: String = baseSchemaRDD.schema.treeString
 
-  /** Prints out the schema in the tree format. */
+  /** Prints out the schema.
+   *
+   * @group schema
+   */
   def printSchema(): Unit = println(schemaString)
 }

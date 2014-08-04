@@ -136,13 +136,13 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext.createSchemaRDD
 
 // Define the schema using a case class.
-// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit, 
+// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit,
 // you can use custom classes that implement the Product interface.
 case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt))
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -210,7 +210,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
 JavaSchemaRDD schemaPeople = sqlContext.applySchema(people, Person.class);
-schemaPeople.registerAsTable("people");
+schemaPeople.registerTempTable("people");
 
 // SQL can be run over RDDs that have been registered as tables.
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -248,7 +248,7 @@ people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
 # In future versions of PySpark we would like to add support for registering RDDs with other
 # datatypes as tables
 schemaPeople = sqlContext.inferSchema(people)
-schemaPeople.registerAsTable("people")
+schemaPeople.registerTempTable("people")
 
 # SQL can be run over SchemaRDDs that have been registered as a table.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -292,7 +292,7 @@ people.saveAsParquetFile("people.parquet")
 val parquetFile = sqlContext.parquetFile("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile")
+parquetFile.registerTempTable("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
@@ -314,7 +314,7 @@ schemaPeople.saveAsParquetFile("people.parquet");
 JavaSchemaRDD parquetFile = sqlContext.parquetFile("people.parquet");
 
 //Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile");
+parquetFile.registerTempTable("parquetFile");
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
   public String call(Row row) {
@@ -340,7 +340,7 @@ schemaPeople.saveAsParquetFile("people.parquet")
 parquetFile = sqlContext.parquetFile("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile");
+parquetFile.registerTempTable("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
@@ -378,7 +378,7 @@ people.printSchema()
 //  |-- name: StringType
 
 // Register this SchemaRDD as a table.
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -416,7 +416,7 @@ people.printSchema();
 //  |-- name: StringType
 
 // Register this JavaSchemaRDD as a table.
-people.registerAsTable("people");
+people.registerTempTable("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -455,7 +455,7 @@ people.printSchema()
 #  |-- name: StringType
 
 # Register this SchemaRDD as a table.
-people.registerAsTable("people")
+people.registerTempTable("people")
 
 # SQL statements can be run by using the sql methods provided by sqlContext.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -487,19 +487,19 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can also experiment with the `LocalHiveContext`,
-which is similar to `HiveContext`, but creates a local copy of the `metastore` and `warehouse`
-automatically.
+not have an existing Hive deployment can still create a HiveContext.  When not configured by the
+hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
+directory.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
 val hiveContext = new org.apache.spark.sql.hive.HiveContext(sc)
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-hiveContext.hql("FROM src SELECT key, value").collect().foreach(println)
+hiveContext.sql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
@@ -515,11 +515,11 @@ expressed in HiveQL.
 // sc is an existing JavaSparkContext.
 JavaHiveContext hiveContext = new org.apache.spark.sql.hive.api.java.HiveContext(sc);
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
 // Queries are expressed in HiveQL.
-Row[] results = hiveContext.hql("FROM src SELECT key, value").collect();
+Row[] results = hiveContext.sql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
@@ -537,17 +537,16 @@ expressed in HiveQL.
 from pyspark.sql import HiveContext
 hiveContext = HiveContext(sc)
 
-hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = hiveContext.hql("FROM src SELECT key, value").collect()
+results = hiveContext.sql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
 </div>
 </div>
-
 
 # Writing Language-Integrated Relational Queries
 
@@ -574,3 +573,209 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 [ScalaDoc](api/scala/index.html#org.apache.spark.sql.SchemaRDD).
 
 <!-- TODO: Include the table of operations here. -->
+
+## Running the Thrift JDBC server
+
+The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
+(https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
+the JDBC server with the beeline script comes with either Spark or Hive 0.12.  In order to use Hive
+you must first run '`sbt/sbt -Phive-thriftserver assembly/assembly`' (or use `-Phive-thriftserver`
+for maven).
+
+To start the JDBC server, run the following in the Spark directory:
+
+    ./sbin/start-thriftserver.sh
+
+The default port the server listens on is 10000.  To listen on customized host and port, please set
+the `HIVE_SERVER2_THRIFT_PORT` and `HIVE_SERVER2_THRIFT_BIND_HOST` environment variables. You may
+run `./sbin/start-thriftserver.sh --help` for a complete list of all available options.  Now you can
+use beeline to test the Thrift JDBC server:
+
+    ./bin/beeline
+
+Connect to the JDBC server in beeline with:
+
+    beeline> !connect jdbc:hive2://localhost:10000
+
+Beeline will ask you for a username and password. In non-secure mode, simply enter the username on
+your machine and a blank password. For secure mode, please follow the instructions given in the
+[beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients)
+
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+
+You may also use the beeline script comes with Hive.
+
+### Migration Guide for Shark Users
+
+#### Reducer number
+
+In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark
+SQL deprecates this property by a new property `spark.sql.shuffle.partitions`, whose default value
+is 200. Users may customize this property via `SET`:
+
+```
+SET spark.sql.shuffle.partitions=10;
+SELECT page, count(*) c FROM logs_last_month_cached
+GROUP BY page ORDER BY c DESC LIMIT 10;
+```
+
+You may also put this property in `hive-site.xml` to override the default value.
+
+For now, the `mapred.reduce.tasks` property is still recognized, and is converted to
+`spark.sql.shuffle.partitions` automatically.
+
+#### Caching
+
+The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no
+longer automcatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
+let user control table caching explicitly:
+
+```
+CACHE TABLE logs_last_month;
+UNCACHE TABLE logs_last_month;
+```
+
+**NOTE** `CACHE TABLE tbl` is lazy, it only marks table `tbl` as "need to by cached if necessary",
+but doesn't actually cache it until a query that touches `tbl` is executed. To force the table to be
+cached, you may simply count the table immediately after executing `CACHE TABLE`:
+
+```
+CACHE TABLE logs_last_month;
+SELECT COUNT(1) FROM logs_last_month;
+```
+
+Several caching related features are not supported yet:
+
+* User defined partition level cache eviction policy
+* RDD reloading
+* In-memory cache write through policy
+
+### Compatibility with Apache Hive
+
+#### Deploying in Exising Hive Warehouses
+
+Spark SQL Thrift JDBC server is designed to be "out of the box" compatible with existing Hive
+installations. You do not need to modify your existing Hive Metastore or change the data placement
+or partitioning of your tables.
+
+#### Supported Hive Features
+
+Spark SQL supports the vast majority of Hive features, such as:
+
+* Hive query statements, including:
+ * `SELECT`
+ * `GROUP BY
+ * `ORDER BY`
+ * `CLUSTER BY`
+ * `SORT BY`
+* All Hive operators, including:
+ * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+ * Arthimatic operators (`+`, `-`, `*`, `/`, `%`, etc)
+ * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
+ * Complex type constructors
+ * Mathemtatical functions (`sign`, `ln`, `cos`, etc)
+ * String functions (`instr`, `length`, `printf`, etc)
+* User defined functions (UDF)
+* User defined aggregation functions (UDAF)
+* User defined serialization formats (SerDe's)
+* Joins
+ * `JOIN`
+ * `{LEFT|RIGHT|FULL} OUTER JOIN`
+ * `LEFT SEMI JOIN`
+ * `CROSS JOIN`
+* Unions
+* Sub queries
+ * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+* Sampling
+* Explain
+* Partitioned tables
+* All Hive DDL Functions, including:
+ * `CREATE TABLE`
+ * `CREATE TABLE AS SELECT`
+ * `ALTER TABLE`
+* Most Hive Data types, including:
+ * `TINYINT`
+ * `SMALLINT`
+ * `INT`
+ * `BIGINT`
+ * `BOOLEAN`
+ * `FLOAT`
+ * `DOUBLE`
+ * `STRING`
+ * `BINARY`
+ * `TIMESTAMP`
+ * `ARRAY<>`
+ * `MAP<>`
+ * `STRUCT<>`
+
+#### Unsupported Hive Functionality
+
+Below is a list of Hive features that we don't support yet. Most of these features are rarely used
+in Hive deployments.
+
+**Major Hive Features**
+
+* Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL
+  doesn't support buckets yet.
+
+**Esoteric Hive Features**
+
+* Tables with partitions using different input formats: In Spark SQL, all table partitions need to
+  have the same input format.
+* Non-equi outer join: For the uncommon use case of using outer joins with non-equi join conditions
+  (e.g. condition "`key < 10`"), Spark SQL will output wrong result for the `NULL` tuple.
+* `UNIONTYPE`
+* Unique join
+* Single query multi insert
+* Column statistics collecting: Spark SQL does not piggyback scans to collect column statistics at
+  the moment.
+
+**Hive Input/Output Formats**
+
+* File format for CLI: For results showing back to the CLI, Spark SQL only supports TextOutputFormat.
+* Hadoop archive
+
+**Hive Optimizations**
+
+A handful of Hive optimizations are not yet included in Spark. Some of these (such as indexes) are
+not necessary due to Spark SQL's in-memory computational model. Others are slotted for future
+releases of Spark SQL.
+
+* Block level bitmap indexes and virtual columns (used to build indexes)
+* Automatically convert a join to map join: For joining a large table with multiple small tables,
+  Hive automatically converts the join into a map join. We are adding this auto conversion in the
+  next release.
+* Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you
+  need to control the degree of parallelism post-shuffle using "SET
+  spark.sql.shuffle.partitions=[num_tasks];". We are going to add auto-setting of parallelism in the
+  next release.
+* Meta-data only query: For queries that can be answered by using only meta data, Spark SQL still
+  launches tasks to compute the result.
+* Skew data flag: Spark SQL does not follow the skew data flags in Hive.
+* `STREAMTABLE` hint in join: Spark SQL does not follow the `STREAMTABLE` hint.
+* Merge multiple small files for query results: if the result output contains multiple small files,
+  Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
+  metadata. Spark SQL does not support that.
+
+## Running the Spark SQL CLI
+
+The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
+queries input from command line. Note: the Spark SQL CLI cannot talk to the Thrift JDBC server.
+
+To start the Spark SQL CLI, run the following in the Spark directory:
+
+    ./bin/spark-sql
+
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+You may run `./bin/spark-sql --help` for a complete list of all available
+options.
+
+# Cached tables
+
+Spark SQL can cache tables using an in-memory columnar format by calling `cacheTable("tableName")`.
+Then Spark SQL will scan only required columns and will automatically tune compression to minimize
+memory usage and GC pressure. You can call `uncacheTable("tableName")` to remove the table from memory.
+
+Note that if you just call `cache` rather than `cacheTable`, tables will _not_ be cached in
+in-memory columnar format. So we strongly recommend using `cacheTable` whenever you want to
+cache tables.

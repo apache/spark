@@ -59,7 +59,7 @@ class JavaSQLSuite extends FunSuite {
     val rdd = javaCtx.parallelize(person :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[PersonBean])
 
-    schemaRDD.registerAsTable("people")
+    schemaRDD.registerTempTable("people")
     javaSqlCtx.sql("SELECT * FROM people").collect()
   }
 
@@ -76,7 +76,7 @@ class JavaSQLSuite extends FunSuite {
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
-    schemaRDD.registerAsTable("allTypes")
+    schemaRDD.registerTempTable("allTypes")
 
     assert(
       javaSqlCtx.sql(
@@ -101,7 +101,7 @@ class JavaSQLSuite extends FunSuite {
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
-    schemaRDD.registerAsTable("allTypes")
+    schemaRDD.registerTempTable("allTypes")
 
     assert(
       javaSqlCtx.sql(
@@ -127,7 +127,7 @@ class JavaSQLSuite extends FunSuite {
 
     var schemaRDD = javaSqlCtx.jsonRDD(rdd)
 
-    schemaRDD.registerAsTable("jsonTable1")
+    schemaRDD.registerTempTable("jsonTable1")
 
     assert(
       javaSqlCtx.sql("select * from jsonTable1").collect.head.row ===
@@ -144,7 +144,7 @@ class JavaSQLSuite extends FunSuite {
     rdd.saveAsTextFile(path)
     schemaRDD = javaSqlCtx.jsonFile(path)
 
-    schemaRDD.registerAsTable("jsonTable2")
+    schemaRDD.registerTempTable("jsonTable2")
 
     assert(
       javaSqlCtx.sql("select * from jsonTable2").collect.head.row ===

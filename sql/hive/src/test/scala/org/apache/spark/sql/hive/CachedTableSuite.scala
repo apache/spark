@@ -23,6 +23,8 @@ import org.apache.spark.sql.hive.execution.HiveComparisonTest
 import org.apache.spark.sql.hive.test.TestHive
 
 class CachedTableSuite extends HiveComparisonTest {
+  import TestHive._
+
   TestHive.loadTestTable("src")
 
   test("cache table") {
@@ -31,6 +33,20 @@ class CachedTableSuite extends HiveComparisonTest {
 
   createQueryTest("read from cached table",
     "SELECT * FROM src LIMIT 1", reset = false)
+
+  test("Drop cached table") {
+    sql("CREATE TABLE test(a INT)")
+    cacheTable("test")
+    sql("SELECT * FROM test").collect()
+    sql("DROP TABLE test")
+    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+      sql("SELECT * FROM test").collect()
+    }
+  }
+
+  test("DROP nonexistant table") {
+    sql("DROP TABLE IF EXISTS nonexistantTable")
+  }
 
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
@@ -58,14 +74,14 @@ class CachedTableSuite extends HiveComparisonTest {
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
-    TestHive.hql("CACHE TABLE src")
+    TestHive.sql("CACHE TABLE src")
     TestHive.table("src").queryExecution.executedPlan match {
       case _: InMemoryColumnarTableScan => // Found evidence of caching
       case _ => fail(s"Table 'src' should be cached")
     }
     assert(TestHive.isCached("src"), "Table 'src' should be cached")
 
-    TestHive.hql("UNCACHE TABLE src")
+    TestHive.sql("UNCACHE TABLE src")
     TestHive.table("src").queryExecution.executedPlan match {
       case _: InMemoryColumnarTableScan => fail(s"Table 'src' should not be cached")
       case _ => // Found evidence of uncaching

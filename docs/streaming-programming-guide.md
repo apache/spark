@@ -9,7 +9,7 @@ title: Spark Streaming Programming Guide
 # Overview
 Spark Streaming is an extension of the core Spark API that allows enables high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Twitter, ZeroMQ or plain old TCP sockets and be processed using complex
+like Kafka, Flume, Twitter, ZeroMQ, Kinesis or plain old TCP sockets and be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's in-built
@@ -38,7 +38,7 @@ stream of results in batches.
 
 Spark Streaming provides a high-level abstraction called *discretized stream* or *DStream*,
 which represents a continuous stream of data. DStreams can be created either from input data
-stream from sources such as Kafka and Flume, or by applying high-level
+stream from sources such as Kafka, Flume, and Kinesis, or by applying high-level
 operations on other DStreams. Internally, a DStream is represented as a sequence of
 [RDDs](api/scala/index.html#org.apache.spark.rdd.RDD).
 
@@ -313,7 +313,7 @@ To write your own Spark Streaming program, you will have to add the following de
     artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
-For ingesting data from sources like Kafka and Flume that are not present in the Spark
+For ingesting data from sources like Kafka, Flume, and Kinesis that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
@@ -327,6 +327,7 @@ some of the common ones are as follows.
 <tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Kinesis<br/>(built separately)</td><td> kinesis-asl_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> </td><td></td></tr>
 </table>
 
@@ -442,7 +443,7 @@ see the API documentations of the relevant functions in
 Scala and [JavaStreamingContext](api/scala/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
  for Java.
 
-Additional functionality for creating DStreams from sources such as Kafka, Flume, and Twitter
+Additional functionality for creating DStreams from sources such as Kafka, Flume, Kinesis, and Twitter
 can be imported by adding the right dependencies as explained in an
 [earlier](#linking) section. To take the
 case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` to the
@@ -466,6 +467,9 @@ KafkaUtils.createStream(jssc, kafkaParams, ...);
 For more details on these additional sources, see the corresponding [API documentation](#where-to-go-from-here).
 Furthermore, you can also implement your own custom receiver for your sources. See the
 [Custom Receiver Guide](streaming-custom-receivers.html).
+
+### Kinesis
+[Kinesis](streaming-kinesis.html)
 
 ## Operations
 There are two kinds of DStream operations - _transformations_ and _output operations_. Similar to
@@ -939,7 +943,7 @@ Receiving multiple data streams can therefore be achieved by creating multiple i
 and configuring them to receive different partitions of the data stream from the source(s).
 For example, a single Kafka input stream receiving two topics of data can be split into two
 Kafka input streams, each receiving only one topic. This would run two receivers on two workers,
-thus allowing data to received in parallel, and increasing overall throughput.
+thus allowing data to be received in parallel, and increasing overall throughput.
 
 Another parameter that should be considered is the receiver's blocking interval. For most receivers,
 the received data is coalesced together into large blocks of data before storing inside Spark's memory.
@@ -980,7 +984,7 @@ If the number of tasks launched per second is high (say, 50 or more per second),
 of sending out tasks to the slaves maybe significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
 
-* **Task Serialization**: Using Kryo serialization for serializing tasks can reduced the task
+* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task
   sizes, and therefore reduce the time taken to send them to the slaves.
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
