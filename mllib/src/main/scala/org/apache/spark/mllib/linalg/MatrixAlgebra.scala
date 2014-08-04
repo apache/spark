@@ -51,7 +51,8 @@ object MatrixAlgebra {
    * @param matrix given row-by-row, each row an array
    * @param colMags Euclidean column magnitudes squared
    * @param gamma The oversampling parameter, should be set to greater than 1,
-   *              guideline is 2 log(n)
+   *              guideline is 2 log(n) / s where s is the smallest similarity
+   *              to be estimated
    * @return Computed A&#94;T A
    */
   def squareWithDIMSUM(matrix: RDD[Array[Double]], colMags: Array[Double], gamma: Double):
