@@ -241,13 +241,13 @@ abstract class HiveComparisonTest
         val quotes = "\"\"\""
         queryList.zipWithIndex.map {
           case (query, i) =>
-            s"""val q$i = hql($quotes$query$quotes); q$i.collect()"""
+            s"""val q$i = sql($quotes$query$quotes); q$i.collect()"""
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
       try {
         // MINOR HACK: You must run a query before calling reset the first time.
-        TestHive.hql("SHOW TABLES")
+        TestHive.sql("SHOW TABLES")
         if (reset) { TestHive.reset() }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {

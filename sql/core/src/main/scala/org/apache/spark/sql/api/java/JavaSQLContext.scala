@@ -39,10 +39,18 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
   /**
-   * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
+   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   *
+   * @group userf
    */
-  def sql(sqlQuery: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
+  def sql(sqlText: String): JavaSchemaRDD = {
+    if (sqlContext.dialect == "sql") {
+      new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlText))
+    } else {
+      sys.error(s"Unsupported SQL dialect: $sqlContext.dialect")
+    }
+  }
 
   /**
    * :: Experimental ::
