@@ -121,3 +121,15 @@ class StreamingContext(object):
         file system. FIle names starting with . are ignored.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
+
+    def stop(self, stopSparkContext=True):
+        """
+        Stop the execution of the streams immediately (does not wait for all received data
+        to be processed).
+        """
+        
+        try:
+            self._jssc.stop(stopSparkContext)
+        finally:
+            # Stop Callback server
+            SparkContext._gateway.shutdown()
