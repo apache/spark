@@ -17,20 +17,18 @@
 
 package org.apache.spark.mllib.feature
 
-import scala.util.Random
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.Logging
-import org.apache.spark.rdd._
+import org.apache.spark.{HashPartitioner, Logging}
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.HashPartitioner
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.rdd.RDDFunctions._
+import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
 
 /**
  *  Entry in vocabulary 
@@ -53,7 +51,7 @@ private case class VocabWord(
  * 
  * We used skip-gram model in our implementation and hierarchical softmax 
  * method to train the model. The variable names in the implementation
- * mathes the original C implementation.
+ * matches the original C implementation.
  *
  * For original C implementation, see https://code.google.com/p/word2vec/ 
  * For research papers, see 
@@ -69,10 +67,14 @@ private case class VocabWord(
 class Word2Vec(
     val size: Int,
     val startingAlpha: Double,
-    val parallelism: Int = 1,
-    val numIterations: Int = 1)
-  extends Serializable with Logging {
-  
+    val parallelism: Int,
+    val numIterations: Int) extends Serializable with Logging {
+
+  /**
+   * Word2Vec with a single thread.
+   */
+  def this(size: Int, startingAlpha: Int) = this(size, startingAlpha, 1, 1)
+
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
@@ -92,7 +94,7 @@ class Word2Vec(
   private var vocabHash = mutable.HashMap.empty[String, Int]
   private var alpha = startingAlpha
 
-  private def learnVocab(words:RDD[String]){
+  private def learnVocab(words:RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
       .map(x => VocabWord(
@@ -126,7 +128,7 @@ class Word2Vec(
     expTable
   }
 
-  private def createBinaryTree() {
+  private def createBinaryTree(): Unit = {
     val count = new Array[Long](vocabSize * 2 + 1)
     val binary = new Array[Int](vocabSize * 2 + 1)
     val parentNode = new Array[Int](vocabSize * 2 + 1)
@@ -208,7 +210,6 @@ class Word2Vec(
    * @param dataset an RDD of words
    * @return a Word2VecModel
    */
-
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
     val words = dataset.flatMap(x => x)
@@ -339,7 +340,7 @@ class Word2Vec(
 /**
 * Word2Vec model
 */
-class Word2VecModel (private val model:RDD[(String, Array[Float])]) extends Serializable {
+class Word2VecModel(private val model: RDD[(String, Array[Float])]) extends Serializable {
 
   private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
@@ -358,7 +359,7 @@ class Word2VecModel (private val model:RDD[(String, Array[Float])]) extends Seri
   def transform(word: String): Vector = {
     val result = model.lookup(word) 
     if (result.isEmpty) {
-      throw new IllegalStateException(s"${word} not in vocabulary")
+      throw new IllegalStateException(s"$word not in vocabulary")
     }
     else Vectors.dense(result(0).map(_.toDouble))
   }
