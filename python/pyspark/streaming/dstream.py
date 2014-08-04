@@ -172,7 +172,8 @@ class DStream(object):
         with _JavaStackTrace(self.ctx) as st:
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
                                                       id(partitionFunc))
-            jdstream = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream(), partitioner).asJavaDStream()
+            jdstream = self.ctx._jvm.PythonPairwiseDStream(keyed._jdstream.dstream(),
+                                                           partitioner).asJavaDStream()
         dstream = DStream(jdstream, self._ssc, BatchedSerializer(outputSerializer))
         # This is required so that id(partitionFunc) remains unique, even if
         # partitionFunc is a lambda:
@@ -245,6 +246,7 @@ class DStream(object):
     #    wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
     #    jdstream = self.ctx._jvm.PythonTransformedDStream(self._jdstream.dstream(), wrapped_func).toJavaDStream
     #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW 
+
 
 class PipelinedDStream(DStream):
     def __init__(self, prev, func, preservesPartitioning=False):
