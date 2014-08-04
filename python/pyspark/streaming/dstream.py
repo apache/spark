@@ -56,8 +56,7 @@ class DStream(object):
         """
         Add up the elements in this DStream.
         """
-        pass
-        #return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self, label=None):
         """
