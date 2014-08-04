@@ -474,4 +474,3 @@ class PipelinedDStream(DStream):
 
     def _is_pipelinable(self):
         return not (self.is_cached)
-
