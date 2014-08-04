@@ -41,10 +41,11 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   def this(conf: SparkConf) = this(ShuffleMemoryManager.getMaxMemory(conf))
 
   /**
-   * Try to acquire up to numBytes memory for the current thread, or return 0 if the pool cannot
-   * allocate any memory to it. This call may block until there is enough free memory in some
-   * situations, to make sure each thread has a chance to ramp up to at least 1 / 2N of the total
-   * memory pool (where N is the # of active threads) before it is forced to spill.
+   * Try to acquire up to numBytes memory for the current thread, and return the number of bytes
+   * obtained, or 0 if none can be allocated. This call may block until there is enough free memory
+   * in some situations, to make sure each thread has a chance to ramp up to at least 1 / 2N of the
+   * total memory pool (where N is the # of active threads) before it is forced to spill. This can
+   * happen if the number of threads increases but an older thread had a lot of memory already.
    */
   def tryToAcquire(numBytes: Long): Long = synchronized {
     val threadId = Thread.currentThread().getId
@@ -71,11 +72,13 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
       if (curMem < maxMemory / (2 * numActiveThreads)) {
         // We want to let each thread get at least 1 / (2 * numActiveThreads) before blocking;
         // if we can't give it this much now, wait for other threads to free up memory
+        // (this happens if older threads allocated lots of memory before N grew)
         if (freeMemory >= math.min(maxToGrant, maxMemory / (2 * numActiveThreads) - curMem)) {
           val toGrant = math.min(maxToGrant, freeMemory)
           threadMemory(threadId) += toGrant
           return toGrant
         } else {
+          logInfo(s"Thread $threadId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
@@ -97,14 +100,14 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
         s"Internal error: release called on ${numBytes} bytes but thread only has ${curMem}")
     }
     threadMemory(threadId) -= numBytes
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has freed
+    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
 
   /** Release all memory for the current thread and mark it as inactive (e.g. when a task ends). */
   def releaseMemoryForThisThread(): Unit = synchronized {
     val threadId = Thread.currentThread().getId
     threadMemory.remove(threadId)
-    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has freed
+    notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
 }
 
@@ -112,7 +115,7 @@ private object ShuffleMemoryManager {
   /**
    * Figure out the shuffle memory limit from a SparkConf. We currently have both a fraction
    * of the memory pool and a safety factor since collections can sometimes grow bigger than
-   * the size we target before we estimate their size again.
+   * the size we target before we estimate their sizes again.
    */
   def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)

@@ -66,10 +66,8 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
+    val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
-
-  // Manages the memory used by externally spilling collections in shuffle operations
-  val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -251,6 +249,8 @@ object SparkEnv extends Logging {
     val shuffleManager = instantiateClass[ShuffleManager](
       "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
+    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -272,6 +272,7 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
+      shuffleMemoryManager,
       conf)
   }
 
