@@ -79,7 +79,7 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
     buffer
   }
 
-  def buildNonNulls(): ByteBuffer = {
+  protected def buildNonNulls(): ByteBuffer = {
     nulls.limit(nulls.position()).rewind()
     super.build()
   }

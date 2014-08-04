@@ -67,22 +67,6 @@ private[sql] object CompressionScheme {
       s"Unrecognized compression scheme type ID: $typeId"))
   }
 
-  def copyColumnHeader(from: ByteBuffer, to: ByteBuffer) {
-    // Writes column type ID
-    to.putInt(from.getInt())
-
-    // Writes null count
-    val nullCount = from.getInt()
-    to.putInt(nullCount)
-
-    // Writes null positions
-    var i = 0
-    while (i < nullCount) {
-      to.putInt(from.getInt())
-      i += 1
-    }
-  }
-
   def columnHeaderSize(columnBuffer: ByteBuffer): Int = {
     val header = columnBuffer.duplicate().order(ByteOrder.nativeOrder)
     val nullCount = header.getInt(4)
