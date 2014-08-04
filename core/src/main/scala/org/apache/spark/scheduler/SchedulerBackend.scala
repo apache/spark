@@ -30,5 +30,15 @@ private[spark] trait SchedulerBackend {
 
   def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
     throw new UnsupportedOperationException
+
+    /**
+     * TaskSchedulerImpl will wait to begin scheduling tasks until this method returns true.
+     * Subclasses can override this method to ensure no tasks are scheduled until sufficient
+     * resources (e.g., enough executors) are alive.
+     *
+     * Waiting until sufficient resources are ready before scheduling tasks can improve performance
+     * for a few reasons; for example, if all tasks are scheduled on a small number of executors,
+     * memory-persisted data may overflow the available memory on those executors.
+     */
   def isReady(): Boolean = true
 }
