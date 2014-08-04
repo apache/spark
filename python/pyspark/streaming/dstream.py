@@ -20,9 +20,7 @@ class DStream(object):
 
     def count(self):
         """
-
         """
-        # TODO: make sure count implementation, this different from what pyspark does
         return self._mapPartitions(lambda i: [sum(1 for _ in i)])._sum()
 
     def _sum(self):
@@ -79,7 +77,6 @@ class DStream(object):
 
     def reduce(self, func):
         """
-
         """
         return self.map(lambda x: (None, x)).reduceByKey(func, 1).map(lambda x: x[1])
 
@@ -107,12 +104,6 @@ class DStream(object):
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
-
-                #TODO for count operation make sure count implementation
-                # This is different from what pyspark does
-                #if isinstance(x, int):
-                #    x = ("", x)
-
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
@@ -142,6 +133,7 @@ class DStream(object):
 
         if partitionFunc is None:
             partitionFunc = lambda x: 0 if x is None else hash(x)
+
         # Transferring O(n) objects to Java is too expensive.  Instead, we'll
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
@@ -227,7 +219,6 @@ class DStream(object):
             print
 
         self.foreachRDD(takeAndPrint)
-
 
     #def transform(self, func):
     #    from utils import RDDFunction
