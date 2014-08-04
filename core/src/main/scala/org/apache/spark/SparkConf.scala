@@ -240,11 +240,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val memoryKeys = Seq(
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction", 
-      "spark.shuffle.safetyFraction")
+      "spark.shuffle.safetyFraction",
+      "spark.storage.unrollFraction",
+      "spark.storage.safetyFraction")
     for (key -> memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
-        throw new IllegalArgumentException("$key should be between 0 and (was '$value').")
+        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
       }
     }
 
