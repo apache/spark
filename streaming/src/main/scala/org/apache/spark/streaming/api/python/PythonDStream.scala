@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.python._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming.{StreamingContext, Duration, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
 
@@ -64,7 +64,7 @@ class PythonDStream[T: ClassTag](
 }
 
 
-private class PairwiseDStream(prev:DStream[Array[Byte]], partitioner: Partitioner) extends
+private class PythonPairwiseDStream(prev:DStream[Array[Byte]], partitioner: Partitioner) extends
 DStream[Array[Byte]](prev.ssc){
   override def dependencies = List(prev)
 
@@ -105,6 +105,7 @@ class PythonForeachDStream(
 
   this.register()
 }
+
 /*
 This does not work. Ignore this for now. -TD
 class PythonTransformedDStream(
