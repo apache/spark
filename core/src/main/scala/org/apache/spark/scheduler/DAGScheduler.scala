@@ -907,7 +907,6 @@ class DAGScheduler(
       listenerBus.post(SparkListenerStageCompleted(stage.info))
       runningStages -= stage
     }
-
     event.reason match {
       case Success =>
         if (event.accumUpdates != null) {
@@ -918,8 +917,8 @@ class DAGScheduler(
             // To avoid UI cruft, ignore cases where value wasn't updated
             if (acc.name.isDefined && partialValue != acc.zero) {
               val name = acc.name.get
-              val stringPartialValue = "%s".format(partialValue)
-              val stringValue = "%s".format(acc.value)
+              val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
+              val stringValue = Accumulators.stringifyValue(acc.value)
               stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
               event.taskInfo.accumulables +=
                 AccumulableInfo(id, name, Some(stringPartialValue), stringValue)

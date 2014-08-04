@@ -46,7 +46,7 @@ class TaskInfo(
   /**
    * Intermediate updates to accumulables during this task. Note that it is valid for the same
    * accumulable to be updated multiple times in a single task or for two accumulables with the
-   * same name but different ID's to exist in a task.
+   * same name but different IDs to exist in a task.
    */
   val accumulables = ListBuffer[AccumulableInfo]()
 
