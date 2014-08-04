@@ -27,7 +27,7 @@ import org.apache.spark.mllib.optimization._
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LinearRegressionModel private[mllib] (
+class LinearRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
@@ -49,7 +49,7 @@ class LinearRegressionModel private[mllib] (
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class LinearRegressionWithSGD private (
+class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double)
@@ -68,7 +68,7 @@ class LinearRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }

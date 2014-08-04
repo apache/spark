@@ -247,6 +247,7 @@ class Vectors(object):
         else:
             return "[" + ",".join([str(v) for v in vector]) + "]"
 
+
 def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
@@ -254,4 +255,8 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
+    # remove current path from list of search paths to avoid importing mllib.random
+    # for C{import random}, which is done in an external dependency of pyspark during doctests.
+    import sys
+    sys.path.pop(0)
     _test()

@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.Socket
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -67,7 +68,7 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val conf: SparkConf) extends Logging {
 
-  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
@@ -79,7 +80,7 @@ class SparkEnv (
 
   private[spark] def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
-    httpFileServer.stop()
+    Option(httpFileServer).foreach(_.stop())
     mapOutputTracker.stop()
     shuffleManager.stop()
     broadcastManager.stop()
@@ -102,10 +103,10 @@ class SparkEnv (
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String]) {
+  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
     synchronized {
       val key = (pythonExec, envVars)
-      pythonWorkers(key).stop()
+      pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 }
@@ -193,13 +194,7 @@ object SparkEnv extends Logging {
         logInfo("Registering " + name)
         actorSystem.actorOf(Props(newActor), name = name)
       } else {
-        val driverHost: String = conf.get("spark.driver.host", "localhost")
-        val driverPort: Int = conf.getInt("spark.driver.port", 7077)
-        Utils.checkHost(driverHost, "Expected hostname")
-        val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
-        val timeout = AkkaUtils.lookupTimeout(conf)
-        logInfo(s"Connecting to $name: $url")
-        Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+        AkkaUtils.makeDriverRef(name, conf, actorSystem)
       }
     }
 
@@ -228,9 +223,15 @@ object SparkEnv extends Logging {
 
     val cacheManager = new CacheManager(blockManager)
 
-    val httpFileServer = new HttpFileServer(securityManager)
-    httpFileServer.initialize()
-    conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
+    val httpFileServer =
+      if (isDriver) {
+        val server = new HttpFileServer(securityManager)
+        server.initialize()
+        conf.set("spark.fileserver.uri",  server.serverUri)
+        server
+      } else {
+        null
+      }
 
     val metricsSystem = if (isDriver) {
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)

@@ -40,7 +40,7 @@ class JavaHiveQLSuite extends FunSuite {
 
   ignore("SELECT * FROM src") {
     assert(
-      javaHiveCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
+      javaHiveCtx.sql("SELECT * FROM src").collect().map(_.getInt(0)) ===
         TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
   }
 
@@ -56,33 +56,34 @@ class JavaHiveQLSuite extends FunSuite {
     val tableName = "test_native_commands"
 
     assertResult(0) {
-      javaHiveCtx.hql(s"DROP TABLE IF EXISTS $tableName").count()
+      javaHiveCtx.sql(s"DROP TABLE IF EXISTS $tableName").count()
     }
 
     assertResult(0) {
-      javaHiveCtx.hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+      javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
     }
 
-    javaHiveCtx.hql("SHOW TABLES").registerAsTable("show_tables")
+    javaHiveCtx.sql("SHOW TABLES").registerTempTable("show_tables")
 
     assert(
       javaHiveCtx
-        .hql("SELECT result FROM show_tables")
+        .sql("SELECT result FROM show_tables")
         .collect()
         .map(_.getString(0))
         .contains(tableName))
 
     assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      javaHiveCtx.hql(s"DESCRIBE $tableName").registerAsTable("describe_table")
+      javaHiveCtx.sql(s"DESCRIBE $tableName").registerTempTable("describe_table")
+
 
       javaHiveCtx
-        .hql("SELECT result FROM describe_table")
+        .sql("SELECT result FROM describe_table")
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
         .toArray
     }
 
-    assert(isExplanation(javaHiveCtx.hql(
+    assert(isExplanation(javaHiveCtx.sql(
       s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
@@ -90,7 +91,7 @@ class JavaHiveQLSuite extends FunSuite {
 
   ignore("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = javaHiveCtx.hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    val q0 = javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
     // If the table was not created, the following assertion would fail
     assert(Try(TestHive.table(tableName)).isSuccess)

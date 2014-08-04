@@ -32,12 +32,14 @@
   <packaging>pom</packaging>
 
   <properties>
+    <sbt.project.name>assembly</sbt.project.name>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
     <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
+    <deb.bin.filemode>744</deb.bin.filemode>
   </properties>
 
   <dependencies>
@@ -164,6 +166,16 @@
       </dependencies>
     </profile>
     <profile>
+      <id>hive-thriftserver</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>
@@ -275,7 +287,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/bin</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                     <data>

@@ -248,7 +248,6 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
     ("Shuffle Finish Time" -> shuffleReadMetrics.shuffleFinishTime) ~
-    ("Total Blocks Fetched" -> shuffleReadMetrics.totalBlocksFetched) ~
     ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
@@ -269,7 +268,8 @@ private[spark] object JsonProtocol {
     val reason = Utils.getFormattedClassName(taskEndReason)
     val json = taskEndReason match {
       case fetchFailed: FetchFailed =>
-        val blockManagerAddress = blockManagerIdToJson(fetchFailed.bmAddress)
+        val blockManagerAddress = Option(fetchFailed.bmAddress).
+          map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
@@ -558,8 +558,9 @@ private[spark] object JsonProtocol {
     metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
     metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
     metrics.diskBytesSpilled = (json \ "Disk Bytes Spilled").extract[Long]
-    metrics.shuffleReadMetrics =
-      Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson)
+    Utils.jsonOption(json \ "Shuffle Read Metrics").map { shuffleReadMetrics =>
+      metrics.updateShuffleReadMetrics(shuffleReadMetricsFromJson(shuffleReadMetrics))
+    }
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
     metrics.inputMetrics =
@@ -578,7 +579,6 @@ private[spark] object JsonProtocol {
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
     metrics.shuffleFinishTime = (json \ "Shuffle Finish Time").extract[Long]
-    metrics.totalBlocksFetched = (json \ "Total Blocks Fetched").extract[Int]
     metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
     metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
     metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]

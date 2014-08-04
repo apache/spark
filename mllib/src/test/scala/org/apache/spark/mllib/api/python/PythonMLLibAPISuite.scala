@@ -19,7 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 
 class PythonMLLibAPISuite extends FunSuite {
@@ -56,5 +56,28 @@ class PythonMLLibAPISuite extends FunSuite {
       assert(q.features.getClass === p.features.getClass)
       assert(q.features === p.features)
     }
+  }
+
+  test("double serialization") {
+    for (x <- List(123.0, -10.0, 0.0, Double.MaxValue, Double.MinValue, Double.NaN)) {
+      val bytes = py.serializeDouble(x)
+      val deser = py.deserializeDouble(bytes)
+      // We use `equals` here for comparison because we cannot use `==` for NaN
+      assert(x.equals(deser))
+    }
+  }
+
+  test("matrix to 2D array") {
+    val values = Array[Double](0, 1.2, 3, 4.56, 7, 8)
+    val matrix = Matrices.dense(2, 3, values)
+    val arr = py.to2dArray(matrix)
+    val expected = Array(Array[Double](0, 3, 7), Array[Double](1.2, 4.56, 8))
+    assert(arr === expected)
+
+    // Test conversion for empty matrix
+    val empty = Array[Double]()
+    val emptyMatrix = Matrices.dense(0, 0, empty)
+    val empty2D = py.to2dArray(emptyMatrix)
+    assert(empty2D === Array[Array[Double]]())
   }
 }

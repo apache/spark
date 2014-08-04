@@ -138,7 +138,7 @@ private[streaming] abstract class ReceiverSupervisor(
       onReceiverStop(message, error)
     } catch {
       case t: Throwable =>
-        stop("Error stopping receiver " + streamId, Some(t))
+        logError("Error stopping receiver " + streamId + t.getStackTraceString)
     }
   }
 

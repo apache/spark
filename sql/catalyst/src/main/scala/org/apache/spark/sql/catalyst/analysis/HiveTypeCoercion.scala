@@ -50,6 +50,7 @@ trait HiveTypeCoercion {
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CastNulls ::
+    Division ::
     Nil
 
   /**
@@ -74,7 +75,7 @@ trait HiveTypeCoercion {
             // Leave the same if the dataTypes match.
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
-              logger.debug(s"Promoting $a to $newType in ${q.simpleString}}")
+              logDebug(s"Promoting $a to $newType in ${q.simpleString}}")
               newType
           }
       }
@@ -153,7 +154,7 @@ trait HiveTypeCoercion {
             (Alias(Cast(l, StringType), l.name)(), r)
 
           case (l, r) if l.dataType != r.dataType =>
-            logger.debug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
+            logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
             findTightestCommonType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
@@ -169,7 +170,7 @@ trait HiveTypeCoercion {
 
         val newLeft =
           if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
-            logger.debug(s"Widening numeric types in union $castedLeft ${left.output}")
+            logDebug(s"Widening numeric types in union $castedLeft ${left.output}")
             Project(castedLeft, left)
           } else {
             left
@@ -177,7 +178,7 @@ trait HiveTypeCoercion {
 
         val newRight =
           if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
-            logger.debug(s"Widening numeric types in union $castedRight ${right.output}")
+            logDebug(s"Widening numeric types in union $castedRight ${right.output}")
             Project(castedRight, right)
           } else {
             right
@@ -231,11 +232,23 @@ trait HiveTypeCoercion {
    * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
    */
   object BooleanComparisons extends Rule[LogicalPlan] {
+    val trueValues = Seq(1, 1L, 1.toByte, 1.toShort, BigDecimal(1)).map(Literal(_))
+    val falseValues = Seq(0, 0L, 0.toByte, 0.toShort, BigDecimal(0)).map(Literal(_))
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      // No need to change EqualTo operators as that actually makes sense for boolean types.
+
+      // Hive treats (true = 1) as true and (false = 0) as true.
+      case EqualTo(l @ BooleanType(), r) if trueValues.contains(r) => l
+      case EqualTo(l, r @ BooleanType()) if trueValues.contains(l) => r
+      case EqualTo(l @ BooleanType(), r) if falseValues.contains(r) => Not(l)
+      case EqualTo(l, r @ BooleanType()) if falseValues.contains(l) => Not(r)
+
+      // No need to change other EqualTo operators as that actually makes sense for boolean types.
       case e: EqualTo => e
+      // No need to change the EqualNullSafe operators, too
+      case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
@@ -302,6 +315,23 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
+    }
+  }
+
+  /**
+   * Hive only performs integral division with the DIV operator. The arguments to / are always
+   * converted to fractional types.
+   */
+  object Division extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      // Decimal and Double remain the same
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType == DecimalType => d
+
+      case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
   }
 

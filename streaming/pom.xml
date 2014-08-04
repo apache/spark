@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming_2.10</artifactId>
+  <properties>
+    <sbt.project.name>streaming</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark.apache.org/</url>
@@ -53,6 +56,11 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

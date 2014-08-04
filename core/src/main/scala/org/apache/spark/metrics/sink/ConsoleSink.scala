@@ -57,5 +57,9 @@ private[spark] class ConsoleSink(val property: Properties, val registry: MetricR
   override def stop() {
     reporter.stop()
   }
+
+  override def report() {
+    reporter.report()
+  }
 }
 
