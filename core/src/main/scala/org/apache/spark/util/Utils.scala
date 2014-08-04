@@ -324,7 +324,10 @@ private[spark] object Utils extends Logging {
     val localDir = new File(getLocalDir(conf))
     val lockFile = new File(localDir, lockFileName)
     val raf = new RandomAccessFile(lockFile, "rw")
-    val lock = raf.getChannel().lock() // only one executor entry
+    // Only one executor entry.
+    // The FileLock is only used to control synchronization for executors download file,
+    // it's always safe regardless of lock type(mandatory or advisory).
+    val lock = raf.getChannel().lock()
     val cachedFile = new File(localDir, cachedFileName)
     try {
       if (!cachedFile.exists()) {
