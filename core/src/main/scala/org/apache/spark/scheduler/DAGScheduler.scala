@@ -819,12 +819,12 @@ class DAGScheduler(
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
           event.accumUpdates.foreach { case (id, partialValue) =>
             val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
-            val name = acc.name
             // To avoid UI cruft, ignore cases where value wasn't updated
-            if (partialValue != acc.zero) {
+            if (acc.name.isDefined && partialValue != acc.zero) {
+              val name = acc.name.get
               val stringPartialValue = "%s".format(partialValue)
               val stringValue = "%s".format(acc.value)
-              stageToInfos(stage).accumulables(id) = AccumulableInfo(id, acc.name, stringValue)
+              stageToInfos(stage).accumulables(id) = AccumulableInfo(id, name, stringValue)
               event.taskInfo.accumulables +=
                 AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
             }

@@ -763,7 +763,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
-    new Accumulator(initialValue, param, Some(name), true)
+    new Accumulator(initialValue, param, Some(name))
   }
 
   /**
@@ -783,7 +783,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @tparam R type that can be added to the accumulator
    */
   def accumulable[T, R](initialValue: T, name: String)(implicit param: AccumulableParam[T, R]) =
-    new Accumulable(initialValue, param, Some(name), true)
+    new Accumulable(initialValue, param, Some(name))
 
   /**
    * Create an accumulator from a "mutable collection" type.
