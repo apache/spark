@@ -306,7 +306,8 @@ def _hijack_namedtuple():
     if hasattr(collections.namedtuple, "__hijack"):
         return
 
-    global _old_namedtuple # or it will put in closure
+    global _old_namedtuple  # or it will put in closure
+
     def _copy_func(f):
         return types.FunctionType(f.func_code, f.func_globals, f.func_name,
                                   f.func_defaults, f.func_closure)
