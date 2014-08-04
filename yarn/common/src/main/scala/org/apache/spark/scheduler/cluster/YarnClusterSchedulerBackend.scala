@@ -35,16 +35,16 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def start() {
     super.start()
-    var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
+    totalExpectedExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
     if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-      numExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).getOrElse(numExecutors)
+      totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))
+        .getOrElse(totalExpectedExecutors)
     }
     // System property can override environment variable.
-    numExecutors = sc.getConf.getInt("spark.executor.instances", numExecutors)
-    totalExpectedExecutors = numExecutors
+    totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 }
