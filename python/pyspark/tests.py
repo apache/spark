@@ -112,6 +112,17 @@ class TestMerger(unittest.TestCase):
         m._cleanup()
 
 
+class SerializationTestCase(unittest.TestCase):
+
+    def test_namedtuple(self):
+        from collections import namedtuple
+        from cPickle import dumps, loads
+        P = namedtuple("P", "x y")
+        p1 = P(1, 3)
+        p2 = loads(dumps(p1, 2))
+        self.assertEquals(p1, p2)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -297,6 +308,14 @@ class TestRDDFunctions(PySparkTestCase):
         from operator import itemgetter
         self.assertEqual([1], rdd.map(itemgetter(1)).collect())
         self.assertEqual([(2, 3)], rdd.map(itemgetter(2, 3)).collect())
+
+    def test_namedtuple_in_rdd(self):
+        from collections import namedtuple
+        Person = namedtuple("Person", "id firstName lastName")
+        jon = Person(1, "Jon", "Doe")
+        jane = Person(2, "Jane", "Doe")
+        theDoes = self.sc.parallelize([jon, jane])
+        self.assertEquals([jon, jane], theDoes.collect())
 
 
 class TestIO(PySparkTestCase):
