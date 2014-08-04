@@ -23,6 +23,8 @@ import org.apache.spark.Logging
 import org.apache.spark.network._
 import org.apache.spark.util.Utils
 
+import scala.util.{Failure, Success, Try}
+
 /**
  * A network interface for BlockManager. Each slave should have one
  * BlockManagerWorker.
@@ -115,9 +117,9 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val resultMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage)
-    resultMessage.isDefined
+    val resultMessage = Try(connectionManager.sendMessageReliablySync(
+        toConnManagerId, blockMessageArray.toBufferMessage))
+    resultMessage.isSuccess
   }
 
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
@@ -125,10 +127,10 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val responseMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage)
+    val responseMessage = Try(connectionManager.sendMessageReliablySync(
+        toConnManagerId, blockMessageArray.toBufferMessage))
     responseMessage match {
-      case Some(message) => {
+      case Success(message) => {
         val bufferMessage = message.asInstanceOf[BufferMessage]
         logDebug("Response message received " + bufferMessage)
         BlockMessageArray.fromBufferMessage(bufferMessage).foreach(blockMessage => {
@@ -136,7 +138,7 @@ private[spark] object BlockManagerWorker extends Logging {
             return blockMessage.getData
           })
       }
-      case None => logDebug("No response message received")
+      case Failure(exception) => logDebug("No response message received")
     }
     null
   }

@@ -148,8 +148,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val f = future {
       val message = Message.createBufferMessage(0)
       message.hasError = true
-      val someMessage = Some(message)
-      someMessage
+      message
     }
     when(connManager.sendMessageReliably(any(),
       any())).thenReturn(f)
@@ -204,10 +203,8 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     buffer.flip()
     arrayBuffer += buffer
 
-    val someMessage = Some(Message.createBufferMessage(arrayBuffer))
-
     val f = future {
-      someMessage
+      Message.createBufferMessage(arrayBuffer)
     }
     when(connManager.sendMessageReliably(any(),
       any())).thenReturn(f)

@@ -22,6 +22,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
+import scala.util.{Failure, Success}
 
 import io.netty.buffer.ByteBuf
 
@@ -118,31 +119,24 @@ object BlockFetcherIterator {
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
-      future.onSuccess {
-        case Some(message) => {
+      future.onComplete {
+        case Success(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
-          if (bufferMessage.hasError) {
-            logError("Could not get block(s) from " + cmId)
-            for ((blockId, size) <- req.blocks) {
-              results.put(new FetchResult(blockId, -1, null))
+          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
+          for (blockMessage <- blockMessageArray) {
+            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
+              throw new SparkException(
+                "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
-          } else {
-            val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-            for (blockMessage <- blockMessageArray) {
-              if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-                throw new SparkException(
-                  "Unexpected message " + blockMessage.getType + " received from " + cmId)
-              }
-              val blockId = blockMessage.getId
-              val networkSize = blockMessage.getData.limit()
-              results.put(new FetchResult(blockId, sizeMap(blockId),
-                () => dataDeserialize(blockId, blockMessage.getData, serializer)))
-              _remoteBytesRead += networkSize
-              logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
-            }
+            val blockId = blockMessage.getId
+            val networkSize = blockMessage.getData.limit()
+            results.put(new FetchResult(blockId, sizeMap(blockId),
+              () => dataDeserialize(blockId, blockMessage.getData, serializer)))
+            _remoteBytesRead += networkSize
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
-        case None => {
+        case Failure(exception) => {
           logError("Could not get block(s) from " + cmId)
           for ((blockId, size) <- req.blocks) {
             results.put(new FetchResult(blockId, -1, null))

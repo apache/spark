@@ -25,6 +25,7 @@ import org.scalatest.FunSuite
 import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Try
 
 /**
   * Test the ConnectionManager with various security settings.
@@ -209,7 +210,6 @@ class ConnectionManagerSuite extends FunSuite {
     }).foreach(f => {
       try {
         val g = Await.result(f, 1 second)
-        if (!g.isDefined) assert(false) else assert(true)
       } catch {
         case e: Exception => {
           assert(false)
@@ -240,9 +240,8 @@ class ConnectionManagerSuite extends FunSuite {
 
     val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
 
-    val message = Await.result(future, 1 second) 
-    assert(message.isDefined)
-    assert(message.get.hasError)
+    val message = Try(Await.result(future, 1 second))
+    assert(message.isFailure)
 
     manager.stop()
     managerServer.stop()
