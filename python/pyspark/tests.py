@@ -105,6 +105,17 @@ class TestMerger(unittest.TestCase):
         m._cleanup()
 
 
+class SerializationTestCase(unittest.TestCase):
+
+    def test_namedtuple(self):
+        from collections import namedtuple
+        from cPickle import dumps, loads
+        P = namedtuple("P", "x y")
+        p1 = P(1, 3)
+        p2 = loads(dumps(p1, 2))
+        self.assertEquals(p1, p2)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
