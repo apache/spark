@@ -414,7 +414,7 @@ class RowMatrix(
     require(colMags.size == this.numCols(),
       "Number of magnitudes didn't match column dimension")
 
-    val sg = math.sqrt(gamma)
+    val sg = math.sqrt(gamma) // sqrt(gamma) used many times
 
     val sims = rows.flatMap {
       row =>
@@ -427,7 +427,8 @@ class RowMatrix(
                 case (_, 0.0) => // Skip explicit zero elements.
                 case (j, jVal) =>
                   if (Math.random < sg / colMags(j)) {
-                    val contrib = ((i.toLong, j.toLong), (iVal * jVal) / (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                    val contrib = ((i.toLong, j.toLong), (iVal * jVal) /
+                      (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
                     buf += contrib
                   }
               }
