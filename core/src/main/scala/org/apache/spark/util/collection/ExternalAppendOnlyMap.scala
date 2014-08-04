@@ -321,12 +321,25 @@ class ExternalAppendOnlyMap[K, V, C](
       while (i < buffer.pairs.length) {
         val pair = buffer.pairs(i)
         if (pair._1 == key) {
-          buffer.pairs.remove(i)
+          removeFromBuffer(buffer.pairs, i)
           return mergeCombiners(baseCombiner, pair._2)
         }
         i += 1
       }
       baseCombiner
+    }
+
+    /**
+     * Remove the index'th element from an ArrayBuffer in constant time, swapping another element
+     * into its place. This is more efficient than the ArrayBuffer.remove method because it does
+     * not have to shift all the elements in the array over. It works for our array buffers because
+     * we don't care about the order of elements inside, we just want to search them for a key.
+     */
+    private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
+      val elem = buffer(index)
+      buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
+      buffer.reduceToSize(buffer.size - 1)
+      elem
     }
 
     /**
@@ -346,7 +359,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val minBuffer = mergeHeap.dequeue()
       val minPairs = minBuffer.pairs
       val minHash = minBuffer.minKeyHash
-      val minPair = minPairs.remove(0)
+      val minPair = removeFromBuffer(minPairs, 0)
       val minKey = minPair._1
       var minCombiner = minPair._2
       assert(hashKey(minPair) == minHash)
