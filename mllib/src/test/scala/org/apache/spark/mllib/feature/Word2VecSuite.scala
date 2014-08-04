@@ -47,10 +47,10 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
   test("Word2VecModel") {
     val num = 2
     val localModel = Seq(
-      ("china" ,  Array(0.50f, 0.50f, 0.50f, 0.50f)),
-      ("japan" ,  Array(0.40f, 0.50f, 0.50f, 0.50f)),
-      ("taiwan",  Array(0.60f, 0.50f, 0.50f, 0.50f)),
-      ("korea" ,  Array(0.45f, 0.60f, 0.60f, 0.60f))
+      ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
     )
     val model = new Word2VecModel(sc.parallelize(localModel, 2))
     val syms = model.findSynonyms("china", num)
