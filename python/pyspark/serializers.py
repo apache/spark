@@ -337,9 +337,6 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def dump_stream(self, iterator, stream):
-        FramedSerializer.dump_stream(self, iterator, stream)
-
     def dumps(self, obj):
         return cPickle.dumps(obj, 2)
 
@@ -365,7 +362,7 @@ class MarshalSerializer(FramedSerializer):
     loads = marshal.loads
 
 
-class AutoSerializer(PickleSerializer):
+class AutoSerializer(FramedSerializer):
     """
     Choose marshal or cPickle as serialization protocol autumatically
     """
