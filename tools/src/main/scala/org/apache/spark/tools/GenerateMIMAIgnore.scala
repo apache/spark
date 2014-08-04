@@ -40,19 +40,7 @@ object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
 
-
-  private def isDeveloperApi(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
-
-  private def isExperimental(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
-
-
-  private def isPackagePrivate(sym: unv.Symbol) =
-    !sym.privateWithin.fullName.startsWith("<none>")
-
-  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
-    !moduleSymbol.privateWithin.fullName.startsWith("<none>")
+  import Utils._
 
   /**
    * For every class checks via scala reflection if the class itself or contained members
@@ -61,14 +49,14 @@ object GenerateMIMAIgnore {
    */
   private def privateWithin(packageName: String): (Set[String], Set[String]) = {
 
-    val classes = getClasses(packageName)
+    val classes = Utils.getClasses(packageName, classLoader, shouldExclude)
     val ignoredClasses = mutable.HashSet[String]()
     val ignoredMembers = mutable.HashSet[String]()
 
     for (className <- classes) {
       try {
-        val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
-        val moduleSymbol = mirror.staticModule(className)
+        val classSymbol = mirror.classSymbol(className)
+        val moduleSymbol = mirror.staticModule(className.getName)
         val directlyPrivateSpark =
           isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
         val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
@@ -76,8 +64,8 @@ object GenerateMIMAIgnore {
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
-          val maybeOuter = className.toString.takeWhile(_ != '$')
-          if (maybeOuter != className) {
+          val maybeOuter = className.getName.takeWhile(_ != '$')
+          if (maybeOuter != className.getName) {
             isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
               isPackagePrivateModule(mirror.staticModule(maybeOuter))
           } else {
@@ -85,13 +73,13 @@ object GenerateMIMAIgnore {
           }
         }
         if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
-          ignoredClasses += className
+          ignoredClasses += className.getName
         }
         // check if this class has package-private/annotated members.
         ignoredMembers ++= getAnnotatedOrPackagePrivateMembers(classSymbol)
 
       } catch {
-        case _: Throwable => println("Error instrumenting class:" + className)
+        case _: Throwable => println("Error instrumenting class:" + className.getName)
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
@@ -140,26 +128,43 @@ object GenerateMIMAIgnore {
     name.contains("Hive")
   }
 
+}
+
+object Utils {
+
+  def isDeveloperApi(sym: unv.Symbol) =
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+
+  def isExperimental(sym: unv.Symbol) =
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
+
+  def isPackagePrivate(sym: unv.Symbol) =
+    !sym.privateWithin.fullName.startsWith("<none>")
+
+  def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
+    !moduleSymbol.privateWithin.fullName.startsWith("<none>")
+
   /**
    * Scans all classes accessible from the context class loader which belong to the given package
    * and subpackages both from directories and jars present on the classpath.
    */
-  private def getClasses(packageName: String): Set[String] = {
+  def getClasses(packageName: String, classLoader: ClassLoader,
+                 shouldExclude: String => Boolean): Set[Class[_]] = {
     val path = packageName.replace('.', '/')
     val resources = classLoader.getResources(path)
 
     val jars = resources.filter(x => x.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0)).toSeq
 
-    jars.flatMap(getClassesFromJar(_, path))
-      .map(_.getName)
-      .filterNot(shouldExclude).toSet
+    jars.flatMap(getClassesFromJar(_, path, classLoader))
+      .map(x => (x.getName, x))
+      .filterNot(x => shouldExclude(x._1)).map(x => x._2).toSet
   }
 
   /**
    * Get all classes in a package from a jar file.
    */
-  private def getClassesFromJar(jarPath: String, packageName: String) = {
+  def getClassesFromJar(jarPath: String, packageName: String, classLoader: ClassLoader) = {
     import scala.collection.mutable
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))

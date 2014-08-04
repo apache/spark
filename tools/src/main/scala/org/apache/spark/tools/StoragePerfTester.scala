@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Internal utility for micro-benchmarking shuffle write performance.
@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 object StoragePerfTester {
   def main(args: Array[String]) = {
     /** Total amount of data to generate. Distributed evenly amongst maps and reduce splits. */
-    val dataSizeMb = Utils.memoryStringToMb(sys.env.getOrElse("OUTPUT_DATA", "1g"))
+    val dataSizeMb = SparkUtils.memoryStringToMb(sys.env.getOrElse("OUTPUT_DATA", "1g"))
 
     /** Number of map tasks. All tasks execute concurrently. */
     val numMaps = sys.env.get("NUM_MAPS").map(_.toInt).getOrElse(8)
@@ -93,8 +93,8 @@ object StoragePerfTester {
     val bytesPerFile = (totalBytes.get() / (numOutputSplits * numMaps.toDouble)).toLong
 
     System.err.println("files_total\t\t%s".format(numMaps * numOutputSplits))
-    System.err.println("bytes_per_file\t\t%s".format(Utils.bytesToString(bytesPerFile)))
-    System.err.println("agg_throughput\t\t%s/s".format(Utils.bytesToString(bytesPerSecond.toLong)))
+    System.err.println("bytes_per_file\t\t%s".format(SparkUtils.bytesToString(bytesPerFile)))
+    System.err.println("agg_throughput\t\t%s/s".format(SparkUtils.bytesToString(bytesPerSecond.toLong)))
 
     executor.shutdown()
     sc.stop()
