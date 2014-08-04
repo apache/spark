@@ -171,6 +171,12 @@ object SparkSubmit {
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraClassPath"),
+      OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraJavaOptions"),
+      OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
@@ -195,12 +201,6 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
 
       // Other options
-      OptionAssigner(args.driverExtraClassPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraClassPath"),
-      OptionAssigner(args.driverExtraJavaOptions, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraJavaOptions"),
-      OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraLibraryPath"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
