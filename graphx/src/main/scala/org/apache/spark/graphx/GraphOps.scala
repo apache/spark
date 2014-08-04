@@ -63,6 +63,45 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     degreesRDD(EdgeDirection.Either).setName("GraphOps.degrees")
 
   /**
+   * The max in-degree of all vertices in the graph.
+   */
+  @transient lazy val maxInDegree: Int =
+    inDegrees.reduce((a, b) => if (a._2 > b._2) a else b)._2
+
+  /**
+   * The min in-degree of all vertices in the graph.
+   */
+  @transient lazy val minInDegree: Int =
+    graph.vertices.leftJoin(inDegrees)((id, data, degree) => degree.getOrElse(0))
+      .reduce((a, b) => if (a._2 < b._2) a else b)._2
+
+  /**
+   * The max out-degree of all vertices in the graph.
+   */
+  @transient lazy val maxOutDegree: Int =
+    outDegrees.reduce((a, b) => if (a._2 > b._2) a else b)._2
+
+  /**
+   * The min out-degree of all vertices in the graph.
+   */
+  @transient lazy val minOutDegree: Int =
+    graph.vertices.leftJoin(outDegrees)((id, data, degree) => degree.getOrElse(0))
+      .reduce((a, b) => if (a._2 < b._2) a else b)._2
+
+  /**
+   * The max degree of all vertices in the graph.
+   */
+  @transient lazy val maxDegree: Int =
+    degrees.reduce((a, b) => if (a._2 > b._2) a else b)._2
+
+  /**
+   * The min degree of all vertices in the graph.
+   */
+  @transient lazy val minDegree: Int =
+    graph.vertices.leftJoin(degrees)((id, data, degree) => degree.getOrElse(0))
+      .reduce((a, b) => if (a._2 < b._2) a else b)._2
+
+  /**
    * Computes the neighboring vertex degrees.
    *
    * @param edgeDirection the direction along which to collect neighboring vertex attributes
