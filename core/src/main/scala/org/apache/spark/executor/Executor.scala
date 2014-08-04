@@ -167,7 +167,7 @@ private[spark] class Executor(
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
-      logInfo(s"Running $taskName (TID $taskId)")
+      logDebug(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
@@ -237,9 +237,9 @@ private[spark] class Executor(
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
         if (directSend) {
-          logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
+          logDebug(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
         } else {
-          logInfo(
+          logDebug(
             s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
         }
       } catch {

@@ -69,7 +69,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   def receive = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
-      logInfo("received a register")
+      logDebug("received a register")
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
 
@@ -118,7 +118,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       sender ! true
 
     case StopBlockManagerMaster =>
-      logInfo("Stopping BlockManagerMaster")
+      logDebug("Stopping BlockManagerMaster")
       sender ! true
       if (timeoutCheckingTask != null) {
         timeoutCheckingTask.cancel()
@@ -225,7 +225,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def removeExecutor(execId: String) {
-    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
+    logDebug("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
@@ -339,7 +339,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
           blockManagerIdByExecutor(id.executorId) = id
       }
 
-      logInfo("Registering block manager %s with %s RAM".format(
+      logDebug("Registering block manager %s with %s RAM".format(
         id.hostPort, Utils.bytesToString(maxMemSize)))
 
       blockManagerInfo(id) =
@@ -479,18 +479,18 @@ private[spark] class BlockManagerInfo(
       if (storageLevel.useMemory) {
         _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
         _remainingMem -= memSize
-        logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
+        logDebug("Added %s in memory on %s (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
         _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
-        logInfo("Added %s on disk on %s (size: %s)".format(
+        logDebug("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
       if (storageLevel.useOffHeap) {
         _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
-        logInfo("Added %s on tachyon on %s (size: %s)".format(
+        logDebug("Added %s on tachyon on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
       }
     } else if (_blocks.containsKey(blockId)) {
@@ -499,16 +499,16 @@ private[spark] class BlockManagerInfo(
       _blocks.remove(blockId)
       if (blockStatus.storageLevel.useMemory) {
         _remainingMem += blockStatus.memSize
-        logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
+        logDebug("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (blockStatus.storageLevel.useDisk) {
-        logInfo("Removed %s on %s on disk (size: %s)".format(
+        logDebug("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
       if (blockStatus.storageLevel.useOffHeap) {
-        logInfo("Removed %s on %s on tachyon (size: %s)".format(
+        logDebug("Removed %s on %s on tachyon (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
       }
     }

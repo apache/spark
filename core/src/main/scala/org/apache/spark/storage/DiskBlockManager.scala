@@ -158,7 +158,7 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
                   " Ignoring this directory.")
         None
       } else {
-        logInfo(s"Created local directory at $localDir")
+        logDebug(s"Created local directory at $localDir")
         Some(localDir)
       }
     }
@@ -194,7 +194,7 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
     shuffleSender = new ShuffleSender(port, this)
-    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
+    logDebug(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
     shuffleSender.port
   }
 }

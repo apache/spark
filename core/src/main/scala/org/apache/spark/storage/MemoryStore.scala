@@ -56,7 +56,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     (maxMemory * unrollFraction).toLong
   }
 
-  logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
+  logDebug("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
   /** Free memory not occupied by existing blocks. Note that this does not include unroll memory. */
   def freeMemory: Long = maxMemory - currentMemory
@@ -176,7 +176,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val entry = entries.remove(blockId)
       if (entry != null) {
         currentMemory -= entry.size
-        logInfo(s"Block $blockId of size ${entry.size} dropped from memory (free $freeMemory)")
+        logDebug(s"Block $blockId of size ${entry.size} dropped from memory (free $freeMemory)")
         true
       } else {
         false
@@ -189,7 +189,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       entries.clear()
       currentMemory = 0
     }
-    logInfo("MemoryStore cleared")
+    logDebug("MemoryStore cleared")
   }
 
   /**
@@ -325,7 +325,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           currentMemory += size
         }
         val valuesOrBytes = if (deserialized) "values" else "bytes"
-        logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
+        logDebug("Block %s stored as %s in memory (estimated size %s, free %s)".format(
           blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(freeMemory)))
         putSuccess = true
       } else {
@@ -357,12 +357,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   private def ensureFreeSpace(
       blockIdToAdd: BlockId,
       space: Long): ResultWithDroppedBlocks = {
-    logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
+    logDebug(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
 
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     if (space > maxMemory) {
-      logInfo(s"Will not store $blockIdToAdd as it is larger than our memory limit")
+      logDebug(s"Will not store $blockIdToAdd as it is larger than our memory limit")
       return ResultWithDroppedBlocks(success = false, droppedBlocks)
     }
 
