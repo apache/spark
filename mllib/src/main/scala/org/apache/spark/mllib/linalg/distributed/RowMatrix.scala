@@ -27,6 +27,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._
 import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
@@ -392,13 +393,26 @@ class RowMatrix(
     new RowMatrix(AB, nRows, B.numCols)
   }
 
+  def similarColumns():
+  CoordinateMatrix = {
+    similarColumnsDIMSUM(Double.MaxValue)
+  }
 
-  def similarColumnsDIMSUM(colMags: Vector, gamma: Double):
+  def similarColumnsDIMSUM(gamma: Double):
+  CoordinateMatrix = {
+    val stats = computeColumnSummaryStatistics()
+    val variance = stats.variance.toArray
+    val meanSquared = stats.mean.toArray.map(x => x * x)
+    val colMags = variance.zip(meanSquared).map{case (a:Double, b:Double) => math.sqrt(a + b)}
+    similarColumnsDIMSUM(colMags, gamma)
+  }
+
+  def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double):
   CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
 
     require(colMags.size == this.numCols(),
-      s"Number of magnitudes ${colMags.size} didn't match column dimension ${numCols()}")
+      "Number of magnitudes didn't match column dimension")
 
     val sg = math.sqrt(gamma)
 
@@ -413,14 +427,15 @@ class RowMatrix(
                 case (_, 0.0) => // Skip explicit zero elements.
                 case (j, jVal) =>
                   if (Math.random < sg / colMags(j)) {
-                    buf += ((i, j), (iVal * jVal) / (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                    val contrib = ((i.toLong, j.toLong), (iVal * jVal) / (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                    buf += contrib
                   }
               }
             }
         }
         buf
-    }.reduce(_ + _).map{ case ((i, j), sim) => MatrixEntry(i, j, sim) }
-    CoordinateMatrix(sims, numCols(), numCols())
+    }.reduceByKey(_ + _).map { case ((i, j), sim) => MatrixEntry(i, j, sim)}
+    new CoordinateMatrix(sims, numCols(), numCols())
   }
 
   private[mllib] override def toBreeze(): BDM[Double] = {
