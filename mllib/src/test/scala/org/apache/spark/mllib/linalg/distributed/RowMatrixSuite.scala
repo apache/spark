@@ -95,6 +95,24 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("similar columns") {
+    val means = Vectors.dense(4.5, 3.0, 4.0)
+    val variances = Vectors.dense(15.0, 10.0, 10.0)
+    val expected =
+      Matrices.dense(n, n, Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0)).toBreeze
+
+    for(i <- 0 until n) for(j <- 0 until n) {
+      val ci = means(i) * means(i) + variances(i)
+      val cj = means(i) * means(i) + variances(i)
+      expected(i, j) /= (ci * cj)
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.similarColumns()
+      assert(G.toBreeze === expected.toBreeze)
+    }
+  }
+
   test("svd of a full-rank matrix") {
     for (mat <- Seq(denseMat, sparseMat)) {
       for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {

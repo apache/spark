@@ -398,6 +398,12 @@ class RowMatrix(
     similarColumnsDIMSUM(Double.MaxValue)
   }
 
+  def similarColumns(threshold: Double):
+  CoordinateMatrix = {
+    require(threshold > 0, s"Similarity threshold must be above 0, but set to: $threshold")
+    similarColumnsDIMSUM(2.0 * math.log(numCols()) / threshold)
+  }
+
   def similarColumnsDIMSUM(gamma: Double):
   CoordinateMatrix = {
     val stats = computeColumnSummaryStatistics()
