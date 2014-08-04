@@ -41,13 +41,33 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-private[spark] class HttpServer(resourceBase: File,
-                                securityManager: SecurityManager,
-                                localPort: Int = 0) extends Logging {
+private[spark] class HttpServer(
+    resourceBase: File,
+    securityManager: SecurityManager,
+    requestedPort: Int = 0,
+    serverName: String = "HTTP server") extends Logging {
   private var server: Server = null
-  private var port: Int = localPort
+  private var port: Int = requestedPort
 
-  private def startOnPort(startPort: Int): (Server, Int) = {
+  def start() {
+    if (server != null) {
+      throw new ServerStateException("Server is already started")
+    } else {
+      logInfo("Starting HTTP Server")
+      val (actualServer, actualPort) =
+        Utils.startServiceOnPort[Server](requestedPort, doStart, serverName)
+      server = actualServer
+      port = actualPort
+    }
+  }
+
+  /**
+   * Actually start the HTTP server on the given port.
+   *
+   * Note that this is only best effort in the sense that we may end up binding to a nearby port
+   * in the event of port collision. Return the bound server and the actual port used.
+   */
+  private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server()
     val connector = new SocketConnector
     connector.setMaxIdleTime(60*1000)
@@ -76,20 +96,9 @@ private[spark] class HttpServer(resourceBase: File,
     }
 
     server.start()
-    val actualPort = server.getConnectors()(0).getLocalPort()
+    val actualPort = server.getConnectors()(0).getLocalPort
 
     (server, actualPort)
-  }
-
-  def start() {
-    if (server != null) {
-      throw new ServerStateException("Server is already started")
-    } else {
-      logInfo("Starting HTTP Server")
-      val (actualServer, actualPort) = Utils.startServiceOnPort(localPort, 3, startOnPort)
-      server = actualServer
-      port = actualPort
-    }
   }
 
   /**
@@ -143,7 +152,7 @@ private[spark] class HttpServer(resourceBase: File,
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      return "http://" + Utils.localIpAddress + ":" + port
+      "http://" + Utils.localIpAddress + ":" + port
     }
   }
 }
