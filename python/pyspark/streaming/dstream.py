@@ -140,12 +140,6 @@ class DStream(object):
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
-
-                #TODO for count operation make sure count implementation
-                # This is different from what pyspark does
-                #if isinstance(x, int):
-                #    x = ("", x)
-
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
