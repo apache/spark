@@ -36,7 +36,7 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
     val minCount = 2
     val num = 2
 
-    val model = Word2Vec.train(doc, size, startingAlpha, window, minCount)
+    val model = Word2Vec.train(doc, size, startingAlpha)
     val syms = model.findSynonyms("a", 2)
     assert(syms.length == num)
     assert(syms(0)._1 == "b")
