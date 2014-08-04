@@ -26,7 +26,7 @@ import org.apache.spark.sql.{HadoopDirectory, HadoopDirectoryLike}
  * Describes a Hive table. Can be converted to a simple HadoopDirectory if the table is not
  * partitioned.
  */
-case class HiveTableLocation(
+private[sql] case class HiveTableLocation(
     databaseName: String,
     tableName: String,
     alias: Option[String],

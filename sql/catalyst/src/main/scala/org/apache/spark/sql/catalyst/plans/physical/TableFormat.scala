@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * a SQLContext (or HiveContext) and Hadoop Configuration are available. Only one constructor
  * is allowed.
  */
-private[sql] abstract class TableFormat {
+abstract class TableFormat {
   /**
    * Constructs a new, empty Relation with the given schema. It is the responsibility of
    * the caller to ensure that the given location is either empty, or else that it is OK to

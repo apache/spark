@@ -343,11 +343,11 @@ private[hive] case class MetastoreRelation
 }
 
 class MetastoreFormat(hiveContext: HiveContext) extends TableFormat {
-  override def createEmptyRelation(loc: TableLocation, schema: Seq[Attribute]): MetastoreRelation = {
-    new MetastoreRelation(loc.asInstanceOf[HiveTableLocation])(hiveContext)
+  override def createEmptyRelation(l: TableLocation, schema: Seq[Attribute]): MetastoreRelation = {
+    new MetastoreRelation(l.asInstanceOf[HiveTableLocation])(hiveContext)
   }
 
-  override def loadExistingRelation(loc: TableLocation): MetastoreRelation = {
-    new MetastoreRelation(loc.asInstanceOf[HiveTableLocation])(hiveContext)
+  override def loadExistingRelation(l: TableLocation): MetastoreRelation = {
+    new MetastoreRelation(l.asInstanceOf[HiveTableLocation])(hiveContext)
   }
 }
