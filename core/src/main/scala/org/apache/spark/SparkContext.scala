@@ -776,6 +776,16 @@ class SparkContext(config: SparkConf) extends Logging {
     new Accumulable(initialValue, param)
 
   /**
+   * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
+   * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
+   * access the accumuable's `value`.
+   * @tparam T accumulator type
+   * @tparam R type that can be added to the accumulator
+   */
+  def accumulable[T, R](initialValue: T, name: String)(implicit param: AccumulableParam[T, R]) =
+    new Accumulable(initialValue, param, Some(name), true)
+
+  /**
    * Create an accumulator from a "mutable collection" type.
    *
    * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
