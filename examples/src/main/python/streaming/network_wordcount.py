@@ -19,5 +19,7 @@ if __name__ == "__main__":
     reduced_lines = mapped_lines.reduceByKey(add)
 
     reduced_lines.pyprint()
+    count_lines = mapped_lines.count()
+    count_lines.pyprint()
     ssc.start()
     ssc.awaitTermination()
