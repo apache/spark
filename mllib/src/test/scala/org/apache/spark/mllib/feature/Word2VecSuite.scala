@@ -19,10 +19,12 @@ package org.apache.spark.mllib.feature
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class Word2VecSuite extends FunSuite with LocalSparkContext {
+
+  // TODO: add more tests
+
   test("Word2Vec") {
     val sentence = "a b " * 100 + "a c " * 10
     val localDoc = Seq(sentence, sentence)
@@ -33,28 +35,27 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
     val window = 2 
     val minCount = 2
     val num = 2
-    val word = "a"
 
     val model = Word2Vec.train(doc, size, startingAlpha, window, minCount)
-    val synons = model.findSynonyms("a", 2)
-    assert(synons.length == num)
-    assert(synons(0)._1 == "b")
-    assert(synons(1)._1 == "c")
+    val syms = model.findSynonyms("a", 2)
+    assert(syms.length == num)
+    assert(syms(0)._1 == "b")
+    assert(syms(1)._1 == "c")
   }
 
 
   test("Word2VecModel") {
     val num = 2
     val localModel = Seq(
-      ("china" ,  Array(0.50, 0.50, 0.50, 0.50)),
-      ("japan" ,  Array(0.40, 0.50, 0.50, 0.50)),
-      ("taiwan",  Array(0.60, 0.50, 0.50, 0.50)),
-      ("korea" ,  Array(0.45, 0.60, 0.60, 0.60))
+      ("china" ,  Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan" ,  Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan",  Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea" ,  Array(0.45f, 0.60f, 0.60f, 0.60f))
     )
     val model = new Word2VecModel(sc.parallelize(localModel, 2))
-    val synons = model.findSynonyms("china", num)
-    assert(synons.length == num)
-    assert(synons(0)._1 == "taiwan")
-    assert(synons(1)._1 == "japan")
+    val syms = model.findSynonyms("china", num)
+    assert(syms.length == num)
+    assert(syms(0)._1 == "taiwan")
+    assert(syms(1)._1 == "japan")
   }
 }
