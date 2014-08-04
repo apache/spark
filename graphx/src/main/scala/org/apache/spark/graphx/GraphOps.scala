@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx
 
+import org.apache.spark.graphx.util.FrequencyDistribution
+
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -100,6 +102,47 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   @transient lazy val minDegree: Int =
     graph.vertices.leftJoin(degrees)((id, data, degree) => degree.getOrElse(0))
       .reduce((a, b) => if (a._2 < b._2) a else b)._2
+
+  /**
+   * The degree distribution of all vertices in the graph.
+   */
+  def degreeDist(frequencyCounter: FrequencyDistribution): Array[((Int, Int), Long)] = {
+    getDegreeDist(EdgeDirection.Either, frequencyCounter)
+  }
+
+
+  /**
+   * The in-degree distribution of all vertices in the graph.
+   */
+  def inDegreeDist(frequencyCounter: FrequencyDistribution): Array[((Int, Int), Long)] = {
+    getDegreeDist(EdgeDirection.In, frequencyCounter)
+  }
+
+  /**
+   * The out-degree distribution of all vertices in the graph.
+   */
+  def outDegreeDist(frequencyCounter: FrequencyDistribution): Array[((Int, Int), Long)] = {
+    getDegreeDist(EdgeDirection.Out, frequencyCounter)
+  }
+
+  /**
+   * Computes the neighboring vertex degrees distribution.
+   */
+  private def getDegreeDist(edgeDirection: EdgeDirection, frequencyCounter: FrequencyDistribution): Array[((Int, Int), Long)] = {
+    val (typedDegrees, max, min) = {
+      if (edgeDirection == EdgeDirection.In) {
+        (graph.vertices.leftJoin(inDegrees)((id, data, degree) => degree.getOrElse(0)),
+          maxInDegree, minInDegree)
+      } else if (edgeDirection == EdgeDirection.Out) {
+        (graph.vertices.leftJoin(outDegrees)((id, data, degree) => degree.getOrElse(0)),
+          maxOutDegree, minOutDegree)
+      } else {
+        (graph.vertices.leftJoin(degrees)((id, data, degree) => degree.getOrElse(0)),
+          maxDegree, minDegree)
+      }
+    }
+    frequencyCounter.compute(typedDegrees.values, max, min)
+  }
 
   /**
    * Computes the neighboring vertex degrees.
