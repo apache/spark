@@ -18,7 +18,6 @@
 package org.apache.spark.network
 
 import java.nio.ByteBuffer
-import scala.util.Try
 import org.apache.spark.{SecurityManager, SparkConf}
 
 private[spark] object SenderTest {
@@ -52,7 +51,7 @@ private[spark] object SenderTest {
       val dataMessage = Message.createBufferMessage(buffer.duplicate)
       val startTime = System.currentTimeMillis
       /* println("Started timer at " + startTime) */
-      val responseStr = Try(manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage))
+      val responseStr = manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage)
         .map { response =>
           val buffer = response.asInstanceOf[BufferMessage].buffers(0)
           new String(buffer.array, "utf-8")

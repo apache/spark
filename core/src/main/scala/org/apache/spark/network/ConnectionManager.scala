@@ -35,6 +35,7 @@ import scala.collection.mutable.SynchronizedQueue
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
@@ -849,8 +850,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   }
 
   def sendMessageReliablySync(connectionManagerId: ConnectionManagerId,
-      message: Message): Message = {
-    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
+      message: Message): Try[Message] = {
+    Try(Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf))
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {

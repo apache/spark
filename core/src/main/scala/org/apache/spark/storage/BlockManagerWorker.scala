@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.network._
 import org.apache.spark.util.Utils
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
  * A network interface for BlockManager. Each slave should have one
@@ -117,8 +117,8 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val resultMessage = Try(connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage))
+    val resultMessage = connectionManager.sendMessageReliablySync(
+        toConnManagerId, blockMessageArray.toBufferMessage)
     resultMessage.isSuccess
   }
 
@@ -127,8 +127,8 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val responseMessage = Try(connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage))
+    val responseMessage = connectionManager.sendMessageReliablySync(
+        toConnManagerId, blockMessageArray.toBufferMessage)
     responseMessage match {
       case Success(message) => {
         val bufferMessage = message.asInstanceOf[BufferMessage]
