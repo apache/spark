@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream}
 
 
 object FlumeUtils {
@@ -242,5 +242,28 @@ object FlumeUtils {
       parallelism: Int
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createPollingStream(jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
+  }
+
+  /**
+   * Creates multi input stream from a Flume source.
+   * @param receiverPath A zookeeper path to store receivers, format:zkAddress/path/to/receivers
+   *                        eg.  localhost:2181/spark/receivers
+   * @param numReceivers  the number of receivers to be started
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
+  def createMultiStream(
+       ssc: StreamingContext,
+       receiverPath: String,
+       numReceivers : Int,
+       storageLevel : StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
+       enableDecompression : Boolean = false
+  ): DStream[SparkFlumeEvent] = {
+    var inputStream : DStream[SparkFlumeEvent] = new FlumeInputDStream[SparkFlumeEvent](ssc,
+      receiverPath, storageLevel, enableDecompression)
+    for (i <- 1 until numReceivers) {
+      inputStream = inputStream.union(new FlumeInputDStream[SparkFlumeEvent](ssc, receiverPath,
+        storageLevel, enableDecompression))
+    }
+    inputStream
   }
 }

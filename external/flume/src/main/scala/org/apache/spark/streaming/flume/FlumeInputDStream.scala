@@ -17,10 +17,13 @@
 
 package org.apache.spark.streaming.flume
 
-import java.net.InetSocketAddress
+import java.net.{ServerSocket, InetSocketAddress}
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+
+import org.apache.spark.streaming.flume.sink.utils.LogicalHostRouter
+import org.apache.spark.streaming.flume.sink.utils.LogicalHostRouter.PhysicalHost
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -30,7 +33,7 @@ import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
@@ -51,8 +54,17 @@ class FlumeInputDStream[T: ClassTag](
   enableDecompression: Boolean
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
+  def this(@transient ssc : StreamingContext, receiverPath: String,
+           storageLevel : StorageLevel, enableDecompression : Boolean) =  {
+    this(ssc, receiverPath, -1, storageLevel, enableDecompression)
+  }
+
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel, enableDecompression)
+    if (port FlumePushingEventCount!= -1) {
+      new FlumeReceiver(host, port, storageLevel, enableDecompression)
+    } else {
+      new DynamicFlumeReceiver(host, storageLevel, enableDecompression)
+    }
   }
 }
 
@@ -121,7 +133,7 @@ private[streaming] object SparkFlumeEvent {
 
 /** A simple server that implements Flume's Avro protocol. */
 private[streaming]
-class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
+class FlumeEventServer(receiver : Receiver[SparkFlumeEvent]) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
     receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event))
     Status.OK
@@ -148,30 +160,13 @@ class FlumeReceiver(
     classOf[AvroSourceProtocol], new FlumeEventServer(this))
   var server: NettyServer = null
 
-  private def initServer() = {
-    if (enableDecompression) {
-      val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
-                                                             Executors.newCachedThreadPool())
-      val channelPipelineFactory = new CompressionChannelPipelineFactory()
-      
-      new NettyServer(
-        responder, 
-        new InetSocketAddress(host, port),
-        channelFactory,
-        channelPipelineFactory,
-        null)
-    } else {
-      new NettyServer(responder, new InetSocketAddress(host, port))
-    }
-  }
-
   def onStart() {
     synchronized {
       if (server == null) {
-        server = initServer()
+        server = FlumeReceiver.initServer(responder, host, port, enableDecompression)
         server.start()
       } else {
-        logWarning("Flume receiver being asked to start more then once with out close")
+        logWarning("Flume receiver being asked to start more then once without close")
       }
     }
     logInfo("Flume receiver started")
@@ -188,13 +183,34 @@ class FlumeReceiver(
   }
 
   override def preferredLocation = Some(host)
-  
-  /** A Netty Pipeline factory that will decompress incoming data from 
+}
+
+//private[Streaming]
+object FlumeReceiver {
+  def initServer(responder : SpecificResponder, host : String, port : Int,
+    enableDecompression : Boolean) : NettyServer = {
+    if (enableDecompression) {
+      val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
+        Executors.newCachedThreadPool())
+      val channelPipelineFactory = new CompressionChannelPipelineFactory()
+
+      new NettyServer(
+        responder,
+        new InetSocketAddress(host, port),
+        channelFactory,
+        channelPipelineFactory,
+        null)
+    } else {
+      new NettyServer(responder, new InetSocketAddress(host, port))
+    }
+  }
+
+  /** A Netty Pipeline factory that will decompress incoming data from
     * and the Netty client and compress data going back to the client.
     *
     * The compression on the return is required because Flume requires
-    * a successful response to indicate it can remove the event/batch 
-    * from the configured channel 
+    * a successful response to indicate it can remove the event/batch
+    * from the configured channel
     */
   private[streaming]
   class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
@@ -205,6 +221,57 @@ class FlumeReceiver(
       pipeline.addFirst("deflater", encoder)
       pipeline.addFirst("inflater", new ZlibDecoder())
       pipeline
+    }
   }
 }
+
+/** A NetworkReceiver which listens for events using the Flume Avro interface.
+  * @param  address zookeeperAddress/path/to/logicalhost
+  */
+private[streaming]
+class DynamicFlumeReceiver(
+  address : String,
+  storageLevel: StorageLevel,
+  enableDecompression : Boolean
+) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
+  val logicalHost = address.substring(address.lastIndexOf("/") + 1)
+  val routerPath = address.substring(0, address.lastIndexOf("/"))
+  lazy val routerConf = LogicalHostRouter.Conf.fromRouterPath(routerPath)
+  lazy val hostRouter = new LogicalHostRouter(routerConf)
+  lazy val responder = new SpecificResponder(
+    classOf[AvroSourceProtocol], new FlumeEventServer(this))
+  lazy val hostName = Utils.localIpAddress // InetAddress.getLocalHost.getHostAddress
+  lazy val hostPort = selectFreePort
+  var server : NettyServer = null
+  def onStart() {
+    synchronized {
+      if (server == null) {
+        server = FlumeReceiver.initServer(responder, hostName, hostPort, enableDecompression)
+        server.start()
+        hostRouter.start()
+        hostRouter.registerPhysicalHost(logicalHost, getPhysicalHost)
+      } else {
+        logWarning("Flume receiver being asked to start more then once without close")
+      }
+    }
+    logInfo("Flume receiver started")
+  }
+
+  private def getPhysicalHost = new PhysicalHost(hostName, hostPort)
+
+  private def selectFreePort : Int = {
+    val serverSocket : ServerSocket  = new ServerSocket(0)
+    val port = serverSocket.getLocalPort()
+    serverSocket.close()
+    logInfo("select a free port " + port)
+    port
+  }
+
+  def onStop() {
+    hostRouter.unregisterPhysicalHost(logicalHost, getPhysicalHost)
+    hostRouter.stop()
+    server.close()
+    logInfo("Flume receiver stopped")
+  }
+  override def preferredLocation = None
 }
