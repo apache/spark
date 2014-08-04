@@ -34,10 +34,9 @@ PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/
 curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
 curl_status=$?
 
-if [ $curl_status -ne 0 ]
-    then
-        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
-        exit $curl_status
+if [ $curl_status -ne 0 ]; then
+    echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
+    exit $curl_status
 fi
 
 
@@ -49,12 +48,11 @@ python $PEP8_SCRIPT_PATH ./python --exclude="cloudpickle.py" \
     > "$PEP8_REPORT_PATH"
 pep8_status=${PIPESTATUS[0]} #$?
 
-if [ $pep8_status -ne 0 ]
-    then
-        echo "PEP 8 checks failed."
-        cat "$PEP8_REPORT_PATH"
-    else
-        echo "PEP 8 checks passed."
+if [ $pep8_status -ne 0 ]; then
+    echo "PEP 8 checks failed."
+    cat "$PEP8_REPORT_PATH"
+else
+    echo "PEP 8 checks passed."
 fi
 
 rm -f "$PEP8_REPORT_PATH"
