@@ -31,6 +31,8 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 
+import scala.collection.mutable.ListBuffer
+
 /**
  * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
@@ -388,6 +390,37 @@ class RowMatrix(
     }
 
     new RowMatrix(AB, nRows, B.numCols)
+  }
+
+
+  def similarColumnsDIMSUM(colMags: Vector, gamma: Double):
+  CoordinateMatrix = {
+    require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
+
+    require(colMags.size == this.numCols(),
+      s"Number of magnitudes ${colMags.size} didn't match column dimension ${numCols()}")
+
+    val sg = math.sqrt(gamma)
+
+    val sims = rows.flatMap {
+      row =>
+        val buf = new ListBuffer[((Long, Long), Double)]()
+        row.toBreeze.activeIterator.foreach {
+          case (_, 0.0) => // Skip explicit zero elements.
+          case (i, iVal) =>
+            if (Math.random < sg / colMags(i)) {
+              row.toBreeze.activeIterator.foreach {
+                case (_, 0.0) => // Skip explicit zero elements.
+                case (j, jVal) =>
+                  if (Math.random < sg / colMags(j)) {
+                    buf += ((i, j), (iVal * jVal) / (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                  }
+              }
+            }
+        }
+        buf
+    }.reduce(_ + _).map{ case ((i, j), sim) => MatrixEntry(i, j, sim) }
+    CoordinateMatrix(sims, numCols(), numCols())
   }
 
   private[mllib] override def toBreeze(): BDM[Double] = {
