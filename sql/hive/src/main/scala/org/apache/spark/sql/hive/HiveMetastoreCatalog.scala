@@ -39,8 +39,11 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
+
 private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
-  import org.apache.spark.sql.hive.HiveMetastoreTypes._
+  import HiveMetastoreTypes._
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
   protected[hive] val client = Hive.get(hive.hiveconf)
