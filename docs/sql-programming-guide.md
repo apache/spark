@@ -153,7 +153,8 @@ teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
 In cases that case classes cannot be defined ahead of time (for example,
-dynamically parsing text files and then projecting parsed fields),
+the structure of records is encoded in a string or a text dataset will be parsed
+and fields will be projected differently for different users),
 a `SchemaRDD` can be created programmatically with three steps.
 
 1. Create an RDD of `Row`s from the original RDD;
@@ -170,17 +171,19 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 // Create an RDD
 val people = sc.textFile("examples/src/main/resources/people.txt")
 
+// The schema is encoded in a string
+val schemaString = "name age"
+
 // Import Spark SQL data types and Row.
 import org.apache.spark.sql._
 
-// Define the schema that will be applied to the RDD.
+// Generate the schema based on the string of schema
 val schema =
   StructType(
-    StructField("name", StringType, true) ::
-    StructField("age", IntegerType, true) :: Nil)
+    schemaString.split(" ").map(fieldName => StructField(fieldName, StringType, true)))
 
 // Convert records of the RDD (people) to Rows.
-val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 
 // Apply the schema to the RDD.
 val peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema)
@@ -189,11 +192,11 @@ val peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema)
 peopleSchemaRDD.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
-val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+val results = sqlContext.sql("SELECT name FROM people")
 
 // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
+results.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
 
@@ -271,7 +274,8 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 {% endhighlight %}
 
 In cases that JavaBean classes cannot be defined ahead of time (for example,
-dynamically parsing text files and then projecting parsed fields),
+the structure of records is encoded in a string or a text dataset will be parsed and
+fields will be projected differently for different users),
 a `SchemaRDD` can be created programmatically with three steps.
 
 1. Create an RDD of `Row`s from the original RDD;
@@ -286,6 +290,7 @@ For example:
 import org.apache.spark.sql.api.java.DataType
 // Import StructType and StructField
 import org.apache.spark.sql.api.java.StructType
+import org.apache.spark.sql.api.java.StructField
 // Import Row.
 import org.apache.spark.sql.api.java.Row
 
@@ -295,32 +300,37 @@ JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
 
-// Define the schema that will be applied to the RDD.
-List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataType.createStructField("name", DataType.StringType, true));
-    fields.add(DataType.createStructField("age", DataType.IntegerType, true));
+// The schema is encoded in a string
+String schemaString = "name age";
+
+// Generate the schema based on the string of schema
+List<StructField> fields = new ArrayList<StructField>();
+for (String fieldName: schemaString.split(" ")) {
+  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+}
 StructType schema = DataType.createStructType(fields);
 
 // Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
-  new Function<Person, Row>() {
-    public Row call(Person person) throws Exception {
-      return Row.create(person.getName(), person.getAge());
+  new Function<String, Row>() {
+    public Row call(String record) throws Exception {
+      String[] fields = record.split(",");
+      return Row.create(fields[0], fields[1].trim());
     }
   });
 
 // Apply the schema to the RDD.
-JavaSchemaRDD peopleSchemaRDD = javaSqlCtx.applySchema(rowRDD, schema);
+JavaSchemaRDD peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema);
 
 // Register the SchemaRDD as a table.
-peopleSchemaRDD.registerTempTable("people")
+peopleSchemaRDD.registerTempTable("people");
 
 // SQL can be run over RDDs that have been registered as tables.
-JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+JavaSchemaRDD results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+List<String> names = results.map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -363,7 +373,10 @@ for teenName in teenNames.collect():
 {% endhighlight %}
 
 
-Alternatively, a `SchemaRDD` can be created programmatically with three steps.
+For some cases (for example, the structure of records is encoded in a string or
+a text dataset will be parsed and fields will be projected differently for
+different users), it is desired to create `SchemaRDD` with a programmatically way.
+It can be done with three steps.
 
 1. Create an RDD of tuples or lists from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
@@ -381,12 +394,17 @@ sqlContext = SQLContext(sc)
 # Load a text file and convert each line to a tuple.
 lines = sc.textFile("examples/src/main/resources/people.txt")
 parts = lines.map(lambda l: l.split(","))
-people = parts.map(lambda p: (p[0], int(p[1])))
+people = parts.map(lambda p: (p[0], p[1].strip()))
 
-# Define the schema that will be applied to the RDD.
-schema = StructType([
-  StructField("name", StringType(), True),
-  StructField("age", IntegerType(), True)])
+# The schema is encoded in a string.
+schemaString = "name age"
+
+# Generate the schema based on the string of schema.
+fields = []
+for field_name in schemaString.split():
+  fields.append(StructField(field_name, StringType(), True))
+
+schema = StructType(fields)
 
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.applySchema(people, schema)
@@ -395,12 +413,12 @@ schemaPeople = sqlContext.applySchema(people, schema)
 schemaPeople.registerTempTable("people")
 
 # SQL can be run over SchemaRDDs that have been registered as a table.
-teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+results = sqlContext.sql("SELECT name FROM people")
 
 # The results of SQL queries are RDDs and support all the normal RDD operations.
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print teenName
+names = results.map(lambda p: "Name: " + p.name)
+for name in names.collect():
+  print name
 {% endhighlight %}
 
 
@@ -1030,7 +1048,7 @@ from pyspark.sql import *
 <tr>
   <td> <b>ByteType</b> </td>
   <td>
-  int <br />
+  int or long <br />
   <b>Note:</b> Numbers will be converted to 1-byte signed integer numbers at runtime.
   Please make sure that numbers are within the range of -128 to 127.
   </td>
@@ -1041,7 +1059,7 @@ from pyspark.sql import *
 <tr>
   <td> <b>ShortType</b> </td>
   <td>
-  int <br />
+  int or long <br />
   <b>Note:</b> Numbers will be converted to 2-byte signed integer numbers at runtime.
   Please make sure that numbers are within the range of -32768 to 32767.
   </td>
@@ -1051,7 +1069,7 @@ from pyspark.sql import *
 </tr>
 <tr>
   <td> <b>IntegerType</b> </td>
-  <td> int </td>
+  <td> int or long </td>
   <td>
   IntegerType()
   </td>
@@ -1063,7 +1081,7 @@ from pyspark.sql import *
   <b>Note:</b> Numbers will be converted to 8-byte signed integer numbers at runtime.
   Please make sure that numbers are within the range of
   -9223372036854775808 to 9223372036854775807.
-  Otherwise, please use DecimalType.
+  Otherwise, please convert data to decimal.Decimal and use DecimalType.
   </td>
   <td>
   LongType()
@@ -1140,7 +1158,7 @@ from pyspark.sql import *
 </tr>
 <tr>
   <td> <b>StructType</b> </td>
-  <td> tuple or list </td>
+  <td> list or tuple </td>
   <td> 
   StructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
