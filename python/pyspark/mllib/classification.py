@@ -74,7 +74,7 @@ class LogisticRegressionModel(LinearModel):
 class LogisticRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=1.0, regType=None, intecept=False):
+              initialWeights=None, regParam=1.0, regType=None, intercept=False):
         """
         Train a logistic regression model on the given data.
 
