@@ -366,6 +366,14 @@ configure those ports.
     <td><code>spark.driver.port</code></td>
     <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
+  <tr>
+    <td>Driver</td>
+    <td>Executor</td>
+    <td>(random)</td>
+    <td>Schedule tasks</td>
+    <td><code>spark.executor.port</code></td>
+    <td>Akka-based. Set to "0" to choose a port randomly.</td>
+  </tr>
 
   <!-- Other misc stuff -->
   <tr>
