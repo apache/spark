@@ -300,6 +300,7 @@ object DecisionTree extends Serializable with Logging {
     new DecisionTree(strategy).train(input)
   }
 
+  // Optional arguments in Python: maxBins
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -309,6 +310,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = ???
 
+  // Optional arguments in Python: all but input, numClassesForClassification
   def trainClassifier(
       input: RDD[LabeledPoint],
       numClassesForClassification: Int,
@@ -317,6 +319,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = ???
 
+  // Optional arguments in Python: all but input
   def trainRegressor(
       input: RDD[LabeledPoint],
       categoricalFeaturesInfo: Map[Int,Int],
