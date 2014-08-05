@@ -821,8 +821,13 @@ class DAGScheduler(
       case Success =>
         logInfo("Completed " + task)
         if (event.accumUpdates != null) {
-          // TODO: fail the stage if the accumulator update fails...
-          Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
+          try {
+            Accumulators.add(event.accumUpdates)
+          } catch {
+            // If we see an exception during accumulator update, just log the error and move on.
+            case e: Exception =>
+              logError(s"Failed to update accumulators for $task", e)
+          }
         }
         pendingTasks(stage) -= task
         task match {
