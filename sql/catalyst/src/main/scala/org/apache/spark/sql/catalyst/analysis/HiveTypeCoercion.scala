@@ -353,7 +353,8 @@ trait HiveTypeCoercion {
         if (valueTypes.distinct.size > 1) {
           val commonType = valueTypes.reduce { (v1, v2) =>
             findTightestCommonType(v1, v2)
-              .getOrElse(sys.error(s"Invalid types in CASE WHEN. $v1, $v2"))
+              .getOrElse(sys.error(
+                s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
           }
           val transformedBranches = branches.sliding(2, 2).map {
             case Seq(cond, value) if value.dataType != commonType =>
