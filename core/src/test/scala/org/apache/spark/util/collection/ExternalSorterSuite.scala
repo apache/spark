@@ -86,28 +86,28 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     // Both aggregator and ordering
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
-    sorter.write(elements.iterator)
+    sorter.insertAll(elements.iterator)
     assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), None, None)
-    sorter2.write(elements.iterator)
+    sorter2.insertAll(elements.iterator)
     assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
-    sorter3.write(elements.iterator)
+    sorter3.insertAll(elements.iterator)
     assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
-    sorter4.write(elements.iterator)
+    sorter4.insertAll(elements.iterator)
     assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter4.stop()
   }
@@ -124,7 +124,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
-    sorter.write(elements)
+    sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
@@ -287,13 +287,13 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
 
     val sorter2 = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter2.write((0 until 100000).iterator.map(i => (i, i)))
+    sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
     sorter2.stop()
@@ -309,7 +309,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
     intercept[SparkException] {
-      sorter.write((0 until 100000).iterator.map(i => {
+      sorter.insertAll((0 until 100000).iterator.map(i => {
         if (i == 99990) {
           throw new SparkException("Intentional failure")
         }
@@ -365,7 +365,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 4, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 4, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i / 4, i)).filter(_._1 % 3 == p).toSet)
@@ -381,7 +381,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -397,7 +397,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -414,7 +414,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -431,7 +431,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 100).iterator.map(i => (i, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
@@ -448,7 +448,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100000).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
@@ -495,7 +495,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val toInsert = (1 to 100000).iterator.map(_.toString).map(s => (s, s)) ++
       collisionPairs.iterator ++ collisionPairs.iterator.map(_.swap)
 
-    sorter.write(toInsert)
+    sorter.insertAll(toInsert)
 
     // A map of collision pairs in both directions
     val collisionPairsMap = (collisionPairs ++ collisionPairs.map(_.swap)).toMap
@@ -524,7 +524,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     // Insert 10 copies each of lots of objects whose hash codes are either 0 or 1. This causes
     // problems if the map fails to group together the objects with the same code (SPARK-2043).
     val toInsert = for (i <- 1 to 10; j <- 1 to 10000) yield (FixedHashObject(j, j % 2), 1)
-    sorter.write(toInsert.iterator)
+    sorter.insertAll(toInsert.iterator)
 
     val it = sorter.iterator
     var count = 0
@@ -548,7 +548,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val agg = new Aggregator[Int, Int, ArrayBuffer[Int]](createCombiner, mergeValue, mergeCombiners)
     val sorter = new ExternalSorter[Int, Int, ArrayBuffer[Int]](Some(agg), None, None, None)
 
-    sorter.write((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
+    sorter.insertAll((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
 
     val it = sorter.iterator
     while (it.hasNext) {
@@ -572,7 +572,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val sorter = new ExternalSorter[String, String, ArrayBuffer[String]](
       Some(agg), None, None, None)
 
-    sorter.write((1 to 100000).iterator.map(i => (i.toString, i.toString)) ++ Iterator(
+    sorter.insertAll((1 to 100000).iterator.map(i => (i.toString, i.toString)) ++ Iterator(
       (null.asInstanceOf[String], "1"),
       ("1", null.asInstanceOf[String]),
       (null.asInstanceOf[String], null.asInstanceOf[String])

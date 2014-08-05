@@ -25,7 +25,7 @@ import scala.collection.mutable
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{Aggregator, SparkEnv, Logging, Partitioner}
+import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -171,7 +171,7 @@ private[spark] class ExternalSorter[K, V, C](
     elementsPerPartition: Array[Long])
   private val spills = new ArrayBuffer[SpilledFile]
 
-  def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+  def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
 
@@ -644,6 +644,72 @@ private[spark] class ExternalSorter[K, V, C](
    * Return an iterator over all the data written to this object, aggregated by our aggregator.
    */
   def iterator: Iterator[Product2[K, C]] = partitionedIterator.flatMap(pair => pair._2)
+
+  /**
+   * Write all the data added into this ExternalSorter into a file in the disk store, creating
+   * an .index file for it as well with the offsets of each partition. This is called by the
+   * SortShuffleWriter and can go through an efficient path of just concatenating binary files
+   * if we decided to avoid merge-sorting.
+   *
+   * @param blockId block ID to write to. The index file will be blockId.name + ".index".
+   * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
+   * @return array of lengths, in bytes, for each partition of the file (for map output tracker)
+   */
+  def writePartitionedFile(blockId: BlockId, context: TaskContext): Array[Long] = {
+    val outputFile = blockManager.diskBlockManager.getFile(blockId)
+
+    // Track location of each range in the output file
+    val offsets = new Array[Long](numPartitions + 1)
+    val lengths = new Array[Long](numPartitions)
+
+    // Statistics
+    var totalBytes = 0L
+    var totalTime = 0L
+
+    for ((id, elements) <- this.partitionedIterator) {
+      if (elements.hasNext) {
+        val writer = blockManager.getDiskWriter(blockId, outputFile, ser, fileBufferSize)
+        for (elem <- elements) {
+          writer.write(elem)
+        }
+        writer.commitAndClose()
+        val segment = writer.fileSegment()
+        offsets(id + 1) = segment.offset + segment.length
+        lengths(id) = segment.length
+        totalTime += writer.timeWriting()
+        totalBytes += segment.length
+      } else {
+        // The partition is empty; don't create a new writer to avoid writing headers, etc
+        offsets(id + 1) = offsets(id)
+      }
+    }
+
+    val shuffleMetrics = new ShuffleWriteMetrics
+    shuffleMetrics.shuffleBytesWritten = totalBytes
+    shuffleMetrics.shuffleWriteTime = totalTime
+    context.taskMetrics.shuffleWriteMetrics = Some(shuffleMetrics)
+    context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
+    context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+
+    // Write an index file with the offsets of each block, plus a final offset at the end for the
+    // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
+    // out where each block begins and ends.
+
+    val diskBlockManager = blockManager.diskBlockManager
+    val indexFile = diskBlockManager.getFile(blockId.name + ".index")
+    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
+    try {
+      var i = 0
+      while (i < numPartitions + 1) {
+        out.writeLong(offsets(i))
+        i += 1
+      }
+    } finally {
+      out.close()
+    }
+
+    lengths
+  }
 
   def stop(): Unit = {
     spills.foreach(s => s.file.delete())
