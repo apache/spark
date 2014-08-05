@@ -883,8 +883,14 @@ class DAGScheduler(
     val task = event.task
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
-    listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-      event.taskMetrics))
+
+    // The success case is dealt with separately below, since we need to compute accumulator
+    // updates before posting.
+    if (event.reason != Success) {
+      listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+        event.taskMetrics))
+    }
+
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
       return
@@ -906,12 +912,26 @@ class DAGScheduler(
         if (event.accumUpdates != null) {
           try {
             Accumulators.add(event.accumUpdates)
+            event.accumUpdates.foreach { case (id, partialValue) =>
+              val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+              // To avoid UI cruft, ignore cases where value wasn't updated
+              if (acc.name.isDefined && partialValue != acc.zero) {
+                val name = acc.name.get
+                val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
+                val stringValue = Accumulators.stringifyValue(acc.value)
+                stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
+                event.taskInfo.accumulables +=
+                  AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+              }
+            }
           } catch {
             // If we see an exception during accumulator update, just log the error and move on.
             case e: Exception =>
               logError(s"Failed to update accumulators for $task", e)
           }
         }
+        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+          event.taskMetrics))
         stage.pendingTasks -= task
         task match {
           case rt: ResultTask[_, _] =>
