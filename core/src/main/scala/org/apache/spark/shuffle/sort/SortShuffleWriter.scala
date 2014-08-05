@@ -40,7 +40,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   private val ser = Serializer.getSerializer(dep.serializer.orNull)
 
   private val conf = SparkEnv.get.conf
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   private var sorter: ExternalSorter[K, V, _] = null
   private var outputFile: File = null
