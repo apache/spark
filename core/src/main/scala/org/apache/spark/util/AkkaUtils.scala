@@ -183,7 +183,7 @@ private[spark] object AkkaUtils extends Logging {
     Utils.checkHost(driverHost, "Expected hostname")
     val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
     val timeout = AkkaUtils.lookupTimeout(conf)
-    logInfo(s"Connecting to $name: $url")
+    logDebug(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
 }

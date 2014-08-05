@@ -113,7 +113,7 @@ private[spark] class PythonRDD(
               val init = initTime - bootTime
               val finish = finishTime - initTime
               val total = finishTime - startTime
-              logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
+              logDebug("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
                 init, finish))
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>

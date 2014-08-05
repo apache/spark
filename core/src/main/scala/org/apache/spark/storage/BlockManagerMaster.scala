@@ -38,14 +38,14 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
     tell(RemoveExecutor(execId))
-    logInfo("Removed " + execId + " successfully in removeExecutor")
+    logDebug("Removed " + execId + " successfully in removeExecutor")
   }
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
-    logInfo("Trying to register BlockManager")
+    logDebug("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
-    logInfo("Registered BlockManager")
+    logDebug("Registered BlockManager")
   }
 
   def updateBlockInfo(
@@ -57,7 +57,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
       tachyonSize: Long): Boolean = {
     val res = askDriverWithReply[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
-    logInfo("Updated info of block " + blockId)
+    logDebug("Updated info of block " + blockId)
     res
   }
 
@@ -197,7 +197,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     if (driverActor != null) {
       tell(StopBlockManagerMaster)
       driverActor = null
-      logInfo("BlockManagerMaster stopped")
+      logDebug("BlockManagerMaster stopped")
     }
   }
 

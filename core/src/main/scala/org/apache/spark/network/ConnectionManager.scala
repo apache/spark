@@ -109,7 +109,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
-  logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
+  logDebug("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
 
   // used in combination with the ConnectionManagerId to create unique Connection ids
   // to be able to track asynchronous messages
@@ -398,7 +398,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
-        logInfo("Accepted connection from [" + newConnection.remoteAddress.getAddress + "]")
+        logDebug("Accepted connection from [" + newConnection.remoteAddress.getAddress + "]")
       } catch {
         // might happen in case of issues with registering with selector
         case e: Exception => logError("Error in accept loop", e)
@@ -425,7 +425,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       connection match {
         case sendingConnection: SendingConnection =>
           val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-          logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
+          logDebug("Removing SendingConnection to " + sendingConnectionManagerId)
 
           connectionsById -= sendingConnectionManagerId
           connectionsAwaitingSasl -= connection.connectionId
@@ -433,7 +433,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           messageStatuses.synchronized {
             messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
               .foreach(status => {
-                logInfo("Notifying " + status)
+              logDebug("Notifying " + status)
                 status.synchronized {
                   status.attempted = true
                   status.acked = false
@@ -447,7 +447,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           }
         case receivingConnection: ReceivingConnection =>
           val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
-          logInfo("Removing ReceivingConnection to " + remoteConnectionManagerId)
+          logDebug("Removing ReceivingConnection to " + remoteConnectionManagerId)
 
           val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
           if (!sendingConnectionOpt.isDefined) {
@@ -466,7 +466,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           messageStatuses.synchronized {
             for (s <- messageStatuses.values
                  if s.connectionManagerId == sendingConnectionManagerId) {
-              logInfo("Notifying " + s)
+              logDebug("Notifying " + s)
               s.synchronized {
                 s.attempted = true
                 s.acked = false
@@ -487,7 +487,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   }
 
   def handleConnectionError(connection: Connection, e: Exception) {
-    logInfo("Handling connection error on connection to " +
+    logDebug("Handling connection error on connection to " +
       connection.getRemoteConnectionManagerId())
     removeConnection(connection)
   }
@@ -725,7 +725,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId,
         newConnectionId)
-      logInfo("creating new sending connection for security! " + newConnectionId )
+      logDebug("creating new sending connection for security! " + newConnectionId )
       registerRequests.enqueue(newConnection)
 
       newConnection
@@ -848,7 +848,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     handleMessageExecutor.shutdown()
     handleReadWriteExecutor.shutdown()
     handleConnectExecutor.shutdown()
-    logInfo("ConnectionManager stopped")
+    logDebug("ConnectionManager stopped")
   }
 }
 

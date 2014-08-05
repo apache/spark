@@ -146,7 +146,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
 
   private val secretKey = generateSecretKey()
-  logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
+  logDebug("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (uiAclsOn) "enabled" else "disabled") +
     "; users with view permissions: " + viewAcls.toString())
 
@@ -170,8 +170,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   }
 
   private[spark] def setViewAcls(defaultUsers: Seq[String], allowedUsers: String) {
-    viewAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet 
-    logInfo("Changing view acls to: " + viewAcls.mkString(","))
+    viewAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet
+    logDebug("Changing view acls to: " + viewAcls.mkString(","))
   }
 
   private[spark] def setViewAcls(defaultUser: String, allowedUsers: String) {
@@ -179,8 +179,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   }
 
   private[spark] def setUIAcls(aclSetting: Boolean) { 
-    uiAclsOn = aclSetting 
-    logInfo("Changing acls enabled to: " + uiAclsOn)
+    uiAclsOn = aclSetting
+    logDebug("Changing acls enabled to: " + uiAclsOn)
   }
 
   /**
@@ -207,7 +207,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
       // if we generated the secret then we must be the first so lets set it so t
       // gets used by everyone else
       SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, cookie)
-      logInfo("adding secret to credentials in yarn mode")
+      logDebug("adding secret to credentials in yarn mode")
       cookie
     } else {
       // user must have set spark.authenticate.secret config

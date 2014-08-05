@@ -37,7 +37,7 @@ private[spark] class HttpFileServer(securityManager: SecurityManager) extends Lo
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()
     jarDir.mkdir()
-    logInfo("HTTP File server directory is " + baseDir)
+    logDebug("HTTP File server directory is " + baseDir)
     httpServer = new HttpServer(baseDir, securityManager)
     httpServer.start()
     serverUri = httpServer.uri

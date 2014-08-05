@@ -271,7 +271,7 @@ class DAGScheduler(
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
+      logDebug("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
     }
     stage
@@ -535,12 +535,12 @@ class DAGScheduler(
    * Cancel a job that is running or waiting in the queue.
    */
   def cancelJob(jobId: Int) {
-    logInfo("Asked to cancel job " + jobId)
+    logDebug("Asked to cancel job " + jobId)
     eventProcessActor ! JobCancelled(jobId)
   }
 
   def cancelJobGroup(groupId: String) {
-    logInfo("Asked to cancel job group " + groupId)
+    logDebug("Asked to cancel job group " + groupId)
     eventProcessActor ! JobGroupCancelled(groupId)
   }
 
@@ -610,7 +610,7 @@ class DAGScheduler(
    * don't block the DAGScheduler event loop or other concurrent jobs.
    */
   protected def runLocally(job: ActiveJob) {
-    logInfo("Computing the requested partition locally")
+    logDebug("Computing the requested partition locally")
     new Thread("Local computation of job " + job.jobId) {
       override def run() {
         runLocallyWithinThread(job)
@@ -729,9 +729,9 @@ class DAGScheduler(
       clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
         job.jobId, callSite.shortForm, partitions.length, allowLocal))
-      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
-      logInfo("Parents of final stage: " + finalStage.parents)
-      logInfo("Missing parents: " + getMissingParentStages(finalStage))
+      logDebug("Final stage: " + finalStage + "(" + finalStage.name + ")")
+      logDebug("Parents of final stage: " + finalStage.parents)
+      logDebug("Missing parents: " + getMissingParentStages(finalStage))
       if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
         // Compute very short actions like first() or take() with no parent stages locally.
         listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
@@ -859,7 +859,7 @@ class DAGScheduler(
           return
       }
 
-      logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
+      logDebug("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
       taskScheduler.submitTasks(
@@ -952,10 +952,10 @@ class DAGScheduler(
             }
             if (runningStages.contains(stage) && stage.pendingTasks.isEmpty) {
               markStageAsFinished(stage)
-              logInfo("looking for newly runnable stages")
-              logInfo("running: " + runningStages)
-              logInfo("waiting: " + waitingStages)
-              logInfo("failed: " + failedStages)
+              logDebug("looking for newly runnable stages")
+              logDebug("running: " + runningStages)
+              logDebug("waiting: " + waitingStages)
+              logDebug("failed: " + failedStages)
               if (stage.shuffleDep.isDefined) {
                 // We supply true to increment the epoch number here in case this is a
                 // recomputation of the map outputs. In that case, some nodes may have cached
@@ -1077,7 +1077,7 @@ class DAGScheduler(
   private[scheduler] def handleExecutorAdded(execId: String, host: String) {
     // remove from failedEpoch(execId) ?
     if (failedEpoch.contains(execId)) {
-      logInfo("Host added was in lost list earlier: " + host)
+      logDebug("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
     submitWaitingStages()
@@ -1091,7 +1091,7 @@ class DAGScheduler(
           handleJobCancellation(jobId, s"because Stage $stageId was cancelled")
         }
       case None =>
-        logInfo("No active jobs to kill for Stage " + stageId)
+        logDebug("No active jobs to kill for Stage " + stageId)
     }
     submitWaitingStages()
   }
@@ -1122,7 +1122,7 @@ class DAGScheduler(
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
     }
     if (dependentJobs.isEmpty) {
-      logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
+      logDebug("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
     }
   }
 
@@ -1263,7 +1263,7 @@ class DAGScheduler(
   }
 
   def stop() {
-    logInfo("Stopping DAGScheduler")
+    logDebug("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
     taskScheduler.stop()
   }

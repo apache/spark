@@ -188,7 +188,7 @@ object SparkEnv extends Logging {
 
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
-        logInfo("Registering " + name)
+        logDebug("Registering " + name)
         actorSystem.actorOf(Props(newActor), name = name)
       } else {
         AkkaUtils.makeDriverRef(name, conf, actorSystem)

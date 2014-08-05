@@ -810,7 +810,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager)
 
-    logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+    logDebug("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
   }
 
@@ -971,7 +971,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (key != null) {
         addedJars(key) = System.currentTimeMillis
-        logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+        logDebug("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
     postEnvironmentUpdate()
@@ -1006,9 +1006,9 @@ class SparkContext(config: SparkConf) extends Logging {
       SparkEnv.set(null)
       listenerBus.stop()
       eventLogger.foreach(_.stop())
-      logInfo("Successfully stopped SparkContext")
+      logDebug("Successfully stopped SparkContext")
     } else {
-      logInfo("SparkContext already stopped")
+      logDebug("SparkContext already stopped")
     }
   }
 
@@ -1064,12 +1064,12 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
-    logInfo("Starting job: " + callSite.shortForm)
+    logDebug("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
-    logInfo(
-      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo("Job finished: %s, took %.3f s".format(
+      callSite.shortForm, (System.nanoTime - start) / 1e9))
     rdd.doCheckpoint()
   }
 
@@ -1150,7 +1150,7 @@ class SparkContext(config: SparkConf) extends Logging {
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
     val callSite = getCallSite
-    logInfo("Starting job: " + callSite.shortForm)
+    logDebug("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
       localProperties.get)

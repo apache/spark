@@ -431,7 +431,7 @@ private[spark] class TaskSetManager(
           // a good proxy to task serialization time.
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
-          logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
+          logDebug("Starting %s (TID %d, %s, %s, %d bytes)".format(
               taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
@@ -503,7 +503,7 @@ private[spark] class TaskSetManager(
         isZombie = true
       }
     } else {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
+      logDebug("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
     failedExecutors.remove(index)
@@ -763,7 +763,7 @@ private[spark] class TaskSetManager(
       }
       false
     }
-    logInfo("Re-computing pending task lists.")
+    logDebug("Re-computing pending task lists.")
     pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.filter(!newLocAvail(_))
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)

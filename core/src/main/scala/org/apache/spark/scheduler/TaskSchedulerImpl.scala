@@ -141,7 +141,7 @@ private[spark] class TaskSchedulerImpl(
     backend.start()
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
-      logInfo("Starting speculative execution thread")
+      logDebug("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
@@ -156,7 +156,7 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
+    logDebug("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
@@ -181,7 +181,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
-    logInfo("Cancelling stage " + stageId)
+    logDebug("Cancelling stage " + stageId)
     activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
       // There are two possible cases here:
       // 1. The task set manager has been created and some tasks have been scheduled.
@@ -194,7 +194,7 @@ private[spark] class TaskSchedulerImpl(
         backend.killTask(tid, execId, interruptThread)
       }
       tsm.abort("Stage %s cancelled".format(stageId))
-      logInfo("Stage %d was cancelled".format(stageId))
+      logDebug("Stage %d was cancelled".format(stageId))
     }
   }
 
@@ -206,7 +206,7 @@ private[spark] class TaskSchedulerImpl(
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
     activeTaskSets -= manager.taskSet.id
     manager.parent.removeSchedulable(manager)
-    logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
+    logDebug("Removed TaskSet %s, whose tasks have all completed, from pool %s"
       .format(manager.taskSet.id, manager.parent.name))
   }
 

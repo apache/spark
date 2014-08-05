@@ -183,7 +183,7 @@ private[spark] class BlockManager(
    */
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
-    logInfo("BlockManager re-registering with master")
+    logDebug("BlockManager re-registering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     reportAllBlocks()
   }
@@ -252,7 +252,7 @@ private[spark] class BlockManager(
       droppedMemorySize: Long = 0L): Unit = {
     val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize)
     if (needReregister) {
-      logInfo(s"Got told to re-register updating block $blockId")
+      logDebug(s"Got told to re-register updating block $blockId")
       // Re-registering will report our new block for free.
       asyncReregister()
     }
@@ -518,12 +518,12 @@ private[spark] class BlockManager(
   def get(blockId: BlockId): Option[BlockResult] = {
     val local = getLocal(blockId)
     if (local.isDefined) {
-      logInfo(s"Found block $blockId locally")
+      logDebug(s"Found block $blockId locally")
       return local
     }
     val remote = getRemote(blockId)
     if (remote.isDefined) {
-      logInfo(s"Found block $blockId remotely")
+      logDebug(s"Found block $blockId remotely")
       return remote
     }
     None
@@ -837,7 +837,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
 
-    logInfo(s"Dropping block $blockId from memory")
+    logDebug(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
 
     // If the block has not already been dropped
@@ -856,7 +856,7 @@ private[spark] class BlockManager(
 
         // Drop to disk, if storage level requires
         if (level.useDisk && !diskStore.contains(blockId)) {
-          logInfo(s"Writing block $blockId to disk")
+          logDebug(s"Writing block $blockId to disk")
           data match {
             case Left(elements) =>
               diskStore.putArray(blockId, elements, level, returnValues = false)
@@ -898,7 +898,7 @@ private[spark] class BlockManager(
    */
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
-    logInfo(s"Removing RDD $rddId")
+    logDebug(s"Removing RDD $rddId")
     val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
@@ -908,7 +908,7 @@ private[spark] class BlockManager(
    * Remove all blocks belonging to the given broadcast.
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
-    logInfo(s"Removing broadcast $broadcastId")
+    logDebug(s"Removing broadcast $broadcastId")
     val blocksToRemove = blockInfo.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
@@ -920,7 +920,7 @@ private[spark] class BlockManager(
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
-    logInfo(s"Removing block $blockId")
+    logDebug(s"Removing block $blockId")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -945,12 +945,12 @@ private[spark] class BlockManager(
   }
 
   private def dropOldNonBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo(s"Dropping non broadcast blocks older than $cleanupTime")
+    logDebug(s"Dropping non broadcast blocks older than $cleanupTime")
     dropOldBlocks(cleanupTime, !_.isBroadcast)
   }
 
   private def dropOldBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo(s"Dropping broadcast blocks older than $cleanupTime")
+    logDebug(s"Dropping broadcast blocks older than $cleanupTime")
     dropOldBlocks(cleanupTime, _.isBroadcast)
   }
 
