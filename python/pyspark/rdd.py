@@ -952,7 +952,7 @@ class RDD(object):
             max = mm_stats.max()
             increment = (max - min) * 1.0 / bucketCount
             if increment != 0:
-                buckets = [round(min+x*increment, 2) for x in range(bucketCount+1)]
+                buckets = [min+x*increment for x in range(bucketCount+1)]
             else:
                 buckets = [min, max]
             return buckets
