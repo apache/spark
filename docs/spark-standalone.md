@@ -311,7 +311,7 @@ configure those ports.
   <!-- Web UIs -->
   <tr>
     <td>Browser</td>
-    <td>Standalone Cluster Master</td>
+    <td>Master</td>
     <td>8080</td>
     <td>Web UI</td>
     <td><code>master.ui.port</code></td>
@@ -343,59 +343,59 @@ configure those ports.
   </tr>
   <!-- Cluster interactions -->
   <tr>
-    <td>Application</td>
-    <td>Standalone Cluster Master</td>
+    <td>Driver<br>Worker</td>
+    <td>Master</td>
     <td>7077</td>
-    <td>Submit job to cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+    <td>Submit job to cluster<br>Join cluster</td>
+    <td><code>SPARK_MASTER_PORT</code></td>
+    <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
   <tr>
-    <td>Worker</td>
-    <td>Standalone Cluster Master</td>
-    <td>7077</td>
-    <td>Join cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
-  </tr>
-  <tr>
-    <td>Application</td>
+    <td>Master</td>
     <td>Worker</td>
     <td>(random)</td>
-    <td>Join cluster</td>
-    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
-    <td>Akka-based</td>
+    <td>Schedule executors</td>
+    <td><code>SPARK_WORKER_PORT</code></td>
+    <td>Akka-based. Set to "0" to choose a port randomly.</td>
+  </tr>
+  <tr>
+    <td>Executor<br>Master</td>
+    <td>Driver</td>
+    <td>(random)</td>
+    <td>Connect to application<br>Notify Master and executor state changes</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
 
   <!-- Other misc stuff -->
   <tr>
-    <td>Worker</td>
-    <td>Application</td>
+    <td>Executor</td>
+    <td>Driver</td>
     <td>(random)</td>
     <td>File server for files and jars</td>
     <td><code>spark.fileserver.port</code></td>
     <td>Jetty-based</td>
   </tr>
   <tr>
-    <td>Worker</td>
-    <td>Application</td>
+    <td>Executor</td>
+    <td>Driver</td>
     <td>(random)</td>
     <td>HTTP Broadcast</td>
     <td><code>spark.broadcast.port</code></td>
-    <td>Jetty-based.  Not used by TorrentBroadcast, which sends data through the block manager
-    instead</td>
+    <td>Jetty-based. Not used by TorrentBroadcast, which sends data through the block manager
+    instead.</td>
   </tr>
   <tr>
-    <td>Worker</td>
-    <td>Spark Shell</td>
+    <td>Executor</td>
+    <td>Driver</td>
     <td>(random)</td>
-    <td>Class file server (Spark Shell only)</td>
+    <td>Class file server</td>
     <td><code>spark.replClassServer.port</code></td>
-    <td>Jetty-based</td>
+    <td>Jetty-based. Only used in Spark shells.</td>
   </tr>
   <tr>
-    <td>Worker</td>
-    <td>Other Workers</td>
+    <td>Executor</td>
+    <td>Executor</td>
     <td>(random)</td>
     <td>Block Manager port</td>
     <td><code>spark.blockManager.port</code></td>
