@@ -180,20 +180,13 @@ private[spark] class TaskSetManager(
       }
     }
 
-    var hadAliveLocations = false
     for (loc <- tasks(index).preferredLocations) {
       for (execId <- loc.executorId) {
         addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
       }
-      if (sched.hasExecutorsAliveOnHost(loc.host)) {
-        hadAliveLocations = true
-      }
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
       for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
-        if(sched.hasHostAliveOnRack(rack)){
-          hadAliveLocations = true
-        }
       }
     }
 
@@ -286,7 +279,7 @@ private[spark] class TaskSetManager(
       !hasAttemptOnHost(index, host) && !executorIsBlacklisted(execId, index)
 
     if (!speculatableTasks.isEmpty) {
-      // Check for process-local or preference-less tasks; note that tasks can be process-local
+      // Check for process-local tasks; note that tasks can be process-local
       // on multiple nodes when we replicate cached blocks, as in Spark Streaming
       for (index <- speculatableTasks if canRunOnHost(index)) {
         val prefs = tasks(index).preferredLocations
@@ -308,6 +301,7 @@ private[spark] class TaskSetManager(
         }
       }
 
+      // Check for no-preference tasks
       if (TaskLocality.isAllowed(locality, TaskLocality.NO_PREF)) {
         for (index <- speculatableTasks if canRunOnHost(index)) {
           val locations = tasks(index).preferredLocations
@@ -350,7 +344,7 @@ private[spark] class TaskSetManager(
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
   private def findTask(execId: String, host: String, maxLocality: TaskLocality.Value)
-  : Option[(Int, TaskLocality.Value, Boolean)] =
+    : Option[(Int, TaskLocality.Value, Boolean)] =
   {
     for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
@@ -392,7 +386,7 @@ private[spark] class TaskSetManager(
   /**
    * Respond to an offer of a single executor from the scheduler by finding a task
    *
-   * NOTE: this function is either called with a real preferredLocality level which
+   * NOTE: this function is either called with a maxLocality which
    * would be adjusted by delay scheduling algorithm or it will be with a special
    * NO_PREF locality which will be not modified
    *
