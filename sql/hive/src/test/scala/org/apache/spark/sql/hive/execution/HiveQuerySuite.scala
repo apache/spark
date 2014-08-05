@@ -32,6 +32,9 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("null case",
+    "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
+
   createQueryTest("single case",
     """SELECT case when true then 1 else 2 end FROM src LIMIT 1""")
 
