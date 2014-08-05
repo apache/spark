@@ -336,13 +336,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
+  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
   <td>
     The codec used to compress internal data such as RDD partitions and shuffle outputs.
-    By default, Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code>
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>. Of these two choices,
-    Snappy offers faster compression and decompression, while LZF offers a better compression
-    ratio.
+    By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -350,7 +349,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
-    is used.
+    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lz4.block.size</code></td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
@@ -412,7 +419,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
@@ -699,6 +706,25 @@ Apart from these, the following properties are also available, and may be useful
     (in milliseconds)
   </td>
 </tr>
+</tr>
+  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td>0</td>
+  <td>
+    The minimum ratio of registered executors (registered executors / total expected executors)
+    to wait for before scheduling begins. Specified as a double between 0 and 1.
+    Regardless of whether the minimum ratio of executors has been reached,
+    the maximum amount of time it will wait before scheduling begins is controlled by config 
+    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td>30000</td>
+  <td>
+    Maximum amount of time to wait for executors to register before scheduling begins
+    (in milliseconds).  
+  </td>
+</tr>
 </table>
 
 #### Security
@@ -774,6 +800,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.receiver.maxRate</code></td>
+  <td>infinite</td>
+  <td>
+    Maximum rate (per second) at which each receiver will push data into blocks. Effectively,
+    each stream will consume at most this number of records per second.
+    Setting this configuration to 0 or a negative number will put no limit on the rate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.unpersist</code></td>
   <td>true</td>
   <td>
@@ -782,6 +817,45 @@ Apart from these, the following properties are also available, and may be useful
     Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.strategy</code></td>
+  <td>(none)</td>
+  <td>
+    Set the strategy of rolling of executor logs. By default it is disabled. It can
+    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
+    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    the maximum file size for rolling.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.time.interval</code></td>
+  <td>daily</td>
+  <td>
+    Set the time interval by which the executor logs will be rolled over.
+    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the max size of the file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
   </td>
 </tr>
 </table>

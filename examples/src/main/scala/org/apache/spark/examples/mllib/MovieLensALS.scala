@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.collection.mutable
+
 import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
@@ -42,6 +44,7 @@ object MovieLensALS {
   class ALSRegistrator extends KryoRegistrator {
     override def registerClasses(kryo: Kryo) {
       kryo.register(classOf[Rating])
+      kryo.register(classOf[mutable.BitSet])
     }
   }
 
@@ -52,9 +55,11 @@ object MovieLensALS {
       lambda: Double = 1.0,
       lambdaL1: Double = 1.0,
       rank: Int = 10,
+      numUserBlocks: Int = -1,
+      numProductBlocks: Int = -1,
       implicitPrefs: Boolean = false,
       qpProblem: Int = 1)
-
+      
   def main(args: Array[String]) {
     val defaultParams = Params()
 
@@ -73,8 +78,14 @@ object MovieLensALS {
         .text(s"lambdaL1 (sparsity constant), default: ${defaultParams.lambdaL1}")
         .action((x, c) => c.copy(lambdaL1 = x))
       opt[Unit]("kryo")
-        .text(s"use Kryo serialization")
+        .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
+      opt[Int]("numUserBlocks")
+        .text(s"number of user blocks, default: ${defaultParams.numUserBlocks} (auto)")
+        .action((x, c) => c.copy(numUserBlocks = x))
+      opt[Int]("numProductBlocks")
+        .text(s"number of product blocks, default: ${defaultParams.numProductBlocks} (auto)")
+        .action((x, c) => c.copy(numProductBlocks = x))
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
@@ -170,9 +181,10 @@ object MovieLensALS {
       .setLambda(params.lambda)
       .setLambdaL1(params.lambdaL1)
       .setImplicitPrefs(params.implicitPrefs)
-    
-    //Let's test the explicit options first
-    println(s"Qp option ${params.qpProblem}")
+      .setUserBlocks(params.numUserBlocks)
+      .setProductBlocks(params.numProductBlocks)
+      
+      println(s"Qp option ${params.qpProblem}")
     
     params.qpProblem match {
       case 1 => println("Unbounded Qp")
@@ -187,7 +199,7 @@ object MovieLensALS {
     als.setQpProblem(params.qpProblem)
     
     val model = als.run(training)
-      
+   
     val rmse = computeRmse(model, test, params.implicitPrefs)
     
     println(s"Test RMSE = $rmse.")

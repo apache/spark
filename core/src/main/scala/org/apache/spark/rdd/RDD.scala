@@ -35,6 +35,7 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
@@ -42,7 +43,7 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -328,7 +329,7 @@ abstract class RDD[T: ClassTag](
       : RDD[T] = {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
-      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
+      val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner 
@@ -336,11 +337,11 @@ abstract class RDD[T: ClassTag](
           position = position + 1
           (position, t)
         }
-      }
+      } : Iterator[(Int, T)]
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -378,46 +379,56 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
-  {
-    var fraction = 0.0
-    var total = 0
-    val multiplier = 3.0
-    val initialCount = this.count()
-    var maxSelected = 0
+  /**
+   * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @param withReplacement whether sampling is done with replacement
+   * @param num size of the returned sample
+   * @param seed seed for the random number generator
+   * @return sample of specified size in an array
+   */
+  def takeSample(withReplacement: Boolean,
+      num: Int,
+      seed: Long = Utils.random.nextLong): Array[T] = {
+    val numStDev =  10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
+    } else if (num == 0) {
+      return new Array[T](0)
     }
 
+    val initialCount = this.count()
     if (initialCount == 0) {
       return new Array[T](0)
     }
 
-    if (initialCount > Integer.MAX_VALUE - 1) {
-      maxSelected = Integer.MAX_VALUE - 1
-    } else {
-      maxSelected = initialCount.toInt
-    }
-
-    if (num > initialCount && !withReplacement) {
-      total = maxSelected
-      fraction = multiplier * (maxSelected + 1) / initialCount
-    } else {
-      fraction = multiplier * (num + 1) / initialCount
-      total = num
+    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
+    if (num > maxSampleSize) {
+      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
+        s"$numStDev * math.sqrt(Int.MaxValue)")
     }
 
     val rand = new Random(seed)
+    if (!withReplacement && num >= initialCount) {
+      return Utils.randomizeInPlace(this.collect(), rand)
+    }
+
+    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+      withReplacement)
+
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
     // this shouldn't happen often because we use a big multiplier for the initial size
-    while (samples.length < total) {
+    var numIters = 0
+    while (samples.length < num) {
+      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+      numIters += 1
     }
 
-    Utils.randomizeInPlace(samples, rand).take(total)
+    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
@@ -431,6 +442,18 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return this RDD sorted by the given key function.
+   */
+  def sortBy[K](
+      f: (T) => K,
+      ascending: Boolean = true,
+      numPartitions: Int = this.partitions.size)
+      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
+    this.keyBy[K](f)
+        .sortByKey(ascending, numPartitions)
+        .values
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -487,6 +510,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
@@ -494,6 +521,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
@@ -501,6 +532,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = {
@@ -885,19 +920,19 @@ abstract class RDD[T: ClassTag](
       throw new SparkException("countByValue() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
-    def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
+    val countPartition = (iter: Iterator[T]) => {
       val map = new OpenHashMap[T,Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
       Iterator(map)
-    }
-    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
+    }: Iterator[OpenHashMap[T,Long]]
+    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
       m2.foreach { case (key, value) =>
         m1.changeValue(key, value, _ + value)
       }
       m1
-    }
+    }: OpenHashMap[T,Long]
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     // Convert to a Scala mutable map
     val mutableResult = scala.collection.mutable.Map[T,Long]()
@@ -1052,11 +1087,11 @@ abstract class RDD[T: ClassTag](
    * Returns the top K (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
+   *   // returns Array(12)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
-   *   // returns [6, 5]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).top(2)
+   *   // returns Array(6, 5)
    * }}}
    *
    * @param num the number of top elements to return
@@ -1070,11 +1105,11 @@ abstract class RDD[T: ClassTag](
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).takeOrdered(1)
+   *   // returns Array(2)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
-   *   // returns [2, 3]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
+   *   // returns Array(2, 3)
    * }}}
    *
    * @param num the number of top elements to return
@@ -1161,26 +1196,41 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = {
-    checkpointData.map(_.isCheckpointed).getOrElse(false)
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = {
-    checkpointData.flatMap(_.getCheckpointFile)
-  }
+  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
 
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
 
+  /**
+   * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that we broadcast
+   * the serialized copy of the RDD and for each task we will deserialize it, which means each
+   * task gets a different copy of the RDD. This provides stronger isolation between tasks that
+   * might modify state of objects referenced in their closures. This is necessary in Hadoop
+   * where the JobConf/Configuration object is not thread-safe.
+   */
+  @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    val bytes = ser.serialize(this).array()
+    val size = Utils.bytesToString(bytes.length)
+    if (bytes.length > (1L << 20)) {
+      logWarning(s"Broadcasting RDD $id ($size), which contains large objects")
+    } else {
+      logDebug(s"Broadcasting RDD $id ($size)")
+    }
+    sc.broadcast(bytes)
+  }
+
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
-  private[spark] def getCreationSite: String = creationSiteInfo.toString
+  @transient private[spark] val creationSite = Utils.getCallSite
+  private[spark] def getCreationSite: String = Option(creationSite).map(_.short).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 

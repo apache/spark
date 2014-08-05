@@ -43,6 +43,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
+/** CallSite represents a place in user code. It can have a short and a long form. */
+private[spark] case class CallSite(short: String, long: String)
+
 /**
  * Various utility methods used by Spark.
  */
@@ -799,23 +802,19 @@ private[spark] object Utils extends Logging {
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
-  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String) {
-
-    /** Returns a printable version of the call site info suitable for logs. */
-    override def toString = {
-      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
-    }
-  }
-
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSiteInfo: CallSiteInfo = {
+  def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot(_.getMethodName.contains("getStackTrace"))
+      .filterNot { ste:StackTraceElement => 
+        // When running under some profilers, the current stack trace might contain some bogus 
+        // frames. This is intended to ensure that we don't crash in these situations by
+        // ignoring any frames that we can't examine.
+        (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
+      }
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -824,11 +823,11 @@ private[spark] object Utils extends Logging {
     var lastSparkMethod = "<unknown>"
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
-    var finished = false
-    var firstUserClass = "<unknown>"
+    var insideSpark = true
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     for (el <- trace) {
-      if (!finished) {
+      if (insideSpark) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
@@ -836,15 +835,21 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
+          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
-          firstUserClass = el.getClassName
-          finished = true
+          callStack += el.toString
+          insideSpark = false
         }
+      } else {
+        callStack += el.toString
       }
     }
-    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
+    CallSite(
+      short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      long = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -860,6 +865,59 @@ private[spark] object Utils extends Logging {
     stream.read(buff)
     stream.close()
     Source.fromBytes(buff).mkString
+  }
+
+  /**
+   * Return a string containing data across a set of files. The `startIndex`
+   * and `endIndex` is based on the cumulative size of all the files take in
+   * the given order. See figure below for more details.
+   */
+  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
+    val fileLengths = files.map { _.length }
+    val startIndex = math.max(start, 0)
+    val endIndex = math.min(end, fileLengths.sum)
+    val fileToLength = files.zip(fileLengths).toMap
+    logDebug("Log files: \n" + fileToLength.mkString("\n"))
+
+    val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
+    var sum = 0L
+    for (file <- files) {
+      val startIndexOfFile = sum
+      val endIndexOfFile = sum + fileToLength(file)
+      logDebug(s"Processing file $file, " +
+        s"with start index = $startIndexOfFile, end index = $endIndex")
+
+      /*
+                                      ____________
+       range 1:                      |            |
+                                     |   case A   |
+
+       files:   |==== file 1 ====|====== file 2 ======|===== file 3 =====|
+
+                     |   case B  .       case C       .    case D    |
+       range 2:      |___________.____________________.______________|
+       */
+
+      if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
+        // Case C: read the whole file
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+      } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
+        // Case A and B: read from [start of required range] to [end of file / end of range]
+        val effectiveStartIndex = startIndex - startIndexOfFile
+        val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
+        // Case D: read from [start of file] to [end of require range]
+        val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
+        val effectiveEndIndex = endIndex - startIndexOfFile
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      }
+      sum += fileToLength(file)
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+    }
+    stringBuffer.toString
   }
 
   /**
@@ -1231,6 +1289,21 @@ private[spark] object Utils extends Logging {
         }
       }
     }
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(e: Exception): String = {
+    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(
+      className: String,
+      description: String,
+      stackTrace: Array[StackTraceElement]): String = {
+    val desc = if (description == null) "" else description
+    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
+    s"$className: $desc\n$st"
   }
 
 }

@@ -28,6 +28,7 @@ class SQLConfSuite extends QueryTest {
   val testVal = "test.val.0"
 
   test("programmatic ways of basic setting and getting") {
+    clear()
     assert(getOption(testKey).isEmpty)
     assert(getAll.toSet === Set())
 
@@ -48,6 +49,7 @@ class SQLConfSuite extends QueryTest {
   }
 
   test("parse SQL set commands") {
+    clear()
     sql(s"set $testKey=$testVal")
     assert(get(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.get(testKey, testVal + "_") == testVal)

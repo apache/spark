@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 
@@ -103,7 +103,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
   } else {
-    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" + 
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
       File.separator + "resources")
   }
 
@@ -130,6 +130,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case CacheCommand(tbl, _) => tbl :: Nil
         case _ => Nil
       }
 

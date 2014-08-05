@@ -35,7 +35,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
-   *
+   * I.e. in flat cpo "False -> Unknown -> True", OR is lowest upper bound, AND is greatest lower bound.
    * p       q       p OR q  p AND q  p = q
    * True    True    True    True     True
    * True    False   True    False    False
@@ -333,6 +333,49 @@ class ExpressionEvaluationSuite extends FunSuite {
       Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
   }
 
+  test("case when") {
+    val row = new GenericRow(Array[Any](null, false, true, "a", "b", "c"))
+    val c1 = 'a.boolean.at(0)
+    val c2 = 'a.boolean.at(1)
+    val c3 = 'a.boolean.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    val c6 = 'a.string.at(5)
+
+    checkEvaluation(CaseWhen(Seq(c1, c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c2, c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c3, c4, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq(Literal(null, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal(false, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal(true, BooleanType), c4, c6)), "a", row)
+
+    checkEvaluation(CaseWhen(Seq(c3, c4, c2, c5, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq(c2, c4, c3, c5, c6)), "b", row)
+    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5)), null, row)
+
+    assert(CaseWhen(Seq(c2, c4, c6)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5)).nullable === true)
+
+    val c4_notNull = 'a.boolean.notNull.at(3)
+    val c5_notNull = 'a.boolean.notNull.at(4)
+    val c6_notNull = 'a.boolean.notNull.at(5)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable === false)
+    assert(CaseWhen(Seq(c2, c4, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c6)).nullable === true)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable === false)
+    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable === true)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
+  }
+
   test("complex type") {
     val row = new GenericRow(Array[Any](
       "^Ba*n",                                  // 0 
@@ -423,5 +466,81 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
   }
-}
 
+  test("StringComparison") {
+    val row = new GenericRow(Array[Any]("abc", null))
+    val c1 = 'a.string.at(0)
+    val c2 = 'a.string.at(1)
+
+    checkEvaluation(Contains(c1, "b"), true, row)
+    checkEvaluation(Contains(c1, "x"), false, row)
+    checkEvaluation(Contains(c2, "b"), null, row)
+    checkEvaluation(Contains(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(StartsWith(c1, "a"), true, row)
+    checkEvaluation(StartsWith(c1, "b"), false, row)
+    checkEvaluation(StartsWith(c2, "a"), null, row)
+    checkEvaluation(StartsWith(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(EndsWith(c1, "c"), true, row)
+    checkEvaluation(EndsWith(c1, "b"), false, row)
+    checkEvaluation(EndsWith(c2, "b"), null, row)
+    checkEvaluation(EndsWith(c1, Literal(null, StringType)), null, row)
+  }
+
+  test("Substring") {
+    val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
+
+    val s = 'a.string.at(0)
+
+    // substring from zero position with less-than-full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)), "ex", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(2, IntegerType)), "ex", row)
+
+    // substring from zero position with full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(7, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(7, IntegerType)), "example", row)
+
+    // substring from zero position with greater-than-full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(100, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(100, IntegerType)), "example", row)
+
+    // substring from nonzero position with less-than-full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(2, IntegerType)), "xa", row)
+
+    // substring from nonzero position with full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(6, IntegerType)), "xample", row)
+
+    // substring from nonzero position with greater-than-full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(100, IntegerType)), "xample", row)
+
+    // zero-length substring (within string bounds)
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(0, IntegerType)), "", row)
+
+    // zero-length substring (beyond string bounds)
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), "", row)
+
+    // substring(null, _, _) -> null
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), null, new GenericRow(Array[Any](null)))
+
+    // substring(_, null, _) -> null
+    checkEvaluation(Substring(s, Literal(null, IntegerType), Literal(4, IntegerType)), null, row)
+
+    // substring(_, _, null) -> null
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(null, IntegerType)), null, row)
+
+    // 2-arg substring from zero position
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
+
+    // 2-arg substring from nonzero position
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
+
+    val s_notNull = 'a.string.notNull.at(0)
+
+    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
+    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+  }
+}

@@ -39,41 +39,39 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     diskManager.getBlockLocation(blockId).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) : PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
-    logDebug("Attempting to put block " + blockId)
+    logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel()
+    val channel = new FileOutputStream(file).getChannel
     while (bytes.remaining > 0) {
       channel.write(bytes)
     }
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
-    return PutResult(bytes.limit(), Right(bytes.duplicate()))
+      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
+    PutResult(bytes.limit(), Right(bytes.duplicate()))
   }
 
   override def putValues(
       blockId: BlockId,
       values: ArrayBuffer[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-  : PutResult = {
-    return putValues(blockId, values.toIterator, level, returnValues)
+      returnValues: Boolean): PutResult = {
+    putValues(blockId, values.toIterator, level, returnValues)
   }
 
   override def putValues(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-    : PutResult = {
+      returnValues: Boolean): PutResult = {
 
-    logDebug("Attempting to write values for block " + blockId)
+    logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
@@ -95,7 +93,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val segment = diskManager.getBlockLocation(blockId)
-    val channel = new RandomAccessFile(segment.file, "r").getChannel()
+    val channel = new RandomAccessFile(segment.file, "r").getChannel
 
     try {
       // For small files, directly read rather than memory map
@@ -131,7 +129,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
       file.delete()
     } else {
       if (fileSegment.length < file.length()) {
-        logWarning("Could not delete block associated with only a part of a file: " + blockId)
+        logWarning(s"Could not delete block associated with only a part of a file: $blockId")
       }
       false
     }

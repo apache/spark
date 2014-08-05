@@ -20,12 +20,13 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
+
+  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
 
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
@@ -33,8 +34,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
-  case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
-    extends CoarseGrainedClusterMessage
+  case object RegisteredExecutor extends CoarseGrainedClusterMessage
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
 
@@ -65,5 +65,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case object StopExecutors extends CoarseGrainedClusterMessage
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
+
+  case class AddWebUIFilter(filterName:String, filterParams: String, proxyBase :String)
+    extends CoarseGrainedClusterMessage
 
 }
