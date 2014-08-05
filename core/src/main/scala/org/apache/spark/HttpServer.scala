@@ -45,7 +45,9 @@ private[spark] class HttpServer(
     resourceBase: File,
     securityManager: SecurityManager,
     requestedPort: Int = 0,
-    serverName: String = "HTTP server") extends Logging {
+    serverName: String = "HTTP server")
+  extends Logging {
+
   private var server: Server = null
   private var port: Int = requestedPort
 

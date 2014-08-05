@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{BindException, InetSocketAddress, URL}
+import java.net.{InetSocketAddress, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -33,7 +33,7 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**

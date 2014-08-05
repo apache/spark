@@ -1340,8 +1340,7 @@ private[spark] object Utils extends Logging {
    *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
-   * @throws SparkException When unable to start service in the given number of attempts
-   * @return
+   * @throws SparkException When unable to start the service after a given number of attempts
    */
   def startServiceOnPort[T](
       startPort: Int,
