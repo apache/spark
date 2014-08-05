@@ -271,9 +271,7 @@ trait ClientBase extends Logging {
     localResources
   }
 
-  def setupLaunchEnv(
-      localResources: HashMap[String, LocalResource],
-      stagingDir: String): HashMap[String, String] = {
+  def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment")
 
     val env = new HashMap[String, String]()
