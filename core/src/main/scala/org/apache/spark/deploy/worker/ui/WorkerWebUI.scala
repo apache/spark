@@ -33,8 +33,8 @@ private[spark]
 class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
-    port: Option[Int] = None)
-  extends WebUI(worker.securityMgr, WorkerWebUI.getUIPort(port, worker.conf), worker.conf)
+    port: Int)
+  extends WebUI(worker.securityMgr, port, worker.conf)
   with Logging {
 
   val timeout = AkkaUtils.askTimeout(worker.conf)
@@ -54,10 +54,5 @@ class WorkerWebUI(
 }
 
 private[spark] object WorkerWebUI {
-  val DEFAULT_PORT = 8081
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
-
-  def getUIPort(requestedPort: Option[Int], conf: SparkConf): Int = {
-    requestedPort.getOrElse(conf.getInt("worker.ui.port", WorkerWebUI.DEFAULT_PORT))
-  }
 }
