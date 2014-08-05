@@ -118,7 +118,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
-     Add the environment variable specified by `EnvironmentVariableName` to the 
+     Add the environment variable specified by <code>EnvironmentVariableName</code> to the 
      Application Master process launched on YARN. The user can specify multiple of 
      these and to set multiple environment variables. In yarn-cluster mode this controls 
      the environment of the SPARK driver and in yarn-client mode it only controls 
