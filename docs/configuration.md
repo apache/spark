@@ -589,7 +589,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver's HTTP class server to listen on.
-    This is only relevant for Spark shell.
+    This is only relevant for the Spark shell.
   </td>
 </tr>
 <tr>
