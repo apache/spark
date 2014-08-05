@@ -393,23 +393,39 @@ class RowMatrix(
     new RowMatrix(AB, nRows, B.numCols)
   }
 
+  /**
+   * Find all similar columns using cosine similarity.
+   *
+   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   */
   def similarColumns():
   CoordinateMatrix = {
     similarColumnsDIMSUM(Double.MaxValue)
   }
 
-  def similarColumns(threshold: Double):
-  CoordinateMatrix = {
-    require(threshold > 0, s"Similarity threshold must be above 0, but set to: $threshold")
-    similarColumnsDIMSUM(10.0 * math.log(numCols()) / threshold)
-  }
-
+  /**
+   * Find all similar columns using the DIMSUM sampling algorithm, described in
+   * http://arxiv.org/abs/1304.1467
+   *
+   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s, where s is the smallest
+   *              similarity score to be estimated, and n is the number of columns
+   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   */
   def similarColumnsDIMSUM(gamma: Double):
   CoordinateMatrix = {
     val colMags = computeColumnSummaryStatistics().magnitude.toArray
     similarColumnsDIMSUM(colMags, gamma)
   }
 
+  /**
+   * Find all similar columns using the DIMSUM sampling algorithm, described in
+   * http://arxiv.org/abs/1304.1467
+   *
+   * @param colMags A vector of column magnitudes
+   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s, where s is the smallest
+   *              similarity score to be estimated, and n is the number of columns
+   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   */
   def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double):
   CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")

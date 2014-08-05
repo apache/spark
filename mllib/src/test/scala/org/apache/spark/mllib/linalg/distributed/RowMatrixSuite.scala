@@ -117,7 +117,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
 
     for (mat <- Seq(denseMat, sparseMat)) {
-      val G = mat.similarColumns(0.01)
+      val G = mat.similarColumnsDIMSUM(colMags.toArray, 150.0)
       assert(closeToZero(G.toBreeze() - expected))
     }
   }
