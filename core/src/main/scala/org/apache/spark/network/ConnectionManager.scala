@@ -110,7 +110,7 @@ private[spark] class ConnectionManager(
 
   private def startService(port: Int): (ServerSocketChannel, Int) = {
     serverChannel.socket.bind(new InetSocketAddress(port))
-    (serverChannel, port)
+    (serverChannel, serverChannel.socket.getLocalPort)
   }
   Utils.startServiceOnPort[ServerSocketChannel](port, startService, name)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)

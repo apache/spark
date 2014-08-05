@@ -1347,22 +1347,26 @@ private[spark] object Utils extends Logging {
       startService: Int => (T, Int),
       serviceName: String = "",
       maxRetries: Int = 3): (T, Int) = {
+    val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     for (offset <- 0 to maxRetries) {
-      val tryPort = (startPort + offset) % 65536
+      // Do not increment port if startPort is 0, which is treated as a special port
+      val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
       try {
-        return startService(tryPort)
+        val (service, port) = startService(tryPort)
+        logInfo(s"Successfully started service$serviceString on port $port.")
+        return (service, port)
       } catch {
         case e: BindException =>
-          val service = if (serviceName.isEmpty) "Service" else s"Service '$serviceName'"
           if (!e.getMessage.contains("Address already in use") || offset >= maxRetries) {
             val exceptionMessage =
-              s"${e.getMessage}: $service failed after $maxRetries retries!"
+              s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logInfo(s"$service could not bind on port $tryPort. Attempting port ${tryPort + 1}.")
+          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+            s"Attempting port ${tryPort + 1}.")
       }
     }
     // Should never happen
