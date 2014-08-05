@@ -119,7 +119,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
 
   /**
    * Compute a histogram using the provided buckets. The buckets are all open
-   * to the left except for the last which is closed
+   * to the right except for the last which is closed
    *  e.g. for the array
    *  [1, 10, 20, 50] the buckets are [1, 10) [10, 20) [20, 50]
    *  e.g 1<=x<10 , 10<=x<20, 20<=x<=50
