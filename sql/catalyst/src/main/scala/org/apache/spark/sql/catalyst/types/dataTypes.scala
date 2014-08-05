@@ -164,6 +164,7 @@ case object BinaryType extends DataType with PrimitiveType {
 
 case class FixedLenByteArrayType( length:Int ) extends DataType with PrimitiveType {
   type JvmType = Array[Byte]
+  def simpleString: String = "fixed_len_byte_array(%d)".format(length)
 }
 
 case object BooleanType extends NativeType with PrimitiveType {
