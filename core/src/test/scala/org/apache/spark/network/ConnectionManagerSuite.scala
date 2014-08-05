@@ -47,7 +47,7 @@ class ConnectionManagerSuite extends FunSuite {
     buffer.flip
 
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(manager.id, bufferMessage)
+    Await.ready(manager.sendMessageReliably(manager.id, bufferMessage), 10 seconds)
 
     assert(receivedMessage == true)
 
@@ -80,7 +80,7 @@ class ConnectionManagerSuite extends FunSuite {
 
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-      manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+      Await.ready(manager.sendMessageReliably(manager.id, bufferMessage), 10 seconds)
     })
 
     assert(numReceivedServerMessages == 10)
@@ -119,7 +119,7 @@ class ConnectionManagerSuite extends FunSuite {
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
     buffer.flip
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+    Await.result(manager.sendMessageReliably(manager.id, bufferMessage), 10 seconds)
 
     assert(numReceivedServerMessages == 0)
     assert(numReceivedMessages == 0)
