@@ -152,7 +152,17 @@ val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age 
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
-Another way to turns an RDD to table is to use `applySchema`. Here is an example.
+In cases that case classes cannot be defined ahead of time (for example,
+dynamically parsing text files and then projecting parsed fields),
+a `SchemaRDD` can be created programmatically with three steps.
+
+1. Create an RDD of `Row`s from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+`Row`s in the RDD created in the step 1.
+3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+by `SQLContext`.
+
+For example:
 {% highlight scala %}
 // sc is an existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
@@ -169,7 +179,7 @@ val schema =
     StructField("name", StringType, true) ::
     StructField("age", IntegerType, true) :: Nil)
 
-// Convert records of the RDD (people) to rows.
+// Convert records of the RDD (people) to Rows.
 val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim.toInt))
 
 // Apply the schema to the RDD.
@@ -260,7 +270,17 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 
 {% endhighlight %}
 
-Another way to turns an RDD to table is to use `applySchema`. Here is an example.
+In cases that JavaBean classes cannot be defined ahead of time (for example,
+dynamically parsing text files and then projecting parsed fields),
+a `SchemaRDD` can be created programmatically with three steps.
+
+1. Create an RDD of `Row`s from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+`Row`s in the RDD created in the step 1.
+3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+by `JavaSQLContext`.
+
+For example:
 {% highlight java %}
 // Import factory methods provided by DataType.
 import org.apache.spark.sql.api.java.DataType
@@ -281,7 +301,7 @@ List<StructField> fields = new ArrayList<StructField>(2);
     fields.add(DataType.createStructField("age", DataType.IntegerType, true));
 StructType schema = DataType.createStructType(fields);
 
-// Convert records of the RDD (people) to rows.
+// Convert records of the RDD (people) to Rows.
 JavaRDD<Row> rowRDD = people.map(
   new Function<Person, Row>() {
     public Row call(Person person) throws Exception {
@@ -342,7 +362,15 @@ for teenName in teenNames.collect():
   print teenName
 {% endhighlight %}
 
-Another way to turns an RDD to table is to use `applySchema`. Here is an example.
+
+Alternatively, a `SchemaRDD` can be created programmatically with three steps.
+
+1. Create an RDD of tuples or lists from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+tuples or lists in the RDD created in the step 1.
+3. Apply the schema to the RDD via `applySchema` method provided by `SQLContext`.
+
+For example:
 {% highlight python %}
 # Import SQLContext and data types
 from pyspark.sql import *
