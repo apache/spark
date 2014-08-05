@@ -35,7 +35,7 @@ class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
     port: Option[Int] = None)
-  extends WebUI(worker.securityMgr, getUIPort(port, worker.conf), worker.conf, "WorkerUI")
+  extends WebUI(worker.securityMgr, getUIPort(port, worker.conf), worker.conf, name = "WorkerUI")
   with Logging {
 
   val timeout = AkkaUtils.askTimeout(worker.conf)
