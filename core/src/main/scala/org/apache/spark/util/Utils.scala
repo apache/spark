@@ -1357,7 +1357,10 @@ private[spark] object Utils extends Logging {
         return (service, port)
       } catch {
         case e: BindException =>
-          if (!e.getMessage.contains("Address already in use") || offset >= maxRetries) {
+          if (!e.getMessage.contains("Address already in use")) {
+            throw e
+          }
+          if (offset >= maxRetries) {
             val exceptionMessage =
               s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
             val exception = new BindException(exceptionMessage)
