@@ -259,6 +259,17 @@ class SparkContext(object):
         """
         return self._jsc.sc().defaultMinPartitions()
 
+    @property
+    def isLocal(self):
+        """
+        Whether the context run locally
+        """
+        return self._jsc.isLocal()
+
+    @property
+    def conf(self):
+        return self._conf
+
     def stop(self):
         """
         Shut down the SparkContext.
@@ -723,6 +734,13 @@ class SparkContext(object):
         Get SPARK_USER for user who is running SparkContext.
         """
         return self._jsc.sc().sparkUser()
+
+    @property
+    def startTime(self):
+        """
+        Return the start time of context in millis seconds
+        """
+        return self._jsc.startTime()
 
     def cancelJobGroup(self, groupId):
         """
