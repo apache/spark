@@ -252,12 +252,17 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
+  private val shade = new ShadeStrategy(List(
+    new Relocator("com.google", "org.spark-project.guava", Seq("com\\.google\\.common\\..*".r),
+      Seq("com\\.google\\.common\\.base\\.Optional.*".r))))
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
       Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
+      case m if m.endsWith(".class")                           => shade
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
