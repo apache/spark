@@ -271,6 +271,7 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     if (regType == "l2") {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
@@ -341,16 +342,27 @@ class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      initialWeightsBA: Array[Byte],
+      regType: String,
+      intercept: Boolean): java.util.List[java.lang.Object] = {
+    val SVMAlg = new SVMWithSGD()
+    SVMAlg.setIntercept(intercept)
+    SVMAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
+    if (regType == "l2") {
+      SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      SVMAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType != "none") {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
-        SVMWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+        SVMAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -363,15 +375,28 @@ class PythonMLLibAPI extends Serializable {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      initialWeightsBA: Array[Byte],
+      regParam: Double,
+      regType: String,
+      intercept: Boolean): java.util.List[java.lang.Object] = {
+    val LogRegAlg = new LogisticRegressionWithSGD()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
+    if (regType == "l2") {
+      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      LogRegAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType != "none") {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
-        LogisticRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          miniBatchFraction,
-          initialWeights),
+        LogRegAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
