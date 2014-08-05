@@ -906,7 +906,7 @@ class RDD(object):
     def histogram(self, buckets=None, evenBuckets=False, bucketCount=None):
         """
         Compute a histogram using the provided buckets or bucketCount. The
-        buckets are all open to the left except for the last which is closed
+        buckets are all open to the right except for the last which is closed
         e.g. for the array [1, 10, 20, 50], the buckets are [1, 10), [10, 20),
         [20, 50] i.e. 1<=x<10, 10<=x<20, 20<=x<=50. And on the input of 1 and 50
         we would have a histogram of 1, 0, 1.
