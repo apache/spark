@@ -77,12 +77,12 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     testSuite.createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
     testSuite.produceAndSendMessage(topic,
-      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
+      JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
         Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("zookeeper.connect", testSuite.zkConnect());
-    kafkaParams.put("group.id", "test-consumer-" + testSuite.random().nextInt(10000));
+    kafkaParams.put("group.id", "test-consumer-" + KafkaTestUtils.random().nextInt(10000));
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
