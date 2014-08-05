@@ -20,11 +20,12 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
@@ -51,6 +52,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
+      val accumulables = listener.stageIdToData(stageId).accumulables
       val hasInput = stageData.inputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
@@ -95,10 +97,15 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </ul>
         </div>
         // scalastyle:on
+      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
+      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
+        accumulables.values.toSeq)
+
       val taskHeaders: Seq[String] =
         Seq(
           "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
-          "Launch Time", "Duration", "GC Time") ++
+          "Launch Time", "Duration", "GC Time", "Accumulators") ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
@@ -208,11 +215,16 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
       val executorTable = new ExecutorTable(stageId, parent)
+
+      val maybeAccumulableTable: Seq[Node] =
+        if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
@@ -278,6 +290,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         </td>
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
+        </td>
+        <td>
+          {Unparsed(
+            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
+          )}
         </td>
         <!--
         TODO: Add this back after we add support to hide certain columns.

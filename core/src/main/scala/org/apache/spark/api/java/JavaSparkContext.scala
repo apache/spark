@@ -430,11 +430,31 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def intAccumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
+    sc.accumulator(initialValue, name)(IntAccumulatorParam)
+      .asInstanceOf[Accumulator[java.lang.Integer]]
+
+  /**
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
     sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def doubleAccumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
+    sc.accumulator(initialValue, name)(DoubleAccumulatorParam)
+      .asInstanceOf[Accumulator[java.lang.Double]]
 
   /**
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
@@ -443,11 +463,30 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
+    intAccumulator(initialValue, name)
+
+  /**
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
     doubleAccumulator(initialValue)
+
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
+    doubleAccumulator(initialValue, name)
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
@@ -457,11 +496,31 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.accumulator(initialValue)(accumulatorParam)
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
+   * values to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator[T](initialValue: T, name: String, accumulatorParam: AccumulatorParam[T])
+      : Accumulator[T] =
+    sc.accumulator(initialValue, name)(accumulatorParam)
+
+  /**
    * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
    * can "add" values with `add`. Only the master can access the accumuable's `value`.
    */
   def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
     sc.accumulable(initialValue)(param)
+
+  /**
+   * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
+   * can "add" values with `add`. Only the master can access the accumuable's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])
+      : Accumulable[T, R] =
+    sc.accumulable(initialValue, name)(param)
 
   /**
    * Broadcast a read-only variable to the cluster, returning a

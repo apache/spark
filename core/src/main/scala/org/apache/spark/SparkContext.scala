@@ -761,6 +761,15 @@ class SparkContext(config: SparkConf) extends Logging {
     new Accumulator(initialValue, param)
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
+   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * driver can access the accumulator's `value`.
+   */
+  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
+    new Accumulator(initialValue, param, Some(name))
+  }
+
+  /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
    * with `+=`. Only the driver can access the accumuable's `value`.
    * @tparam T accumulator type
@@ -768,6 +777,16 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def accumulable[T, R](initialValue: T)(implicit param: AccumulableParam[T, R]) =
     new Accumulable(initialValue, param)
+
+  /**
+   * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
+   * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
+   * access the accumuable's `value`.
+   * @tparam T accumulator type
+   * @tparam R type that can be added to the accumulator
+   */
+  def accumulable[T, R](initialValue: T, name: String)(implicit param: AccumulableParam[T, R]) =
+    new Accumulable(initialValue, param, Some(name))
 
   /**
    * Create an accumulator from a "mutable collection" type.

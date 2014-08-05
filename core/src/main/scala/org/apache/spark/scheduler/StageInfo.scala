@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.RDDInfo
 
@@ -37,6 +39,8 @@ class StageInfo(
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
+  /** Terminal values of accumulables updated during this stage. */
+  val accumulables = HashMap[Long, AccumulableInfo]()
 
   def stageFailed(reason: String) {
     failureReason = Some(reason)
