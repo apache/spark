@@ -106,7 +106,7 @@ class JdbcRDD[T: ClassTag](
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! stmt.isClosed()) conn.close()
+        if (null != conn && ! conn.isClosed()) conn.close()
         logInfo("closed connection")
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
