@@ -815,13 +815,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ui.acls.enable</code></td>
+  <td><code>spark.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether Spark web ui acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
-    Also note this requires the user to be known, if the user comes across as null no checks
-    are done. Filters can be used to authenticate and set the user.
+    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view or modify the job.  Note this requires the user to be known, 
+    so if the user comes across as null no checks are done. Filters can be used with the UI
+    to authenticate and set the user.
   </td>
 </tr>
 <tr>
@@ -830,6 +830,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.modify.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have modify access to the Spark job. By default only the
+    user that started the Spark job has access to modify it (kill it for example).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
+    This can be used if you run on a shared cluster and have a set of administrators or devs who
+    help debug when things work.
   </td>
 </tr>
 </table>
