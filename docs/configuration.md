@@ -206,6 +206,14 @@ Apart from these, the following properties are also available, and may be useful
     used during aggregation goes above this amount, it will spill the data into disks.
   </td>
 </tr>
+<tr>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
+    process. The user can specify multiple of these and to set multiple environment variables. 
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
