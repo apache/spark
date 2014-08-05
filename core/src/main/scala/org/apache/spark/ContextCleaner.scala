@@ -140,7 +140,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       logDebug("Cleaning RDD " + rddId)
       sc.unpersistRDD(rddId, blocking)
       listeners.foreach(_.rddCleaned(rddId))
-      logInfo("Cleaned RDD " + rddId)
+      logDebug("Cleaned RDD " + rddId)
     } catch {
       case e: Exception => logError("Error cleaning RDD " + rddId, e)
     }
@@ -153,7 +153,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
       blockManagerMaster.removeShuffle(shuffleId, blocking)
       listeners.foreach(_.shuffleCleaned(shuffleId))
-      logInfo("Cleaned shuffle " + shuffleId)
+      logDebug("Cleaned shuffle " + shuffleId)
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }
@@ -165,7 +165,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       logDebug("Cleaning broadcast " + broadcastId)
       broadcastManager.unbroadcast(broadcastId, true, blocking)
       listeners.foreach(_.broadcastCleaned(broadcastId))
-      logInfo("Cleaned broadcast " + broadcastId)
+      logDebug("Cleaned broadcast " + broadcastId)
     } catch {
       case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
     }

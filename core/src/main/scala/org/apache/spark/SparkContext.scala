@@ -1068,8 +1068,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
-    logInfo(
-      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo("Job finished: %s, took %.3f s".format(callSite.shortForm, (System.nanoTime - start) / 1e9))
     rdd.doCheckpoint()
   }
 

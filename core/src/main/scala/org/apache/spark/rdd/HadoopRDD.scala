@@ -188,7 +188,7 @@ class HadoopRDD[K, V](
     val iter = new NextIterator[(K, V)] {
 
       val split = theSplit.asInstanceOf[HadoopPartition]
-      logInfo("Input split: " + split.inputSplit)
+      logDebug("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
       val jobConf = getJobConf()
       val inputFormat = getInputFormat(jobConf)
