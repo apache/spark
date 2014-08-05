@@ -108,14 +108,6 @@ configure those ports.
     <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
   <tr>
-    <td>Driver</td>
-    <td>Executor</td>
-    <td>(random)</td>
-    <td>Executor actor system port</td>
-    <td><code>spark.executor.env.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly.</td>
-  </tr>
-  <tr>
     <td>Executor</td>
     <td>Driver</td>
     <td>(random)</td>

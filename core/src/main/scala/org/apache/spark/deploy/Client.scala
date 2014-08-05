@@ -146,7 +146,6 @@ object Client {
     }
 
     val conf = new SparkConf()
-    val port = conf.getInt("spark.standalone.client.port", 0)
     val driverArgs = new ClientArguments(args)
 
     if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
@@ -156,10 +155,8 @@ object Client {
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    // TODO: See if we can initialize akka so return messages are sent back using the same TCP
-    //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), port, conf, new SecurityManager(conf))
+      "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 

@@ -607,20 +607,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.env.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port used by the executor's actor system for various purposes.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.standalone.cluster.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port used by <code>org.apache.spark.deploy.Client</code> in standalone cluster deploy mode.
-  </td>
-</tr>
-<tr>
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
