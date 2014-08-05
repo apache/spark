@@ -17,6 +17,7 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
+from tempfile import NamedTemporaryFile
 
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
@@ -138,3 +139,27 @@ class StreamingContext(object):
         """
         """
         self._jssc.checkpoint(directory)
+
+    def _testInputStream(self, test_input, numSlices=None):
+
+        numSlices = numSlices or self._sc.defaultParallelism
+        # Calling the Java parallelize() method with an ArrayList is too slow,
+        # because it sends O(n) Py4J commands.  As an alternative, serialized
+        # objects are written to a file and loaded through textFile().
+        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
+        # Make sure we distribute data evenly if it's smaller than self.batchSize
+        if "__len__" not in dir(test_input):
+            c = list(test_input)    # Make it a list so we can compute its length
+        batchSize = min(len(test_input) // numSlices, self._sc._batchSize)
+        if batchSize > 1:
+            serializer = BatchedSerializer(self._sc._unbatched_serializer,
+                                           batchSize)
+        else:
+            serializer = self._sc._unbatched_serializer
+        serializer.dump_stream(test_input, tempFile)
+        tempFile.close()
+        print tempFile.name
+        jinput_stream = self._jvm.PythonTestInputStream(self._jssc,
+                                                        tempFile.name,
+                                                        numSlices).asJavaDStream()
+        return DStream(jinput_stream, self, UTF8Deserializer())

@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java._
 import org.apache.spark.api.python._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.streaming.{StreamingContext, Duration, Time}
