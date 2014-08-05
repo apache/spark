@@ -1367,10 +1367,7 @@ private[spark] object Utils extends Logging {
         logInfo(s"Successfully started service$serviceString on port $port.")
         return (service, port)
       } catch {
-        case e: BindException =>
-          if (!e.getMessage.contains("Address already in use")) {
-            throw e
-          }
+        case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
             val exceptionMessage =
               s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
@@ -1385,6 +1382,21 @@ private[spark] object Utils extends Logging {
     }
     // Should never happen
     throw new SparkException(s"Failed to start service on port $startPort")
+  }
+
+  /**
+   * Return whether the exception is caused by an address-port collision when binding.
+   */
+  private def isBindCollision(exception: Throwable): Boolean = {
+    exception match {
+      case e: BindException =>
+        if (e.getMessage != null && e.getMessage.contains("Address already in use")) {
+          return true
+        }
+        isBindCollision(e.getCause)
+      case e: Exception => isBindCollision(e.getCause)
+      case _ => false
+    }
   }
 
 }
