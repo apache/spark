@@ -300,6 +300,30 @@ object DecisionTree extends Serializable with Logging {
     new DecisionTree(strategy).train(input)
   }
 
+  def train(
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: Map[Int,Int],
+      impurity: Impurity,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = ???
+
+  def trainClassifier(
+      input: RDD[LabeledPoint],
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: Map[Int,Int],
+      impurity: Impurity,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = ???
+
+  def trainRegressor(
+      input: RDD[LabeledPoint],
+      categoricalFeaturesInfo: Map[Int,Int],
+      impurity: Impurity,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = ???
+
   private val InvalidBinIndex = -1
 
   /**
