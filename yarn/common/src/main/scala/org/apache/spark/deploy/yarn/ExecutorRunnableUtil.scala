@@ -171,7 +171,11 @@ trait ExecutorRunnableUtil extends Logging {
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
     ClientBase.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
 
-    // Allow users to specify some environment variables
+    sparkConf.getExecutorEnv.foreach { case (key, value) =>
+      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
+    }
+
+    // Keep this for backwards compatibility but users should move to the config
     YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
       File.pathSeparator)
 
