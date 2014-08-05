@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
+import java.io._
 import java.util.Comparator
 
 import scala.collection.BufferedIterator
@@ -28,7 +28,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 
@@ -199,13 +199,16 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush() = {
-      writer.commitAndClose()
-      val bytesWritten = writer.bytesWritten
+      val w = writer
+      writer = null
+      w.commitAndClose()
+      val bytesWritten = w.bytesWritten
       batchSizes.append(bytesWritten)
       _diskBytesSpilled += bytesWritten
       objectsWritten = 0
     }
 
+    var success = false
     try {
       val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
@@ -215,16 +218,28 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          writer.close()
           writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
         }
       }
       if (objectsWritten > 0) {
         flush()
+      } else if (writer != null) {
+        val w = writer
+        writer = null
+        w.revertPartialWritesAndClose()
       }
+      success = true
     } finally {
-      // Partial failures cannot be tolerated; do not revert partial writes
-      writer.close()
+      if (!success) {
+        // This code path only happens if an exception was thrown above before we set success;
+        // close our stuff and let the exception be thrown further
+        if (writer != null) {
+          writer.revertPartialWritesAndClose()
+        }
+        if (file.exists()) {
+          file.delete()
+        }
+      }
     }
 
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
@@ -271,30 +286,32 @@ class ExternalAppendOnlyMap[K, V, C](
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
-      val kcPairs = getMorePairs(it)
+      val kcPairs = new ArrayBuffer[(K, C)]
+      readNextHashCode(it, kcPairs)
       if (kcPairs.length > 0) {
         mergeHeap.enqueue(new StreamBuffer(it, kcPairs))
       }
     }
 
     /**
-     * Fetch from the given iterator until a key of different hash is retrieved.
+     * Fill a buffer with the next set of keys with the same hash code from a given iterator. We
+     * read streams one hash code at a time to ensure we don't miss elements when they are merged.
      *
-     * In the event of key hash collisions, this ensures no pairs are hidden from being merged.
-     * Assume the given iterator is in sorted order.
+     * Assumes the given iterator is in sorted order of hash code.
+     *
+     * @param it iterator to read from
+     * @param buf buffer to write the results into
      */
-    private def getMorePairs(it: BufferedIterator[(K, C)]): ArrayBuffer[(K, C)] = {
-      val kcPairs = new ArrayBuffer[(K, C)]
+    private def readNextHashCode(it: BufferedIterator[(K, C)], buf: ArrayBuffer[(K, C)]): Unit = {
       if (it.hasNext) {
         var kc = it.next()
-        kcPairs += kc
+        buf += kc
         val minHash = hashKey(kc)
         while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
-          kcPairs += kc
+          buf += kc
         }
       }
-      kcPairs
     }
 
     /**
@@ -306,12 +323,27 @@ class ExternalAppendOnlyMap[K, V, C](
       while (i < buffer.pairs.length) {
         val pair = buffer.pairs(i)
         if (pair._1 == key) {
-          buffer.pairs.remove(i)
+          // Note that there's at most one pair in the buffer with a given key, since we always
+          // merge stuff in a map before spilling, so it's safe to return after the first we find
+          removeFromBuffer(buffer.pairs, i)
           return mergeCombiners(baseCombiner, pair._2)
         }
         i += 1
       }
       baseCombiner
+    }
+
+    /**
+     * Remove the index'th element from an ArrayBuffer in constant time, swapping another element
+     * into its place. This is more efficient than the ArrayBuffer.remove method because it does
+     * not have to shift all the elements in the array over. It works for our array buffers because
+     * we don't care about the order of elements inside, we just want to search them for a key.
+     */
+    private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
+      val elem = buffer(index)
+      buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
+      buffer.reduceToSize(buffer.size - 1)
+      elem
     }
 
     /**
@@ -331,7 +363,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val minBuffer = mergeHeap.dequeue()
       val minPairs = minBuffer.pairs
       val minHash = minBuffer.minKeyHash
-      val minPair = minPairs.remove(0)
+      val minPair = removeFromBuffer(minPairs, 0)
       val minKey = minPair._1
       var minCombiner = minPair._2
       assert(hashKey(minPair) == minHash)
@@ -348,7 +380,7 @@ class ExternalAppendOnlyMap[K, V, C](
       // Repopulate each visited stream buffer and add it back to the queue if it is non-empty
       mergedBuffers.foreach { buffer =>
         if (buffer.isEmpty) {
-          buffer.pairs ++= getMorePairs(buffer.iterator)
+          readNextHashCode(buffer.iterator, buffer.pairs)
         }
         if (!buffer.isEmpty) {
           mergeHeap.enqueue(buffer)
@@ -360,10 +392,13 @@ class ExternalAppendOnlyMap[K, V, C](
 
     /**
      * A buffer for streaming from a map iterator (in-memory or on-disk) sorted by key hash.
-     * Each buffer maintains the lowest-ordered keys in the corresponding iterator. Due to
-     * hash collisions, it is possible for multiple keys to be "tied" for being the lowest.
+     * Each buffer maintains all of the key-value pairs with what is currently the lowest hash
+     * code among keys in the stream. There may be multiple keys if there are hash collisions.
+     * Note that because when we spill data out, we only spill one value for each key, there is
+     * at most one element for each key.
      *
-     * StreamBuffers are ordered by the minimum key hash found across all of their own pairs.
+     * StreamBuffers are ordered by the minimum key hash currently available in their stream so
+     * that we can put them into a heap and sort that.
      */
     private class StreamBuffer(
         val iterator: BufferedIterator[(K, C)],
@@ -389,27 +424,51 @@ class ExternalAppendOnlyMap[K, V, C](
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
-    extends Iterator[(K, C)] {
-    private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+    extends Iterator[(K, C)]
+  {
+    private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)  // Size will be batchSize.length + 1
+    assert(file.length() == batchOffsets(batchOffsets.length - 1))
+
+    private var batchIndex = 0  // Which batch we're in
+    private var fileStream: FileInputStream = null
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    private var batchStream = nextBatchStream()
-    private var compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-    private var deserializeStream = ser.deserializeStream(compressedStream)
+    private var deserializeStream = nextBatchStream()
     private var nextItem: (K, C) = null
     private var objectsRead = 0
 
     /**
      * Construct a stream that reads only from the next batch.
      */
-    private def nextBatchStream(): InputStream = {
-      if (batchSizes.length > 0) {
-        ByteStreams.limit(bufferedStream, batchSizes.remove(0))
+    private def nextBatchStream(): DeserializationStream = {
+      // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
+      // we're still in a valid batch.
+      if (batchIndex < batchOffsets.length - 1) {
+        if (deserializeStream != null) {
+          deserializeStream.close()
+          fileStream.close()
+          deserializeStream = null
+          fileStream = null
+        }
+
+        val start = batchOffsets(batchIndex)
+        fileStream = new FileInputStream(file)
+        fileStream.getChannel.position(start)
+        batchIndex += 1
+
+        val end = batchOffsets(batchIndex)
+
+        assert(end >= start, "start = " + start + ", end = " + end +
+          ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
+
+        val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
+        val compressedStream = blockManager.wrapForCompression(blockId, bufferedStream)
+        ser.deserializeStream(compressedStream)
       } else {
         // No more batches left
-        bufferedStream
+        cleanup()
+        null
       }
     }
 
@@ -424,10 +483,8 @@ class ExternalAppendOnlyMap[K, V, C](
         val item = deserializeStream.readObject().asInstanceOf[(K, C)]
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {
-          batchStream = nextBatchStream()
-          compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-          deserializeStream = ser.deserializeStream(compressedStream)
           objectsRead = 0
+          deserializeStream = nextBatchStream()
         }
         item
       } catch {
@@ -439,6 +496,9 @@ class ExternalAppendOnlyMap[K, V, C](
 
     override def hasNext: Boolean = {
       if (nextItem == null) {
+        if (deserializeStream == null) {
+          return false
+        }
         nextItem = readNextItem()
       }
       nextItem != null
@@ -455,7 +515,11 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // TODO: Ensure this gets called even if the iterator isn't drained.
     private def cleanup() {
-      deserializeStream.close()
+      batchIndex = batchOffsets.length  // Prevent reading any other batch
+      val ds = deserializeStream
+      deserializeStream = null
+      fileStream = null
+      ds.close()
       file.delete()
     }
   }

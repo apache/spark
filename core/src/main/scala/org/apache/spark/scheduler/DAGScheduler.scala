@@ -910,19 +910,24 @@ class DAGScheduler(
     event.reason match {
       case Success =>
         if (event.accumUpdates != null) {
-          // TODO: fail the stage if the accumulator update fails...
-          Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
-          event.accumUpdates.foreach { case (id, partialValue) =>
-            val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
-            // To avoid UI cruft, ignore cases where value wasn't updated
-            if (acc.name.isDefined && partialValue != acc.zero) {
-              val name = acc.name.get
-              val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
-              val stringValue = Accumulators.stringifyValue(acc.value)
-              stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
-              event.taskInfo.accumulables +=
-                AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+          try {
+            Accumulators.add(event.accumUpdates)
+            event.accumUpdates.foreach { case (id, partialValue) =>
+              val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+              // To avoid UI cruft, ignore cases where value wasn't updated
+              if (acc.name.isDefined && partialValue != acc.zero) {
+                val name = acc.name.get
+                val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
+                val stringValue = Accumulators.stringifyValue(acc.value)
+                stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
+                event.taskInfo.accumulables +=
+                  AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+              }
             }
+          } catch {
+            // If we see an exception during accumulator update, just log the error and move on.
+            case e: Exception =>
+              logError(s"Failed to update accumulators for $task", e)
           }
         }
         listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
