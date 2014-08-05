@@ -271,6 +271,7 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     if (regType == "l2") {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
@@ -350,6 +351,7 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     if (regType == "l2") {
       SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
@@ -383,6 +385,7 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     if (regType == "l2") {
       LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
