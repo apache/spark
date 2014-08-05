@@ -113,7 +113,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolve(name).getOrElse(u)
+            val result = q.resolveChildren(name).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
         }
