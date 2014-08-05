@@ -84,7 +84,8 @@ private[spark] class Executor(
   // Initialize Spark environment (using system properties read above)
   private val env = {
     if (!isLocal) {
-      val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
+      val port = conf.getInt("spark.executor.env.port", 0) // TODO: document this
+      val _env = SparkEnv.create(conf, executorId, slaveHostname, port,
         isDriver = false, isLocal = false)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)

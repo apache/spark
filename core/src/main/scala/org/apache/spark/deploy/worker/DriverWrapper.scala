@@ -30,8 +30,9 @@ object DriverWrapper {
     args.toList match {
       case workerUrl :: mainClass :: extraArgs =>
         val conf = new SparkConf()
+        val watcherPort = conf.getInt("spark.worker.watcher.port", 0) // TODO: document this
         val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
-          Utils.localHostName(), 0, conf, new SecurityManager(conf))
+          Utils.localHostName(), watcherPort, conf, new SecurityManager(conf))
         actorSystem.actorOf(Props(classOf[WorkerWatcher], workerUrl), name = "workerWatcher")
 
         // Delegate to supplied main class
