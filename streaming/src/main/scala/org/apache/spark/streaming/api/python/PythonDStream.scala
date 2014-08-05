@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java._
 import org.apache.spark.api.python._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.streaming.{StreamingContext, Duration, Time}
@@ -130,10 +131,10 @@ class PythonTransformedDStream(
 /**
  * This is a input stream just for the unitest. This is equivalent to a checkpointable,
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
- * returns the i_th element at the i_th batch unde manual clock.
+ * returns the i_th element at the i_th batch under manual clock.
  */
-class PythonTestInputStream(ssc_ : StreamingContext, filename: String, numPartitions: Int)
-  extends InputDStream[Array[Byte]](ssc_) {
+class PythonTestInputStream(ssc_ : JavaStreamingContext, filename: String, numPartitions: Int)
+  extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)){
 
   def start() {}
 
@@ -141,7 +142,7 @@ class PythonTestInputStream(ssc_ : StreamingContext, filename: String, numPartit
 
   def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     logInfo("Computing RDD for time " + validTime)
-    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
+    //val index = ((validTime - zeroTime) / slideDuration - 1).toInt
     //val selectedInput = if (index < input.size) input(index) else Seq[T]()
 
     // lets us test cases where RDDs are not created
@@ -149,8 +150,10 @@ class PythonTestInputStream(ssc_ : StreamingContext, filename: String, numPartit
     //  return None
 
     //val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
-    val rdd = PythonRDD.readRDDFromFile(ssc.sc, filename, numPartitions).rdd
+    val rdd = PythonRDD.readRDDFromFile(JavaSparkContext.fromSparkContext(ssc_.sparkContext), filename, numPartitions).rdd
     logInfo("Created RDD " + rdd.id + " with " + filename)
     Some(rdd)
   }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
 }
