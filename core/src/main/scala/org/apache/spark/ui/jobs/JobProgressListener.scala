@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer, Map}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -64,6 +64,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       logWarning("Stage completed for unknown stage " + stageId)
       new StageUIData
     })
+
+    for ((id, info) <- stageCompleted.stageInfo.accumulables) {
+      stageData.accumulables(id) = info
+    }
 
     poolToActiveStages.get(stageData.schedulingPool).foreach(_.remove(stageId))
     activeStages.remove(stageId)
@@ -129,6 +133,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         logWarning("Task end for unknown stage " + taskEnd.stageId)
         new StageUIData
       })
+
+      for (accumulableInfo <- info.accumulables) {
+        stageData.accumulables(accumulableInfo.id) = accumulableInfo
+      }
 
       val execSummaryMap = stageData.executorSummary
       val execSummary = execSummaryMap.getOrElseUpdate(info.executorId, new ExecutorSummary)

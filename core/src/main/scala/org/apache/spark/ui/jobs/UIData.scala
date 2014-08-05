@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.TaskInfo
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 import scala.collection.mutable.HashMap
 
@@ -51,6 +51,7 @@ private[jobs] object UIData {
     var schedulingPool: String = ""
     var description: Option[String] = None
 
+    var accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
   }
