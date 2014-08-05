@@ -326,6 +326,11 @@ private[spark] object SparkConf {
     isAkkaConf(name) ||
     name.startsWith("spark.akka") ||
     name.startsWith("spark.auth") ||
-    name == "spark.executor.port"
+    isSparkPortConf(name)
   }
+
+  /**
+   * Return whether the given config is a Spark port config.
+   */
+  def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
 }
