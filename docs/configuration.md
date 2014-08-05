@@ -568,6 +568,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.port.maxRetries</code></td>
+  <td>16</td>
+  <td>
+    Maximum number of retries when binding to a port before giving up.
+  </td>
+</tr>
+<tr>
   <td><code>spark.akka.frameSize</code></td>
   <td>10</td>
   <td>

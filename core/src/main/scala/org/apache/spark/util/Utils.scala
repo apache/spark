@@ -1332,6 +1332,17 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Default number of retries in binding to a port.
+   */
+  val portMaxRetries: Int = {
+    // SparkEnv may be null during tests
+    Option(SparkEnv.get)
+      .flatMap(_.conf.getOption("spark.ports.maxRetries"))
+      .map(_.toInt)
+      .getOrElse(16)
+  }
+
+  /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
    * Each subsequent attempt uses 1 + the port used in the previous attempt.
    *
@@ -1346,7 +1357,7 @@ private[spark] object Utils extends Logging {
       startPort: Int,
       startService: Int => (T, Int),
       serviceName: String = "",
-      maxRetries: Int = 3): (T, Int) = {
+      maxRetries: Int = portMaxRetries): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
