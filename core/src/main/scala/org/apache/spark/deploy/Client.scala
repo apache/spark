@@ -146,7 +146,7 @@ object Client {
     }
 
     val conf = new SparkConf()
-    val port = conf.getInt("spark.standalone.client.port", 0) // TODO: document this
+    val port = conf.getInt("spark.standalone.client.port", 0)
     val driverArgs = new ClientArguments(args)
 
     if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
