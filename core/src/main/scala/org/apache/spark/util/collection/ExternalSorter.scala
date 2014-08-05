@@ -78,6 +78,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
+  private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
@@ -115,13 +116,6 @@ private[spark] class ExternalSorter[K, V, C](
   private var spillCount = 0
   private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
-
-  // Collective memory threshold shared across all running tasks
-  private val maxMemoryThreshold = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
-    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
-  }
 
   // How much of the shared memory pool this collection has claimed
   private var myMemoryThreshold = 0L
@@ -218,31 +212,15 @@ private[spark] class ExternalSorter[K, V, C](
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold)
     {
-      // TODO: This logic doesn't work if there are two external collections being used in the same
-      // task (e.g. to read shuffle output and write it out into another shuffle) [SPARK-2711]
-
-      val currentSize = collection.estimateSize()
-      var shouldSpill = false
-      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
-
-      // Atomically check whether there is sufficient memory in the global pool for
-      // us to double our threshold
-      shuffleMemoryMap.synchronized {
-        val threadId = Thread.currentThread().getId
-        val previouslyClaimedMemory = shuffleMemoryMap.get(threadId)
-        val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyClaimedMemory.getOrElse(0L))
-
-        // Try to allocate at least 2x more memory, otherwise spill
-        shouldSpill = availableMemory < currentSize * 2
-        if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = currentSize * 2
-          myMemoryThreshold = currentSize * 2
-        }
-      }
-      // Do not hold lock during spills
-      if (shouldSpill) {
-        spill(currentSize, usingMap)
+      // Claim up to double our current memory from the shuffle memory pool
+      val currentMemory = collection.estimateSize()
+      val amountToRequest = 2 * currentMemory - myMemoryThreshold
+      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      myMemoryThreshold += granted
+      if (myMemoryThreshold <= currentMemory) {
+        // We were granted too little memory to grow further (either tryToAcquire returned 0,
+        // or we already had more memory than myMemoryThreshold); spill the current collection
+        spill(currentMemory, usingMap)  // Will also release memory back to ShuffleMemoryManager
       }
     }
   }
@@ -327,11 +305,8 @@ private[spark] class ExternalSorter[K, V, C](
       buffer = new SizeTrackingPairBuffer[(Int, K), C]
     }
 
-    // Reset the amount of shuffle memory used by this map in the global pool
-    val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
-    shuffleMemoryMap.synchronized {
-      shuffleMemoryMap(Thread.currentThread().getId) = 0
-    }
+    // Release our memory back to the shuffle pool so that other threads can grab it
+    shuffleMemoryManager.release(myMemoryThreshold)
     myMemoryThreshold = 0
 
     spills.append(SpilledFile(file, blockId, batchSizes.toArray, elementsPerPartition))
