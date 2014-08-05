@@ -29,7 +29,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -191,23 +191,11 @@ trait ClientBase extends Logging {
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
     // local resources to the application master.
     val fs = FileSystem.get(conf)
-
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    if (UserGroupInformation.isSecurityEnabled()) {
-      if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-        logError(errorMessage)
-        throw new SparkException(errorMessage)
-      }
-    }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
+    val nns = ClientBase.getNameNodesToAccess(sparkConf) + dst
+    ClientBase.obtainTokensForNamenodes(nns, conf, credentials)
+
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
-
-    if (UserGroupInformation.isSecurityEnabled()) {
-      val dstFs = dst.getFileSystem(conf)
-      dstFs.addDelegationTokens(delegTokenRenewer, credentials)
-    }
-
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
@@ -613,5 +601,41 @@ object ClientBase extends Logging {
   private def addClasspathEntry(path: String, env: HashMap[String, String]) =
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
+
+  /** 
+   * Get the list of namenodes the user may access.
+   */
+  private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "").split(",").map(_.trim()).filter(!_.isEmpty)
+      .map(new Path(_)).toSet
+  }
+
+  private[yarn] def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  private[yarn] def obtainTokensForNamenodes(paths: Set[Path], conf: Configuration,
+    creds: Credentials) {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = getTokenRenewer(conf)
+
+      paths.foreach {
+        dst =>
+          val dstFs = dst.getFileSystem(conf)
+          logDebug("getting token for namenode: " + dst)
+          dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
+  }
 
 }
