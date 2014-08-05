@@ -737,10 +737,16 @@ class RDD(object):
 
     def collectPartitions(self, partitions):
         """
-        Return an array that contains all of the elements in a specific
+        Return a list of list that contains all of the elements in a specific
         partition of this RDD.
+
+        >>> rdd = sc.parallelize(range(8), 4)
+        >>> rdd.collectPartitions([1, 3])
+        [[2, 3], [6, 7]]
         """
-        raise NotImplementedError
+
+        return [self.ctx.runJob(self, lambda it: it, [p], True)
+                for p in partitions]
 
     def reduce(self, f):
         """
