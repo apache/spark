@@ -60,7 +60,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
-
     val stageData = stageIdToData.getOrElseUpdate(stageId, {
       logWarning("Stage completed for unknown stage " + stageId)
       new StageUIData

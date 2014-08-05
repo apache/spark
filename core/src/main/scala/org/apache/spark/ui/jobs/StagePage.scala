@@ -215,12 +215,16 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
       val executorTable = new ExecutorTable(stageId, parent)
+
+      val maybeAccumulableTable: Seq[Node] =
+        if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
-        <h4>Accumulators</h4> ++ accumulableTable ++
+        maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),

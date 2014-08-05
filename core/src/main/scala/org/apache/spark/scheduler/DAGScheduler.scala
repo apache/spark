@@ -924,9 +924,9 @@ class DAGScheduler(
                 AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
             }
           }
-          listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-            event.taskMetrics))
         }
+        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+          event.taskMetrics))
         stage.pendingTasks -= task
         task match {
           case rt: ResultTask[_, _] =>
