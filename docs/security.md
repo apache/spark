@@ -39,7 +39,7 @@ configure those ports.
     <td>Standalone Master</td>
     <td>8080</td>
     <td>Web UI</td>
-    <td><code>spark.master.ui.port<br>SPARK_MASTER_WEBUI_PORT</code></td>
+    <td><code>spark.master.ui.port /<br> SPARK_MASTER_WEBUI_PORT</code></td>
     <td>Jetty-based. Standalone mode only.</td>
   </tr>
   <tr>
@@ -47,14 +47,14 @@ configure those ports.
     <td>Standalone Worker</td>
     <td>8081</td>
     <td>Web UI</td>
-    <td><code>spark.worker.ui.port<br>SPARK_WORKER_WEBUI_PORT</code></td>
+    <td><code>spark.worker.ui.port /<br> SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Jetty-based. Standalone mode only.</td>
   </tr>
   <tr>
-    <td>Driver<br>Standalone Worker</td>
+    <td>Driver /<br> Standalone Worker</td>
     <td>Standalone Master</td>
     <td>7077</td>
-    <td>Submit job to cluster<br>Join cluster</td>
+    <td>Submit job to cluster /<br> Join cluster</td>
     <td><code>SPARK_MASTER_PORT</code></td>
     <td>Akka-based. Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
@@ -92,10 +92,10 @@ configure those ports.
     <td>Jetty-based</td>
   </tr>
   <tr>
-    <td>Executor<br>Standalone Master</td>
+    <td>Executor /<br> Standalone Master</td>
     <td>Driver</td>
     <td>(random)</td>
-    <td>Connect to application<br>Notify executor state changes</td>
+    <td>Connect to application /<br> Notify executor state changes</td>
     <td><code>spark.driver.port</code></td>
     <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
