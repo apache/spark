@@ -903,13 +903,14 @@ class RDD(object):
         of the last position and all NaN entries will be counted in that
         bucket.
 
-        If buckets is an number, it will generates buckets which is
+        If buckets is a number, it will generates buckets which is
         evenly spaced between the minimum and maximum of the RDD. For
-        example if the min value is 0 and the max is 100
-        and there are two buckets the resulting buckets will be [0,50)
-        [50,100]. bucketCount must be at least 1 If the RDD contains
-        infinity, NaN throws an exception If the elements in RDD do not
-        vary (max == min) always returns a single bucket.
+        example, if the min value is 0 and the max is 100, given buckets
+        as 2, the resulting buckets will be [0,50) [50,100]. buckets must
+        be at least 1 If the RDD contains infinity, NaN throws an exception
+        If the elements in RDD do not vary (max == min) always returns
+        a single bucket. It will return an tuple of buckets and histogram
+        in them.
 
         >>> rdd = sc.parallelize(range(51))
         >>> rdd.histogram(2)
