@@ -150,10 +150,10 @@ object SparkEnv extends Logging {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
 
-    // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
-    // figure out which port number Akka actually bound to and set spark.driver.port to it.
-    if (isDriver && port == 0) {
-      conf.set("spark.driver.port",  boundPort.toString)
+    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // This is so that we tell the executors the correct port to connect to.
+    if (isDriver) {
+      conf.set("spark.driver.port", boundPort.toString)
     }
 
     // Create an instance of the class named by the given Java system property, or by
