@@ -401,15 +401,12 @@ class RowMatrix(
   def similarColumns(threshold: Double):
   CoordinateMatrix = {
     require(threshold > 0, s"Similarity threshold must be above 0, but set to: $threshold")
-    similarColumnsDIMSUM(2.0 * math.log(numCols()) / threshold)
+    similarColumnsDIMSUM(10.0 * math.log(numCols()) / threshold)
   }
 
   def similarColumnsDIMSUM(gamma: Double):
   CoordinateMatrix = {
-    val stats = computeColumnSummaryStatistics()
-    val variance = stats.variance.toArray
-    val meanSquared = stats.mean.toArray.map(x => x * x)
-    val colMags = variance.zip(meanSquared).map{case (a:Double, b:Double) => math.sqrt(a + b)}
+    val colMags = computeColumnSummaryStatistics().magnitude.toArray
     similarColumnsDIMSUM(colMags, gamma)
   }
 

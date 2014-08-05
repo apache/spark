@@ -96,20 +96,29 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
   }
 
   test("similar columns") {
-    val means = Vectors.dense(4.5, 3.0, 4.0)
-    val variances = Vectors.dense(15.0, 10.0, 10.0)
-    val expected =
-      Matrices.dense(n, n, Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0)).toBreeze
+    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+    val expected = BDM(
+          (126.0, 54.0, 72.0),
+          (54.0, 66.0, 78.0),
+          (72.0, 78.0, 94.0))
 
     for(i <- 0 until n) for(j <- 0 until n) {
-      val ci = means(i) * means(i) + variances(i)
-      val cj = means(i) * means(i) + variances(i)
-      expected(i, j) /= (ci * cj)
+      expected(i, j) /= (colMags(i) * colMags(j))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.similarColumnsDIMSUM(150.0)
+      assert(closeToZero(G.toBreeze() - expected))
     }
 
     for (mat <- Seq(denseMat, sparseMat)) {
       val G = mat.similarColumns()
-      assert(G.toBreeze === expected.toBreeze)
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.similarColumns(0.01)
+      assert(closeToZero(G.toBreeze() - expected))
     }
   }
 
@@ -208,6 +217,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
         assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
+        assert(summary.magnitude === Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94)), "magnitude mismatch.")
       }
     }
   }
