@@ -30,19 +30,12 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
     val localDoc = Seq(sentence, sentence)
     val doc = sc.parallelize(localDoc)
       .map(line => line.split(" ").toSeq)
-    val size = 10
-    val startingAlpha = 0.025
-    val window = 2 
-    val minCount = 2
-    val num = 2
-
-    val model = Word2Vec.train(doc, size, startingAlpha)
+    val model = new Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
     val syms = model.findSynonyms("a", 2)
-    assert(syms.length == num)
+    assert(syms.length == 2)
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
   }
-
 
   test("Word2VecModel") {
     val num = 2

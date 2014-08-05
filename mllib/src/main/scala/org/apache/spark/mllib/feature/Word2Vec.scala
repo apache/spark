@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -58,29 +59,63 @@ private case class VocabWord(
  * Efficient Estimation of Word Representations in Vector Space
  * and 
  * Distributed Representations of Words and Phrases and their Compositionality.
- * @param size vector dimension
- * @param startingAlpha initial learning rate
- * @param parallelism number of partitions to run Word2Vec (using a small number for accuracy)
- * @param numIterations number of iterations to run, should be smaller than or equal to parallelism
  */
 @Experimental
-class Word2Vec(
-    val size: Int,
-    val startingAlpha: Double,
-    val parallelism: Int,
-    val numIterations: Int) extends Serializable with Logging {
+class Word2Vec extends Serializable with Logging {
+
+  private var vectorSize = 100
+  private var startingAlpha = 0.025
+  private var numPartitions = 1
+  private var numIterations = 1
+  private var seed = Utils.random.nextLong()
 
   /**
-   * Word2Vec with a single thread.
+   * Sets vector size (default: 100).
    */
-  def this(size: Int, startingAlpha: Int) = this(size, startingAlpha, 1, 1)
+  def setVectorSize(vectorSize: Int): this.type = {
+    this.vectorSize = vectorSize
+    this
+  }
+
+  /**
+   * Sets initial learning rate (default: 0.025).
+   */
+  def setLearningRate(learningRate: Double): this.type = {
+    this.startingAlpha = learningRate
+    this
+  }
+
+  /**
+   * Sets number of partitions (default: 1). Use a small number for accuracy.
+   */
+  def setNumPartitions(numPartitions: Int): this.type = {
+    require(numPartitions > 0, s"numPartitions must be greater than 0 but got $numPartitions")
+    this.numPartitions = numPartitions
+    this
+  }
+
+  /**
+   * Sets number of iterations (default: 1), which should be smaller than or equal to number of
+   * partitions.
+   */
+  def setNumIterations(numIterations: Int): this.type = {
+    this.numIterations = numIterations
+    this
+  }
+
+  /**
+   * Sets random seed (default: a random long integer).
+   */
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
+    this
+  }
 
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
   private val MAX_SENTENCE_LENGTH = 1000
-  private val layer1Size = size 
-  private val modelPartitionNum = 100
+  private val layer1Size = vectorSize
 
   /** context words from [-window, window] */
   private val window = 5
@@ -245,8 +280,7 @@ class Word2Vec(
       }
     }
     
-    val newSentences = sentences.repartition(parallelism).cache()
-    val seed = 5875483L
+    val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
     var syn0Global =
       Array.fill[Float](vocabSize * layer1Size)((initRandom.nextFloat() - 0.5f) / layer1Size)
@@ -263,7 +297,7 @@ class Word2Vec(
               lwc = wordCount
               // TODO: discount by iteration?
               alpha =
-                startingAlpha * (1 - parallelism * wordCount.toDouble / (trainWordsCount + 1))
+                startingAlpha * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
               if (alpha < startingAlpha * 0.0001) alpha = startingAlpha * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
@@ -402,25 +436,5 @@ class Word2VecModel private[mllib] (
       .take(num + 1)
       .tail
       .toArray
-  }
-}
-
-object Word2Vec{
-  /**
-   * Train Word2Vec model
-   * @param input RDD of words
-   * @param size vector dimension
-   * @param startingAlpha initial learning rate
-   * @param parallelism number of partitions to run Word2Vec (using a small number for accuracy)
-   * @param numIterations number of iterations, should be smaller than or equal to parallelism
-   * @return Word2Vec model
-   */
-  def train[S <: Iterable[String]](
-    input: RDD[S],
-    size: Int,
-    startingAlpha: Double,
-    parallelism: Int = 1,
-    numIterations:Int = 1): Word2VecModel = {
-    new Word2Vec(size,startingAlpha, parallelism, numIterations).fit[S](input)
   }
 }
