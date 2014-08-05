@@ -314,30 +314,46 @@ private[spark] object Utils extends Logging {
 
   /**
    * Copy cached file to targetDir, if not exists, download it from url firstly.
+   * If useCache == false, download file to targetDir directly.
    */
   def fetchCachedFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    timestamp: Long) {
+    timestamp: Long, useCache: Boolean) {
     val fileName = url.split("/").last
-    val cachedFileName = fileName + timestamp
     val targetFile = new File(targetDir, fileName)
-    val lockFileName = fileName + timestamp + "_lock"
-    val localDir = new File(getLocalDir(conf))
-    val lockFile = new File(localDir, lockFileName)
-    val raf = new RandomAccessFile(lockFile, "rw")
-    // Only one executor entry.
-    // The FileLock is only used to control synchronization for executors download file,
-    // it's always safe regardless of lock type(mandatory or advisory).
-    val lock = raf.getChannel().lock()
-    val cachedFile = new File(localDir, cachedFileName)
-    try {
-      if (!cachedFile.exists()) {
-        fetchFile(url, localDir, conf, securityMgr)
-        Files.move(new File(localDir, fileName), cachedFile)
+    if (useCache) {
+      val cachedFileName = fileName + timestamp
+      val lockFileName = fileName + timestamp + "_lock"
+      val localDir = new File(getLocalDir(conf))
+      val lockFile = new File(localDir, lockFileName)
+      val raf = new RandomAccessFile(lockFile, "rw")
+      // Only one executor entry.
+      // The FileLock is only used to control synchronization for executors download file,
+      // it's always safe regardless of lock type(mandatory or advisory).
+      val lock = raf.getChannel().lock()
+      val cachedFile = new File(localDir, cachedFileName)
+      try {
+        if (!cachedFile.exists()) {
+          fetchFile(url, localDir, conf, securityMgr)
+          Files.move(new File(localDir, fileName), cachedFile)
+        }
+      } finally {
+        lock.release()
       }
-    } finally {
-      lock.release()
+      Files.copy(cachedFile, targetFile)
+    } else {
+      fetchFile(url, targetDir, conf, securityMgr)
     }
-    Files.copy(cachedFile, targetFile)
+    
+    // Decompress the file if it's a .tar or .tar.gz
+    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xzf", fileName), targetDir)
+    } else if (fileName.endsWith(".tar")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xf", fileName), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -347,7 +363,7 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
+  private def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
     hadoopConf: Configuration) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
@@ -437,16 +453,6 @@ private[spark] object Utils extends Logging {
         }
         Files.move(tempFile, targetFile)
     }
-    // Decompress the file if it's a .tar or .tar.gz
-    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
-    } else if (filename.endsWith(".tar")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xf", filename), targetDir)
-    }
-    // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
