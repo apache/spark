@@ -47,7 +47,6 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
     get_used_memory
 
 from py4j.java_collections import ListConverter, MapConverter
-from bisect import bisect_left
 
 __all__ = ["RDD"]
 
