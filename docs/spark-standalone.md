@@ -303,7 +303,6 @@ Spark makes heavy use of the network, and some environments have strict requirem
 tight firewall settings. For a complete list of ports to configure, see the [security page]
 (security.html#configuring-ports-for-network-security).
 
-
 # High Availability
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.
