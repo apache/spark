@@ -407,8 +407,9 @@ class RowMatrix(
    * Find all similar columns using the DIMSUM sampling algorithm, described in
    * http://arxiv.org/abs/1304.1467
    *
-   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s, where s is the smallest
-   *              similarity score to be estimated, and n is the number of columns
+   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s,
+   *              where s is the smallest similarity score to be estimated,
+   *              and n is the number of columns
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
   def similarColumnsDIMSUM(gamma: Double):
@@ -422,8 +423,9 @@ class RowMatrix(
    * http://arxiv.org/abs/1304.1467
    *
    * @param colMags A vector of column magnitudes
-   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s, where s is the smallest
-   *              similarity score to be estimated, and n is the number of columns
+   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s,
+   *              where s is the smallest similarity score to be estimated,
+   *              and n is the number of columns
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
   def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double):
