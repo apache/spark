@@ -314,7 +314,15 @@ configure those ports.
     <td>Master</td>
     <td>8080</td>
     <td>Web UI</td>
-    <td><code>master.ui.port</code></td>
+    <td><code>master.ui.port<br>SPARK_MASTER_WEBUI_PORT</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Worker</td>
+    <td>8081</td>
+    <td>Web UI</td>
+    <td><code>worker.ui.port<br>SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Jetty-based</td>
   </tr>
   <tr>
@@ -331,14 +339,6 @@ configure those ports.
     <td>18080</td>
     <td>Web UI</td>
     <td><code>spark.history.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>Worker</td>
-    <td>8081</td>
-    <td>Web UI</td>
-    <td><code>worker.ui.port</code></td>
     <td>Jetty-based</td>
   </tr>
   <!-- Cluster interactions -->
