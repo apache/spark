@@ -25,6 +25,8 @@ import scala.collection.Map
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
+
 
 import org.apache.spark.executor.{DataReadMethod, InputMetrics, ShuffleReadMetrics,
   ShuffleWriteMetrics, TaskMetrics}
@@ -538,10 +540,10 @@ private[spark] object JsonProtocol {
   }
 
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
-    val id = (json \ "id").extract[Long]
-    val name = (json \ "name").extract[String]
-    val update = Utils.jsonOption(json \ "update").map(_.extract[String])
-    val value = (json \ "value").extract[String]
+    val id = (json \ "ID").extract[Long]
+    val name = (json \ "Name").extract[String]
+    val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
+    val value = (json \ "Value").extract[String]
     AccumulableInfo(id, name, update, value)
   }
 

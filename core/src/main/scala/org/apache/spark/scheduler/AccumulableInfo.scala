@@ -28,7 +28,15 @@ class AccumulableInfo (
     val id: Long,
     val name: String,
     val update: Option[String], // represents a partial update within a task
-    val value: String) { }
+    val value: String) {
+
+  override def equals(other: Any): Boolean = other match {
+    case acc: AccumulableInfo =>
+      this.id == acc.id && this.name == acc.name &&
+        this.update == acc.update && this.value == acc.value
+    case _ => false
+  }
+}
 
 object AccumulableInfo {
   def apply(id: Long, name: String, update: Option[String], value: String) =

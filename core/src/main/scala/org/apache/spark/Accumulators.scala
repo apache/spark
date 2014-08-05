@@ -290,6 +290,6 @@ private object Accumulators {
     }
   }
 
-  def stringifyPartialValue(partialValue: Any) = "%s".format(value)
+  def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
   def stringifyValue(value: Any) = "%s".format(value)
 }
