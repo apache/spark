@@ -59,8 +59,8 @@ class SparkContext(object):
     _writeToFile = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = Lock()  # zip and egg files that need to be added to PYTHONPATH
-    _python_includes = None
+    _lock = Lock()
+    _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
     _default_batch_size_for_serialized_input = 10
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,

@@ -539,8 +539,7 @@ class TestOutputFormat(PySparkTestCase):
 
         ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
         self.sc.parallelize(ed).saveAsSequenceFile(basepath + "/sfdouble/")
-        doubles = sorted(
-            self.sc.sequenceFile(basepath + "/sfdouble/").collect())
+        doubles = sorted(self.sc.sequenceFile(basepath + "/sfdouble/").collect())
         self.assertEqual(doubles, ed)
 
         ebs = [(1, bytearray(b'\x00\x07spam\x08')), (2, bytearray(b'\x00\x07spam\x08'))]
@@ -725,25 +724,25 @@ class TestOutputFormat(PySparkTestCase):
         self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
-        unbatched_sequence = sorted(self.sc.sequenceFile(basepath + "/unbatched/",
-                                                         batchSize=1).collect())
+        unbatched_sequence = sorted(self.sc.sequenceFile(
+            basepath + "/unbatched/",
+            batchSize=1).collect())
         self.assertEqual(unbatched_sequence, ei)
 
-        unbatched_hadoopFile = sorted(
-            self.sc.hadoopFile(basepath + "/unbatched/",
-                               "org.apache.hadoop.mapred.SequenceFileInputFormat",
-                               "org.apache.hadoop.io.IntWritable",
-                               "org.apache.hadoop.io.Text",
-                               batchSize=1).collect())
+        unbatched_hadoopFile = sorted(self.sc.hadoopFile(
+            basepath + "/unbatched/",
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            batchSize=1).collect())
         self.assertEqual(unbatched_hadoopFile, ei)
 
-        unbatched_newAPIHadoopFile = sorted(
-            self.sc.newAPIHadoopFile(
-                basepath + "/unbatched/",
-                "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-                "org.apache.hadoop.io.IntWritable",
-                "org.apache.hadoop.io.Text",
-                batchSize=1).collect())
+        unbatched_newAPIHadoopFile = sorted(self.sc.newAPIHadoopFile(
+            basepath + "/unbatched/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            batchSize=1).collect())
         self.assertEqual(unbatched_newAPIHadoopFile, ei)
 
         oldconf = {"mapred.input.dir": basepath + "/unbatched/"}
@@ -949,9 +948,8 @@ class TestSparkSubmit(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen(
-            [self.sparkSubmit, "--py-files", zip, script],
-            stdout=subprocess.PIPE)
+        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
+                                stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
@@ -969,10 +967,9 @@ class TestSparkSubmit(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen(
-            [self.sparkSubmit, "--py-files", zip, "--master",
-                "local-cluster[1,1,512]", script],
-            stdout=subprocess.PIPE)
+        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, "--master",
+                                "local-cluster[1,1,512]", script],
+                                stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
