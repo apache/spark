@@ -17,6 +17,7 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
+from tempfile import NamedTemporaryFile
 
 
 from pyspark.conf import SparkConf

@@ -156,6 +156,7 @@ class DStream(object):
                     combiners[k] = v
                 else:
                     combiners[k] = mergeCombiners(combiners[k], v)
+            return combiners.iteritems()
 
         return shuffled.mapPartitions(_mergeCombiners)
 
