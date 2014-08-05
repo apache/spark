@@ -314,7 +314,7 @@ configure those ports.
     <td>Standalone Cluster Master</td>
     <td>8080</td>
     <td>Web UI</td>
-    <td><code>master.ui.port</code></td>
+    <td><code>spark.master.ui.port</code></td>
     <td>Jetty-based</td>
   </tr>
   <tr>
@@ -338,7 +338,7 @@ configure those ports.
     <td>Worker</td>
     <td>8081</td>
     <td>Web UI</td>
-    <td><code>worker.ui.port</code></td>
+    <td><code>spark.worker.ui.port</code></td>
     <td>Jetty-based</td>
   </tr>
   <!-- Cluster interactions -->
