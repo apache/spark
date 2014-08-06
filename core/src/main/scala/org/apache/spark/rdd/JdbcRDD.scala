@@ -74,13 +74,17 @@ class JdbcRDD[T: ClassTag](
   }
 
   def getSchema: Seq[(String, Int, Boolean)] = {
-    if (null != schema) return schema
+    if (null != schema) {
+      return schema
+    }
 
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql)
     val metadata = stmt.getMetaData
     try {
-      if (null != stmt && ! stmt.isClosed()) stmt.close()
+      if (null != stmt && ! stmt.isClosed()) {
+        stmt.close()
+      }
     } catch {
       case e: Exception => logWarning("Exception closing statement", e)
     }
@@ -110,8 +114,12 @@ class JdbcRDD[T: ClassTag](
     }
 
     val parameterCount = stmt.getParameterMetaData.getParameterCount
-    if (parameterCount > 0) stmt.setLong(1, part.lower)
-    if (parameterCount > 1) stmt.setLong(2, part.upper)
+    if (parameterCount > 0) {
+      stmt.setLong(1, part.lower)
+    }
+    if (parameterCount > 1) {
+      stmt.setLong(2, part.upper)
+    }
 
     val rs = stmt.executeQuery()
 
@@ -126,17 +134,23 @@ class JdbcRDD[T: ClassTag](
 
     override def close() {
       try {
-        if (null != rs && ! rs.isClosed()) rs.close()
+        if (null != rs && ! rs.isClosed()) {
+          rs.close()
+        }
       } catch {
         case e: Exception => logWarning("Exception closing resultset", e)
       }
       try {
-        if (null != stmt && ! stmt.isClosed()) stmt.close()
+        if (null != stmt && ! stmt.isClosed()) {
+          stmt.close()
+        }
       } catch {
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! conn.isClosed()) conn.close()
+        if (null != conn && ! conn.isClosed()) {
+          conn.close()
+        }
         logInfo("closed connection")
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
@@ -150,3 +164,4 @@ object JdbcRDD {
     Array.tabulate[Object](rs.getMetaData.getColumnCount)(i => rs.getObject(i + 1))
   }
 }
+
