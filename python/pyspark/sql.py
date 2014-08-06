@@ -1231,6 +1231,13 @@ class SQLContext:
         ...   "field3.field5[0] as f3 from table3")
         >>> srdd6.collect()
         [Row(f1=u'row1', f2=None,...Row(f1=u'row3', f2=[], f3=None)]
+
+        >>> sqlCtx.jsonRDD(sc.parallelize(['{}',
+        ...         '{"key0": {"key1": "value1"}}'])).collect()
+        [Row(key0=None), Row(key0=Row(key1=u'value1'))]
+        >>> sqlCtx.jsonRDD(sc.parallelize(['{"key0": null}',
+        ...         '{"key0": {"key1": "value1"}}'])).collect()
+        [Row(key0=None), Row(key0=Row(key1=u'value1'))]
         """
 
         def func(iterator):
