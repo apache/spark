@@ -265,6 +265,7 @@ object Assembly {
       Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
+      case PathList("org", "objectweb", "asm", xs @ _*)        => MergeStrategy.discard
       case m if m.endsWith(".class")                           => shade
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
