@@ -24,6 +24,7 @@ from pyspark.mllib._common import \
     _serialize_double, _serialize_double_vector, \
     _deserialize_double, _deserialize_double_matrix
 
+
 class Statistics(object):
 
     @staticmethod
