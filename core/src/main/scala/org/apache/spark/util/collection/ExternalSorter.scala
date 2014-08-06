@@ -134,10 +134,10 @@ private[spark] class ExternalSorter[K, V, C](
   // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't need
   // local aggregation and sorting, write numPartitions files directly and just concatenate them
   // at the end. This avoids doing serialization and deserialization twice to merge together the
-  // spilled files, which would happen with the normal code path. The downside is more small files
-  // and possibly more I/O if these fall out of the buffer cache.
+  // spilled files, which would happen with the normal code path. The downside is having multiple
+  // files open at a time and thus more memory allocated to buffers.
   private val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-  private[collection] val bypassMergeSort =            // private[collection] for testing
+  private[collection] val bypassMergeSort =            // private[collection] for unit tests
     (numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty)
 
   // Array of file writers for each partition, used if bypassMergeSort is true
