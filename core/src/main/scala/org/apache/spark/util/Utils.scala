@@ -779,7 +779,8 @@ private[spark] object Utils extends Logging {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
           stderr.append(line + "\n")
-          System.err.println(line)
+          System.err.println("-- " + line)
+          System.out.println(">> " + line) // TESTING. REMOVE ME BEFORE MERGE!!
         }
       }
     }.start()
