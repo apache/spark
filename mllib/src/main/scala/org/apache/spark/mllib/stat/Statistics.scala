@@ -91,24 +91,73 @@ object Statistics {
   @Experimental
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
-  // Technically input should be RDD[Long] since the data should be counts
+  /**
+   * :: Experimental ::
+   * Conduct the Chi-squared goodness of fit test of the observed data against the
+   * expected distribution.
+   *
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
+   *
+   * @param observed RDD[Double] containing the observed counts.
+   * @param expected RDD[Double] containing the expected counts. If the observed total differs from
+   *                 the expected total, this RDD is rescaled to sum up to the observed total.
+   * @param method String specifying the method to use for the Chi-squared test.
+   *               Supported: `pearson` (default)
+   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
+   *         the method used, and the null hypothesis.
+   */
   @Experimental
-  def chiSquared(x: RDD[Double], y: RDD[Double], method: String): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(x, y, method)
+  def chiSquared(observed: RDD[Double],
+      expected: RDD[Double],
+      method: String): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(observed, expected, method)
   }
 
+  /**
+   * :: Experimental ::
+   * Conduct the Chi-squared goodness of fit test of the observed data against the
+   * expected distribution.
+   *
+   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
+   *
+   * @param observed RDD[Double] containing the observed counts.
+   * @param expected RDD[Double] containing the expected counts. If the observed total differs from
+   *                 the expected total, this RDD is rescaled to sum up to the observed total.
+   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
+   *         the method used, and the null hypothesis.
+   */
   @Experimental
-  def chiSquared(expected: RDD[Double], observed: RDD[Double]): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(expected, observed)
+  def chiSquared(observed: RDD[Double], expected: RDD[Double]): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(observed, expected)
   }
 
-  // Same here. It should be something like RDD[Array[Long]] for counts instead, but I don't know
-  // if we should be consistent about how a "matrix" is presented
+  /**
+   * :: Experimental ::
+   * Conduct the Chi-squared independence test between the columns in the input matrix.
+   *
+   * @param counts RDD[Vector] containing observations with rows representing categories and columns
+   *               representing separate trials for which independence between trials is assessed.
+   * @param method String specifying the method to use for the Chi-squared test.
+   *               Supported: `pearson` (default)
+   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
+   *         the method used, and the null hypothesis.
+   */
   @Experimental
   def chiSquared(counts: RDD[Vector], method: String): ChiSquaredTestResult = {
     ChiSquaredTest.chiSquaredMatrix(counts, method)
   }
 
+  /**
+   * :: Experimental ::
+   * Conduct the Chi-squared independence test between the columns in the input matrix.
+   *
+   * @param counts RDD[Vector] containing observations with rows representing categories and columns
+   *               representing separate trials for which independence between trials is assessed.
+   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
+   *         the method used, and the null hypothesis.
+   */
   @Experimental
   def chiSquared(counts: RDD[Vector]): ChiSquaredTestResult = {
     ChiSquaredTest.chiSquaredMatrix(counts)

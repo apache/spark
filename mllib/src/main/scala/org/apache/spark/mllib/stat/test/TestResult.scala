@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.stat.test
 
 import org.apache.spark.annotation.Experimental
@@ -27,34 +28,48 @@ trait TestResult {
 
   def pValue: Double
 
-  def degreesOfFreedom: Array[Int]
+  def degreesOfFreedom: Array[Long]
 
   def statistic: Double
 
   /**
-   * Returns a String explaining the hypothesis test result.
+   * String explaining the hypothesis test result.
    * Specific classes implementing this trait should override this method to output test-specific
    * information.
    */
   override def toString: String = {
-    s"pValue = $pValue \n" + // TODO explain what pValue is
+
+    val pValueExplain = if (pValue <= 0.01) {
+      "Very strong presumption against null hypothesis."
+    } else if (0.01 < pValue && pValue <= 0.05) {
+      "Strong presumption against null hypothesis."
+    } else if (0.05 < pValue && pValue <= 0.01) {
+      "Low presumption against null hypothesis."
+    } else {
+      "No presumption against null hypothesis."
+    }
+
     s"degrees of freedom = ${degreesOfFreedom.mkString} \n" +
-    s"statistic = $statistic"
+    s"statistic = $statistic \n" +
+    s"pValue = $pValue \n" + pValueExplain
   }
 }
 
 /**
  * :: Experimental ::
+ * Object containing the test results for the chi squared hypothesis test.
  */
 @Experimental
 case class ChiSquaredTestResult(override val pValue: Double,
-    override val degreesOfFreedom: Array[Int],
+    override val degreesOfFreedom: Array[Long],
     override val statistic: Double,
-    val method: String) extends TestResult {
+    val method: String,
+    val nullHypothesis: String) extends TestResult {
 
   override def toString: String = {
     "Chi squared test summary: \n" +
     s"method: $method \n" +
+    s"null hypothesis: $nullHypothesis \n" +
     super.toString
   }
 }
