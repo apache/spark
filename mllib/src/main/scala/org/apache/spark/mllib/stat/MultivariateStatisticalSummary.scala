@@ -53,9 +53,4 @@ trait MultivariateStatisticalSummary {
    * Minimum value of each column.
    */
   def min: Vector
-
-  /**
-   * Euclidean magnitude of each column
-   */
-  def magnitude: Vector
 }

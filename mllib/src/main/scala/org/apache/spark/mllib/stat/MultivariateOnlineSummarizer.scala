@@ -42,7 +42,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var n = 0
   private var currMean: BDV[Double] = _
   private var currM2n: BDV[Double] = _
-  private var currM2: BDV[Double] = _
   private var totalCnt: Long = 0
   private var nnz: BDV[Double] = _
   private var currMax: BDV[Double] = _
@@ -83,7 +82,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         val tmpPrevMean = currMean(i)
         currMean(i) = (currMean(i) * nnz(i) + value) / (nnz(i) + 1.0)
         currM2n(i) += (value - currMean(i)) * (value - tmpPrevMean)
-        currM2(i) += value * value
 
         nnz(i) += 1.0
     }
@@ -117,10 +115,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
             (nnz(i) + other.nnz(i))
         }
-        // merge m2 together
-        if (nnz(i) + other.nnz(i) != 0.0) {
-          currM2(i) += other.currM2(i)
-        }
 
         if (currMax(i) < other.currMax(i)) {
           currMax(i) = other.currMax(i)
@@ -135,7 +129,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.n = other.n
       this.currMean = other.currMean.copy
       this.currM2n = other.currM2n.copy
-      this.currM2 = other.currM2.copy
       this.totalCnt = other.totalCnt
       this.nnz = other.nnz.copy
       this.currMax = other.currMax.copy
@@ -206,19 +199,5 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       i += 1
     }
     Vectors.fromBreeze(currMin)
-  }
-
-  override def magnitude: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
-
-    val realMagnitude = BDV.zeros[Double](n)
-
-    var i = 0
-    while (i < currM2.size) {
-      realMagnitude(i) = math.sqrt(currM2(i))
-      i += 1
-    }
-
-    Vectors.fromBreeze(realMagnitude)
   }
 }

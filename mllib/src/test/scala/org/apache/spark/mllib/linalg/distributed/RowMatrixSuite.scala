@@ -217,8 +217,6 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
         assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
-        assert(summary.magnitude === Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94)),
-          "magnitude mismatch.")
       }
     }
   }

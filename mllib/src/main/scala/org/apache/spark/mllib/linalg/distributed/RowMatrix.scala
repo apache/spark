@@ -394,6 +394,19 @@ class RowMatrix(
   }
 
   /**
+   * Return 2-norm of the columns of this matrix.
+   * @return an array of column magnitudes
+   */
+  def columnMagnitudes():
+  Array[Double] = {
+    rows.map {
+      x =>
+        val brzX = x.toBreeze
+        brzX.:*(brzX)
+    }.fold(BDV.zeros[Double](numCols().toInt))(_ + _).toArray.map(math.sqrt(_))
+  }
+
+  /**
    * Find all similar columns using cosine similarity.
    *
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
@@ -414,8 +427,7 @@ class RowMatrix(
    */
   def similarColumnsDIMSUM(gamma: Double):
   CoordinateMatrix = {
-    val colMags = computeColumnSummaryStatistics().magnitude.toArray
-    similarColumnsDIMSUM(colMags, gamma)
+    similarColumnsDIMSUM(columnMagnitudes(), gamma)
   }
 
   /**
