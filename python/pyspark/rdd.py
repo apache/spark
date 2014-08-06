@@ -944,7 +944,7 @@ class RDD(object):
             # faster than stats()
             def minmax(a, b):
                 return min(a[0], b[0]), max(a[1], b[1])
-            minv, maxv = self.map(lambda x:(x,x)).reduce(minmax)
+            minv, maxv = self.map(lambda x: (x, x)).reduce(minmax)
 
             if minv == maxv or buckets == 1:
                 return [minv, maxv], [self.count()]
@@ -955,7 +955,7 @@ class RDD(object):
                 inc = (maxv - minv) * 1.0 / buckets
 
             buckets = [i * inc + minv for i in range(buckets)]
-            buckets.append(maxv) # fix accumuated error
+            buckets.append(maxv)  # fix accumuated error
             even = True
 
         else:
@@ -973,8 +973,7 @@ class RDD(object):
             for i in iterator:
                 if i > maxv or i < minv:
                     continue
-                t = (int((i - minv) / inc) if even
-                        else bisect_right(buckets, i) - 1)
+                t = (int((i - minv) / inc) if even else bisect_right(buckets, i) - 1)
                 counters[t] += 1
             # add last two together
             last = counters.pop()
@@ -1003,7 +1002,6 @@ class RDD(object):
         0.666...
         """
         return self.stats().variance()
-
 
     def stdev(self):
         """
@@ -1816,7 +1814,7 @@ class RDD(object):
         """
         if self.getNumPartitions() != other.getNumPartitions():
             raise ValueError("the number of partitions dose not match"
-                              " with each other")
+                             " with each other")
 
         pairRDD = self._jrdd.zip(other._jrdd)
         deserializer = PairDeserializer(self._jrdd_deserializer,
@@ -1994,7 +1992,7 @@ class RDD(object):
         >>> rdd.countApprox(1000, 1.0)
         1000
         """
-        drdd = self.mapPartitions(lambda it:[float(sum(1 for i in it))])
+        drdd = self.mapPartitions(lambda it: [float(sum(1 for i in it))])
         return int(drdd.sumApprox(timeout, confidence))
 
     def sumApprox(self, timeout, confidence=0.95):
