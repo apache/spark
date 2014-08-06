@@ -35,38 +35,47 @@ import org.apache.spark.rdd.RDD
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
 @Experimental
-class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransformer {
+class StandardScaler(withMean: Boolean, withStd: Boolean) {
 
   def this() = this(false, true)
 
   require(withMean || withStd, s"withMean and withStd both equal to false. Doing nothing.")
 
-  private var mean: BV[Double] = _
-  private var factor: BV[Double] = _
-
   /**
    * Computes the mean and variance and stores as a model to be used for later scaling.
    *
    * @param data The data used to compute the mean and variance to build the transformation model.
-   * @return This StandardScalar object.
+   * @return a StandardScalarModel
    */
-  def fit(data: RDD[Vector]): this.type = {
+  def fit(data: RDD[Vector]): StandardScalerModel = {
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
 
-    mean = summary.mean.toBreeze
-    factor = summary.variance.toBreeze
-    require(mean.length == factor.length)
+    val mean = summary.mean.toBreeze
+    val factor = summary.variance.toBreeze
+    require(mean.size == factor.size)
 
     var i = 0
-    while (i < factor.length) {
+    while (i < factor.size) {
       factor(i) = if (factor(i) != 0.0) 1.0 / math.sqrt(factor(i)) else 0.0
       i += 1
     }
 
-    this
+    new StandardScalerModel(withMean, withStd, mean, factor)
   }
+}
+
+/**
+ * :: Experimental ::
+ * Represents a StandardScaler model that can transform vectors.
+ */
+@Experimental
+class StandardScalerModel private[mllib] (
+    val withMean: Boolean,
+    val withStd: Boolean,
+    val mean: BV[Double],
+    val factor: BV[Double]) extends VectorTransformer {
 
   /**
    * Applies standardization transformation on a vector.
@@ -81,7 +90,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransfor
         "Haven't learned column summary statistics yet. Call fit first.")
     }
 
-    require(vector.size == mean.length)
+    require(vector.size == mean.size)
 
     if (withMean) {
       vector.toBreeze match {
@@ -115,5 +124,4 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransfor
       vector
     }
   }
-
 }
