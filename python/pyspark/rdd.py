@@ -923,17 +923,9 @@ class RDD(object):
                 raise ValueError("buckets should not less than 1")
 
             # faster than stats()
-            def minmax(it):
-                minv, maxv = float("inf"), float("-inf")
-                for v in it:
-                    minv = min(minv, v)
-                    maxv = max(maxv, v)
-                return [(minv, maxv)]
-
-            def _merge(a, b):
-                return (min(a[0], b[0]), max(a[1], b[1]))
-
-            minv, maxv = self.mapPartitions(minmax).reduce(_merge)
+            def minmax(a, b):
+                return min(a[0], b[0]), max(a[1], b[1])
+            minv, maxv = self.map(lambda x:(x,x)).reduce(minmax)
 
             if minv == maxv or buckets == 1:
                 return [minv, maxv], [self.count()]
