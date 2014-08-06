@@ -84,7 +84,7 @@ case class SetCommand(
     case (None, None) =>
       context.getAllConfs.map { case (k, v) =>
         s"$k=$v"
-      }
+      }.toSeq
 
     case _ =>
       throw new IllegalArgumentException()

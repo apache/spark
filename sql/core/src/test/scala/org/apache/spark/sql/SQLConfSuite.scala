@@ -29,7 +29,7 @@ class SQLConfSuite extends QueryTest {
 
   test("programmatic ways of basic setting and getting") {
     clear()
-    assert(getAllConfs.toSet === Set())
+    assert(getAllConfs.size === 0)
 
     setConf(testKey, testVal)
     assert(getConf(testKey) == testVal)

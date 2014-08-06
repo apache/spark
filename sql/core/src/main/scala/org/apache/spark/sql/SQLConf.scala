@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable
+import scala.collection.JavaConversions._
+
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
@@ -105,10 +107,8 @@ trait SQLConf {
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
-  def setConf(props: Properties): Unit = {
-    settings.synchronized {
-      props.asScala.foreach { case (k, v) => settings.put(k, v) }
-    }
+  def setConf(props: Properties): Unit = settings.synchronized {
+    props.foreach { case (k, v) => settings.put(k, v) }
   }
 
   /** Set the given Spark SQL configuration property. */
@@ -131,8 +131,11 @@ trait SQLConf {
     Option(settings.get(key)).getOrElse(defaultValue)
   }
 
-  /** Return all the configuration properties that have been set (i.e. not the default). */
-  def getAllConfs: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
+  /**
+   * Return all the configuration properties that have been set (i.e. not the default).
+   * This creates a new copy of the config properties in the form of a Map.
+   */
+  def getAllConfs: immutable.Map[String, String] = settings.synchronized { settings.toMap }
 
   private[spark] def clear() {
     settings.clear()
