@@ -764,10 +764,11 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
-                          extraEnvironment: Map[String, String] = Map.empty): String = {
-    val builder = new ProcessBuilder(command: _*)
-        .directory(workingDir)
+  def executeAndGetOutput(
+      command: Seq[String],
+      workingDir: File = new File("."),
+      extraEnvironment: Map[String, String] = Map.empty): String = {
+    val builder = new ProcessBuilder(command: _*).directory(workingDir)
     val environment = builder.environment()
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
@@ -792,7 +793,7 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      throw new SparkException("Process " + command + " exited with code " + exitCode)
+      throw new SparkException(s"Process $command exited with code $exitCode:\n\n$output")
     }
     output.toString
   }
