@@ -151,8 +151,6 @@ private[spark] class CoarseMesosSchedulerBackend(
     mesosCommand.build()
   }
 
-
-
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
