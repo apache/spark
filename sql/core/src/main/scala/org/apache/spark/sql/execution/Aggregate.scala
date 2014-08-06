@@ -40,10 +40,10 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap
  */
 @DeveloperApi
 case class Aggregate(
-                      partial: Boolean,
-                      groupingExpressions: Seq[Expression],
-                      aggregateExpressions: Seq[NamedExpression],
-                      child: SparkPlan)
+    partial: Boolean,
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: SparkPlan)
   extends UnaryNode {
 
   private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", false)
@@ -74,9 +74,9 @@ case class Aggregate(
    *                        output.
    */
   case class ComputedAggregate(
-                                unbound: AggregateExpression,
-                                aggregate: AggregateExpression,
-                                resultAttribute: AttributeReference)
+      unbound: AggregateExpression,
+      aggregate: AggregateExpression,
+      resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
   private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
@@ -177,7 +177,8 @@ case class Aggregate(
             private[this] val hashTableIter = hashTable.entrySet().iterator()
             private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
             private[this] val resultProjection =
-              new InterpretedMutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+              new InterpretedMutableProjection(
+                resultExpressions, computedSchema ++ namedGroups.map(_._2))
             private[this] val joinedRow = new JoinedRow
 
             override final def hasNext: Boolean = hashTableIter.hasNext

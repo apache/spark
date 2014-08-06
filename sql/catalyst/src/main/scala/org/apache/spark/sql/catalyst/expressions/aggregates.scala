@@ -49,8 +49,8 @@ abstract class AggregateExpression extends Expression {
  *                           data sets and are required to compute the `finalEvaluation`.
  */
 case class SplitEvaluation(
-                            finalEvaluation: Expression,
-                            partialEvaluations: Seq[NamedExpression])
+    finalEvaluation: Expression,
+    partialEvaluations: Seq[NamedExpression])
 
 /**
  * An [[AggregateExpression]] that can be partially computed without seeing all relevant tuples.
@@ -339,9 +339,9 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 }
 
 case class ApproxCountDistinctPartitionFunction(
-                                                 expr: Expression,
-                                                 base: AggregateExpression,
-                                                 relativeSD: Double)
+    expr: Expression,
+    base: AggregateExpression,
+    relativeSD: Double)
   extends AggregateFunction {
   def this() = this(null, null, 0) // Required for serialization.
 
@@ -362,9 +362,9 @@ case class ApproxCountDistinctPartitionFunction(
 }
 
 case class ApproxCountDistinctMergeFunction(
-                                             expr: Expression,
-                                             base: AggregateExpression,
-                                             relativeSD: Double)
+    expr: Expression,
+    base: AggregateExpression,
+    relativeSD: Double)
   extends AggregateFunction {
   def this() = this(null, null, 0) // Required for serialization.
 
