@@ -50,7 +50,7 @@ if [ $DEPLOY_MODE == "client" ]; then
   # a key value pair delimited either by white space or "=" sign. All
   # spark.driver.* configs must be processed now before it's too late.
   if [ -f "$PROPERTIES_FILE" ]; then
-    echo "Using properties file $PROPERTIES_FILE"
+    echo "Using properties file $PROPERTIES_FILE" 1>&2
     DRIVER_MEMORY_CONF="spark.driver.memory"
     DRIVER_EXTRA_JAVA_OPTS="spark.driver.extraJavaOptions"
     DRIVER_EXTRA_CLASSPATH="spark.driver.extraClassPath"
@@ -68,7 +68,7 @@ if [ $DEPLOY_MODE == "client" ]; then
     export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
     export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
   else
-    echo "Warning: properties file $PROPERTIES_FILE does not exist."
+    echo "Warning: properties file $PROPERTIES_FILE does not exist." 1>&2
   fi
 
   # Favor command line memory over config memory
