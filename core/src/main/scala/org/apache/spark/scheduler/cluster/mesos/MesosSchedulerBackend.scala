@@ -142,7 +142,6 @@ private[spark] class MesosSchedulerBackend(
       .setData(ByteString.copyFrom(createExecArg()))
       .addResources(memory)
       .build()
-
   }
 
   /**
