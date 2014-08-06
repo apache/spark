@@ -53,10 +53,10 @@ case class SetCommand(
       if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
         logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-        context.set(SQLConf.SHUFFLE_PARTITIONS, v)
+        context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
         Array(s"${SQLConf.SHUFFLE_PARTITIONS}=$v")
       } else {
-        context.set(k, v)
+        context.setConf(k, v)
         Array(s"$k=$v")
       }
 
@@ -77,14 +77,14 @@ case class SetCommand(
           "system:sun.java.command=shark.SharkServer2")
       }
       else {
-        Array(s"$k=${context.getOption(k).getOrElse("<undefined>")}")
+        Array(s"$k=${context.getConf(k, "<undefined>")}")
       }
 
     // Query all key-value pairs that are set in the SQLConf of the context.
     case (None, None) =>
-      context.getAll.map { case (k, v) =>
+      context.getAllConfs.map { case (k, v) =>
         s"$k=$v"
-      }
+      }.toSeq
 
     case _ =>
       throw new IllegalArgumentException()

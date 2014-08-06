@@ -29,21 +29,18 @@ class SQLConfSuite extends QueryTest {
 
   test("programmatic ways of basic setting and getting") {
     clear()
-    assert(getOption(testKey).isEmpty)
-    assert(getAll.toSet === Set())
+    assert(getAllConfs.size === 0)
 
-    set(testKey, testVal)
-    assert(get(testKey) == testVal)
-    assert(get(testKey, testVal + "_") == testVal)
-    assert(getOption(testKey) == Some(testVal))
-    assert(contains(testKey))
+    setConf(testKey, testVal)
+    assert(getConf(testKey) == testVal)
+    assert(getConf(testKey, testVal + "_") == testVal)
+    assert(getAllConfs.contains(testKey))
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(TestSQLContext.get(testKey) == testVal)
-    assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
-    assert(TestSQLContext.getOption(testKey) == Some(testVal))
-    assert(TestSQLContext.contains(testKey))
+    assert(TestSQLContext.getConf(testKey) == testVal)
+    assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
+    assert(TestSQLContext.getAllConfs.contains(testKey))
 
     clear()
   }
@@ -51,21 +48,21 @@ class SQLConfSuite extends QueryTest {
   test("parse SQL set commands") {
     clear()
     sql(s"set $testKey=$testVal")
-    assert(get(testKey, testVal + "_") == testVal)
-    assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
+    assert(getConf(testKey, testVal + "_") == testVal)
+    assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
 
     sql("set some.property=20")
-    assert(get("some.property", "0") == "20")
+    assert(getConf("some.property", "0") == "20")
     sql("set some.property = 40")
-    assert(get("some.property", "0") == "40")
+    assert(getConf("some.property", "0") == "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
     sql(s"set $key=$vs")
-    assert(get(key, "0") == vs)
+    assert(getConf(key, "0") == vs)
 
     sql(s"set $key=")
-    assert(get(key, "0") == "")
+    assert(getConf(key, "0") == "")
 
     clear()
   }
@@ -73,6 +70,6 @@ class SQLConfSuite extends QueryTest {
   test("deprecated property") {
     clear()
     sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(get(SQLConf.SHUFFLE_PARTITIONS) == "10")
+    assert(getConf(SQLConf.SHUFFLE_PARTITIONS) == "10")
   }
 }
