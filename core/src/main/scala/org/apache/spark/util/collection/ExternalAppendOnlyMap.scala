@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException, IOException}
+import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 import java.util.Comparator
 
 import scala.collection.BufferedIterator
@@ -108,9 +108,6 @@ class ExternalAppendOnlyMap[K, V, C](
   private val ser = serializer.newInstance()
   private val threadId = Thread.currentThread().getId
 
-  private val timesMax = sparkConf.getInt("spark.shuffle.spill.times.max", 0)
-  private val diskBytesMax = sparkConf.getInt("spark.shuffle.spill.diskbytes.max", 0)
-
   /**
    * Insert the given key and value into the map.
    */
@@ -157,15 +154,7 @@ class ExternalAppendOnlyMap[K, V, C](
         }
         // Do not synchronize spills
         if (shouldSpill) {
-          if (timesMax > 0 && spillCount >= timesMax) {
-            logWarning("spill times more than " + timesMax)
-            throw new IOException("spill times more than " + timesMax)
-          } else if (diskBytesMax > 0 && _diskBytesSpilled >= diskBytesMax) {
-            logWarning("spill disk bytes written more than " + diskBytesMax)
-            throw new IOException("spill disk bytes written more than " + diskBytesMax)
-          } else {
-            spill(mapSize)
-          }
+          spill(mapSize)
         }
       }
       currentMap.changeValue(curEntry._1, update)
