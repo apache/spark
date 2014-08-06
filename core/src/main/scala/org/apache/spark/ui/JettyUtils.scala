@@ -199,8 +199,7 @@ private[spark] object JettyUtils extends Logging {
       }
     }
 
-    val (server, boundPort) =
-      Utils.startServiceOnPort[Server](port, connect, serverName, maxRetries = 10)
+    val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, serverName)
     ServerInfo(server, boundPort, collection)
   }
 

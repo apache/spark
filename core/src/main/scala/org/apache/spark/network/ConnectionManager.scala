@@ -42,7 +42,8 @@ private[spark] class ConnectionManager(
     port: Int,
     conf: SparkConf,
     securityManager: SecurityManager,
-    name: String = "Connection manager") extends Logging {
+    name: String = "Connection manager")
+  extends Logging {
 
   class MessageStatus(
       val message: Message,

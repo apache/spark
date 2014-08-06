@@ -1344,14 +1344,13 @@ private[spark] object Utils extends Logging {
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses 1 + the port used in the previous attempt.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
    * @param maxRetries Maximum number of retries to attempt.
    *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
-   * @throws SparkException When unable to start the service after a given number of attempts
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -1381,13 +1380,13 @@ private[spark] object Utils extends Logging {
       }
     }
     // Should never happen
-    throw new SparkException(s"Failed to start service on port $startPort")
+    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
   }
 
   /**
    * Return whether the exception is caused by an address-port collision when binding.
    */
-  private def isBindCollision(exception: Throwable): Boolean = {
+  def isBindCollision(exception: Throwable): Boolean = {
     exception match {
       case e: BindException =>
         if (e.getMessage != null && e.getMessage.contains("Address already in use")) {

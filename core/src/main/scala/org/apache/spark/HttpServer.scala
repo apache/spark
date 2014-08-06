@@ -72,7 +72,7 @@ private[spark] class HttpServer(
   private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server()
     val connector = new SocketConnector
-    connector.setMaxIdleTime(60*1000)
+    connector.setMaxIdleTime(60 * 1000)
     connector.setSoLingerTime(-1)
     connector.setPort(startPort)
     server.addConnector(connector)
