@@ -52,6 +52,9 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
+  private val writeMetrics = new ShuffleWriteMetrics()
+  context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
+
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
     // Get an iterator with the elements for each partition ID
@@ -84,13 +87,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     val offsets = new Array[Long](numPartitions + 1)
     val lengths = new Array[Long](numPartitions)
 
-    // Statistics
-    var totalBytes = 0L
-    var totalTime = 0L
-
     for ((id, elements) <- partitions) {
       if (elements.hasNext) {
-        val writer = blockManager.getDiskWriter(blockId, outputFile, ser, fileBufferSize)
+        val writer = blockManager.getDiskWriter(blockId, outputFile, ser, fileBufferSize,
+          writeMetrics)
         for (elem <- elements) {
           writer.write(elem)
         }
@@ -98,18 +98,12 @@ private[spark] class SortShuffleWriter[K, V, C](
         val segment = writer.fileSegment()
         offsets(id + 1) = segment.offset + segment.length
         lengths(id) = segment.length
-        totalTime += writer.timeWriting()
-        totalBytes += segment.length
       } else {
         // The partition is empty; don't create a new writer to avoid writing headers, etc
         offsets(id + 1) = offsets(id)
       }
     }
 
-    val shuffleMetrics = new ShuffleWriteMetrics
-    shuffleMetrics.shuffleBytesWritten = totalBytes
-    shuffleMetrics.shuffleWriteTime = totalTime
-    context.taskMetrics.shuffleWriteMetrics = Some(shuffleMetrics)
     context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
 
