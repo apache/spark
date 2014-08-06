@@ -90,7 +90,7 @@ private[spark] class MesosSchedulerBackend(
   def createExecutorInfo(execId: String): ExecutorInfo = {
     val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
       "Spark home is not set; set it through the spark.home system " +
-        "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -100,8 +100,14 @@ private[spark] class MesosSchedulerBackend(
     }
     val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
-
+      
     val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
+    // Start executors with a few necessary configs for registering with the scheduler
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+
     val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
       cp.split(java.io.File.pathSeparator)
     }
@@ -112,7 +118,7 @@ private[spark] class MesosSchedulerBackend(
 
     val command = Command(
       "org.apache.spark.executor.MesosExecutorBackend", Nil, sc.executorEnvs,
-      classPathEntries, libraryPathEntries, extraJavaOpts)
+      classPathEntries, libraryPathEntries, javaOpts)
 
     val uri = conf.get("spark.executor.uri", null)
     if ( uri == null ) {
@@ -345,7 +351,7 @@ private[spark] class MesosSchedulerBackend(
   override def executorLost(d: SchedulerDriver, executorId: ExecutorID,
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
-                                                                         slaveId.getValue))
+                                                                 slaveId.getValue))
     recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 
