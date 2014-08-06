@@ -246,8 +246,9 @@ class ConnectionManagerSuite extends FunSuite {
 
     val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
 
-    val message = Try(Await.result(future, 1 second))
-    assert(message.isFailure)
+    intercept[IOException] {
+      Await.result(future, 1 second)
+    }
 
     manager.stop()
     managerServer.stop()
