@@ -29,7 +29,7 @@
   <packaging>pom</packaging>
   <name>Spark Project YARN Parent POM</name>
   <properties>
-     <sbt.project.name>yarn</sbt.project.name>
+    <sbt.project.name>yarn</sbt.project.name>
   </properties>
 
   <dependencies>

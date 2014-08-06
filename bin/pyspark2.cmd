@@ -45,7 +45,7 @@ rem Figure out which Python to use.
 if [%PYSPARK_PYTHON%] == [] set PYSPARK_PYTHON=python
 
 set PYTHONPATH=%FWDIR%python;%PYTHONPATH%
-set PYTHONPATH=%FWDIR%python\lib\py4j-0.8.1-src.zip;%PYTHONPATH%
+set PYTHONPATH=%FWDIR%python\lib\py4j-0.8.2.1-src.zip;%PYTHONPATH%
 
 set OLD_PYTHONSTARTUP=%PYTHONSTARTUP%
 set PYTHONSTARTUP=%FWDIR%python\pyspark\shell.py

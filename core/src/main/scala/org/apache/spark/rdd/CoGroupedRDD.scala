@@ -17,10 +17,11 @@
 
 package org.apache.spark.rdd
 
+import scala.language.existentials
+
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
@@ -157,8 +158,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       for ((it, depNum) <- rddIterators) {
         map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
       }
-      context.taskMetrics.memoryBytesSpilled = map.memoryBytesSpilled
-      context.taskMetrics.diskBytesSpilled = map.diskBytesSpilled
+      context.taskMetrics.memoryBytesSpilled += map.memoryBytesSpilled
+      context.taskMetrics.diskBytesSpilled += map.diskBytesSpilled
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     }

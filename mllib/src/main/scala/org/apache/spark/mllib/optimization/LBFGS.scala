@@ -26,6 +26,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * :: DeveloperApi ::
@@ -199,7 +200,7 @@ object LBFGS extends Logging {
       val n = weights.length
       val bcWeights = data.context.broadcast(weights)
 
-      val (gradientSum, lossSum) = data.aggregate((BDV.zeros[Double](n), 0.0))(
+      val (gradientSum, lossSum) = data.treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
               features, label, Vectors.fromBreeze(bcWeights.value), Vectors.fromBreeze(grad))

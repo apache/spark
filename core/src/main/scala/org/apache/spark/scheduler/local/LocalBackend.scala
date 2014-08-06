@@ -23,14 +23,17 @@ import akka.actor.{Actor, ActorRef, Props}
 
 import org.apache.spark.{Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.executor.{TaskMetrics, Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.storage.BlockManagerId
 
 private case class ReviveOffers()
 
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
 private case class KillTask(taskId: Long, interruptThread: Boolean)
+
+private case class StopExecutor()
 
 /**
  * Calls to LocalBackend are all serialized through LocalActor. Using an actor makes the calls on
@@ -63,6 +66,9 @@ private[spark] class LocalActor(
 
     case KillTask(taskId, interruptThread) =>
       executor.killTask(taskId, interruptThread)
+
+    case StopExecutor =>
+      executor.stop()
   }
 
   def reviveOffers() {
@@ -91,6 +97,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def stop() {
+    localActor ! StopExecutor
   }
 
   override def reviveOffers() {
