@@ -36,7 +36,7 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     }
 
   if (!hasBash) {
-    logInfo("Cannot execute bash, skipping all tests.")
+    logWarning("Cannot execute bash, skipping bash tests.")
   }
 
   def bashTest(name: String)(fn: => Unit) =

@@ -163,7 +163,7 @@ object YarnSparkHadoopUtil {
         arg.charAt(i) match {
           case '$' => escaped.append("\\$")
           case '"' => escaped.append("\\\"")
-          case '\'' => escaped.append("'\\\"'\\\"'")
+          case '\'' => escaped.append("'\\''")
           case c => escaped.append(c)
         }
       }
