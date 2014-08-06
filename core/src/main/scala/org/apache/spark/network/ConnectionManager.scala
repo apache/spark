@@ -548,7 +548,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         case e: Exception => {
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
-          throw new IOException("Error evaluating sasl response: " + e)
+          throw new IOException("Error evaluating sasl response: ", e)
         }
       }
     }
