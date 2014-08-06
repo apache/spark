@@ -69,7 +69,7 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
     | grep \+ \
     | sed "s/\+ *//" \
     | tr "\n" "~" \
-    | sed "s/~/<br>/g"
+    | sed "s/~/<br>/g" \
     | sed "s/\"/\\\\\"/g")
   if [ "$new_public_classes" == "" ]; then
     result_message="$result_message- This patch adds no public classes<br>"
