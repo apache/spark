@@ -109,8 +109,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     }
     val increment = (max-min)/bucketCount.toDouble
     val range = if (increment != 0) {
-      //Range.Double.inclusive(min, max, increment)
-      //[SPARK-2862] The above code doesn't return inclusive range. Scala bug.
+      // Range.Double.inclusive(min, max, increment)
+      // The above code doesn't return inclusive range.
+      // https://issues.scala-lang.org/browse/SI-8782
       min to (max, increment)
     } else {
       List(min, min)
