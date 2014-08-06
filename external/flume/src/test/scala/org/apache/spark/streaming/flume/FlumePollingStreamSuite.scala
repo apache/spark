@@ -68,7 +68,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
         testPassed = true
       } catch {
         case e: java.net.BindException =>
-          logError("Exception when running flume polling test", e)
+          logWarning("Exception when running flume polling test: " + e)
           attempt += 1
       }
     }
