@@ -206,6 +206,14 @@ Apart from these, the following properties are also available, and may be useful
     used during aggregation goes above this amount, it will spill the data into disks.
   </td>
 </tr>
+<tr>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
+    process. The user can specify multiple of these and to set multiple environment variables. 
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -258,7 +266,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>100</td>
+  <td>32</td>
   <td>
     Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
     reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
@@ -419,7 +427,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer.mb</code></td>
-  <td>2</td>
+  <td>0.064</td>
   <td>
     Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
@@ -822,13 +830,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ui.acls.enable</code></td>
+  <td><code>spark.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether Spark web ui acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
-    Also note this requires the user to be known, if the user comes across as null no checks
-    are done. Filters can be used to authenticate and set the user.
+    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view or modify the job.  Note this requires the user to be known, 
+    so if the user comes across as null no checks are done. Filters can be used with the UI
+    to authenticate and set the user.
   </td>
 </tr>
 <tr>
@@ -837,6 +845,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.modify.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have modify access to the Spark job. By default only the
+    user that started the Spark job has access to modify it (kill it for example).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
+    This can be used if you run on a shared cluster and have a set of administrators or devs who
+    help debug when things work.
   </td>
 </tr>
 </table>
