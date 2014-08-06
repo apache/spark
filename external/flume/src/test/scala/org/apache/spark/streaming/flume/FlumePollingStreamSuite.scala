@@ -35,6 +35,7 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
+import org.apache.spark.util.Utils
 
 class FlumePollingStreamSuite extends TestSuiteBase {
 
@@ -67,7 +68,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
         test()
         testPassed = true
       } catch {
-        case e: java.net.BindException =>
+        case e: Exception if Utils.isBindCollision(e) =>
           logWarning("Exception when running flume polling test: " + e)
           attempt += 1
       }
