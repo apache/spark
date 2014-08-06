@@ -129,8 +129,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case s@Sort(ordering, p@Project(projectList, child)) if !s.resolved && p.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name})
+      case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolveChildren)
         val requiredAttributes = resolved.collect { case a: Attribute => a }.toSet
 
@@ -143,19 +143,19 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         } else {
           s // Nothing we can do here. Return original plan.
         }
-      case s@Sort(ordering, a@Aggregate(grouping, aggs, child)) if !s.resolved && a.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name})
+      case s @ Sort(ordering, a @ Aggregate(grouping, aggs, child)) if !s.resolved && a.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
         val groupingRelation = LocalRelation(
-          grouping.collect { case ne: NamedExpression => ne.toAttribute}
+          grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
         logWarning(s"Grouping expressions: $groupingRelation")
         val resolved = unresolved.flatMap(groupingRelation.resolve).toSet
         val missingInAggs = resolved -- a.outputSet
         logWarning(s"Resolved: $resolved Missing in aggs: $missingInAggs")
-        if(missingInAggs.nonEmpty) {
+        if (missingInAggs.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
             Sort(ordering,
