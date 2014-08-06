@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.deploy.worker.ui.WorkerWebUI._
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.AkkaUtils
@@ -34,7 +35,7 @@ class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
     port: Option[Int] = None)
-  extends WebUI(worker.securityMgr, WorkerWebUI.getUIPort(port, worker.conf), worker.conf)
+  extends WebUI(worker.securityMgr, getUIPort(port, worker.conf), worker.conf, name = "WorkerUI")
   with Logging {
 
   val timeout = AkkaUtils.askTimeout(worker.conf)

@@ -20,7 +20,7 @@ package org.apache.spark.util
 import scala.util.Random
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
-import java.net.URI
+import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 
 import com.google.common.base.Charsets
@@ -263,6 +263,38 @@ class UtilsSuite extends FunSuite {
       Array("hdfs:/a.jar", "s3:/another.jar"))
     assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
       Array("hdfs:/a.jar", "s3:/another.jar"))
+  }
+
+  test("isBindCollision") {
+    // Negatives
+    assert(!Utils.isBindCollision(null))
+    assert(!Utils.isBindCollision(new Exception))
+    assert(!Utils.isBindCollision(new Exception(new Exception)))
+    assert(!Utils.isBindCollision(new Exception(new BindException)))
+    assert(!Utils.isBindCollision(new Exception(new BindException("Random message"))))
+
+    // Positives
+    val be = new BindException("Address already in use")
+    val be1 = new Exception(new BindException("Address already in use"))
+    val be2 = new Exception(new Exception(new BindException("Address already in use")))
+    assert(Utils.isBindCollision(be))
+    assert(Utils.isBindCollision(be1))
+    assert(Utils.isBindCollision(be2))
+
+    // Actual bind exception
+    var server1: ServerSocket = null
+    var server2: ServerSocket = null
+    try {
+      server1 = new java.net.ServerSocket(0)
+      server2 = new java.net.ServerSocket(server1.getLocalPort)
+    } catch {
+      case e: Exception =>
+        assert(e.isInstanceOf[java.net.BindException])
+        assert(Utils.isBindCollision(e))
+    } finally {
+      Option(server1).foreach(_.close())
+      Option(server2).foreach(_.close())
+    }
   }
 
 }
