@@ -22,7 +22,6 @@ import java.net.Socket
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-import scala.concurrent.Await
 import scala.util.Properties
 
 import akka.actor._
@@ -35,7 +34,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -66,11 +65,8 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
+    val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
-
-  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
-  // All accesses should be manually synchronized
-  val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -154,10 +150,10 @@ object SparkEnv extends Logging {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
 
-    // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
-    // figure out which port number Akka actually bound to and set spark.driver.port to it.
-    if (isDriver && port == 0) {
-      conf.set("spark.driver.port",  boundPort.toString)
+    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // This is so that we tell the executors the correct port to connect to.
+    if (isDriver) {
+      conf.set("spark.driver.port", boundPort.toString)
     }
 
     // Create an instance of the class named by the given Java system property, or by
@@ -225,7 +221,8 @@ object SparkEnv extends Logging {
 
     val httpFileServer =
       if (isDriver) {
-        val server = new HttpFileServer(securityManager)
+        val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+        val server = new HttpFileServer(securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -252,6 +249,8 @@ object SparkEnv extends Logging {
     val shuffleManager = instantiateClass[ShuffleManager](
       "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
+    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -273,6 +272,7 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
+      shuffleMemoryManager,
       conf)
   }
 

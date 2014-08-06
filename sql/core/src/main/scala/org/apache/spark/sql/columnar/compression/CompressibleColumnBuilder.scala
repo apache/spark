@@ -46,8 +46,6 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>
 
-  import CompressionScheme._
-
   var compressionEncoders: Seq[Encoder[T]] = _
 
   abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
@@ -81,28 +79,32 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     }
   }
 
-  abstract override def build() = {
-    val rawBuffer = super.build()
+  override def build() = {
+    val nonNullBuffer = buildNonNulls()
+    val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
       if (isWorthCompressing(candidate)) candidate else PassThrough.encoder
     }
 
-    val headerSize = columnHeaderSize(rawBuffer)
+    // Header = column type ID + null count + null positions
+    val headerSize = 4 + 4 + nulls.limit()
     val compressedSize = if (encoder.compressedSize == 0) {
-      rawBuffer.limit - headerSize
+      nonNullBuffer.remaining()
     } else {
       encoder.compressedSize
     }
 
-    // Reserves 4 bytes for compression scheme ID
     val compressedBuffer = ByteBuffer
+      // Reserves 4 bytes for compression scheme ID
       .allocate(headerSize + 4 + compressedSize)
       .order(ByteOrder.nativeOrder)
-
-    copyColumnHeader(rawBuffer, compressedBuffer)
+      // Write the header
+      .putInt(typeId)
+      .putInt(nullCount)
+      .put(nulls)
 
     logInfo(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
-    encoder.compress(rawBuffer, compressedBuffer, columnType)
+    encoder.compress(nonNullBuffer, compressedBuffer, columnType)
   }
 }

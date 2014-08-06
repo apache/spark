@@ -66,16 +66,25 @@ fi
 set -e
 set -o pipefail
 
+echo ""
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
 dev/check-license
 
+echo ""
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
-dev/scalastyle
+dev/lint-scala
 
+echo ""
+echo "========================================================================="
+echo "Running Python style checks"
+echo "========================================================================="
+dev/lint-python
+
+echo ""
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
@@ -89,11 +98,13 @@ fi
 echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS clean package assembly/assembly test | \
   grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
+echo ""
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
 ./python/run-tests
 
+echo ""
 echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="

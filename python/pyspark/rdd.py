@@ -135,6 +135,7 @@ class MaxHeapQ(object):
 
     """
     An implementation of MaxHeap.
+
     >>> import pyspark.rdd
     >>> heap = pyspark.rdd.MaxHeapQ(5)
     >>> [heap.insert(i) for i in range(10)]
@@ -250,7 +251,7 @@ class RDD(object):
 
     def _toPickleSerialization(self):
         if (self._jrdd_deserializer == PickleSerializer() or
-            self._jrdd_deserializer == BatchedSerializer(PickleSerializer())):
+                self._jrdd_deserializer == BatchedSerializer(PickleSerializer())):
             return self
         else:
             return self._reserialize(BatchedSerializer(PickleSerializer(), 10))
@@ -398,6 +399,7 @@ class RDD(object):
     def getNumPartitions(self):
         """
         Returns the number of partitions in RDD
+
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> rdd.getNumPartitions()
         2
@@ -587,6 +589,7 @@ class RDD(object):
         """
         Sorts this RDD, which is assumed to consist of (key, value) pairs.
         # noqa
+
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
         >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
         [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
@@ -1209,7 +1212,9 @@ class RDD(object):
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
         self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, batched, path,
-            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter, jconf)
+                                                       outputFormatClass,
+                                                       keyClass, valueClass,
+                                                       keyConverter, valueConverter, jconf)
 
     def saveAsHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
         """
@@ -1255,8 +1260,10 @@ class RDD(object):
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
         self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched, path,
-            outputFormatClass, keyClass, valueClass, keyConverter, valueConverter,
-            jconf, compressionCodecClass)
+                                                 outputFormatClass,
+                                                 keyClass, valueClass,
+                                                 keyConverter, valueConverter,
+                                                 jconf, compressionCodecClass)
 
     def saveAsSequenceFile(self, path, compressionCodecClass=None):
         """
@@ -1335,6 +1342,7 @@ class RDD(object):
     def keys(self):
         """
         Return an RDD with the keys of each tuple.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
         >>> m.collect()
         [1, 3]
@@ -1344,6 +1352,7 @@ class RDD(object):
     def values(self):
         """
         Return an RDD with the values of each tuple.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
         >>> m.collect()
         [2, 4]
@@ -1478,7 +1487,7 @@ class RDD(object):
         outputSerializer = self.ctx._unbatched_serializer
 
         limit = (_parse_memory(self.ctx._conf.get(
-                    "spark.python.worker.memory", "512m")) / 2)
+            "spark.python.worker.memory", "512m")) / 2)
 
         def add_shuffle_key(split, iterator):
 
@@ -1560,12 +1569,12 @@ class RDD(object):
         spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower()
                  == 'true')
         memory = _parse_memory(self.ctx._conf.get(
-                    "spark.python.worker.memory", "512m"))
+            "spark.python.worker.memory", "512m"))
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator):
             merger = ExternalMerger(agg, memory * 0.9, serializer) \
-                         if spill else InMemoryMerger(agg)
+                if spill else InMemoryMerger(agg)
             merger.mergeValues(iterator)
             return merger.iteritems()
 
@@ -1574,7 +1583,7 @@ class RDD(object):
 
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
-                         if spill else InMemoryMerger(agg)
+                if spill else InMemoryMerger(agg)
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
@@ -1718,7 +1727,7 @@ class RDD(object):
         """
         for fraction in fractions.values():
             assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        return self.mapPartitionsWithIndex( \
+        return self.mapPartitionsWithIndex(
             RDDStratifiedSampler(withReplacement, fractions, seed).func, True)
 
     def subtractByKey(self, other, numPartitions=None):
@@ -1768,6 +1777,7 @@ class RDD(object):
          Internally, this uses a shuffle to redistribute data.
          If you are decreasing the number of partitions in this RDD, consider
          using `coalesce`, which can avoid performing a shuffle.
+
          >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
          >>> sorted(rdd.glom().collect())
          [[1], [2, 3], [4, 5], [6, 7]]
@@ -1782,6 +1792,7 @@ class RDD(object):
     def coalesce(self, numPartitions, shuffle=False):
         """
         Return a new RDD that is reduced into `numPartitions` partitions.
+
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
         [[1], [2, 3], [4, 5]]
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
@@ -1866,6 +1877,7 @@ class RDD(object):
     def setName(self, name):
         """
         Assign a name to this RDD.
+
         >>> rdd1 = sc.parallelize([1,2])
         >>> rdd1.setName('RDD1')
         >>> rdd1.name()
@@ -2041,6 +2053,7 @@ class PipelinedRDD(RDD):
 
     """
     Pipelined maps:
+
     >>> rdd = sc.parallelize([1, 2, 3, 4])
     >>> rdd.map(lambda x: 2 * x).cache().map(lambda x: 2 * x).collect()
     [4, 8, 12, 16]
