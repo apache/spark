@@ -118,12 +118,36 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
-    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
     val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
     val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(7)), Some(ord), None)
+    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    sorter.insertAll(elements)
+    assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
+    val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
+    assert(iter.next() === (0, Nil))
+    assert(iter.next() === (1, List((1, 1))))
+    assert(iter.next() === (2, (0 until 100000).map(x => (2, 2)).toList))
+    assert(iter.next() === (3, Nil))
+    assert(iter.next() === (4, Nil))
+    assert(iter.next() === (5, List((5, 5))))
+    assert(iter.next() === (6, Nil))
+    sorter.stop()
+  }
+
+  test("empty partitions with spilling, bypass merge-sort") {
+    val conf = createSparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
+
+    val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
+    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
@@ -286,13 +310,42 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
+    val ord = implicitly[Ordering[Int]]
+
+    val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assert(!sorter2.bypassMergeSort, "sorter bypassed merge-sort")
+    sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    sorter2.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in sorter, bypass merge-sort") {
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
     sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
 
     val sorter2 = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    assert(sorter2.bypassMergeSort, "sorter did not bypass merge-sort")
     sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
@@ -307,7 +360,33 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
+    val ord = implicitly[Ordering[Int]]
+
+    val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    intercept[SparkException] {
+      sorter.insertAll((0 until 100000).iterator.map(i => {
+        if (i == 99990) {
+          throw new SparkException("Intentional failure")
+        }
+        (i, i)
+      }))
+    }
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in sorter if there are errors, bypass merge-sort") {
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
     intercept[SparkException] {
       sorter.insertAll((0 until 100000).iterator.map(i => {
         if (i == 99990) {
@@ -583,5 +662,39 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
       // Should not throw NullPointerException
       it.next()
     }
+  }
+
+  test("conditions for bypassing merge-sort") {
+    val conf = createSparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val ord = implicitly[Ordering[Int]]
+
+    // Numbers of partitions that are above and below the default bypassMergeThreshold
+    val FEW_PARTITIONS = 50
+    val MANY_PARTITIONS = 10000
+
+    // Sorters with no ordering or aggregator: should bypass unless # of partitions is high
+
+    val sorter1 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
+    assert(sorter1.bypassMergeSort, "sorter did not bypass merge-sort")
+
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(MANY_PARTITIONS)), None, None)
+    assert(!sorter2.bypassMergeSort, "sorter bypassed merge-sort")
+
+    // Sorters with an ordering or aggregator: should not bypass even if they have few partitions
+
+    val sorter3 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(FEW_PARTITIONS)), Some(ord), None)
+    assert(!sorter3.bypassMergeSort, "sorter bypassed merge-sort")
+
+    val sorter4 = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
+    assert(!sorter4.bypassMergeSort, "sorter bypassed merge-sort")
   }
 }

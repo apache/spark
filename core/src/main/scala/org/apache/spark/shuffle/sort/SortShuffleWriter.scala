@@ -58,25 +58,20 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
-    // Get an iterator with the elements for each partition ID
-    val externalSorter: ExternalSorter[K, V, _] = {
-      if (dep.mapSideCombine) {
-        if (!dep.aggregator.isDefined) {
-          throw new IllegalStateException("Aggregator is empty for map-side combine")
-        }
-        val sorter = new ExternalSorter[K, V, C](
-          dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
-        sorter.insertAll(records)
-        sorter
-      } else {
-        // In this case we pass neither an aggregator nor an ordering to the sorter, because we
-        // don't care whether the keys get sorted in each partition; that will be done on the
-        // reduce side if the operation being run is sortByKey.
-        val sorter = new ExternalSorter[K, V, V](
-          None, Some(dep.partitioner), None, dep.serializer)
-        sorter.insertAll(records)
-        sorter
+    if (dep.mapSideCombine) {
+      if (!dep.aggregator.isDefined) {
+        throw new IllegalStateException("Aggregator is empty for map-side combine")
       }
+      sorter = new ExternalSorter[K, V, C](
+        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+      sorter.insertAll(records)
+    } else {
+      // In this case we pass neither an aggregator nor an ordering to the sorter, because we
+      // don't care whether the keys get sorted in each partition; that will be done on the
+      // reduce side if the operation being run is sortByKey.
+      sorter = new ExternalSorter[K, V, V](
+        None, Some(dep.partitioner), None, dep.serializer)
+      sorter.insertAll(records)
     }
 
     // Create a single shuffle file with reduce ID 0 that we'll write all results to. We'll later
