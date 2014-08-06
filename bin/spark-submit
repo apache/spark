@@ -55,7 +55,9 @@ if [ $DEPLOY_MODE == "client" ]; then
     # Parse the value of the given config
     # This removes the "=" sign, whitespace, and double quotes around the value (if any)
     parse_config() {
-      result=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$1" | \
+      result=$( \
+        sed "/^#/ d" "$PROPERTIES_FILE" | \
+        grep "$1" | \
         sed "s/$1//g" | \
         sed "s/^[[:space:]]*=//g" | \
         sed "s/^[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/g" | \
