@@ -65,6 +65,7 @@ def launch_gateway():
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):
+
             def __init__(self, stream):
                 Thread.__init__(self)
                 self.daemon = True
