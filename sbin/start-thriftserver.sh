@@ -28,7 +28,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+function usage {
   echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
   pattern="usage"
   pattern+="\|Spark assembly has been built with Hive"
@@ -41,7 +41,38 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   echo
   echo "Thrift server options:"
   $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+}
+
+function ensure_arg_number {
+  arg_number=$1
+  at_least=$2
+
+  if [[ $arg_number -lt $at_least ]]; then
+    usage
+    exit 1
+  fi
+}
+
+if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
+  usage
   exit 0
 fi
 
-exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@
+THRIFT_SERVER_ARGS=""
+SUBMISSION_ARGS=""
+
+while (($#)); do
+  case $1 in
+    --hiveconf)
+      ensure_arg_number $# 2
+      THRIFT_SERVER_ARGS+=" $1"; shift
+      THRIFT_SERVER_ARGS+=" $1"; shift
+      ;;
+
+    *)
+      SUBMISSION_ARGS+=" $1"; shift
+      ;;
+  esac
+done
+
+exec "$FWDIR"/bin/spark-submit --class $CLASS $SUBMISSION_ARGS spark-internal $THRIFT_SERVER_ARGS
