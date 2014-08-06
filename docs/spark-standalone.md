@@ -319,7 +319,7 @@ configure those ports.
   </tr>
   <tr>
     <td>Browser</td>
-    <td>Driver</td>
+    <td>Application</td>
     <td>4040</td>
     <td>Web UI</td>
     <td><code>spark.ui.port</code></td>
@@ -369,18 +369,37 @@ configure those ports.
 
   <!-- Other misc stuff -->
   <tr>
-    <td>Driver and other Workers</td>
     <td>Worker</td>
+    <td>Application</td>
     <td>(random)</td>
-    <td>
-      <ul>
-        <li>File server for file and jars</li>
-        <li>Http Broadcast</li>
-        <li>Class file server (Spark Shell only)</li>
-      </ul>
-    </td>
-    <td>None</td>
-    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
+    <td>File server for files and jars</td>
+    <td><code>spark.fileserver.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Application</td>
+    <td>(random)</td>
+    <td>HTTP Broadcast</td>
+    <td><code>spark.broadcast.port</code></td>
+    <td>Jetty-based.  Not used by TorrentBroadcast, which sends data through the block manager
+    instead</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Spark Shell</td>
+    <td>(random)</td>
+    <td>Class file server (Spark Shell only)</td>
+    <td><code>spark.replClassServer.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Other Workers</td>
+    <td>(random)</td>
+    <td>Block Manager port</td>
+    <td><code>spark.blockManager.port</code></td>
+    <td>Raw socket via ServerSocketChannel</td>
   </tr>
 
 </table>

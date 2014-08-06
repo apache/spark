@@ -63,7 +63,8 @@ private[spark] class BlockManager(
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-  val connectionManager = new ConnectionManager(0, conf, securityManager)
+  val connectionManager = new ConnectionManager(conf.getInt("spark.blockManager.port", 0), conf,
+    securityManager)
 
   implicit val futureExecContext = connectionManager.futureExecContext
 

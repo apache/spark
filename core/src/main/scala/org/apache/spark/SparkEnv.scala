@@ -223,7 +223,7 @@ object SparkEnv extends Logging {
     val httpFileServer =
       if (isDriver) {
         val server = new HttpFileServer(securityManager)
-        server.initialize()
+        server.initialize(conf.getOption("spark.fileserver.port").map(_.toInt))
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
       } else {

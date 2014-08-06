@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.network.PortManager
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService, SecurityHandler}
@@ -41,45 +42,54 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-private[spark] class HttpServer(resourceBase: File, securityManager: SecurityManager)
-    extends Logging {
+private[spark] class HttpServer(resourceBase: File,
+                                securityManager: SecurityManager,
+                                localPort: Int = 0) extends Logging {
   private var server: Server = null
-  private var port: Int = -1
+  private var port: Int = localPort
+
+  private def startOnPort(startPort: Int): (Server, Int) = {
+    val server = new Server()
+    val connector = new SocketConnector
+    connector.setMaxIdleTime(60*1000)
+    connector.setSoLingerTime(-1)
+    connector.setPort(startPort)
+    server.addConnector(connector)
+
+    val threadPool = new QueuedThreadPool
+    threadPool.setDaemon(true)
+    server.setThreadPool(threadPool)
+    val resHandler = new ResourceHandler
+    resHandler.setResourceBase(resourceBase.getAbsolutePath)
+
+    val handlerList = new HandlerList
+    handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+
+    if (securityManager.isAuthenticationEnabled()) {
+      logDebug("HttpServer is using security")
+      val sh = setupSecurityHandler(securityManager)
+      // make sure we go through security handler to get resources
+      sh.setHandler(handlerList)
+      server.setHandler(sh)
+    } else {
+      logDebug("HttpServer is not using security")
+      server.setHandler(handlerList)
+    }
+
+    server.start()
+    val actualPort = server.getConnectors()(0).getLocalPort()
+
+    (server, actualPort)
+  }
 
   def start() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      server = new Server()
-      val connector = new SocketConnector
-      connector.setMaxIdleTime(60*1000)
-      connector.setSoLingerTime(-1)
-      connector.setPort(0)
-      server.addConnector(connector)
-
-      val threadPool = new QueuedThreadPool
-      threadPool.setDaemon(true)
-      server.setThreadPool(threadPool)
-      val resHandler = new ResourceHandler
-      resHandler.setResourceBase(resourceBase.getAbsolutePath)
-
-      val handlerList = new HandlerList
-      handlerList.setHandlers(Array(resHandler, new DefaultHandler))
-
-      if (securityManager.isAuthenticationEnabled()) {
-        logDebug("HttpServer is using security")
-        val sh = setupSecurityHandler(securityManager)
-        // make sure we go through security handler to get resources
-        sh.setHandler(handlerList)
-        server.setHandler(sh)
-      } else {
-        logDebug("HttpServer is not using security")
-        server.setHandler(handlerList)
-      }
-
-      server.start()
-      port = server.getConnectors()(0).getLocalPort()
+      val (actualServer, actualPort) = PortManager.startWithIncrements(localPort, 3, startOnPort)
+      server = actualServer
+      port = actualPort
     }
   }
 
