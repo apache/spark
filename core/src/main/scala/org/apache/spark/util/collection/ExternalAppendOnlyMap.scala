@@ -205,6 +205,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
+          curWriteMetrics = new ShuffleWriteMetrics()
           writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
             curWriteMetrics)
         }
