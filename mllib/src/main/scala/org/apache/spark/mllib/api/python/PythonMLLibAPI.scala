@@ -521,8 +521,8 @@ class PythonMLLibAPI extends Serializable {
 
     val data = dataBytesJRDD.rdd.map(deserializeLabeledPoint)
 
-    val algo = Algo.stringToAlgo(algoStr)
-    val impurity = Impurities.stringToImpurity(impurityStr)
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
 
     val strategy = new Strategy(
       algo = algo,

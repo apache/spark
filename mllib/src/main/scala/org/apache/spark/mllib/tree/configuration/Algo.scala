@@ -28,7 +28,7 @@ object Algo extends Enumeration {
   type Algo = Value
   val Classification, Regression = Value
 
-  private[mllib] def stringToAlgo(name: String): Algo = name match {
+  private[mllib] def fromString(name: String): Algo = name match {
     case "classification" => Classification
     case "regression" => Regression
     case _ => throw new IllegalArgumentException(s"Did not recognize Algo name: $name")

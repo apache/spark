@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
- * Factory class for Impurity types.
+ * Factory for Impurity.
  */
 private[mllib] object Impurities {
 
-  def stringToImpurity(name: String): Impurity = name match {
+  def fromString(name: String): Impurity = name match {
     case "gini" => Gini
     case "entropy" => Entropy
     case "variance" => Variance
