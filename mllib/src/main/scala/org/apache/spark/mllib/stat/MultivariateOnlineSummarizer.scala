@@ -60,7 +60,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
       currMean = BDV.zeros[Double](n)
       currM2n = BDV.zeros[Double](n)
-      currM2 = BDV.zeros[Double](n)
       nnz = BDV.zeros[Double](n)
       currMax = BDV.fill(n)(Double.MinValue)
       currMin = BDV.fill(n)(Double.MaxValue)
@@ -115,7 +114,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
             (nnz(i) + other.nnz(i))
         }
-
         if (currMax(i) < other.currMax(i)) {
           currMax(i) = other.currMax(i)
         }
