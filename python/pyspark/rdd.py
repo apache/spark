@@ -17,22 +17,22 @@
 
 from base64 import standard_b64encode as b64enc
 import copy
-from collections import defaultdict
-from collections import namedtuple
-from itertools import chain, ifilter, imap
 import operator
 import os
 import sys
 import shlex
 import traceback
+import warnings
+import heapq
+import array
+from collections import defaultdict, namedtuple
+from itertools import chain, ifilter, imap
+from random import Random
+from math import sqrt, log
+from bisect import bisect_right
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
-import warnings
-import heapq
-from random import Random
-from math import sqrt, log
-import array
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
@@ -884,58 +884,96 @@ class RDD(object):
 
         return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
 
-    def histogram(self, buckets=None, even=False):
+    def histogram(self, buckets, even=False):
         """
-        Compute a histogram of the data.
-
         Compute a histogram using the provided buckets. The buckets
-        are all open to the left except for the last which is closed
-        e.g. for the array [1,10,20,50] the buckets are [1,10) [10,20)
-        [20,50] e.g 1<=x<10, 10<=x<20, 20<=x<50. And on the input of 1
-        and 50 we would have a histogram of 1,0,0.
+        are all open to the right except for the last which is closed.
+        e.g. [1,10,20,50] means the buckets are [1,10) [10,20) [20,50],
+        which means 1<=x<10, 10<=x<20, 20<=x<=50. And on the input of 1
+        and 50 we would have a histogram of 1,0,1.
 
-        Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30])
+        If your histogram is evenly spaced (e.g. [0, 10, 20, 30]),
         this can be switched from an O(log n) inseration to O(1) per
-        element(where n = # buckets), if you set evenBuckets to true.
-        Buckets must be sorted and not contain any duplicates, Buckets
-        array must be at least two elements All NaN entries are treated
-        the same. If you have a NaN bucket it must be the maximum value
-        of the last position and all NaN entries will be counted in that
-        bucket.
+        element(where n = # buckets), if you set `even` to True.
 
-        If buckets is a number, it will generates buckets which is
+        Buckets must be sorted and not contain any duplicates, must be
+        at least two elements.
+
+        If `buckets` is a number, it will generates buckets which is
         evenly spaced between the minimum and maximum of the RDD. For
         example, if the min value is 0 and the max is 100, given buckets
         as 2, the resulting buckets will be [0,50) [50,100]. buckets must
         be at least 1 If the RDD contains infinity, NaN throws an exception
         If the elements in RDD do not vary (max == min) always returns
-        a single bucket. It will return an tuple of buckets and histogram
-        in them.
+        a single bucket.
+
+        It will return an tuple of buckets and histogram.
 
         >>> rdd = sc.parallelize(range(51))
         >>> rdd.histogram(2)
-        ([0.0, 25.0, 50.0], [25L, 26L])
+        ([0, 25, 50], [25, 26])
         >>> rdd.histogram([0, 5, 25, 50])
-        [5L, 20L, 26L]
+        ([0, 5, 25, 50], [5, 20, 26])
         >>> rdd.histogram([0, 15, 30, 45, 60], True)
-        [15L, 15L, 15L, 6L]
+        ([0, 15, 30, 45, 60], [15, 15, 15, 6])
         """
 
-        drdd = self.map(lambda x:float(x))
-        batched = isinstance(drdd._jrdd_deserializer, BatchedSerializer)
-        jdrdd = self.ctx._jvm.PythonRDD.pythonToJavaDouble(drdd._jrdd, batched)
-
-        if isinstance(buckets, (int,long)):
+        if isinstance(buckets, (int, long)):
             if buckets < 1:
-                raise ValueError("buckets should be greater than 1")
+                raise ValueError("buckets should not less than 1")
 
-            r = jdrdd.histogram(buckets)
-            return list(r._1()), list(r._2())
+            # faster than stats()
+            def minmax(it):
+                minv, maxv = float("inf"), float("-inf")
+                for v in it:
+                    minv = min(minv, v)
+                    maxv = max(maxv, v)
+                return [(minv, maxv)]
 
-        jbuckets = self.ctx._gateway.new_array(self.ctx._gateway.jvm.java.lang.Double, len(buckets))
-        for i in range(len(buckets)):
-            jbuckets[i] = float(buckets[i])
-        return list(jdrdd.histogram(jbuckets, even))
+            def _merge(a, b):
+                return (min(a[0], b[0]), max(a[1], b[1]))
+
+            minv, maxv = self.mapPartitions(minmax).reduce(_merge)
+
+            if minv == maxv or buckets == 1:
+                return [minv, maxv], [self.count()]
+
+            inc = (maxv - minv) / buckets
+            # keep them as integer if possible
+            if inc * buckets != maxv - minv:
+                inc = (maxv - minv) * 1.0 / buckets
+
+            buckets = [i * inc + minv for i in range(buckets)]
+            buckets.append(maxv) # fix accumuated error
+            even = True
+
+        else:
+            if len(buckets) < 2:
+                raise ValueError("buckets should have more than one value")
+            if sorted(buckets) != buckets:
+                raise ValueError("buckets should be sorted")
+
+            minv = buckets[0]
+            maxv = buckets[-1]
+            inc = buckets[1] - buckets[0] if even else None
+
+        def histogram(iterator):
+            counters = [0] * len(buckets)
+            for i in iterator:
+                if i > maxv or i < minv:
+                    continue
+                t = (int((i - minv) / inc) if even
+                        else bisect_right(buckets, i) - 1)
+                counters[t] += 1
+            # add last two together
+            last = counters.pop()
+            counters[-1] += last
+            return [counters]
+
+        def mergeCounters(a, b):
+            return [i + j for i, j in zip(a, b)]
+
+        return buckets, self.mapPartitions(histogram).reduce(mergeCounters)
 
     def mean(self):
         """

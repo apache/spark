@@ -730,24 +730,6 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Convert a RDD of serialized Python objects to RDD of Double, that is usable by
-   * PySpark.
-   */
-  def pythonToJavaDouble(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaDoubleRDD = {
-    new JavaDoubleRDD(pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        val obj = unpickle.loads(row)
-        if (batched) {
-          obj.asInstanceOf[JArrayList[_]].map(_.asInstanceOf[Double])
-        } else {
-          Seq(obj.asInstanceOf[Double])
-        }
-      }
-    })
-  }
-
-  /**
    * Convert a RDD of Java objects to and RDD of serialized Python objects, that is usable by
    * PySpark.
    */
