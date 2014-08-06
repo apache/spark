@@ -252,9 +252,12 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
-  private val shade = new ShadeStrategy(List(
+  private val relocators = List(
     new Relocator("com.google", "org.spark-project.guava", Seq("com\\.google\\.common\\..*".r),
-      Seq("com\\.google\\.common\\.base\\.Optional.*".r))))
+      Seq("com\\.google\\.common\\.base\\.Optional.*".r)))
+  private val localFilters = List(
+    "com/google/common/base/Optional.*".r)
+  private val shade = new ShadeStrategy(relocators, localFilters)
 
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},

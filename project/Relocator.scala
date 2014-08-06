@@ -23,6 +23,15 @@ import org.objectweb.asm._
 import org.objectweb.asm.commons._
 import sbtassembly.Plugin._
 
+/**
+ * Relocates classes that match the configuration to a new location. Tries to match the options
+ * available in the maven-shade-plugin.
+ *
+ * @param prefix Prefix that classes to be relocated must match.
+ * @param shaded New prefix for classes that match.
+ * @param includes Regexes for classes to include inside the matching package (empty = all).
+ * @param excludes Regexes for classes to exclude from the matching package (empty = none).
+ */
 class Relocator(prefix: String, shaded: String, includes: Seq[Regex], excludes: Seq[Regex]) {
 
   /**
@@ -78,8 +87,19 @@ class RelocatorRemapper(relocators: List[Relocator]) extends Remapper {
  * Tries to emulate part of the class relocation behavior of maven-shade-plugin. Classes that
  * should be relocated are moved to a new location, and all classes are passed through the
  * remapper so that references to relocated classes are fixed.
+ *
+ * Note about `preferLocal`: this is a hack to make sure that we always ship the Spark-compiled
+ * version of Guava's `Optional` class. Unlike maven, sbt-assembly doesn't seem to allow filtering
+ * of specific entries in dependencies. It also does not provide information about where does
+ * a particular file come from. The only hint is that the temp path for the file ends with a "_dir"
+ * when it comes from a directory, and with a hash when it comes from a jar file. So for classes
+ * that match a regex in the `preferLocal` list, we choose the first class file in a local
+ * directory.
+ *
+ * @param relocators List of relocators to apply to classes being shaded.
+ * @param preferLocal List of regexes that match classes for which a local version is preferred.
  */
-class ShadeStrategy(relocators: List[Relocator]) extends MergeStrategy {
+class ShadeStrategy(relocators: List[Relocator], preferLocal: List[Regex]) extends MergeStrategy {
 
   private val remapper = new RelocatorRemapper(relocators)
 
@@ -91,7 +111,7 @@ class ShadeStrategy(relocators: List[Relocator]) extends MergeStrategy {
         (files.head, path)
       } else {
         val className = path.substring(0, path.length() - ".class".length())
-        (remap(files.head, tempDir), remapper.rename(className) + ".class")
+        (remap(chooseFile(path, files), tempDir), remapper.rename(className) + ".class")
       }
     Right(Seq(file -> newPath))
   }
@@ -116,6 +136,20 @@ class ShadeStrategy(relocators: List[Relocator]) extends MergeStrategy {
     } finally {
       in.foreach { _.close() }
       out.foreach { _.close() }
+    }
+  }
+
+  private def chooseFile(path: String, files: Seq[File]): File = {
+    if (!preferLocal.filter { r => r.pattern.matcher(path).matches() }.isEmpty) {
+      def isLocal(f: File) = {
+        val abs = f.getAbsolutePath()
+        val dir = abs.substring(0, abs.length() - path.length())
+        dir.endsWith("_dir")
+      }
+
+      files.filter(isLocal).orElse(files)(0)
+    } else {
+      files.head
     }
   }
 
