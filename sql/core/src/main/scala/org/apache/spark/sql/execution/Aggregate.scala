@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution
 import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkEnv, SparkContext}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.util.collection.ExternalAppendOnlyMap
 
 /**
  * :: DeveloperApi ::
@@ -39,11 +40,13 @@ import org.apache.spark.sql.SQLContext
  */
 @DeveloperApi
 case class Aggregate(
-    partial: Boolean,
-    groupingExpressions: Seq[Expression],
-    aggregateExpressions: Seq[NamedExpression],
-    child: SparkPlan)
+                      partial: Boolean,
+                      groupingExpressions: Seq[Expression],
+                      aggregateExpressions: Seq[NamedExpression],
+                      child: SparkPlan)
   extends UnaryNode {
+
+  private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", false)
 
   override def requiredChildDistribution =
     if (partial) {
@@ -71,9 +74,9 @@ case class Aggregate(
    *                        output.
    */
   case class ComputedAggregate(
-      unbound: AggregateExpression,
-      aggregate: AggregateExpression,
-      resultAttribute: AttributeReference)
+                                unbound: AggregateExpression,
+                                aggregate: AggregateExpression,
+                                resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
   private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
@@ -148,53 +151,116 @@ case class Aggregate(
         Iterator(resultProjection(aggregateResults))
       }
     } else {
-      child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[Row, Array[AggregateFunction]]
-        val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+      if (!externalSorting) {
+        child.execute().mapPartitions { iter =>
+          val hashTable = new HashMap[Row, Array[AggregateFunction]]
+          val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
 
-        var currentRow: Row = null
-        while (iter.hasNext) {
-          currentRow = iter.next()
-          val currentGroup = groupingProjection(currentRow)
-          var currentBuffer = hashTable.get(currentGroup)
-          if (currentBuffer == null) {
-            currentBuffer = newAggregateBuffer()
-            hashTable.put(currentGroup.copy(), currentBuffer)
-          }
-
-          var i = 0
-          while (i < currentBuffer.length) {
-            currentBuffer(i).update(currentRow)
-            i += 1
-          }
-        }
-
-        new Iterator[Row] {
-          private[this] val hashTableIter = hashTable.entrySet().iterator()
-          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
-          private[this] val resultProjection =
-            new InterpretedMutableProjection(
-              resultExpressions, computedSchema ++ namedGroups.map(_._2))
-          private[this] val joinedRow = new JoinedRow
-
-          override final def hasNext: Boolean = hashTableIter.hasNext
-
-          override final def next(): Row = {
-            val currentEntry = hashTableIter.next()
-            val currentGroup = currentEntry.getKey
-            val currentBuffer = currentEntry.getValue
+          var currentRow: Row = null
+          while (iter.hasNext) {
+            currentRow = iter.next()
+            val currentGroup = groupingProjection(currentRow)
+            var currentBuffer = hashTable.get(currentGroup)
+            if (currentBuffer == null) {
+              currentBuffer = newAggregateBuffer()
+              hashTable.put(currentGroup.copy(), currentBuffer)
+            }
 
             var i = 0
             while (i < currentBuffer.length) {
-              // Evaluating an aggregate buffer returns the result.  No row is required since we
-              // already added all rows in the group using update.
-              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+              currentBuffer(i).update(currentRow)
               i += 1
             }
-            resultProjection(joinedRow(aggregateResults, currentGroup))
+          }
+
+          new Iterator[Row] {
+            private[this] val hashTableIter = hashTable.entrySet().iterator()
+            private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
+            private[this] val resultProjection =
+              new InterpretedMutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+            private[this] val joinedRow = new JoinedRow
+
+            override final def hasNext: Boolean = hashTableIter.hasNext
+
+            override final def next(): Row = {
+              val currentEntry = hashTableIter.next()
+              val currentGroup = currentEntry.getKey
+              val currentBuffer = currentEntry.getValue
+
+              var i = 0
+              while (i < currentBuffer.length) {
+                // Evaluating an aggregate buffer returns the result.  No row is required since we
+                // already added all rows in the group using update.
+                aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+                i += 1
+              }
+              resultProjection(joinedRow(aggregateResults, currentGroup))
+            }
           }
         }
+      } else {
+        child.execute().mapPartitions { iter =>
+          val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+
+          val createCombiner = (v: Row) =>{
+            val c = newAggregateBuffer()
+            var i = 0
+            while (i < c.length) {
+              c(i).update(v)
+              i += 1
+            }
+            c
+          }
+          val mergeValue = (c: Array[AggregateFunction], v: Row) => {
+            var i = 0
+            while (i < c.length) {
+              c(i).update(v)
+              i += 1
+            }
+            c
+          }
+          val mergeCombiners = (c1: Array[AggregateFunction], c2: Array[AggregateFunction]) => {
+            var i = 0
+            while (i < c1.length) {
+              c1(i).merge(c2(i))
+              i += 1
+            }
+            c1
+          }
+          val combiners = new ExternalAppendOnlyMap[Row, Row, Array[AggregateFunction]](createCombiner, mergeValue, mergeCombiners)
+          while (iter.hasNext) {
+            val row = iter.next()
+            combiners.insert(groupingProjection(row).copy(), row)
+          }
+
+          new Iterator[Row] {
+            private[this] val iter = combiners.iterator
+            private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
+            private[this] val resultProjection =
+              new InterpretedMutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+            private[this] val joinedRow = new JoinedRow
+
+            override final def hasNext: Boolean = iter.hasNext
+            override final def next(): Row = {
+              val currentEntry = iter.next()
+              val currentGroup = currentEntry._1
+              val currentBuffer = currentEntry._2
+
+              var i = 0
+              while (i < currentBuffer.length) {
+                // Evaluating an aggregate buffer returns the result.  No row is required since we
+                // already added all rows in the group using update.
+                aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+                i += 1
+              }
+              resultProjection(joinedRow(aggregateResults, currentGroup))
+            }
+          }
+
+        }
       }
+
     }
   }
+
 }
