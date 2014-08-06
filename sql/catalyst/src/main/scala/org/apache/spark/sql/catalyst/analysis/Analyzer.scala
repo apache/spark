@@ -151,10 +151,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        logWarning(s"Grouping expressions: $groupingRelation")
+        logDebug(s"Grouping expressions: $groupingRelation")
         val resolved = unresolved.flatMap(groupingRelation.resolve).toSet
         val missingInAggs = resolved -- a.outputSet
-        logWarning(s"Resolved: $resolved Missing in aggs: $missingInAggs")
+        logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
         if (missingInAggs.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
