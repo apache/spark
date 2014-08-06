@@ -73,7 +73,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   val sortBasedShuffle =
     conf.get("spark.shuffle.manager", "") == classOf[SortShuffleManager].getName
 
-  private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   /**
    * Contains all the state related to a particular shuffle. This includes a pool of unused

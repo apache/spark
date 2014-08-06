@@ -101,7 +101,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
 
-  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
