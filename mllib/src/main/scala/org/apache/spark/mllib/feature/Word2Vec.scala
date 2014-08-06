@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.feature
 
+import java.lang.{Iterable => JavaIterable}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,6 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
@@ -239,7 +243,7 @@ class Word2Vec extends Serializable with Logging {
       a += 1
     }
   }
-  
+
   /**
    * Computes the vector representation of each word in vocabulary.
    * @param dataset an RDD of words
@@ -369,11 +373,22 @@ class Word2Vec extends Serializable with Logging {
 
     new Word2VecModel(word2VecMap.toMap)
   }
+
+  /**
+   * Computes the vector representation of each word in vocabulary (Java version).
+   * @param dataset a JavaRDD of words
+   * @return a Word2VecModel
+   */
+  def fit[S <: JavaIterable[String]](dataset: JavaRDD[S]): Word2VecModel = {
+    fit(dataset.rdd.map(_.asScala))
+  }
 }
 
 /**
-* Word2Vec model
+ * :: Experimental ::
+ * Word2Vec model
  */
+@Experimental
 class Word2VecModel private[mllib] (
     private val model: Map[String, Array[Float]]) extends Serializable {
 
