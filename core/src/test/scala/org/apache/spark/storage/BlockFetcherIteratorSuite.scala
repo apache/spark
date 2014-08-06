@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
@@ -146,9 +147,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     when(blockManager.connectionManager).thenReturn(connManager)
 
     val f = future {
-      val message = Message.createBufferMessage(0)
-      message.hasError = true
-      message
+      throw new IOException("Send failed or we received an error ACK")
     }
     when(connManager.sendMessageReliably(any(),
       any())).thenReturn(f)
