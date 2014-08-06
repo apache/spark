@@ -60,10 +60,12 @@ private[spark] class BlockManager(
     mapOutputTracker: MapOutputTracker)
   extends Logging {
 
+  private val port = conf.getInt("spark.blockManager.port", 0)
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-  val connectionManager = new ConnectionManager(0, conf, securityManager)
+  val connectionManager =
+    new ConnectionManager(port, conf, securityManager, "Connection manager for block manager")
 
   implicit val futureExecContext = connectionManager.futureExecContext
 

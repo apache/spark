@@ -323,6 +323,14 @@ private[spark] object SparkConf {
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
-    isAkkaConf(name) || name.startsWith("spark.akka") || name.startsWith("spark.auth")
+    isAkkaConf(name) ||
+    name.startsWith("spark.akka") ||
+    name.startsWith("spark.auth") ||
+    isSparkPortConf(name)
   }
+
+  /**
+   * Return whether the given config is a Spark port config.
+   */
+  def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
 }
