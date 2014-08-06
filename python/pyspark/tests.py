@@ -594,7 +594,8 @@ class TestOutputFormat(PySparkTestCase):
             "mapred.output.format.class": "org.apache.hadoop.mapred.SequenceFileOutputFormat",
             "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
             "mapred.output.value.class": "org.apache.hadoop.io.MapWritable",
-            "mapred.output.dir": basepath + "/olddataset/"}
+            "mapred.output.dir": basepath + "/olddataset/"
+        }
         self.sc.parallelize(dict_data).saveAsHadoopDataset(conf)
         input_conf = {"mapred.input.dir": basepath + "/olddataset/"}
         old_dataset = sorted(self.sc.hadoopRDD(
@@ -624,11 +625,13 @@ class TestOutputFormat(PySparkTestCase):
             valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
         self.assertEqual(result, array_data)
 
-        conf = {"mapreduce.outputformat.class":
+        conf = {
+            "mapreduce.outputformat.class":
                 "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-                "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-                "mapred.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
-                "mapred.output.dir": basepath + "/newdataset/"}
+            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapred.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
+            "mapred.output.dir": basepath + "/newdataset/"
+        }
         self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(
             conf,
             valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
@@ -1012,8 +1015,7 @@ class NumPyTests(PySparkTestCase):
     """General PySpark tests that depend on numpy """
 
     def test_statcounter_array(self):
-        x = self.sc.parallelize(
-            [np.array([1.0, 1.0]), np.array([2.0, 2.0]), np.array([3.0, 3.0])])
+        x = self.sc.parallelize([np.array([1.0, 1.0]), np.array([2.0, 2.0]), np.array([3.0, 3.0])])
         s = x.stats()
         self.assertSequenceEqual([2.0, 2.0], s.mean().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.min().tolist())
