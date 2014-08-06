@@ -491,7 +491,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         new java.sql.Timestamp(c.getTime().getTime())
 
       case (c: Int, ByteType) => c.toByte
+      case (c: Long, ByteType) => c.toByte
       case (c: Int, ShortType) => c.toShort
+      case (c: Long, ShortType) => c.toShort
+      case (c: Long, IntegerType) => c.toInt
       case (c: Double, FloatType) => c.toFloat
       case (c, StringType) if !c.isInstanceOf[String] => c.toString
 
