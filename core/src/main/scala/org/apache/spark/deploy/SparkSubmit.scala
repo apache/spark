@@ -200,7 +200,7 @@ object SparkSubmit {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+        sysProp = "spark.files"),
 
       // Only process driver specific options for cluster mode here,
       // because they have already been processed in bash for client mode
@@ -209,7 +209,7 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraJavaOptions, STANDALONE | YARN, CLUSTER,
         sysProp = "spark.driver.extraJavaOptions"),
       OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraLibraryPath"),
+        sysProp = "spark.driver.extraLibraryPath")
     )
 
     // In client mode, launch the application main class directly
