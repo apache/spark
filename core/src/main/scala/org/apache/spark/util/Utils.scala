@@ -1335,11 +1335,15 @@ private[spark] object Utils extends Logging {
    * Default number of retries in binding to a port.
    */
   val portMaxRetries: Int = {
-    // SparkEnv may be null during tests
-    Option(SparkEnv.get)
-      .flatMap(_.conf.getOption("spark.ports.maxRetries"))
-      .map(_.toInt)
-      .getOrElse(16)
+    if (sys.props.contains("spark.testing")) {
+      // Set a higher number of retries for tests...
+      sys.props.get("spark.ports.maxRetries").map(_.toInt).getOrElse(100)
+    } else {
+      Option(SparkEnv.get)
+        .flatMap(_.conf.getOption("spark.ports.maxRetries"))
+        .map(_.toInt)
+        .getOrElse(16)
+    }
   }
 
   /**
