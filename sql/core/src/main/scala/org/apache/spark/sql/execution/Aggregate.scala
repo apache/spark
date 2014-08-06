@@ -154,7 +154,8 @@ case class Aggregate(
       if (!externalSorting) {
         child.execute().mapPartitions { iter =>
           val hashTable = new HashMap[Row, Array[AggregateFunction]]
-          val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+          val groupingProjection =
+            new InterpretedMutableProjection(groupingExpressions, childOutput)
 
           var currentRow: Row = null
           while (iter.hasNext) {
@@ -201,7 +202,8 @@ case class Aggregate(
         }
       } else {
         child.execute().mapPartitions { iter =>
-          val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+          val groupingProjection =
+            new InterpretedMutableProjection(groupingExpressions, childOutput)
 
           val createCombiner = (v: Row) =>{
             val c = newAggregateBuffer()
@@ -228,7 +230,8 @@ case class Aggregate(
             }
             c1
           }
-          val combiners = new ExternalAppendOnlyMap[Row, Row, Array[AggregateFunction]](createCombiner, mergeValue, mergeCombiners)
+          val combiners = new ExternalAppendOnlyMap[Row, Row, Array[AggregateFunction]](
+            createCombiner, mergeValue, mergeCombiners)
           while (iter.hasNext) {
             val row = iter.next()
             combiners.insert(groupingProjection(row).copy(), row)
@@ -238,7 +241,8 @@ case class Aggregate(
             private[this] val iter = combiners.iterator
             private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
             private[this] val resultProjection =
-              new InterpretedMutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+              new InterpretedMutableProjection(
+                resultExpressions, computedSchema ++ namedGroups.map(_._2))
             private[this] val joinedRow = new JoinedRow
 
             override final def hasNext: Boolean = iter.hasNext
