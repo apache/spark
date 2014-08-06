@@ -53,7 +53,7 @@ function ensure_arg_number {
   fi
 }
 
-if [[ "$@" = --help ]] || [[ "$@" = -H ]]; then
+if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
   usage
   exit 0
 fi
