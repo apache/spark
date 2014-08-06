@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import _root_.java.io.File
 
 /* Implicits */
 import org.apache.spark.sql.test.TestSQLContext._
@@ -29,8 +29,9 @@ class InsertIntoSuite extends QueryTest {
   test("insertInto() created parquet file") {
     val testFilePath = File.createTempFile("sparkSql", "pqt")
     testFilePath.delete()
+    testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
-    testFile.registerAsTable("createAndInsertTest")
+    testFile.registerTempTable("createAndInsertTest")
 
     // Add some data.
     testData.insertInto("createAndInsertTest")
@@ -76,13 +77,16 @@ class InsertIntoSuite extends QueryTest {
       sql("SELECT * FROM createAndInsertTest"),
       testData.collect().toSeq
     )
+
+    testFilePath.delete()
   }
 
   test("INSERT INTO parquet table") {
     val testFilePath = File.createTempFile("sparkSql", "pqt")
     testFilePath.delete()
+    testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
-    testFile.registerAsTable("createAndInsertSQLTest")
+    testFile.registerTempTable("createAndInsertSQLTest")
 
     sql("INSERT INTO createAndInsertSQLTest SELECT * FROM testData")
 
@@ -126,23 +130,31 @@ class InsertIntoSuite extends QueryTest {
       sql("SELECT * FROM createAndInsertSQLTest"),
       testData.collect().toSeq
     )
+
+    testFilePath.delete()
   }
 
   test("Double create fails when allowExisting = false") {
     val testFilePath = File.createTempFile("sparkSql", "pqt")
     testFilePath.delete()
+    testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
 
     intercept[RuntimeException] {
       createParquetFile[TestData](testFilePath.getCanonicalPath, allowExisting = false)
     }
+
+    testFilePath.delete()
   }
 
   test("Double create does not fail when allowExisting = true") {
     val testFilePath = File.createTempFile("sparkSql", "pqt")
     testFilePath.delete()
+    testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
 
     createParquetFile[TestData](testFilePath.getCanonicalPath, allowExisting = true)
+
+    testFilePath.delete()
   }
 }

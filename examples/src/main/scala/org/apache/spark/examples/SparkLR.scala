@@ -27,6 +27,10 @@ import org.apache.spark._
 
 /**
  * Logistic regression based classification.
+ * Usage: SparkLR [slices]
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkLR {
   val N = 10000  // Number of data points
@@ -46,14 +50,21 @@ object SparkLR {
     Array.tabulate(N)(generatePoint)
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkLR <master> [<slices>]")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "SparkLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
-    val numSlices = if (args.length > 1) args(1).toInt else 2
+
+    showWarning()
+
+    val sparkConf = new SparkConf().setAppName("SparkLR")
+    val sc = new SparkContext(sparkConf)
+    val numSlices = if (args.length > 0) args(0).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
@@ -69,6 +80,7 @@ object SparkLR {
     }
 
     println("Final w: " + w)
+
     sc.stop()
   }
 }

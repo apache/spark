@@ -30,7 +30,8 @@ class KMeansModel(object):
     """A clustering model derived from the k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
-    >>> model = KMeans.train(sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random")
+    >>> model = KMeans.train(
+    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random")
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
     >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
@@ -76,18 +77,17 @@ class KMeansModel(object):
 
 class KMeans(object):
     @classmethod
-    def train(cls, data, k, maxIterations=100, runs=1,
-            initializationMode="k-means||"):
+    def train(cls, data, k, maxIterations=100, runs=1, initializationMode="k-means||"):
         """Train a k-means clustering model."""
         sc = data.context
         dataBytes = _get_unmangled_double_vector_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainKMeansModel(dataBytes._jrdd,
-                k, maxIterations, runs, initializationMode)
+        ans = sc._jvm.PythonMLLibAPI().trainKMeansModel(
+            dataBytes._jrdd, k, maxIterations, runs, initializationMode)
         if len(ans) != 1:
             raise RuntimeError("JVM call result had unexpected length")
         elif type(ans[0]) != bytearray:
             raise RuntimeError("JVM call result had first element of type "
-                    + type(ans[0]) + " which is not bytearray")
+                               + type(ans[0]) + " which is not bytearray")
         matrix = _deserialize_double_matrix(ans[0])
         return KMeansModel([row for row in matrix])
 
@@ -96,8 +96,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

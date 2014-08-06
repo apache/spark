@@ -17,20 +17,35 @@
 
 package org.apache.spark.sql.columnar
 
+import java.nio.ByteBuffer
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkConf
 
-private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
-  extends LeafNode {
+object InMemoryRelation {
+  def apply(useCompression: Boolean, child: SparkPlan): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, child)()
+}
 
-  override def output: Seq[Attribute] = attributes
+private[sql] case class InMemoryRelation(
+    output: Seq[Attribute],
+    useCompression: Boolean,
+    child: SparkPlan)
+    (private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null)
+  extends LogicalPlan with MultiInstanceRelation {
 
-  lazy val cachedColumnBuffers = {
+  // If the cached column buffers were not passed in, we calculate them in the constructor.
+  // As in Spark, the actual work of caching is lazy.
+  if (_cachedColumnBuffers == null) {
     val output = child.output
     val cached = child.execute().mapPartitions { iterator =>
       val columnBuilders = output.map { attribute =>
-        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name)
+        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
       }.toArray
 
       var row: Row = null
@@ -47,18 +62,47 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
     }.cache()
 
     cached.setName(child.toString)
-    // Force the materialization of the cached RDD.
-    cached.count()
-    cached
+    _cachedColumnBuffers = cached
   }
 
+
+  override def children = Seq.empty
+
+  override def references = Set.empty
+
+  override def newInstance() = {
+    new InMemoryRelation(
+      output.map(_.newInstance),
+      useCompression,
+      child)(
+      _cachedColumnBuffers).asInstanceOf[this.type]
+  }
+
+  def cachedColumnBuffers = _cachedColumnBuffers
+}
+
+private[sql] case class InMemoryColumnarTableScan(
+    attributes: Seq[Attribute],
+    relation: InMemoryRelation)
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = attributes
+
   override def execute() = {
-    cachedColumnBuffers.mapPartitions { iterator =>
+    relation.cachedColumnBuffers.mapPartitions { iterator =>
       val columnBuffers = iterator.next()
       assert(!iterator.hasNext)
 
       new Iterator[Row] {
-        val columnAccessors = columnBuffers.map(ColumnAccessor(_))
+        // Find the ordinals of the requested columns.  If none are requested, use the first.
+        val requestedColumns =
+          if (attributes.isEmpty) {
+            Seq(0)
+          } else {
+            attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
+          }
+
+        val columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
         val nextRow = new GenericMutableRow(columnAccessors.length)
 
         override def next() = {

@@ -17,26 +17,24 @@
 
 package org.apache.spark.examples
 
-import java.util.Random
-
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /**
  * K-means clustering.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.clustering.KMeans
  */
 object SparkKMeans {
-  val R = 1000     // Scaling factor
-  val rand = new Random(42)
 
   def parseVector(line: String): Vector[Double] = {
     DenseVector(line.split(' ').map(_.toDouble))
   }
 
   def closestPoint(p: Vector[Double], centers: Array[Vector[Double]]): Int = {
-    var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
@@ -51,17 +49,29 @@ object SparkKMeans {
     bestIndex
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
+        |Please use the KMeans method found in org.apache.spark.mllib.clustering
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
-    if (args.length < 4) {
-        System.err.println("Usage: SparkLocalKMeans <master> <file> <k> <convergeDist>")
-        System.exit(1)
+
+    if (args.length < 3) {
+      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
+      System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkLocalKMeans",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
-    val lines = sc.textFile(args(1))
+
+    showWarning()
+
+    val sparkConf = new SparkConf().setAppName("SparkKMeans")
+    val sc = new SparkContext(sparkConf)
+    val lines = sc.textFile(args(0))
     val data = lines.map(parseVector _).cache()
-    val K = args(2).toInt
-    val convergeDist = args(3).toDouble
+    val K = args(1).toInt
+    val convergeDist = args(2).toDouble
 
     val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
     var tempDist = 1.0

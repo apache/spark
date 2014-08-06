@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -103,16 +104,16 @@ public final class JavaHdfsLR {
 
   public static void main(String[] args) {
 
-    if (args.length < 3) {
-      System.err.println("Usage: JavaHdfsLR <master> <file> <iters>");
+    if (args.length < 2) {
+      System.err.println("Usage: JavaHdfsLR <file> <iters>");
       System.exit(1);
     }
 
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaHdfsLR",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaHdfsLR.class));
-    JavaRDD<String> lines = sc.textFile(args[1]);
+    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    JavaRDD<String> lines = sc.textFile(args[0]);
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
-    int ITERATIONS = Integer.parseInt(args[2]);
+    int ITERATIONS = Integer.parseInt(args[1]);
 
     // Initialize w to a random value
     double[] w = new double[D];

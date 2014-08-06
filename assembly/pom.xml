@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -32,21 +32,15 @@
   <packaging>pom</packaging>
 
   <properties>
+    <sbt.project.name>assembly</sbt.project.name>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
     <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
+    <deb.bin.filemode>744</deb.bin.filemode>
   </properties>
-
-  <repositories>
-    <!-- A repository in the local filesystem for the Py4J JAR, which is not in Maven central -->
-    <repository>
-      <id>lib</id>
-      <url>file://${project.basedir}/lib</url>
-    </repository>
-  </repositories>
 
   <dependencies>
     <dependency>
@@ -84,11 +78,6 @@
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>net.sf.py4j</groupId>
-      <artifactId>py4j</artifactId>
-      <version>0.8.1</version>
-    </dependency>
   </dependencies>
 
   <build>
@@ -109,6 +98,7 @@
             <filter>
               <artifact>*:*</artifact>
               <excludes>
+                <exclude>org/datanucleus/**</exclude>
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
@@ -134,6 +124,8 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
                   <resource>log4j.properties</resource>
                 </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
             </configuration>
           </execution>
@@ -169,6 +161,16 @@
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hive-thriftserver</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -285,7 +287,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/bin</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                     <data>

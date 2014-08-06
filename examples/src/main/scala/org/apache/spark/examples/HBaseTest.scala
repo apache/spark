@@ -22,23 +22,21 @@ import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import org.apache.spark._
-import org.apache.spark.rdd.NewHadoopRDD
+
 
 object HBaseTest {
   def main(args: Array[String]) {
-    val sc = new SparkContext(args(0), "HBaseTest",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
-
+    val sparkConf = new SparkConf().setAppName("HBaseTest")
+    val sc = new SparkContext(sparkConf)
     val conf = HBaseConfiguration.create()
-
     // Other options for configuring scan behavior are available. More information available at
     // http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/mapreduce/TableInputFormat.html
-    conf.set(TableInputFormat.INPUT_TABLE, args(1))
+    conf.set(TableInputFormat.INPUT_TABLE, args(0))
 
     // Initialize hBase table if necessary
     val admin = new HBaseAdmin(conf)
-    if(!admin.isTableAvailable(args(1))) {
-      val tableDesc = new HTableDescriptor(args(1))
+    if (!admin.isTableAvailable(args(0))) {
+      val tableDesc = new HTableDescriptor(args(0))
       admin.createTable(tableDesc)
     }
 

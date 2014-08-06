@@ -49,6 +49,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   /** Render an HTML row representing an RDD */
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
+    // scalastyle:off
     <tr>
       <td>
         <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
@@ -59,9 +60,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       </td>
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
-      <td>{Utils.bytesToString(rdd.memSize)}</td>
-      <td>{Utils.bytesToString(rdd.tachyonSize)}</td>
-      <td>{Utils.bytesToString(rdd.diskSize)}</td>
+      <td sorttable_customekey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
+      <td sorttable_customekey={rdd.tachyonSize.toString}>{Utils.bytesToString(rdd.tachyonSize)}</td>
+      <td sorttable_customekey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
+    // scalastyle:on
   }
 }

@@ -40,6 +40,8 @@ import scala.collection.mutable.HashMap
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
+  import SparkConf._
+
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
@@ -198,7 +200,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      *
      *   E.g. spark.akka.option.x.y.x = "value"
      */
-    getAll.filter {case (k, v) => k.startsWith("akka.")}
+    getAll.filter { case (k, _) => isAkkaConf(k) }
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)
@@ -236,20 +238,34 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
     }
 
+    // Validate memory fractions
+    val memoryKeys = Seq(
+      "spark.storage.memoryFraction",
+      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.safetyFraction",
+      "spark.storage.unrollFraction",
+      "spark.storage.safetyFraction")
+    for (key <- memoryKeys) {
+      val value = getDouble(key, 0.5)
+      if (value > 1 || value < 0) {
+        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
+      }
+    }
+
     // Check for legacy configs
     sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-      val error =
+      val warning =
         s"""
           |SPARK_JAVA_OPTS was detected (set to '$value').
-          |This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |This is deprecated in Spark 1.0+.
           |
           |Please instead use:
           | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
           | - ./spark-submit with --driver-java-options to set -X options for a driver
           | - spark.executor.extraJavaOptions to set -X options for executors
-          | - SPARK_DAEMON_OPTS to set java options for standalone daemons (i.e. master, worker)
+          | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
         """.stripMargin
-      logError(error)
+      logWarning(warning)
 
       for (key <- Seq(executorOptsKey, driverOptsKey)) {
         if (getOption(key).isDefined) {
@@ -262,16 +278,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     sys.env.get("SPARK_CLASSPATH").foreach { value =>
-      val error =
+      val warning =
         s"""
           |SPARK_CLASSPATH was detected (set to '$value').
-          | This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |This is deprecated in Spark 1.0+.
           |
           |Please instead use:
           | - ./spark-submit with --driver-class-path to augment the driver classpath
           | - spark.executor.extraClassPath to augment the executor classpath
         """.stripMargin
-      logError(error)
+      logWarning(warning)
 
       for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
         if (getOption(key).isDefined) {
@@ -290,5 +306,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def toDebugString: String = {
     settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+  }
+}
+
+private[spark] object SparkConf {
+  /**
+   * Return whether the given config is an akka config (e.g. akka.actor.provider).
+   * Note that this does not include spark-specific akka configs (e.g. spark.akka.timeout).
+   */
+  def isAkkaConf(name: String): Boolean = name.startsWith("akka.")
+
+  /**
+   * Return whether the given config should be passed to an executor on start-up.
+   *
+   * Certain akka and authentication configs are required of the executor when it connects to
+   * the scheduler, while the rest of the spark configs can be inherited from the driver later.
+   */
+  def isExecutorStartupConf(name: String): Boolean = {
+    isAkkaConf(name) || name.startsWith("spark.akka") || name.startsWith("spark.auth")
   }
 }

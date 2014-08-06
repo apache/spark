@@ -21,19 +21,18 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
- * :: DeveloperApi ::
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-@DeveloperApi
-class GradientDescent(private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0
@@ -51,9 +50,11 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   }
 
   /**
+   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
+  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     this.miniBatchFraction = fraction
     this
@@ -95,6 +96,14 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
     this
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector
+   */
+  @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = GradientDescent.runMiniBatchSGD(
       data,
@@ -153,8 +162,17 @@ object GradientDescent extends Logging {
     val numExamples = data.count()
     val miniBatchSize = numExamples * miniBatchFraction
 
+    // if no data, return initial weights to avoid NaNs
+    if (numExamples == 0) {
+
+      logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
+      return (initialWeights, stochasticLossHistory.toArray)
+
+    }
+
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
+    val n = weights.size
 
     /**
      * For the first iteration, the regVal will be initialized as sum of weight squares
@@ -164,12 +182,13 @@ object GradientDescent extends Logging {
       weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
 
     for (i <- 1 to numIterations) {
+      val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i)
-        .aggregate((BDV.zeros[Double](weights.size), 0.0))(
+        .treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = gradient.compute(features, label, weights, Vectors.fromBreeze(grad))
+            val l = gradient.compute(features, label, bcWeights.value, Vectors.fromBreeze(grad))
             (grad, loss + l)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
@@ -191,5 +210,6 @@ object GradientDescent extends Logging {
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights, stochasticLossHistory.toArray)
+
   }
 }

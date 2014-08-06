@@ -18,6 +18,7 @@
 package org.apache.spark.examples;
 
 import scala.Tuple2;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -33,14 +34,15 @@ public final class JavaWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
   public static void main(String[] args) throws Exception {
-    if (args.length < 2) {
-      System.err.println("Usage: JavaWordCount <master> <file>");
+
+    if (args.length < 1) {
+      System.err.println("Usage: JavaWordCount <file>");
       System.exit(1);
     }
 
-    JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaWordCount.class));
-    JavaRDD<String> lines = ctx.textFile(args[1], 1);
+    SparkConf sparkConf = new SparkConf().setAppName("JavaWordCount");
+    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
+    JavaRDD<String> lines = ctx.textFile(args[0], 1);
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override

@@ -30,7 +30,7 @@ import org.apache.cassandra.thrift._
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /*
@@ -38,10 +38,10 @@ import org.apache.spark.SparkContext._
  * support for Hadoop.
  *
  * To run this example, run this file with the following command params -
- * <spark_master> <cassandra_node> <cassandra_port>
+ * <cassandra_node> <cassandra_port>
  *
  * So if you want to run this on localhost this will be,
- * local[3] localhost 9160
+ * localhost 9160
  *
  * The example makes some assumptions:
  * 1. You have already created a keyspace called casDemo and it has a column family named Words
@@ -54,9 +54,9 @@ import org.apache.spark.SparkContext._
 object CassandraTest {
 
   def main(args: Array[String]) {
-
+    val sparkConf = new SparkConf().setAppName("casDemo")
     // Get a SparkContext
-    val sc = new SparkContext(args(0), "casDemo")
+    val sc = new SparkContext(sparkConf)
 
     // Build the job configuration with ConfigHelper provided by Cassandra
     val job = new Job()

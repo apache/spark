@@ -18,13 +18,16 @@
 package org.apache.spark.util
 
 import scala.collection.JavaConversions.mapAsJavaMap
+import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, ExtendedActorSystem}
+import akka.pattern.ask
+
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
 
 /**
  * Various utility classes for working with Akka.
@@ -41,7 +44,7 @@ private[spark] object AkkaUtils extends Logging {
    * If indestructible is set to true, the Actor System will continue running in the event
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
-  def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
+  def createActorSystem(name: String, host: String, port: Int,
     conf: SparkConf, securityManager: SecurityManager): (ActorSystem, Int) = {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
@@ -101,12 +104,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
       """.stripMargin))
 
-    val actorSystem = if (indestructible) {
-      IndestructibleActorSystem(name, akkaConf)
-    } else {
-      ActorSystem(name, akkaConf)
-    }
-
+    val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
     (actorSystem, boundPort)
@@ -125,5 +123,67 @@ private[spark] object AkkaUtils extends Logging {
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+  }
+
+  /** Space reserved for extra data in an Akka message besides serialized task or task result. */
+  val reservedSizeBytes = 200 * 1024
+
+  /** Returns the configured number of times to retry connecting */
+  def numRetries(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.num.retries", 3)
+  }
+
+  /** Returns the configured number of milliseconds to wait on each retry */
+  def retryWaitMs(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.retry.wait", 3000)
+  }
+
+  /**
+   * Send a message to the given actor and get its result within a default timeout, or
+   * throw a SparkException if this fails.
+   */
+  def askWithReply[T](
+      message: Any,
+      actor: ActorRef,
+      retryAttempts: Int,
+      retryInterval: Int,
+      timeout: FiniteDuration): T = {
+    // TODO: Consider removing multiple attempts
+    if (actor == null) {
+      throw new SparkException("Error sending message as driverActor is null " +
+        "[message = " + message + "]")
+    }
+    var attempts = 0
+    var lastException: Exception = null
+    while (attempts < retryAttempts) {
+      attempts += 1
+      try {
+        val future = actor.ask(message)(timeout)
+        val result = Await.result(future, timeout)
+        if (result == null) {
+          throw new SparkException("Actor returned null")
+        }
+        return result.asInstanceOf[T]
+      } catch {
+        case ie: InterruptedException => throw ie
+        case e: Exception =>
+          lastException = e
+          logWarning("Error sending message in " + attempts + " attempts", e)
+      }
+      Thread.sleep(retryInterval)
+    }
+
+    throw new SparkException(
+      "Error sending message [message = " + message + "]", lastException)
+  }
+
+  def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    logInfo(s"Connecting to $name: $url")
+    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
 }

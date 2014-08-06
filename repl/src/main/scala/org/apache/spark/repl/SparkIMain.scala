@@ -744,7 +744,7 @@ import org.apache.spark.util.Utils
    *
    *  Read! Eval! Print! Some of that not yet centralized here.
    */
-  class ReadEvalPrint(lineId: Int) {
+  class ReadEvalPrint(val lineId: Int) {
     def this() = this(freshLineId())
 
     private var lastRun: Run = _
@@ -892,11 +892,16 @@ import org.apache.spark.util.Utils
     def definedTypeSymbol(name: String) = definedSymbols(newTypeName(name))
     def definedTermSymbol(name: String) = definedSymbols(newTermName(name))
 
+    val definedClasses = handlers.exists {
+      case _: ClassHandler => true
+      case _ => false
+    }
+
     /** Code to import bound names from previous lines - accessPath is code to
      * append to objectName to access anything bound by request.
      */
     val SparkComputedImports(importsPreamble, importsTrailer, accessPath) =
-      importsCode(referencedNames.toSet)
+      importsCode(referencedNames.toSet, definedClasses)
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {
@@ -1241,7 +1246,10 @@ import org.apache.spark.util.Utils
     // old style
     beSilentDuring(parse(code)) foreach { ts =>
       ts foreach { t =>
-        withoutUnwrapping(logDebug(asCompactString(t)))
+        if (isShow || isShowRaw)
+          withoutUnwrapping(echo(asCompactString(t)))
+        else
+          withoutUnwrapping(logDebug(asCompactString(t)))
       }
     }
   }

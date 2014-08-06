@@ -55,22 +55,24 @@ case class Aggregator[K, V, C] (
       combiners.iterator
     } else {
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
-      while (iter.hasNext) {
-        val (k, v) = iter.next()
-        combiners.insert(k, v)
+      combiners.insertAll(iter)
+      // Update task metrics if context is not null
+      // TODO: Make context non optional in a future release
+      Option(context).foreach { c =>
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
       }
-      // TODO: Make this non optional in a future release
-      Option(context).foreach(c => c.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled)
-      Option(context).foreach(c => c.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled)
       combiners.iterator
     }
   }
 
   @deprecated("use combineCombinersByKey with TaskContext argument", "0.9.0")
-  def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] =
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]) : Iterator[(K, C)] =
     combineCombinersByKey(iter, null)
 
-  def combineCombinersByKey(iter: Iterator[(K, C)], context: TaskContext) : Iterator[(K, C)] = {
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext)
+      : Iterator[(K, C)] =
+  {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null
@@ -85,12 +87,15 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
       while (iter.hasNext) {
-        val (k, c) = iter.next()
-        combiners.insert(k, c)
+        val pair = iter.next()
+        combiners.insert(pair._1, pair._2)
       }
-      // TODO: Make this non optional in a future release
-      Option(context).foreach(c => c.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled)
-      Option(context).foreach(c => c.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled)
+      // Update task metrics if context is not null
+      // TODO: Make context non-optional in a future release
+      Option(context).foreach { c =>
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
+      }
       combiners.iterator
     }
   }

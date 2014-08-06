@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -28,7 +30,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 private[spark] trait Schedulable {
   var parent: Pool
   // child queues
-  def schedulableQueue: ArrayBuffer[Schedulable]
+  def schedulableQueue: ConcurrentLinkedQueue[Schedulable]
   def schedulingMode: SchedulingMode
   def weight: Int
   def minShare: Int
@@ -42,5 +44,5 @@ private[spark] trait Schedulable {
   def getSchedulableByName(name: String): Schedulable
   def executorLost(executorId: String, host: String): Unit
   def checkSpeculatableTasks(): Boolean
-  def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager]
+  def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]
 }

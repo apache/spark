@@ -27,6 +27,7 @@ private[streaming] class ContextWaiter {
   }
 
   def notifyStop() = synchronized {
+    stopped = true
     notifyAll()
   }
 

@@ -45,7 +45,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   // Files with mod time earlier than this is ignored. This is updated every interval
   // such that in the current interval, files older than any file found in the
   // previous interval will be ignored. Obviously this time keeps moving forward.
-  private var ignoreTime = if (newFilesOnly) 0L else System.currentTimeMillis()
+  private var ignoreTime = if (newFilesOnly) System.currentTimeMillis() else 0L
 
   // Latest file mod time seen till any point of time
   @transient private var path_ : Path = null

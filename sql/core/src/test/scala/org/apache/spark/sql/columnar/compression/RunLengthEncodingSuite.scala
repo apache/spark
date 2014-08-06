@@ -61,15 +61,15 @@ class RunLengthEncodingSuite extends FunSuite {
       }.sum
 
       // 4 extra bytes for compression scheme type ID
-      expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+      assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
       // Skips column header
       buffer.position(headerSize)
-      expectResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
+      assertResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       inputRuns.foreach { case (index, run) =>
-        expectResult(values(index), "Wrong column element value")(columnType.extract(buffer))
-        expectResult(run, "Wrong run length")(buffer.getInt())
+        assertResult(values(index), "Wrong column element value")(columnType.extract(buffer))
+        assertResult(run, "Wrong run length")(buffer.getInt())
       }
 
       // -------------
@@ -81,8 +81,11 @@ class RunLengthEncodingSuite extends FunSuite {
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
 
-      inputSeq.foreach { i =>
-        expectResult(values(i), "Wrong decoded value")(decoder.next())
+      if (inputSeq.nonEmpty) {
+        inputSeq.foreach { i =>
+          assert(decoder.hasNext)
+          assertResult(values(i), "Wrong decoded value")(decoder.next())
+        }
       }
 
       assert(!decoder.hasNext)

@@ -48,7 +48,7 @@ private[spark] object ThreadingTest {
         val block = (1 to blockSize).map(_ => Random.nextInt())
         val level = randomLevel()
         val startTime = System.currentTimeMillis()
-        manager.put(blockId, block.iterator, level, tellMaster = true)
+        manager.putIterator(blockId, block.iterator, level, tellMaster = true)
         println("Pushed block " + blockId + " in " + (System.currentTimeMillis - startTime) + " ms")
         queue.add((blockId, block))
       }
@@ -78,7 +78,7 @@ private[spark] object ThreadingTest {
         val startTime = System.currentTimeMillis()
         manager.get(blockId) match {
           case Some(retrievedBlock) =>
-            assert(retrievedBlock.toList.asInstanceOf[List[Int]] == block.toList,
+            assert(retrievedBlock.data.toList.asInstanceOf[List[Int]] == block.toList,
               "Block " + blockId + " did not match")
             println("Got block " + blockId + " in " +
               (System.currentTimeMillis - startTime) + " ms")

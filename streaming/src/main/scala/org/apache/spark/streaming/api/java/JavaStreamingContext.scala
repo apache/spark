@@ -142,11 +142,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
-  @deprecated("use sparkContext", "0.9.0")
-  val sc: JavaSparkContext = sparkContext
-
   /** The underlying SparkContext */
   val sparkContext = new JavaSparkContext(ssc.sc)
+
+  @deprecated("use sparkContext", "0.9.0")
+  val sc: JavaSparkContext = sparkContext
 
   /**
    * Create an input stream from network source hostname:port. Data is received using
@@ -390,7 +390,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
      * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
      * @param receiver Custom implementation of Receiver
      */
-  def receiverStream[T](receiver: Receiver[T]): ReceiverInputDStream[T] = {
+  def receiverStream[T](receiver: Receiver[T]): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.receiverStream(receiver)

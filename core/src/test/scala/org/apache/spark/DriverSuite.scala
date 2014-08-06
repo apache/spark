@@ -34,7 +34,7 @@ import scala.language.postfixOps
 class DriverSuite extends FunSuite with Timeouts {
 
   test("driver should exit after finishing") {
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     // Regression test for SPARK-530: "Spark driver process doesn't exit after finishing"
     val masters = Table(("master"), ("local"), ("local-cluster[2,1,512]"))
     forAll(masters) { (master: String) =>

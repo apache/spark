@@ -18,23 +18,25 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
+import java.sql.Timestamp
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
-class ColumnTypeSuite extends FunSuite {
+class ColumnTypeSuite extends FunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
     val checks = Map(
       INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
-      BOOLEAN -> 1, STRING -> 8, BINARY -> 16, GENERIC -> 16)
+      BOOLEAN -> 1, STRING -> 8, TIMESTAMP -> 12, BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
-      expectResult(expectedSize, s"Wrong defaultSize for $columnType") {
+      assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
         columnType.defaultSize
       }
     }
@@ -46,19 +48,20 @@ class ColumnTypeSuite extends FunSuite {
         value: JvmType,
         expected: Int) {
 
-      expectResult(expected, s"Wrong actualSize for $columnType") {
+      assertResult(expected, s"Wrong actualSize for $columnType") {
         columnType.actualSize(value)
       }
     }
 
-    checkActualSize(INT,     Int.MaxValue,    4)
-    checkActualSize(SHORT,   Short.MaxValue,  2)
-    checkActualSize(LONG,    Long.MaxValue,   8)
-    checkActualSize(BYTE,    Byte.MaxValue,   1)
-    checkActualSize(DOUBLE,  Double.MaxValue, 8)
-    checkActualSize(FLOAT,   Float.MaxValue,  4)
-    checkActualSize(BOOLEAN, true,            1)
-    checkActualSize(STRING,  "hello",         4 + "hello".getBytes("utf-8").length)
+    checkActualSize(INT,       Int.MaxValue,      4)
+    checkActualSize(SHORT,     Short.MaxValue,    2)
+    checkActualSize(LONG,      Long.MaxValue,     8)
+    checkActualSize(BYTE,      Byte.MaxValue,     1)
+    checkActualSize(DOUBLE,    Double.MaxValue,   8)
+    checkActualSize(FLOAT,     Float.MaxValue,    4)
+    checkActualSize(BOOLEAN,   true,              1)
+    checkActualSize(STRING,    "hello",           4 + "hello".getBytes("utf-8").length)
+    checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
     val binary = Array.fill[Byte](4)(0: Byte)
     checkActualSize(BINARY,  binary, 4 + 4)
@@ -126,7 +129,7 @@ class ColumnTypeSuite extends FunSuite {
     val length = buffer.getInt()
     assert(length === serializedObj.length)
 
-    expectResult(obj, "Deserialized object didn't equal to the original object") {
+    assertResult(obj, "Deserialized object didn't equal to the original object") {
       val bytes = new Array[Byte](length)
       buffer.get(bytes, 0, length)
       SparkSqlSerializer.deserialize(bytes)
@@ -135,7 +138,7 @@ class ColumnTypeSuite extends FunSuite {
     buffer.rewind()
     buffer.putInt(serializedObj.length).put(serializedObj)
 
-    expectResult(obj, "Deserialized object didn't equal to the original object") {
+    assertResult(obj, "Deserialized object didn't equal to the original object") {
       buffer.rewind()
       SparkSqlSerializer.deserialize(GENERIC.extract(buffer))
     }
@@ -163,7 +166,7 @@ class ColumnTypeSuite extends FunSuite {
 
       buffer.rewind()
       seq.foreach { expected =>
-        println("buffer = " + buffer + ", expected = " + expected)
+        logInfo("buffer = " + buffer + ", expected = " + expected)
         val extracted = columnType.extract(buffer)
         assert(
           expected === extracted,
@@ -187,17 +190,7 @@ class ColumnTypeSuite extends FunSuite {
   }
 
   private def hexDump(value: Any): String = {
-    if (value.isInstanceOf[String]) {
-      val sb = new StringBuilder()
-      for (ch <- value.asInstanceOf[String].toCharArray) {
-        sb.append(Integer.toHexString(ch & 0xffff)).append(' ')
-      }
-      if (! sb.isEmpty) sb.setLength(sb.length - 1)
-      sb.toString()
-    } else {
-      // for now ..
-      hexDump(value.toString)
-    }
+    value.toString.map(ch => Integer.toHexString(ch & 0xffff)).mkString(" ")
   }
 
   private def dumpBuffer(buff: ByteBuffer): Any = {
@@ -206,7 +199,7 @@ class ColumnTypeSuite extends FunSuite {
       val b = buff.get()
       sb.append(Integer.toHexString(b & 0xff)).append(' ')
     }
-    if (! sb.isEmpty) sb.setLength(sb.length - 1)
+    if (sb.nonEmpty) sb.setLength(sb.length - 1)
     sb.toString()
   }
 }

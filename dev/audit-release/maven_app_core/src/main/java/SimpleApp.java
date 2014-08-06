@@ -37,5 +37,6 @@ public class SimpleApp {
      System.exit(-1);
    }
    System.out.println("Test succeeded");
+   sc.stop();
   }
 }

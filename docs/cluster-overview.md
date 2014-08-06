@@ -4,7 +4,8 @@ title: Cluster Mode Overview
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
-the components involved.
+the components involved. Read through the [application submission guide](submitting-applications.html)
+to submit applications to a cluster.
 
 # Components
 
@@ -50,89 +51,10 @@ The system currently supports three cluster managers:
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
 
-# Bundling and Launching Applications
+# Submitting Applications
 
-### Bundling Your Application's Dependencies
-If your code depends on other projects, you will need to package them alongside
-your application in order to distribute the code to a Spark cluster. To do this,
-to create an assembly jar (or "uber" jar) containing your code and its dependencies. Both
-[sbt](https://github.com/sbt/sbt-assembly) and
-[Maven](http://maven.apache.org/plugins/maven-shade-plugin/)
-have assembly plugins. When creating assembly jars, list Spark and Hadoop
-as `provided` dependencies; these need not be bundled since they are provided by
-the cluster manager at runtime. Once you have an assembled jar you can call the `bin/spark-submit`
-script as shown here while passing your jar.
-
-For Python, you can use the `pyFiles` argument of SparkContext
-or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed.
-
-### Launching Applications with ./bin/spark-submit
-
-Once a user application is bundled, it can be launched using the `spark-submit` script located in
-the bin directory. This script takes care of setting up the classpath with Spark and its
-dependencies, and can support different cluster managers and deploy modes that Spark supports.
-It's usage is
-
-    ./bin/spark-submit --class path.to.your.Class [options] <app jar> [app options]
-
-When calling `spark-submit`, `[app options]` will be passed along to your application's
-main class. To enumerate all options available to `spark-submit` run it with 
-the `--help` flag. Here are a few examples of common options:
-
-{% highlight bash %}
-# Run application locally
-./bin/spark-submit \
-  --class my.main.ClassName
-  --master local[8] \
-  my-app.jar
-
-# Run on a Spark cluster
-./bin/spark-submit \
-  --class my.main.ClassName
-  --master spark://mycluster:7077 \
-  --executor-memory 20G \
-  --total-executor-cores 100 \
-  my-app.jar
-
-# Run on a YARN cluster
-HADOOP_CONF_DIR=XX /bin/spark-submit \
-  --class my.main.ClassName
-  --master yarn-cluster \  # can also be `yarn-client` for client mode
-  --executor-memory 20G \
-  --num-executors 50 \
-  my-app.jar
-{% endhighlight %}
-
-### Loading Configurations from a File
-
-The `spark-submit` script can load default `SparkConf` values from a properties file and pass them
-onto your application. By default it will read configuration options from
-`conf/spark-defaults.conf`. Any values specified in the file will be passed on to the
-application when run. They can obviate the need for certain flags to `spark-submit`: for
-instance, if `spark.master` property is set, you can safely omit the
-`--master` flag from `spark-submit`. In general, configuration values explicitly set on a
-`SparkConf` take the highest precedence, then flags passed to `spark-submit`, then values
-in the defaults file.
-
-If you are ever unclear where configuration options are coming from. fine-grained debugging
-information can be printed by adding the `--verbose` option to `./spark-submit`.
-
-### Advanced Dependency Management
-When using `./bin/spark-submit` jars will be automatically transferred to the cluster. For many
-users this is sufficient. However, advanced users can add jars by calling `addFile` or `addJar`
-on an existing SparkContext. This can be used to distribute JAR files (Java/Scala) or .egg and
-.zip libraries (Python) to executors. Spark uses the following URL scheme to allow different
-strategies for disseminating jars:
-
-- **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
-  every executor pulls the file from the driver HTTP server
-- **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
-- **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
-  means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
-  or shared via NFS, GlusterFS, etc.
-
-Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
-Over time this can use up a significant amount of space and will need to be cleaned up.
+Applications can be submitted to a cluster of any type using the `spark-submit` script.
+The [application submission guide](submitting-applications.html) describes how to do this.
 
 # Monitoring
 
@@ -180,7 +102,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
         the driver inside of the cluster. In "client" mode, the submitter launches the driver
         outside of the cluster.</td>
-    <tr>
+    </tr>
     <tr>
       <td>Worker node</td>
       <td>Any node that can run application code in the cluster</td>

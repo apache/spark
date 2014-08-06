@@ -1,0 +1,10 @@
+key                 	int                 	None                
+value               	string              	None                
+ds                  	string              	None                
+country             	string              	None                
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+	 	 
+ds                  	string              	None                
+country             	string              	None                

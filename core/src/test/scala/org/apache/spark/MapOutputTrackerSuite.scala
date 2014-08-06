@@ -24,6 +24,7 @@ import akka.testkit.TestActorRef
 import org.scalatest.FunSuite
 
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
 
@@ -123,9 +124,6 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
-
-    // Will be cleared by LocalSparkContext
-    System.setProperty("spark.driver.port", boundPort.toString)
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerActor = actorSystem.actorOf(

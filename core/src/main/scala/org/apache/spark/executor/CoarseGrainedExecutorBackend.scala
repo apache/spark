@@ -19,23 +19,26 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import akka.actor._
-import akka.remote._
+import scala.concurrent.Await
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import akka.actor.{Actor, ActorSelection, Props}
+import akka.pattern.Patterns
+import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
+import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
-    cores: Int)
-  extends Actor
-  with ExecutorBackend
-  with Logging {
+    cores: Int,
+    sparkProperties: Seq[(String, String)]) extends Actor with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
@@ -50,7 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive = {
-    case RegisteredExecutor(sparkProperties) =>
+    case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
       executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
@@ -60,13 +63,15 @@ private[spark] class CoarseGrainedExecutorBackend(
       logError("Slave registration failed: " + message)
       System.exit(1)
 
-    case LaunchTask(taskDesc) =>
-      logInfo("Got assigned task " + taskDesc.taskId)
+    case LaunchTask(data) =>
       if (executor == null) {
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
-        executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val taskDesc = ser.deserialize[TaskDescription](data.value)
+        logInfo("Got assigned task " + taskDesc.taskId)
+        executor.launchTask(this, taskDesc.taskId, taskDesc.name, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -83,6 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
@@ -92,27 +98,46 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 }
 
-private[spark] object CoarseGrainedExecutorBackend {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-          workerUrl: Option[String]) {
-    // Debug code
-    Utils.checkHost(hostname)
+private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-    val conf = new SparkConf
-    // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
-    // before getting started with all our system properties, etc
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
-      indestructible = true, conf = conf, new SecurityManager(conf))
-    // set it
-    val sparkHostPort = hostname + ":" + boundPort
-    actorSystem.actorOf(
-      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
-        sparkHostPort, cores),
-      name = "Executor")
-    workerUrl.foreach{ url =>
-      actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+  private def run(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      workerUrl: Option[String]) {
+
+    SignalLogger.register(log)
+
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+      // Debug code
+      Utils.checkHost(hostname)
+
+      // Bootstrap to fetch the driver's Spark properties.
+      val executorConf = new SparkConf
+      val (fetcher, _) = AkkaUtils.createActorSystem(
+        "driverPropsFetcher", hostname, 0, executorConf, new SecurityManager(executorConf))
+      val driver = fetcher.actorSelection(driverUrl)
+      val timeout = AkkaUtils.askTimeout(executorConf)
+      val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
+      val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]]
+      fetcher.shutdown()
+
+      // Create a new ActorSystem using driver's Spark properties to run the backend.
+      val driverConf = new SparkConf().setAll(props)
+      val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+        "sparkExecutor", hostname, 0, driverConf, new SecurityManager(driverConf))
+      // set it
+      val sparkHostPort = hostname + ":" + boundPort
+      actorSystem.actorOf(
+        Props(classOf[CoarseGrainedExecutorBackend],
+          driverUrl, executorId, sparkHostPort, cores, props),
+        name = "Executor")
+      workerUrl.foreach { url =>
+        actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+      }
+      actorSystem.awaitTermination()
     }
-    actorSystem.awaitTermination()
   }
 
   def main(args: Array[String]) {

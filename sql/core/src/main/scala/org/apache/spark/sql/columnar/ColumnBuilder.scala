@@ -28,7 +28,7 @@ private[sql] trait ColumnBuilder {
   /**
    * Initializes with an approximate lower bound on the expected number of elements in this column.
    */
-  def initialize(initialSize: Int, columnName: String = "")
+  def initialize(initialSize: Int, columnName: String = "", useCompression: Boolean = false)
 
   /**
    * Appends `row(ordinal)` to the column builder.
@@ -55,7 +55,11 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
 
   protected var buffer: ByteBuffer = _
 
-  override def initialize(initialSize: Int, columnName: String = "") = {
+  override def initialize(
+      initialSize: Int,
+      columnName: String = "",
+      useCompression: Boolean = false) = {
+
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
 
@@ -105,13 +109,16 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class TimestampColumnBuilder
+  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
+
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 
 // TODO (lian) Add support for array, struct and map
 private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
 
 private[sql] object ColumnBuilder {
-  val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104
+  val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
 
   private[columnar] def ensureFreeSpace(orig: ByteBuffer, size: Int) = {
     if (orig.remaining >= size) {
@@ -130,7 +137,12 @@ private[sql] object ColumnBuilder {
     }
   }
 
-  def apply(typeId: Int, initialSize: Int = 0, columnName: String = ""): ColumnBuilder = {
+  def apply(
+      typeId: Int,
+      initialSize: Int = 0,
+      columnName: String = "",
+      useCompression: Boolean = false): ColumnBuilder = {
+
     val builder = (typeId match {
       case INT.typeId     => new IntColumnBuilder
       case LONG.typeId    => new LongColumnBuilder
@@ -142,9 +154,10 @@ private[sql] object ColumnBuilder {
       case STRING.typeId  => new StringColumnBuilder
       case BINARY.typeId  => new BinaryColumnBuilder
       case GENERIC.typeId => new GenericColumnBuilder
+      case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 
-    builder.initialize(initialSize, columnName)
+    builder.initialize(initialSize, columnName, useCompression)
     builder
   }
 }

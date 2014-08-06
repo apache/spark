@@ -91,7 +91,7 @@ private[spark] object XORShiftRandom {
     val xorRand = new XORShiftRandom(seed)
 
     // this is just to warm up the JIT - we're not timing anything
-    timeIt(1e6.toInt) {
+    timeIt(million) {
       javaRand.nextInt()
       xorRand.nextInt()
     }

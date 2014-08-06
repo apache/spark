@@ -32,5 +32,7 @@ private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAcc
     decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType)
   }
 
-  abstract override def extractSingle(buffer: ByteBuffer): T#JvmType = decoder.next()
+  abstract override def hasNext = super.hasNext || decoder.hasNext
+
+  override def extractSingle(buffer: ByteBuffer): T#JvmType = decoder.next()
 }

@@ -43,7 +43,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def enqueueSuccessfulTask(
     taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
     getTaskResultExecutor.execute(new Runnable {
-      override def run() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
         try {
           val result = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] => directResult
@@ -70,8 +70,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
-          case ex: Throwable =>
-            taskSetManager.abort("Exception while deserializing and fetching task: %s".format(ex))
+          case ex: Exception =>
+            logError("Exception while getting task result", ex)
+            taskSetManager.abort("Exception while getting task result: %s".format(ex))
         }
       }
     })
@@ -81,7 +82,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     serializedData: ByteBuffer) {
     var reason : TaskEndReason = UnknownReason
     getTaskResultExecutor.execute(new Runnable {
-      override def run() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
         try {
           if (serializedData != null && serializedData.limit() > 0) {
             reason = serializer.get().deserialize[TaskEndReason](
@@ -94,7 +95,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             val loader = Utils.getContextOrSparkClassLoader
             logError(
               "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-          case ex: Throwable => {}
+          case ex: Exception => {}
         }
         scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
       }

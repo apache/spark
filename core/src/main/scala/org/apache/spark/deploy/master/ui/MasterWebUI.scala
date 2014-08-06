@@ -21,7 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Web UI server for the standalone master.
@@ -38,6 +38,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   /** Initialize all components of the server. */
   def initialize() {
     attachPage(new ApplicationPage(this))
+    attachPage(new HistoryNotFoundPage(this))
     attachPage(new MasterPage(this))
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     master.masterMetricsSystem.getServletHandlers.foreach(attachHandler)

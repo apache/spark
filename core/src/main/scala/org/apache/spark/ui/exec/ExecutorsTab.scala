@@ -20,6 +20,7 @@ package org.apache.spark.ui.exec
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.ExceptionFailure
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, WebUITab}
@@ -34,15 +35,16 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
 }
 
 /**
+ * :: DeveloperApi ::
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
-private[ui] class ExecutorsListener(storageStatusListener: StorageStatusListener)
-  extends SparkListener {
-
+@DeveloperApi
+class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
+  val executorToInputBytes = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
 
@@ -69,6 +71,10 @@ private[ui] class ExecutorsListener(storageStatusListener: StorageStatusListener
       // Update shuffle read/write
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
+        metrics.inputMetrics.foreach { inputMetrics =>
+          executorToInputBytes(eid) =
+            executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+        }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =
             executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead

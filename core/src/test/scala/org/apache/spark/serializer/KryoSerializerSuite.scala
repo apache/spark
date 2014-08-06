@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
@@ -31,7 +32,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(1)
@@ -61,7 +62,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("pairs") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 1))
@@ -85,7 +86,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("Scala data structures") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
@@ -108,7 +109,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
       assert(ser.serialize(t).limit < 100)
@@ -127,9 +128,24 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(1.0 until 1000000.0 by 2.0)
   }
 
+  test("asJavaIterable") {
+    // Serialize a collection wrapped by asJavaIterable
+    val ser = new KryoSerializer(conf).newInstance()
+    val a = ser.serialize(scala.collection.convert.WrapAsJava.asJavaIterable(Seq(12345)))
+    val b = ser.deserialize[java.lang.Iterable[Int]](a)
+    assert(b.iterator().next() === 12345)
+
+    // Serialize a normal Java collection
+    val col = new java.util.ArrayList[Int]
+    col.add(54321)
+    val c = ser.serialize(col)
+    val d = ser.deserialize[java.lang.Iterable[Int]](c)
+    assert(b.iterator().next() === 12345)
+  }
+
   test("custom registrator") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 
@@ -190,6 +206,36 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
         .fold(new ClassWithoutNoArgConstructor(10))((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
     assert(10 + control.sum === result)
+  }
+}
+
+class KryoSerializerResizableOutputSuite extends FunSuite {
+  import org.apache.spark.SparkConf
+  import org.apache.spark.SparkContext
+  import org.apache.spark.LocalSparkContext
+  import org.apache.spark.SparkException
+
+  // trial and error showed this will not serialize with 1mb buffer
+  val x = (1 to 400000).toArray
+
+  test("kryo without resizable output buffer should fail on large array") {
+    val conf = new SparkConf(false)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryoserializer.buffer.mb", "1")
+    conf.set("spark.kryoserializer.buffer.max.mb", "1")
+    val sc = new SparkContext("local", "test", conf)
+    intercept[SparkException](sc.parallelize(x).collect)
+    LocalSparkContext.stop(sc)
+  }
+
+  test("kryo with resizable output buffer should succeed on large array") {
+    val conf = new SparkConf(false)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryoserializer.buffer.mb", "1")
+    conf.set("spark.kryoserializer.buffer.max.mb", "2")
+    val sc = new SparkContext("local", "test", conf)
+    assert(sc.parallelize(x).collect === x)
+    LocalSparkContext.stop(sc)
   }
 }
 
