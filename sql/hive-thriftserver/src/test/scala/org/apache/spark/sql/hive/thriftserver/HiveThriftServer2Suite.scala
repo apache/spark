@@ -25,6 +25,7 @@ import java.io.{BufferedReader, InputStreamReader}
 import java.net.ServerSocket
 import java.sql.{Connection, DriverManager, Statement}
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
@@ -63,16 +64,18 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     // Forking a new process to start the Hive Thrift server. The reason to do this is it is
     // hard to clean up Hive resources entirely, so we just start a new process and kill
     // that process for cleanup.
-    val defaultArgs = Seq(
-      "../../sbin/start-thriftserver.sh",
-      "--master local",
-      "--hiveconf",
-      "hive.root.logger=INFO,console",
-      "--hiveconf",
-      s"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$METASTORE_PATH;create=true",
-      "--hiveconf",
-      s"hive.metastore.warehouse.dir=$WAREHOUSE_PATH")
-    val pb = new ProcessBuilder(defaultArgs ++ args)
+    val jdbcUrl = s"jdbc:derby:;databaseName=$METASTORE_PATH;create=true"
+    val command =
+      s"""../../sbin/start-thriftserver.sh
+         |  --master local
+         |  --hiveconf hive.root.logger=INFO,console
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}="$jdbcUrl"
+         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$METASTORE_PATH
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$HOST
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$PORT
+       """.stripMargin.split("\\s+")
+
+    val pb = new ProcessBuilder(command ++ args: _*)
     val environment = pb.environment()
     environment.put("HIVE_SERVER2_THRIFT_PORT", PORT.toString)
     environment.put("HIVE_SERVER2_THRIFT_BIND_HOST", HOST)

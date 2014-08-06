@@ -17,29 +17,14 @@
 # limitations under the License.
 #
 
+#
+# Shell script for starting BeeLine
+
+# Enter posix mode for bash
+set -o posix
+
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-# Find the java binary
-if [ -n "${JAVA_HOME}" ]; then
-  RUNNER="${JAVA_HOME}/bin/java"
-else
-  if [ `command -v java` ]; then
-    RUNNER="java"
-  else
-    echo "JAVA_HOME is not set" >&2
-    exit 1
-  fi
-fi
-
-# Compute classpath using external script
-classpath_output=$($FWDIR/bin/compute-classpath.sh)
-if [[ "$?" != "0" ]]; then
-  echo "$classpath_output"
-  exit 1
-else
-  CLASSPATH=$classpath_output
-fi
-
 CLASS="org.apache.hive.beeline.BeeLine"
-exec "$RUNNER" -cp "$CLASSPATH" $CLASS "$@"
+exec "$FWDIR/bin/spark-class" $CLASS "$@"
