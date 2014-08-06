@@ -37,7 +37,15 @@ function post_message {
     $COMMENTS_URL | head -n 8
 }
 
-start_message="QA tests have started for PR $ghprbPullId."
+commit_url="https://github.com/apache/spark/commit/${ghprbActualCommit}"
+short_commit_hash=${ghprbActualCommit:0:7}
+
+start_message="\
+QA tests have started for PR $ghprbPullId at commit hash \
+[\`${short_commit_hash}\`](${commit_url}).
+
+By the way, sha1 is \`${sha1}\`.
+"
 if [ "$sha1" == "$ghprbActualCommit" ]; then
   start_message="$start_message This patch DID NOT merge cleanly! "
 else
@@ -48,7 +56,7 @@ start_message="$start_message${BUILD_URL}consoleFull"
 
 post_message "$start_message"
 
-./dev/run-tests
+: ./dev/run-tests # temporary; I'll undo this obviously
 test_result="$?"
 
 result_message="QA results for PR $ghprbPullId:<br>"
