@@ -38,8 +38,12 @@ import scala.language.postfixOps
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
 
-private[spark] class ConnectionManager(port: Int, conf: SparkConf,
-    securityManager: SecurityManager) extends Logging {
+private[spark] class ConnectionManager(
+    port: Int,
+    conf: SparkConf,
+    securityManager: SecurityManager,
+    name: String = "Connection manager")
+  extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -105,7 +109,11 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
-  serverChannel.socket.bind(new InetSocketAddress(port))
+  private def startService(port: Int): (ServerSocketChannel, Int) = {
+    serverChannel.socket.bind(new InetSocketAddress(port))
+    (serverChannel, serverChannel.socket.getLocalPort)
+  }
+  Utils.startServiceOnPort[ServerSocketChannel](port, startService, name)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)

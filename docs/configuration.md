@@ -566,6 +566,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(local hostname)</td>
   <td>
     Hostname or IP address for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
   </td>
 </tr>
 <tr>
@@ -573,6 +574,51 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.fileserver.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP file server to listen on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP broadcast server to listen on.
+    This is not relevant for torrent broadcast.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.replClassServer.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP class server to listen on.
+    This is only relevant for the Spark shell.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blockManager.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for all block managers to listen on. These exist on both the driver and the executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the executor to listen on. This is used for communicating with the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.port.maxRetries</code></td>
+  <td>16</td>
+  <td>
+    Maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>
