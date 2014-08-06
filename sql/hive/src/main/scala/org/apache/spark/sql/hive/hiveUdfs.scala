@@ -340,4 +340,9 @@ private[hive] case class HiveUdafFunction(
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
     function.iterate(buffer, inputs)
   }
+
+  override def merge(input: AggregateFunction): Unit = {
+    //not support yet
+    //udaf need Serializable
+  }
 }

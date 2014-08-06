@@ -49,8 +49,8 @@ abstract class AggregateExpression extends Expression {
  *                           data sets and are required to compute the `finalEvaluation`.
  */
 case class SplitEvaluation(
-    finalEvaluation: Expression,
-    partialEvaluations: Seq[NamedExpression])
+                            finalEvaluation: Expression,
+                            partialEvaluations: Seq[NamedExpression])
 
 /**
  * An [[AggregateExpression]] that can be partially computed without seeing all relevant tuples.
@@ -82,6 +82,7 @@ abstract class AggregateFunction
   override def dataType = base.dataType
 
   def update(input: Row): Unit
+  def merge(input: AggregateFunction): Unit
 
   // Do we really need this?
   override def newInstance() = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
@@ -114,6 +115,14 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
     }
   }
 
+  override def merge(input: AggregateFunction): Unit = {
+    if (currentMin == null) {
+      currentMin = input.eval(EmptyRow)
+    } else if(GreaterThan(this, input).eval(EmptyRow) == true) {
+      currentMin = input.eval(EmptyRow)
+    }
+  }
+
   override def eval(input: Row): Any = currentMin
 }
 
@@ -141,6 +150,14 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
       currentMax = expr.eval(input)
     } else if(LessThan(Literal(currentMax, expr.dataType), expr).eval(input) == true) {
       currentMax = expr.eval(input)
+    }
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    if (currentMax == null) {
+      currentMax = input.eval(EmptyRow)
+    } else if(LessThan(this, input).eval(EmptyRow) == true) {
+      currentMax = input.eval(EmptyRow)
     }
   }
 
@@ -282,6 +299,9 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   private def addFunction(value: Any) = Add(sum, Literal(value))
 
+  def getCount: Long = count
+  def getSum: MutableLiteral = sum
+
   override def eval(input: Row): Any =
     sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
 
@@ -291,6 +311,11 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
       count += 1
       sum.update(addFunction(evaluatedExpr), input)
     }
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    count += input.asInstanceOf[AverageFunction].getCount
+    sum.update(Add(sum, input.asInstanceOf[AverageFunction].getSum),EmptyRow)
   }
 }
 
@@ -306,13 +331,17 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
     }
   }
 
+  override def merge(input: AggregateFunction): Unit = {
+    count +=input.eval(EmptyRow).asInstanceOf[Long]
+  }
+
   override def eval(input: Row): Any = count
 }
 
 case class ApproxCountDistinctPartitionFunction(
-    expr: Expression,
-    base: AggregateExpression,
-    relativeSD: Double)
+                                                 expr: Expression,
+                                                 base: AggregateExpression,
+                                                 relativeSD: Double)
   extends AggregateFunction {
   def this() = this(null, null, 0) // Required for serialization.
 
@@ -325,21 +354,31 @@ case class ApproxCountDistinctPartitionFunction(
     }
   }
 
+  override def merge(input: AggregateFunction): Unit = {
+    hyperLogLog.addAll(input.eval(EmptyRow).asInstanceOf[HyperLogLog])
+  }
+
   override def eval(input: Row): Any = hyperLogLog
 }
 
 case class ApproxCountDistinctMergeFunction(
-    expr: Expression,
-    base: AggregateExpression,
-    relativeSD: Double)
+                                             expr: Expression,
+                                             base: AggregateExpression,
+                                             relativeSD: Double)
   extends AggregateFunction {
   def this() = this(null, null, 0) // Required for serialization.
 
   private val hyperLogLog = new HyperLogLog(relativeSD)
 
+  def getHyperLogLog: HyperLogLog = hyperLogLog
+
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
     hyperLogLog.addAll(evaluatedExpr.asInstanceOf[HyperLogLog])
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    hyperLogLog.addAll(input.asInstanceOf[ApproxCountDistinctMergeFunction].getHyperLogLog)
   }
 
   override def eval(input: Row): Any = hyperLogLog.cardinality()
@@ -358,6 +397,10 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
     sum.update(addFunction, input)
   }
 
+  override def merge(input: AggregateFunction): Unit = {
+    sum.update(Add(this, input),EmptyRow)
+  }
+
   override def eval(input: Row): Any = sum.eval(null)
 }
 
@@ -368,11 +411,17 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
 
   private val seen = new scala.collection.mutable.HashSet[Any]()
 
+  def getSeen: scala.collection.mutable.HashSet[Any] = seen
+
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
     }
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    input.asInstanceOf[SumDistinctFunction].getSeen.map(seen += _)
   }
 
   override def eval(input: Row): Any =
@@ -386,11 +435,17 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
 
   val seen = new scala.collection.mutable.HashSet[Any]()
 
+  def getSeen: scala.collection.mutable.HashSet[Any] = seen
+
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
       seen += evaluatedExpr
     }
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    input.asInstanceOf[CountDistinctFunction].getSeen.map(seen += _)
   }
 
   override def eval(input: Row): Any = seen.size.toLong
@@ -404,6 +459,12 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
   override def update(input: Row): Unit = {
     if (result == null) {
       result = expr.eval(input)
+    }
+  }
+
+  override def merge(input: AggregateFunction): Unit = {
+    if (result == null) {
+      result = input.eval(EmptyRow)
     }
   }
 
