@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{SparkEnv, SparkContext}
+import org.apache.spark.{InterruptibleIterator, SparkEnv, SparkContext}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -234,7 +234,7 @@ case class Aggregate(
             combiners.insert(groupingProjection(row).copy(), row)
           }
 
-          new Iterator[Row] {
+          new InterruptibleIterator[Row] {
             private[this] val iter = combiners.iterator
             private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
             private[this] val resultProjection =
