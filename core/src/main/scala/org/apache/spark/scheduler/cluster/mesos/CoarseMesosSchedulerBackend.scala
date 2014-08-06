@@ -74,7 +74,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
     "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
@@ -114,12 +114,18 @@ private[spark] class CoarseMesosSchedulerBackend(
     val environment = Environment.newBuilder()
     val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
-
+      
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores.toString)
     val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
+    // Start executors with a few necessary configs for registering with the scheduler
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+
     val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
       cp.split(java.io.File.pathSeparator)
     }
@@ -130,7 +136,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     val command = Command(
       "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
-      classPathEntries, libraryPathEntries, extraJavaOpts)
+      classPathEntries, libraryPathEntries, javaOpts)
 
     val uri = conf.get("spark.executor.uri", null)
     if ( uri == null ) {
@@ -182,8 +188,8 @@ private[spark] class CoarseMesosSchedulerBackend(
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         if (totalCoresAcquired < maxCores && mem >= sc.executorMemory && cpus >= 1 &&
-          failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
-          !slaveIdsWithExecutors.contains(slaveId)) {
+            failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
+            !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
           totalCoresAcquired += cpusToUse
@@ -255,7 +261,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +
-              "is Spark installed on it?")
+                "is Spark installed on it?")
           }
         }
         driver.reviveOffers() // In case we'd rejected everything before but have now lost a node
