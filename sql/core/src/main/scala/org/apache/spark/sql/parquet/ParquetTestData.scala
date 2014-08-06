@@ -104,7 +104,7 @@ private[sql] object ParquetTestData {
   val testDir = Utils.createTempDir()
   val testFilterDir = Utils.createTempDir()
 
-  lazy val testData = new ParquetRelation(testDir.toURI.toString, None, TestSQLContext)
+  lazy val testData = TestSQLContext.parquetFile(testDir.toURI.toString)
 
   val testNestedSchema1 =
     // based on blogpost example, source:
@@ -203,10 +203,8 @@ private[sql] object ParquetTestData {
   val testNestedDir3 = Utils.createTempDir()
   val testNestedDir4 = Utils.createTempDir()
 
-  lazy val testNestedData1 =
-    new ParquetRelation(testNestedDir1.toURI.toString, None, TestSQLContext)
-  lazy val testNestedData2 =
-    new ParquetRelation(testNestedDir2.toURI.toString, None, TestSQLContext)
+  lazy val testNestedData1 = TestSQLContext.parquetFile(testNestedDir1.toURI.toString)
+  lazy val testNestedData2 = TestSQLContext.parquetFile(testNestedDir2.toURI.toString)
 
   def writeFile() = {
     testDir.delete()

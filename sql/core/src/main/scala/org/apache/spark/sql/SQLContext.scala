@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -30,13 +31,12 @@ import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.TableFormat
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.SparkStrategies
 import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.sql.parquet.ParquetFormat
 
 /**
  * :: AlphaComponent ::
@@ -74,6 +74,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  protected[sql] def defaultTableFormat: Class[_ <: TableFormat] = classOf[ParquetFormat]
 
   /**
    * :: DeveloperApi ::
@@ -135,8 +137,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+  def parquetFile(path: String): SchemaRDD = {
+    val format = instantiateTableFormat(classOf[ParquetFormat])
+    new SchemaRDD(this, format.loadExistingRelation(new HadoopDirectory(path)))
+  }
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
@@ -230,11 +234,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createParquetFile[A <: Product : TypeTag](
       path: String,
       allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
-    new SchemaRDD(
-      this,
-      ParquetRelation.createEmpty(
-        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
+      conf: Configuration = sparkContext.hadoopConfiguration): SchemaRDD = {
+    createParquetFile(ScalaReflection.attributesFor[A], path, allowExisting, conf)
+  }
+
+  /** Creates an empty parquet file. Full documentation above. */
+  private[sql] def createParquetFile(
+      schema: Seq[Attribute],
+      path: String,
+      allowExisting: Boolean,
+      conf: Configuration): SchemaRDD = {
+    val dir = HadoopDirectory.createChecked(path, conf, allowExisting)
+    val format = instantiateTableFormat(classOf[ParquetFormat])
+    val relation = format.createEmptyRelation(dir, schema)
+    new SchemaRDD(this, relation)
   }
 
   /**
@@ -450,7 +463,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
     import scala.collection.JavaConversions._
-    import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
+    import scala.collection.convert.Wrappers.JListWrapper
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
@@ -514,5 +527,36 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
+  }
+
+  /**
+   * Constructs an instance of the given TableFormat class. A concrete TableFormat must have
+   * exactly one constructor. We will attempt to inject proper values for its constructor
+   * arguments based on a set of objects in our environment.
+   * Currently, we will inject this SQLContext, our SparkContext, and our Hadoop Configuration.
+   */
+  def instantiateTableFormat(cls: Class[_ <: TableFormat]): TableFormat = {
+    // Contains the environment of all objects that may be injected into the given TableFormat's
+    // constructor. Each object must have a different class in order to choose between them.
+    val environment = Seq[AnyRef](this, sparkContext, sparkContext.hadoopConfiguration)
+
+    // Only 1 constructor is allowed.
+    val ctors = cls.getConstructors
+    if (ctors.isEmpty) {
+      sys.error(s"No accessible constructors for TableFormat '$cls'.")
+    } else if (ctors.length > 1) {
+      sys.error(s"Cannot construct TableFormat '$cls' as it contains more than one constructor.")
+    }
+
+    val ctor = ctors.head
+    val parameterTypes = ctor.getParameterTypes
+
+    // Attempt to find a matching object in our environment for each parameter type.
+    val parameters = parameterTypes.map { case typ =>
+      environment.find(envObject => typ.isAssignableFrom(envObject.getClass)).getOrElse(
+        sys.error(s"Could not find parameter of type '$typ' while constructing '$cls'"))
+    }
+
+    ctor.newInstance(parameters: _*).asInstanceOf[TableFormat]
   }
 }

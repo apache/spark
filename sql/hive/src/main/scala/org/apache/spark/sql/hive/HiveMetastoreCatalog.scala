@@ -17,24 +17,23 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConversions._
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.Deserializer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.HadoopDirectoryLike
+import org.apache.spark.sql.catalyst.analysis.{Catalog, EliminateAnalysisOperators}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{TableFormat, TableLocation}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
@@ -51,6 +50,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
+  private val formatPropertyName = "spark.sql.format"
+
   def lookupRelation(
       db: Option[String],
       tableName: String,
@@ -65,32 +66,50 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         Nil
       }
 
-    // Since HiveQL is case insensitive for table names we make them all lowercase.
-    MetastoreRelation(
-      databaseName, tblName, alias)(
-      table.getTTable, partitions.map(part => part.getTPartition))(hive)
+    val location = new HiveTableLocation(databaseName, tblName, alias, table.getTTable,
+      partitions.map(part => part.getTPartition))
+
+    val formatClass =
+      Option(table.getTTable.getSd.getParameters.get(formatPropertyName)).map(Class.forName)
+        .getOrElse(classOf[MetastoreFormat])
+        .asInstanceOf[Class[_ <: TableFormat]]
+    logDebug(s"Using format $formatClass for table $tblName")
+    val format = hive.instantiateTableFormat(formatClass)
+    format.loadExistingRelation(location)
   }
 
+  /**
+   * Creates a new table in the Metastore, and returns a Relation based on the given format.
+   * If an existing location is specified, this call will act similarly to a Hive "CREATE EXTERNAL"
+   * and we will create our Relation based on the existing data. Otherwise, we will pick a new
+   * location within the Hive warehouse and create a new Relation for it.
+   *
+   * Note that this method cannot create partitioned tables, and only deals with tables that
+   * are backed by a single Hadoop directory (either within the Hive warehouse or without).
+   */
   def createTable(
       databaseName: String,
       tableName: String,
       schema: Seq[Attribute],
-      allowExisting: Boolean = false): Unit = {
+      formatClass: Class[_ <: TableFormat],
+      existingLocation: Option[HadoopDirectoryLike] = None,
+      allowExisting: Boolean = false): LogicalPlan = {
     val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
     val table = new Table(dbName, tblName)
     val hiveSchema =
       schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
     table.setFields(hiveSchema)
 
-    val sd = new StorageDescriptor()
+    val sd = new StorageDescriptor
     table.getTTable.setSd(sd)
     sd.setCols(hiveSchema)
 
     // TODO: THESE ARE ALL DEFAULTS, WE NEED TO PARSE / UNDERSTAND the output specs.
     sd.setCompressed(false)
-    sd.setParameters(Map[String, String]())
+    sd.setParameters(Map[String, String](formatPropertyName -> formatClass.getCanonicalName))
     sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat")
     sd.setOutputFormat("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
+    existingLocation.map(_.asHadoopDirectory.asString).foreach(sd.setLocation)
     val serDeInfo = new SerDeInfo()
     serDeInfo.setName(tblName)
     serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
@@ -102,6 +121,15 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
            allowExisting => // Do nothing.
     }
+
+    val format = hive.instantiateTableFormat(formatClass)
+    val finalLocation = new HiveTableLocation(databaseName, tblName, None, table.getTTable, Nil)
+
+    // Either initialize a new Relation or load the existing one.
+    existingLocation match {
+      case None    => format.createEmptyRelation(finalLocation, schema)
+      case Some(_) => format.loadExistingRelation(finalLocation)
+    }
   }
 
   /**
@@ -110,15 +138,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(db, tableName, child) =>
+      case InsertIntoCreatedTable(db, tableName, formatClass, child) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
+        val relation = createTable(databaseName, tblName, child.output, formatClass)
 
         InsertIntoTable(
-          EliminateAnalysisOperators(
-            lookupRelation(Some(databaseName), tblName, None)),
+          EliminateAnalysisOperators(relation),
           Map.empty,
           child,
           overwrite = false)
@@ -166,14 +193,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   * For now, if this functionality is desired mix in the in-memory OverrideCatalog.
    */
   override def registerTable(
       databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   * For now, if this functionality is desired mix in the in-memory OverrideCatalog.
    */
   override def unregisterTable(
       databaseName: Option[String], tableName: String): Unit = ???
@@ -253,9 +280,8 @@ object HiveMetastoreTypes extends RegexParsers {
 }
 
 private[hive] case class MetastoreRelation
-    (databaseName: String, tableName: String, alias: Option[String])
-    (val table: TTable, val partitions: Seq[TPartition])
-    (@transient sqlContext: SQLContext)
+    (location: HiveTableLocation)
+    (@transient hiveContext: HiveContext)
   extends LeafNode {
 
   self: Product =>
@@ -266,9 +292,9 @@ private[hive] case class MetastoreRelation
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
 
-  @transient lazy val hiveQlTable = new Table(table)
+  @transient lazy val hiveQlTable = new Table(location.table)
 
-  def hiveQlPartitions = partitions.map { p =>
+  def hiveQlPartitions = location.partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
 
@@ -283,7 +309,7 @@ private[hive] case class MetastoreRelation
       BigInt(
         Option(hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE))
           .map(_.toLong)
-          .getOrElse(sqlContext.defaultSizeInBytes))
+          .getOrElse(hiveContext.defaultSizeInBytes))
     }
   )
 
@@ -304,14 +330,24 @@ private[hive] case class MetastoreRelation
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = tableName +: alias.toSeq)
+    )(qualifiers = location.tableName +: location.alias.toSeq)
   }
 
   // Must be a stable value since new attributes are born here.
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = table.getSd.getCols.map(_.toAttribute)
+  val attributes = location.table.getSd.getCols.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
+}
+
+class MetastoreFormat(hiveContext: HiveContext) extends TableFormat {
+  override def createEmptyRelation(l: TableLocation, schema: Seq[Attribute]): MetastoreRelation = {
+    new MetastoreRelation(l.asInstanceOf[HiveTableLocation])(hiveContext)
+  }
+
+  override def loadExistingRelation(l: TableLocation): MetastoreRelation = {
+    new MetastoreRelation(l.asInstanceOf[HiveTableLocation])(hiveContext)
+  }
 }

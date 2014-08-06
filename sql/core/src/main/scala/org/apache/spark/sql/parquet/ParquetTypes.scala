@@ -23,17 +23,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-
-import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
-import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
-import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType}
 import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.HadoopDirectory
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types._
 
 // Implicits
@@ -306,16 +305,20 @@ private[parquet] object ParquetTypesConverter extends Logging {
     StructType.fromAttributes(schema).toString
   }
 
-  def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
-    if (origPath == null) {
+  def writeMetaData(
+     attributes: Seq[Attribute],
+     location: HadoopDirectory,
+     conf: Configuration): Unit =
+  {
+    if (location == null) {
       throw new IllegalArgumentException("Unable to write Parquet metadata: path is null")
     }
-    val fs = origPath.getFileSystem(conf)
+    val path = location.asPath
+    val fs = path.getFileSystem(conf)
     if (fs == null) {
       throw new IllegalArgumentException(
-        s"Unable to write Parquet metadata: path $origPath is incorrectly formatted")
+        s"Unable to write Parquet metadata: path $location is incorrectly formatted")
     }
-    val path = origPath.makeQualified(fs)
     if (fs.exists(path) && !fs.getFileStatus(path).isDir) {
       throw new IllegalArgumentException(s"Expected to write to directory $path but found file")
     }
@@ -353,15 +356,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * in the parent directory. If so, this is used. Else we read the actual footer at the given
    * location.
    * @param origPath The path at which we expect one (or more) Parquet files.
-   * @param configuration The Hadoop configuration to use.
+   * @param conf The Hadoop configuration to use.
    * @return The `ParquetMetadata` containing among other things the schema.
    */
-  def readMetaData(origPath: Path, configuration: Option[Configuration]): ParquetMetadata = {
+  def readMetaData(origPath: Path, conf: Configuration): ParquetMetadata = {
     if (origPath == null) {
       throw new IllegalArgumentException("Unable to read Parquet metadata: path is null")
     }
     val job = new Job()
-    val conf = configuration.getOrElse(ContextUtil.getConfiguration(job))
     val fs: FileSystem = origPath.getFileSystem(conf)
     if (fs == null) {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
@@ -402,7 +404,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * @param conf The Hadoop configuration to use.
    * @return A list of attributes that make up the schema.
    */
-  def readSchemaFromFile(origPath: Path, conf: Option[Configuration]): Seq[Attribute] = {
+  def readSchemaFromFile(origPath: Path, conf: Configuration): Seq[Attribute] = {
     val keyValueMetadata: java.util.Map[String, String] =
       readMetaData(origPath, conf)
         .getFileMetaData
