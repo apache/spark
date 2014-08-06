@@ -297,8 +297,11 @@ private[hive] object HiveQl {
       matches.headOption
     }
 
-    assert(remainingNodes.isEmpty,
-      s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
+    if (remainingNodes.nonEmpty) {
+      sys.error(
+        s"""Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}.
+           |You are likely trying to use an unsupported Hive feature."""".stripMargin)
+    }
     clauses
   }
 
@@ -748,7 +751,10 @@ private[hive] object HiveQl {
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
-      assert(other.size <= 1, s"Unhandled join child $other")
+      if (!(other.size <= 1)) {
+        sys.error(s"Unsupported join operation: $other")
+      }
+
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
@@ -756,7 +762,6 @@ private[hive] object HiveQl {
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
       }
-      assert(other.size <= 1, "Unhandled join clauses.")
       Join(nodeToRelation(relation1),
         nodeToRelation(relation2),
         joinType,

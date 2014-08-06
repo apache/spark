@@ -39,13 +39,17 @@ trait Logging {
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
 
+  // Method to get the logger name for this object
+  protected def logName = {
+    // Ignore trailing $'s in the class names for Scala objects
+    this.getClass.getName.stripSuffix("$")
+  }
+
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
       initializeIfNecessary()
-      var className = this.getClass.getName
-      // Ignore trailing $'s in the class names for Scala objects
-      log_ = LoggerFactory.getLogger(className.stripSuffix("$"))
+      log_ = LoggerFactory.getLogger(logName)
     }
     log_
   }

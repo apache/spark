@@ -28,9 +28,13 @@ from array import array
 from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+
+from itertools import chain, ifilter, imap
 
 from py4j.protocol import Py4JError
+from py4j.java_collections import ListConverter, MapConverter
+
 
 __all__ = [
     "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
@@ -668,12 +672,12 @@ _acceptable_types = {
     ByteType: (int, long),
     ShortType: (int, long),
     IntegerType: (int, long),
-    LongType: (int, long),
+    LongType: (long,),
     FloatType: (float,),
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    TimestampType: (datetime.datetime, datetime.time, datetime.date),
+    TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list),
@@ -905,7 +909,7 @@ class SQLContext:
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> srdd = sqlCtx.inferSchema(allTypes)
-        >>> srdd.registerAsTable("allTypes")
+        >>> srdd.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
@@ -931,6 +935,39 @@ class SQLContext:
         if not hasattr(self, '_scala_SQLContext'):
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
+
+    def registerFunction(self, name, f, returnType=StringType()):
+        """Registers a lambda function as a UDF so it can be used in SQL statements.
+
+        In addition to a name and the function itself, the return type can be optionally specified.
+        When the return type is not given it default to a string and conversion will automatically
+        be done.  For any other return type, the produced object must match the specified type.
+
+        >>> sqlCtx.registerFunction("stringLengthString", lambda x: len(x))
+        >>> sqlCtx.sql("SELECT stringLengthString('test')").collect()
+        [Row(c0=u'4')]
+        >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
+        [Row(c0=4)]
+        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        [Row(c0=5)]
+        """
+        func = lambda _, it: imap(lambda x: f(*x), it)
+        command = (func,
+                   BatchedSerializer(PickleSerializer(), 1024),
+                   BatchedSerializer(PickleSerializer(), 1024))
+        env = MapConverter().convert(self._sc.environment,
+                                     self._sc._gateway._gateway_client)
+        includes = ListConverter().convert(self._sc._python_includes,
+                                     self._sc._gateway._gateway_client)
+        self._ssql_ctx.registerPython(name,
+                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      env,
+                                      includes,
+                                      self._sc.pythonExec,
+                                      self._sc._javaAccumulator,
+                                      str(returnType))
 
     def inferSchema(self, rdd):
         """Infer and apply a schema to an RDD of L{Row}s.
@@ -1005,12 +1042,15 @@ class SQLContext:
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
         >>> from datetime import datetime
-        >>> rdd = sc.parallelize([(127, -32768, 1.0,
+        >>> rdd = sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, (2,), [1, 2, 3], None)])
         >>> schema = StructType([
-        ...     StructField("byte", ByteType(), False),
-        ...     StructField("short", ShortType(), False),
+        ...     StructField("byte1", ByteType(), False),
+        ...     StructField("byte2", ByteType(), False),
+        ...     StructField("short1", ShortType(), False),
+        ...     StructField("short2", ShortType(), False),
+        ...     StructField("int", IntegerType(), False),
         ...     StructField("float", FloatType(), False),
         ...     StructField("time", TimestampType(), False),
         ...     StructField("map",
@@ -1019,11 +1059,19 @@ class SQLContext:
         ...         StructType([StructField("b", ShortType(), False)]), False),
         ...     StructField("list", ArrayType(ByteType(), False), False),
         ...     StructField("null", DoubleType(), True)])
-        >>> srdd = sqlCtx.applySchema(rdd, schema).map(
-        ...     lambda x: (x.byte, x.short, x.float, x.time,
+        >>> srdd = sqlCtx.applySchema(rdd, schema)
+        >>> results = srdd.map(
+        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.time,
         ...         x.map["a"], x.struct.b, x.list, x.null))
-        >>> srdd.collect()[0]
-        (127, -32768, 1.0, ...(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+        >>> results.collect()[0]
+        (127, -128, -32768, 32767, 2147483647, 1.0, ...(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+
+        >>> srdd.registerTempTable("table2")
+        >>> sqlCtx.sql(
+        ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
+        ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
+        ...     "float + 1.1 as float FROM table2").collect()
+        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.1)]
 
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
@@ -1254,16 +1302,20 @@ class HiveContext(SQLContext):
 
     def hiveql(self, hqlQuery):
         """
-        Runs a query expressed in HiveQL, returning the result as
-        a L{SchemaRDD}.
+        DEPRECATED: Use sql()
         """
+        warnings.warn("hiveql() is deprecated as the sql function now parses using HiveQL by" +
+                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
+                      DeprecationWarning)
         return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery), self)
 
     def hql(self, hqlQuery):
         """
-        Runs a query expressed in HiveQL, returning the result as
-        a L{SchemaRDD}.
+        DEPRECATED: Use sql()
         """
+        warnings.warn("hql() is deprecated as the sql function now parses using HiveQL by" +
+                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
+                      DeprecationWarning)
         return self.hiveql(hqlQuery)
 
 
@@ -1276,16 +1328,16 @@ class LocalHiveContext(HiveContext):
     >>> import os
     >>> hiveCtx = LocalHiveContext(sc)
     >>> try:
-    ...     supress = hiveCtx.hql("DROP TABLE src")
+    ...     supress = hiveCtx.sql("DROP TABLE src")
     ... except Exception:
     ...     pass
     >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
     ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.hql(
+    >>> supress = hiveCtx.sql(
     ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.hql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
+    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
     ...        % kv1)
-    >>> results = hiveCtx.hql("FROM src SELECT value"
+    >>> results = hiveCtx.sql("FROM src SELECT value"
     ...      ).map(lambda r: int(r.value.split('_')[1]))
     >>> num = results.count()
     >>> reduce_sum = results.reduce(lambda x, y: x + y)
@@ -1449,19 +1501,23 @@ class SchemaRDD(RDD):
         """
         self._jschema_rdd.saveAsParquetFile(path)
 
-    def registerAsTable(self, name):
+    def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the L{SQLContext}
         that was used to create this SchemaRDD.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.registerAsTable("test")
+        >>> srdd.registerTempTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        self._jschema_rdd.registerAsTable(name)
+        self._jschema_rdd.registerTempTable(name)
+
+    def registerAsTable(self, name):
+        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this SchemaRDD into the specified table.
@@ -1552,9 +1608,9 @@ class SchemaRDD(RDD):
         self._jschema_rdd.persist(javaStorageLevel)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking=True):
         self.is_cached = False
-        self._jschema_rdd.unpersist()
+        self._jschema_rdd.unpersist(blocking)
         return self
 
     def checkpoint(self):

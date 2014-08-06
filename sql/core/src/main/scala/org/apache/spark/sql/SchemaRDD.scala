@@ -67,7 +67,7 @@ import org.apache.spark.api.java.JavaRDD
  *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
- *  rdd.registerAsTable("records")
+ *  rdd.registerTempTable("records")
  *
  *  val results: SchemaRDD = sql("SELECT * FROM records")
  * }}}

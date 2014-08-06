@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import com.typesafe.scalalogging.slf4j.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{StringType, NumericType}
 
@@ -92,7 +92,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
       }
       new $orderingName()
       """
-    logger.debug(s"Generated Ordering: $code")
+    logDebug(s"Generated Ordering: $code")
     toolBox.eval(code).asInstanceOf[Ordering[Row]]
   }
 }

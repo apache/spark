@@ -25,10 +25,12 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, Ser
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.Deserializer
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{SQLContext, Logging}
+import org.apache.spark.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
@@ -277,9 +279,9 @@ private[hive] case class MetastoreRelation
       // relatively cheap if parameters for the table are populated into the metastore.  An
       // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
       // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
-      // `rawDataSize` keys that we can look at in the future.
+      // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
       BigInt(
-        Option(hiveQlTable.getParameters.get("totalSize"))
+        Option(hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE))
           .map(_.toLong)
           .getOrElse(sqlContext.defaultSizeInBytes))
     }

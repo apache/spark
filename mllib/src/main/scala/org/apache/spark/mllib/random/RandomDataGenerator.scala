@@ -25,21 +25,21 @@ import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
 
 /**
  * :: Experimental ::
- * Trait for random number generators that generate i.i.d. values from a distribution.
+ * Trait for random data generators that generate i.i.d. data.
  */
 @Experimental
-trait DistributionGenerator extends Pseudorandom with Serializable {
+trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 
   /**
-   * Returns an i.i.d. sample as a Double from an underlying distribution.
+   * Returns an i.i.d. sample as a generic type from an underlying distribution.
    */
-  def nextValue(): Double
+  def nextValue(): T
 
   /**
-   * Returns a copy of the DistributionGenerator with a new instance of the rng object used in the
+   * Returns a copy of the RandomDataGenerator with a new instance of the rng object used in the
    * class when applicable for non-locking concurrent usage.
    */
-  def copy(): DistributionGenerator
+  def copy(): RandomDataGenerator[T]
 }
 
 /**
@@ -47,7 +47,7 @@ trait DistributionGenerator extends Pseudorandom with Serializable {
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
 @Experimental
-class UniformGenerator extends DistributionGenerator {
+class UniformGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
@@ -66,7 +66,7 @@ class UniformGenerator extends DistributionGenerator {
  * Generates i.i.d. samples from the standard normal distribution.
  */
 @Experimental
-class StandardNormalGenerator extends DistributionGenerator {
+class StandardNormalGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
@@ -87,7 +87,7 @@ class StandardNormalGenerator extends DistributionGenerator {
  * @param mean mean for the Poisson distribution.
  */
 @Experimental
-class PoissonGenerator(val mean: Double) extends DistributionGenerator {
+class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
   private var rng = new Poisson(mean, new DRand)
 

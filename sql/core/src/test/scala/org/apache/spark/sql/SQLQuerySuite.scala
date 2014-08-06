@@ -461,7 +461,7 @@ class SQLQuerySuite extends QueryTest {
     }
 
     val schemaRDD1 = applySchema(rowRDD1, schema1)
-    schemaRDD1.registerAsTable("applySchema1")
+    schemaRDD1.registerTempTable("applySchema1")
     checkAnswer(
       sql("SELECT * FROM applySchema1"),
       (1, "A1", true, null) ::
@@ -491,7 +491,7 @@ class SQLQuerySuite extends QueryTest {
     }
 
     val schemaRDD2 = applySchema(rowRDD2, schema2)
-    schemaRDD2.registerAsTable("applySchema2")
+    schemaRDD2.registerTempTable("applySchema2")
     checkAnswer(
       sql("SELECT * FROM applySchema2"),
       (Seq(1, true), Map("A1" -> null)) ::
@@ -516,7 +516,7 @@ class SQLQuerySuite extends QueryTest {
     }
 
     val schemaRDD3 = applySchema(rowRDD3, schema2)
-    schemaRDD3.registerAsTable("applySchema3")
+    schemaRDD3.registerTempTable("applySchema3")
 
     checkAnswer(
       sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),

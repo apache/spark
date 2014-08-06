@@ -60,9 +60,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
-    val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
+      sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()

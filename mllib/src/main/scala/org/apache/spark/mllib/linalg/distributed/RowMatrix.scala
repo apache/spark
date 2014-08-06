@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
 
-import breeze.linalg.{Vector => BV, DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
 import breeze.linalg.{svd => brzSvd, axpy => brzAxpy}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}

@@ -22,9 +22,9 @@ import org.scalatest.FunSuite
 import org.apache.spark.util.StatCounter
 
 // TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
-class DistributionGeneratorSuite extends FunSuite {
+class RandomDataGeneratorSuite extends FunSuite {
 
-  def apiChecks(gen: DistributionGenerator) {
+  def apiChecks(gen: RandomDataGenerator[Double]) {
 
     // resetting seed should generate the same sequence of random numbers
     gen.setSeed(42L)
@@ -53,7 +53,7 @@ class DistributionGeneratorSuite extends FunSuite {
     assert(array5.equals(array6))
   }
 
-  def distributionChecks(gen: DistributionGenerator,
+  def distributionChecks(gen: RandomDataGenerator[Double],
       mean: Double = 0.0,
       stddev: Double = 1.0,
       epsilon: Double = 0.01) {

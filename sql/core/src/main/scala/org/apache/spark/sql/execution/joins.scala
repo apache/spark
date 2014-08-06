@@ -405,8 +405,7 @@ case class BroadcastHashJoin(
      left: SparkPlan,
      right: SparkPlan) extends BinaryNode with HashJoin {
 
-
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil

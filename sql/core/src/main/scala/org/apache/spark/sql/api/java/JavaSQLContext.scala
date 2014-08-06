@@ -28,22 +28,29 @@ import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.types.util.DataTypeConversions
-import DataTypeConversions.asScalaDataType;
+import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
 
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(val sqlContext: SQLContext) {
+class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
   /**
-   * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
+   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   *
+   * @group userf
    */
-  def sql(sqlQuery: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
+  def sql(sqlText: String): JavaSchemaRDD = {
+    if (sqlContext.dialect == "sql") {
+      new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlText))
+    } else {
+      sys.error(s"Unsupported SQL dialect: $sqlContext.dialect")
+    }
+  }
 
   /**
    * :: Experimental ::
@@ -53,7 +60,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * {{{
    *   JavaSQLContext sqlCtx = new JavaSQLContext(...)
    *
-   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerAsTable("people")
+   *   sqlCtx.createParquetFile(Person.class, "path/to/file.parquet").registerTempTable("people")
    *   sqlCtx.sql("INSERT INTO people SELECT 'michael', 29")
    * }}}
    *
