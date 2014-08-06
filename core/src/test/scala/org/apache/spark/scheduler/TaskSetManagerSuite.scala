@@ -211,21 +211,21 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // An executor that is not NODE_LOCAL should be rejected.
-    assert(manager.resourceOffer("execC", "host2", NODE_LOCAL) === None)
+    assert(manager.resourceOffer("execC", "host2", ANY) === None)
 
     // Because there are no alive PROCESS_LOCAL executors, the base locality level should be
     // NODE_LOCAL. So, we should schedule the task on this offered NODE_LOCAL executor before
     // any of the locality wait timers expire.
-    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execA", "host1", ANY).get.index === 0)
   }
 
   test("basic delay scheduling") {
     sc = new SparkContext("local", "test")
-    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec3", "host2"))
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4,
       Seq(TaskLocation("host1", "exec1")),
       Seq(TaskLocation("host2", "exec2")),
-      Seq(TaskLocation("host1"), TaskLocation("host2", "exec3")),
+      Seq(TaskLocation("host1"), TaskLocation("host2", "exec2")),
       Seq()   // Last task has no locality prefs
     )
     val clock = new FakeClock
@@ -235,18 +235,18 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL) == None)
 
     clock.advance(LOCALITY_WAIT)
-    // Offer host1, exec1 again, at PROCESS_LOCAL level: the node local (task 2) should
+    // Offer host1, exec1 again, at NODE_LOCAL level: the node local (task 2) should
     // get chosen before the noPref task
     assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index == 2)
 
     // Offer host2, exec3 again, at NODE_LOCAL level: we should choose task 2
-    assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL).get.index == 1)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).get.index == 1)
 
     // Offer host2, exec3 again, at NODE_LOCAL level: we should get noPref task
     // after failing to find a node_Local task
-    assert(manager.resourceOffer("exec3", "host2", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL) == None)
     clock.advance(LOCALITY_WAIT)
-    assert(manager.resourceOffer("exec3", "host2", NO_PREF).get.index == 3)
+    assert(manager.resourceOffer("exec2", "host2", NO_PREF).get.index == 3)
   }
 
   test("we do not need to delay scheduling when we only have noPref tasks in the queue") {
