@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable
+import scala.collection.JavaConversions._
+
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 
-object SQLConf {
+private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
-  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
-  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
 
@@ -66,13 +66,13 @@ trait SQLConf {
    * Note that the choice of dialect does not affect things like what tables are available or
    * how query execution is performed.
    */
-  private[spark] def dialect: String = get(DIALECT, "sql")
+  private[spark] def dialect: String = getConf(DIALECT, "sql")
 
   /** When true tables cached using the in-memory columnar caching will be compressed. */
-  private[spark] def useCompression: Boolean = get(COMPRESS_CACHED, "false").toBoolean
+  private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "false").toBoolean
 
   /** Number of partitions to use for shuffle operators. */
-  private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt
+  private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS, "200").toInt
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
@@ -84,7 +84,7 @@ trait SQLConf {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def codegenEnabled: Boolean =
-    if (get(CODEGEN_ENABLED, "false") == "true") true else false
+    if (getConf(CODEGEN_ENABLED, "false") == "true") true else false
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -94,7 +94,7 @@ trait SQLConf {
    * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is also 10000.
    */
   private[spark] def autoBroadcastJoinThreshold: Int =
-    get(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
+    getConf(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
@@ -102,41 +102,40 @@ trait SQLConf {
    * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
    */
   private[spark] def defaultSizeInBytes: Long =
-    getOption(DEFAULT_SIZE_IN_BYTES).map(_.toLong).getOrElse(autoBroadcastJoinThreshold + 1)
+    getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
 
   /** ********************** SQLConf functionality methods ************ */
 
-  def set(props: Properties): Unit = {
-    settings.synchronized {
-      props.asScala.foreach { case (k, v) => settings.put(k, v) }
-    }
+  /** Set Spark SQL configuration properties. */
+  def setConf(props: Properties): Unit = settings.synchronized {
+    props.foreach { case (k, v) => settings.put(k, v) }
   }
 
-  def set(key: String, value: String): Unit = {
+  /** Set the given Spark SQL configuration property. */
+  def setConf(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
     settings.put(key, value)
   }
 
-  def get(key: String): String = {
+  /** Return the value of Spark SQL configuration property for the given key. */
+  def getConf(key: String): String = {
     Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
-  def get(key: String, defaultValue: String): String = {
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`.
+   */
+  def getConf(key: String, defaultValue: String): String = {
     Option(settings.get(key)).getOrElse(defaultValue)
   }
 
-  def getAll: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
-
-  def getOption(key: String): Option[String] = Option(settings.get(key))
-
-  def contains(key: String): Boolean = settings.containsKey(key)
-
-  def toDebugString: String = {
-    settings.synchronized {
-      settings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
-    }
-  }
+  /**
+   * Return all the configuration properties that have been set (i.e. not the default).
+   * This creates a new copy of the config properties in the form of a Map.
+   */
+  def getAllConfs: immutable.Map[String, String] = settings.synchronized { settings.toMap }
 
   private[spark] def clear() {
     settings.clear()

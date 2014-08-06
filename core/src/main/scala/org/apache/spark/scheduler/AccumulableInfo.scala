@@ -19,14 +19,28 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
 
+/**
+ * :: DeveloperApi ::
+ * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
+ */
 @DeveloperApi
-object TaskLocality extends Enumeration {
-  // Process local is expected to be used ONLY within TaskSetManager for now.
-  val PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY = Value
+class AccumulableInfo (
+    val id: Long,
+    val name: String,
+    val update: Option[String], // represents a partial update within a task
+    val value: String) {
 
-  type TaskLocality = Value
-
-  def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
-    condition <= constraint
+  override def equals(other: Any): Boolean = other match {
+    case acc: AccumulableInfo =>
+      this.id == acc.id && this.name == acc.name &&
+        this.update == acc.update && this.value == acc.value
+    case _ => false
   }
+}
+
+object AccumulableInfo {
+  def apply(id: Long, name: String, update: Option[String], value: String) =
+    new AccumulableInfo(id, name, update, value)
+
+  def apply(id: Long, name: String, value: String) = new AccumulableInfo(id, name, None, value)
 }
