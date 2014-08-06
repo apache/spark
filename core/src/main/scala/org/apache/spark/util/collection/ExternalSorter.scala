@@ -28,6 +28,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{Aggregator, SparkEnv, Logging, Partitioner}
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.BlockId
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -112,10 +113,13 @@ private[spark] class ExternalSorter[K, V, C](
   // What threshold of elementsRead we start estimating map size at.
   private val trackMemoryThreshold = 1000
 
-  // Spilling statistics
+  // Total spilling statistics
   private var spillCount = 0
   private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
+
+  // Write metrics for current spill
+  private var curWriteMetrics: ShuffleWriteMetrics = _
 
   // How much of the shared memory pool this collection has claimed
   private var myMemoryThreshold = 0L
@@ -239,7 +243,8 @@ private[spark] class ExternalSorter[K, V, C](
     logInfo("Thread %d spilling in-memory batch of %d MB to disk (%d spill%s so far)"
       .format(threadId, memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
-    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize)
+    curWriteMetrics = new ShuffleWriteMetrics()
+    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0   // Objects written since the last flush
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -254,9 +259,8 @@ private[spark] class ExternalSorter[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      val bytesWritten = w.bytesWritten
-      batchSizes.append(bytesWritten)
-      _diskBytesSpilled += bytesWritten
+      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
+      batchSizes.append(curWriteMetrics.shuffleBytesWritten)
       objectsWritten = 0
     }
 
@@ -275,7 +279,8 @@ private[spark] class ExternalSorter[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize)
+          curWriteMetrics = new ShuffleWriteMetrics()
+          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
