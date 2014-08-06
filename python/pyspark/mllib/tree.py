@@ -25,7 +25,9 @@ from pyspark.mllib._common import \
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
+
 class DecisionTreeModel(object):
+
     """
     A decision tree model for classification or regression.
 
@@ -77,6 +79,7 @@ class DecisionTreeModel(object):
 
 
 class DecisionTree(object):
+
     """
     Learning algorithm for a decision tree model
     for classification or regression.
@@ -173,7 +176,6 @@ class DecisionTree(object):
         return DecisionTree.train(data, "regression", 0,
                                   categoricalFeaturesInfo,
                                   impurity, maxDepth, maxBins)
-
 
     @staticmethod
     def train(data, algo, numClasses, categoricalFeaturesInfo,

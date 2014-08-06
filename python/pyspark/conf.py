@@ -56,6 +56,7 @@ spark.home=/path
 
 
 class SparkConf(object):
+
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.

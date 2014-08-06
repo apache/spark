@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,12 +17,7 @@
 # limitations under the License.
 #
 
-"""
-Used to test shipping of code depenencies with SparkContext.addPyFile().
-"""
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
-
-class UserClass(object):
-
-    def hello(self):
-        return "Hello World!"
+"$SCRIPT_DIR/scalastyle"

@@ -21,9 +21,11 @@ import collections
 
 
 class ResultIterable(collections.Iterable):
+
     """
     A special result iterable. This is used because the standard iterator can not be pickled
     """
+
     def __init__(self, data):
         self.data = data
         self.index = 0

@@ -45,6 +45,7 @@ def _from_id(bid):
 
 
 class Broadcast(object):
+
     """
     A broadcast variable created with
     L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}.

@@ -47,6 +47,7 @@ DEFAULT_CONFIGS = {
 
 
 class SparkContext(object):
+
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD}s and
@@ -213,7 +214,7 @@ class SparkContext(object):
 
             if instance:
                 if (SparkContext._active_spark_context and
-                   SparkContext._active_spark_context != instance):
+                        SparkContext._active_spark_context != instance):
                     currentMaster = SparkContext._active_spark_context.master
                     currentAppName = SparkContext._active_spark_context.appName
                     callsite = SparkContext._active_spark_context._callsite
@@ -406,7 +407,7 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, path, keyClass, valueClass,
-                    keyConverter, valueConverter, minSplits, batchSize)
+                                                keyConverter, valueConverter, minSplits, batchSize)
         return RDD(jrdd, self, ser)
 
     def newAPIHadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -437,7 +438,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                                    valueClass, keyConverter, valueConverter,
+                                                    jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def newAPIHadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -465,7 +467,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                                   valueClass, keyConverter, valueConverter,
+                                                   jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def hadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -496,7 +499,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.hadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                              valueClass, keyConverter, valueConverter,
+                                              jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def hadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -523,8 +527,9 @@ class SparkContext(object):
         jconf = self._dictToJavaMap(conf)
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
-        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass, valueClass,
-                    keyConverter, valueConverter, jconf, batchSize)
+        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass,
+                                             valueClass, keyConverter, valueConverter,
+                                             jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def _checkpointFile(self, name, input_deserializer):
@@ -555,8 +560,7 @@ class SparkContext(object):
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
         rest = ListConverter().convert(rest, self._gateway._gateway_client)
-        return RDD(self._jsc.union(first, rest), self,
-                   rdds[0]._jrdd_deserializer)
+        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """
@@ -568,8 +572,7 @@ class SparkContext(object):
         pickleSer = PickleSerializer()
         pickled = pickleSer.dumps(value)
         jbroadcast = self._jsc.broadcast(bytearray(pickled))
-        return Broadcast(jbroadcast.id(), value, jbroadcast,
-                         self._pickled_broadcast_vars)
+        return Broadcast(jbroadcast.id(), value, jbroadcast, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """

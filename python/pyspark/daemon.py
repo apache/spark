@@ -43,7 +43,7 @@ def worker(sock):
     """
     # Redirect stdout to stderr
     os.dup2(2, 1)
-    sys.stdout = sys.stderr   # The sys.stdout object is different from file descriptor 1
+    sys.stdout = sys.stderr  # The sys.stdout object is different from file descriptor 1
 
     signal.signal(SIGHUP, SIG_DFL)
     signal.signal(SIGCHLD, SIG_DFL)
@@ -134,8 +134,7 @@ def manager():
                 try:
                     os.kill(worker_pid, signal.SIGKILL)
                 except OSError:
-                    pass # process already died
-
+                    pass  # process already died
 
             if listen_sock in ready_fds:
                 sock, addr = listen_sock.accept()

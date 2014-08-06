@@ -27,6 +27,7 @@ from pyspark.mllib.linalg import SparseVector, Vectors
 
 
 class LabeledPoint(object):
+
     """
     The features and labels of a data point.
 
@@ -34,6 +35,7 @@ class LabeledPoint(object):
     @param features: Vector of features for this point (NumPy array, list,
         pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
     """
+
     def __init__(self, label, features):
         self.label = label
         if (type(features) == ndarray or type(features) == SparseVector
@@ -49,7 +51,9 @@ class LabeledPoint(object):
 
 
 class LinearModel(object):
+
     """A linear model that has a vector of coefficients and an intercept."""
+
     def __init__(self, weights, intercept):
         self._coeff = weights
         self._intercept = intercept
@@ -64,6 +68,7 @@ class LinearModel(object):
 
 
 class LinearRegressionModelBase(LinearModel):
+
     """A linear regression model.
 
     >>> lrmb = LinearRegressionModelBase(array([1.0, 2.0]), 0.1)
@@ -72,6 +77,7 @@ class LinearRegressionModelBase(LinearModel):
     >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
     True
     """
+
     def predict(self, x):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
@@ -80,6 +86,7 @@ class LinearRegressionModelBase(LinearModel):
 
 
 class LinearRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit.
 
     >>> from pyspark.mllib.regression import LabeledPoint
@@ -111,6 +118,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
 
 class LinearRegressionWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=1.0, regType=None, intercept=False):
@@ -146,6 +154,7 @@ class LinearRegressionWithSGD(object):
 
 
 class LassoModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with an
     l_1 penalty term.
 
@@ -178,6 +187,7 @@ class LassoModel(LinearRegressionModelBase):
 
 
 class LassoWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
@@ -189,6 +199,7 @@ class LassoWithSGD(object):
 
 
 class RidgeRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with an
     l_2 penalty term.
 
@@ -221,6 +232,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 
 class RidgeRegressionWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
