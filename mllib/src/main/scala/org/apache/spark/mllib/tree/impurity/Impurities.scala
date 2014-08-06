@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
- * Factory for Impurity.
+ * Factory for Impurity instances.
  */
 private[mllib] object Impurities {
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.api.java.JavaRDD
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -343,13 +345,13 @@ object DecisionTree extends Serializable with Logging {
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    */
   def trainClassifier(
-      input: RDD[LabeledPoint],
+      input: JavaRDD[LabeledPoint],
       numClassesForClassification: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
-    trainClassifier(input, numClassesForClassification,
+    trainClassifier(input.rdd, numClassesForClassification,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
   }
@@ -385,12 +387,12 @@ object DecisionTree extends Serializable with Logging {
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    */
   def trainRegressor(
-      input: RDD[LabeledPoint],
+      input: JavaRDD[LabeledPoint],
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
-    trainRegressor(input,
+    trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
   }
