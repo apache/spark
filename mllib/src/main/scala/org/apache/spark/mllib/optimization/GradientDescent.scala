@@ -25,6 +25,7 @@ import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -161,6 +162,14 @@ object GradientDescent extends Logging {
     val numExamples = data.count()
     val miniBatchSize = numExamples * miniBatchFraction
 
+    // if no data, return initial weights to avoid NaNs
+    if (numExamples == 0) {
+
+      logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
+      return (initialWeights, stochasticLossHistory.toArray)
+
+    }
+
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
     val n = weights.size
@@ -177,7 +186,7 @@ object GradientDescent extends Logging {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i)
-        .aggregate((BDV.zeros[Double](n), 0.0))(
+        .treeAggregate((BDV.zeros[Double](n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = gradient.compute(features, label, bcWeights.value, Vectors.fromBreeze(grad))
             (grad, loss + l)
@@ -201,5 +210,6 @@ object GradientDescent extends Logging {
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights, stochasticLossHistory.toArray)
+
   }
 }

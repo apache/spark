@@ -52,7 +52,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   override def blackList = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
-    "hook_context",
+    "hook_context_cs",
     "mapjoin_hook",
     "multi_sahooks",
     "overridden_confs",
@@ -289,7 +289,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "compute_stats_empty_table",
     "compute_stats_long",
     "compute_stats_string",
-    "compute_stats_table",
     "convert_enum_to_string",
     "correlationoptimizer1",
     "correlationoptimizer10",
@@ -395,7 +394,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_sort_9",
     "groupby_sort_test_1",
     "having",
-    "having1",
     "implicit_cast1",
     "innerjoin",
     "inoutdriver",
@@ -697,8 +695,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf7",
     "udf8",
     "udf9",
-    "udf_E",
-    "udf_PI",
     "udf_abs",
     "udf_acos",
     "udf_add",

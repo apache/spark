@@ -22,7 +22,7 @@
 
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+cd "$FWDIR"
 
 COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 

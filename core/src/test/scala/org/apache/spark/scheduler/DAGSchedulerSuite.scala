@@ -23,12 +23,15 @@ import scala.language.reflectiveCalls
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
+import org.apache.spark.executor.TaskMetrics
 
 class BuggyDAGEventProcessActor extends Actor {
   val state = 0
@@ -63,7 +66,7 @@ class MyRDD(
 class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
-  with ImplicitSender with BeforeAndAfter with LocalSparkContext {
+  with ImplicitSender with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -77,6 +80,8 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
+    override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+      blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -291,6 +296,18 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assertDataStructuresEmpty
   }
 
+  test("avoid exponential blowup when getting preferred locs list") {
+    // Build up a complex dependency graph with repeated zip operations, without preferred locations.
+    var rdd: RDD[_] = new MyRDD(sc, 1, Nil)
+    (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
+    // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
+    failAfter(10 seconds) {
+      val preferredLocs = scheduler.getPreferredLocs(rdd,0)
+      // No preferred locations are returned.
+      assert(preferredLocs.length === 0)
+    }
+  }
+
   test("unserializable task") {
     val unserializableRdd = new MyRDD(sc, 1, Nil) {
       class UnserializableClass
@@ -342,6 +359,8 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
       override def defaultParallelism() = 2
+      override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+        blockManagerId: BlockManagerId): Boolean = true
     }
     val noKillScheduler = new DAGScheduler(
       sc,
@@ -603,8 +622,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assertDataStructuresEmpty
   }
 
-  // TODO: Fix this and un-ignore the test.
-  ignore("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
+  test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
     val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
       override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
       override def zero(initialValue: Int): Int = 0
@@ -614,14 +632,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     })
 
     // Run this on executors
-    intercept[SparkDriverExecutionException] {
-      sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
-    }
+    sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
 
     // Run this within a local thread
-    intercept[SparkDriverExecutionException] {
-      sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
-    }
+    sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
 
     // Make sure we can still run local commands as well as cluster commands.
     assert(sc.parallelize(1 to 10, 2).count() === 10)

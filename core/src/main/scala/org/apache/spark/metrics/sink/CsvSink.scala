@@ -66,5 +66,9 @@ private[spark] class CsvSink(val property: Properties, val registry: MetricRegis
   override def stop() {
     reporter.stop()
   }
+
+  override def report() {
+    reporter.report()
+  }
 }
 
