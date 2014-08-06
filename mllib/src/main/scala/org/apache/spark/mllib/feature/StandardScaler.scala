@@ -19,14 +19,14 @@ package org.apache.spark.mllib.feature
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  *
@@ -34,7 +34,7 @@ import org.apache.spark.rdd.RDD
  *                 dense output, so this does not work on sparse input and will raise an exception.
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
-@DeveloperApi
+@Experimental
 class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransformer {
 
   def this() = this(false, true)
