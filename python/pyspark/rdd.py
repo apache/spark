@@ -134,6 +134,7 @@ class MaxHeapQ(object):
 
     """
     An implementation of MaxHeap.
+
     >>> import pyspark.rdd
     >>> heap = pyspark.rdd.MaxHeapQ(5)
     >>> [heap.insert(i) for i in range(10)]
@@ -381,6 +382,7 @@ class RDD(object):
     def getNumPartitions(self):
         """
         Returns the number of partitions in RDD
+
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> rdd.getNumPartitions()
         2
@@ -570,6 +572,7 @@ class RDD(object):
         """
         Sorts this RDD, which is assumed to consist of (key, value) pairs.
         # noqa
+
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
         >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
         [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
@@ -1209,6 +1212,7 @@ class RDD(object):
     def keys(self):
         """
         Return an RDD with the keys of each tuple.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
         >>> m.collect()
         [1, 3]
@@ -1218,6 +1222,7 @@ class RDD(object):
     def values(self):
         """
         Return an RDD with the values of each tuple.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
         >>> m.collect()
         [2, 4]
@@ -1642,6 +1647,7 @@ class RDD(object):
          Internally, this uses a shuffle to redistribute data.
          If you are decreasing the number of partitions in this RDD, consider
          using `coalesce`, which can avoid performing a shuffle.
+
          >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
          >>> sorted(rdd.glom().collect())
          [[1], [2, 3], [4, 5], [6, 7]]
@@ -1656,6 +1662,7 @@ class RDD(object):
     def coalesce(self, numPartitions, shuffle=False):
         """
         Return a new RDD that is reduced into `numPartitions` partitions.
+
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
         [[1], [2, 3], [4, 5]]
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
@@ -1694,6 +1701,7 @@ class RDD(object):
     def setName(self, name):
         """
         Assign a name to this RDD.
+
         >>> rdd1 = sc.parallelize([1,2])
         >>> rdd1.setName('RDD1')
         >>> rdd1.name()
@@ -1753,6 +1761,7 @@ class PipelinedRDD(RDD):
 
     """
     Pipelined maps:
+
     >>> rdd = sc.parallelize([1, 2, 3, 4])
     >>> rdd.map(lambda x: 2 * x).cache().map(lambda x: 2 * x).collect()
     [4, 8, 12, 16]
