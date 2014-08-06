@@ -72,9 +72,9 @@ except:
 # Python interpreter must agree on what endian the machine is.
 
 
-DENSE_VECTOR_MAGIC  = 1
+DENSE_VECTOR_MAGIC = 1
 SPARSE_VECTOR_MAGIC = 2
-DENSE_MATRIX_MAGIC  = 3
+DENSE_MATRIX_MAGIC = 3
 LABELED_POINT_MAGIC = 4
 
 
@@ -443,6 +443,7 @@ def _serialize_rating(r):
 
 
 class RatingDeserializer(Serializer):
+
     def loads(self, stream):
         length = struct.unpack("!i", stream.read(4))[0]
         ba = stream.read(length)
