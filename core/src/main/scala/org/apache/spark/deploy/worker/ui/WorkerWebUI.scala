@@ -58,6 +58,6 @@ private[spark] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
 
   def getUIPort(requestedPort: Option[Int], conf: SparkConf): Int = {
-    requestedPort.getOrElse(conf.getInt("worker.ui.port", WorkerWebUI.DEFAULT_PORT))
+    requestedPort.getOrElse(conf.getInt("spark.worker.ui.port", WorkerWebUI.DEFAULT_PORT))
   }
 }

@@ -26,7 +26,7 @@ import scala.collection.mutable
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Aggregator, SparkEnv, Logging, Partitioner}
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.BlockId
 
 /**
@@ -78,12 +78,13 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
+  private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -115,13 +116,6 @@ private[spark] class ExternalSorter[K, V, C](
   private var spillCount = 0
   private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
-
-  // Collective memory threshold shared across all running tasks
-  private val maxMemoryThreshold = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
-    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
-  }
 
   // How much of the shared memory pool this collection has claimed
   private var myMemoryThreshold = 0L
@@ -218,31 +212,15 @@ private[spark] class ExternalSorter[K, V, C](
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold)
     {
-      // TODO: This logic doesn't work if there are two external collections being used in the same
-      // task (e.g. to read shuffle output and write it out into another shuffle) [SPARK-2711]
-
-      val currentSize = collection.estimateSize()
-      var shouldSpill = false
-      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
-
-      // Atomically check whether there is sufficient memory in the global pool for
-      // us to double our threshold
-      shuffleMemoryMap.synchronized {
-        val threadId = Thread.currentThread().getId
-        val previouslyClaimedMemory = shuffleMemoryMap.get(threadId)
-        val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyClaimedMemory.getOrElse(0L))
-
-        // Try to allocate at least 2x more memory, otherwise spill
-        shouldSpill = availableMemory < currentSize * 2
-        if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = currentSize * 2
-          myMemoryThreshold = currentSize * 2
-        }
-      }
-      // Do not hold lock during spills
-      if (shouldSpill) {
-        spill(currentSize, usingMap)
+      // Claim up to double our current memory from the shuffle memory pool
+      val currentMemory = collection.estimateSize()
+      val amountToRequest = 2 * currentMemory - myMemoryThreshold
+      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      myMemoryThreshold += granted
+      if (myMemoryThreshold <= currentMemory) {
+        // We were granted too little memory to grow further (either tryToAcquire returned 0,
+        // or we already had more memory than myMemoryThreshold); spill the current collection
+        spill(currentMemory, usingMap)  // Will also release memory back to ShuffleMemoryManager
       }
     }
   }
@@ -273,13 +251,16 @@ private[spark] class ExternalSorter[K, V, C](
     // Flush the disk writer's contents to disk, and update relevant variables.
     // The writer is closed at the end of this process, and cannot be reused.
     def flush() = {
-      writer.commitAndClose()
-      val bytesWritten = writer.bytesWritten
+      val w = writer
+      writer = null
+      w.commitAndClose()
+      val bytesWritten = w.bytesWritten
       batchSizes.append(bytesWritten)
       _diskBytesSpilled += bytesWritten
       objectsWritten = 0
     }
 
+    var success = false
     try {
       val it = collection.destructiveSortedIterator(partitionKeyComparator)
       while (it.hasNext) {
@@ -299,13 +280,23 @@ private[spark] class ExternalSorter[K, V, C](
       }
       if (objectsWritten > 0) {
         flush()
+      } else if (writer != null) {
+        val w = writer
+        writer = null
+        w.revertPartialWritesAndClose()
       }
-      writer.close()
-    } catch {
-      case e: Exception =>
-        writer.close()
-        file.delete()
-        throw e
+      success = true
+    } finally {
+      if (!success) {
+        // This code path only happens if an exception was thrown above before we set success;
+        // close our stuff and let the exception be thrown further
+        if (writer != null) {
+          writer.revertPartialWritesAndClose()
+        }
+        if (file.exists()) {
+          file.delete()
+        }
+      }
     }
 
     if (usingMap) {
@@ -314,11 +305,8 @@ private[spark] class ExternalSorter[K, V, C](
       buffer = new SizeTrackingPairBuffer[(Int, K), C]
     }
 
-    // Reset the amount of shuffle memory used by this map in the global pool
-    val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
-    shuffleMemoryMap.synchronized {
-      shuffleMemoryMap(Thread.currentThread().getId) = 0
-    }
+    // Release our memory back to the shuffle pool so that other threads can grab it
+    shuffleMemoryManager.release(myMemoryThreshold)
     myMemoryThreshold = 0
 
     spills.append(SpilledFile(file, blockId, batchSizes.toArray, elementsPerPartition))
@@ -472,36 +460,58 @@ private[spark] class ExternalSorter[K, V, C](
    * partitions to be requested in order.
    */
   private[this] class SpillReader(spill: SpilledFile) {
-    val fileStream = new FileInputStream(spill.file)
-    val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+    // Serializer batch offsets; size will be batchSize.length + 1
+    val batchOffsets = spill.serializerBatchSizes.scanLeft(0L)(_ + _)
 
     // Track which partition and which batch stream we're in. These will be the indices of
     // the next element we will read. We'll also store the last partition read so that
     // readNextPartition() can figure out what partition that was from.
     var partitionId = 0
     var indexInPartition = 0L
-    var batchStreamsRead = 0
+    var batchId = 0
     var indexInBatch = 0
     var lastPartitionId = 0
 
     skipToNextPartition()
 
-    // An intermediate stream that reads from exactly one batch
+
+    // Intermediate file and deserializer streams that read from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    var batchStream = nextBatchStream()
-    var compressedStream = blockManager.wrapForCompression(spill.blockId, batchStream)
-    var deserStream = serInstance.deserializeStream(compressedStream)
+    var fileStream: FileInputStream = null
+    var deserializeStream = nextBatchStream()  // Also sets fileStream
+
     var nextItem: (K, C) = null
     var finished = false
 
     /** Construct a stream that only reads from the next batch */
-    def nextBatchStream(): InputStream = {
-      if (batchStreamsRead < spill.serializerBatchSizes.length) {
-        batchStreamsRead += 1
-        ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
+    def nextBatchStream(): DeserializationStream = {
+      // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
+      // we're still in a valid batch.
+      if (batchId < batchOffsets.length - 1) {
+        if (deserializeStream != null) {
+          deserializeStream.close()
+          fileStream.close()
+          deserializeStream = null
+          fileStream = null
+        }
+
+        val start = batchOffsets(batchId)
+        fileStream = new FileInputStream(spill.file)
+        fileStream.getChannel.position(start)
+        batchId += 1
+
+        val end = batchOffsets(batchId)
+
+        assert(end >= start, "start = " + start + ", end = " + end +
+          ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
+
+        val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
+        val compressedStream = blockManager.wrapForCompression(spill.blockId, bufferedStream)
+        serInstance.deserializeStream(compressedStream)
       } else {
-        // No more batches left; give an empty stream
-        bufferedStream
+        // No more batches left
+        cleanup()
+        null
       }
     }
 
@@ -525,19 +535,17 @@ private[spark] class ExternalSorter[K, V, C](
      * If no more pairs are left, return null.
      */
     private def readNextItem(): (K, C) = {
-      if (finished) {
+      if (finished || deserializeStream == null) {
         return null
       }
-      val k = deserStream.readObject().asInstanceOf[K]
-      val c = deserStream.readObject().asInstanceOf[C]
+      val k = deserializeStream.readObject().asInstanceOf[K]
+      val c = deserializeStream.readObject().asInstanceOf[C]
       lastPartitionId = partitionId
       // Start reading the next batch if we're done with this one
       indexInBatch += 1
       if (indexInBatch == serializerBatchSize) {
-        batchStream = nextBatchStream()
-        compressedStream = blockManager.wrapForCompression(spill.blockId, batchStream)
-        deserStream = serInstance.deserializeStream(compressedStream)
         indexInBatch = 0
+        deserializeStream = nextBatchStream()
       }
       // Update the partition location of the element we're reading
       indexInPartition += 1
@@ -545,7 +553,9 @@ private[spark] class ExternalSorter[K, V, C](
       // If we've finished reading the last partition, remember that we're done
       if (partitionId == numPartitions) {
         finished = true
-        deserStream.close()
+        if (deserializeStream != null) {
+          deserializeStream.close()
+        }
       }
       (k, c)
     }
@@ -577,6 +587,17 @@ private[spark] class ExternalSorter[K, V, C](
         nextItem = null
         item
       }
+    }
+
+    // Clean up our open streams and put us in a state where we can't read any more data
+    def cleanup() {
+      batchId = batchOffsets.length  // Prevent reading any other batch
+      val ds = deserializeStream
+      deserializeStream = null
+      fileStream = null
+      ds.close()
+      // NOTE: We don't do file.delete() here because that is done in ExternalSorter.stop().
+      // This should also be fixed in ExternalAppendOnlyMap.
     }
   }
 
