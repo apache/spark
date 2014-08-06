@@ -382,21 +382,26 @@ class SchemaRDD(
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     import scala.collection.Map
 
-    def toJava(obj: Any, dataType: DataType): Any = dataType match {
-      case struct: StructType => rowToArray(obj.asInstanceOf[Row], struct)
-      case array: ArrayType => obj match {
-        case seq: Seq[Any] => seq.map(x => toJava(x, array.elementType)).asJava
-        case list: JList[_] => list.map(x => toJava(x, array.elementType)).asJava
-        case arr if arr != null && arr.getClass.isArray =>
-          arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
-        case other => other
-      }
-      case mt: MapType => obj.asInstanceOf[Map[_, _]].map {
+    def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
+      case (null, _) => null
+
+      case (obj: Row, struct: StructType) => rowToArray(obj, struct)
+
+      case (seq: Seq[Any], array: ArrayType) =>
+        seq.map(x => toJava(x, array.elementType)).asJava
+      case (list: JList[_], array: ArrayType) =>
+        list.map(x => toJava(x, array.elementType)).asJava
+      case (arr, array: ArrayType) if arr.getClass.isArray =>
+        arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
+
+      case (obj: Map[_, _], mt: MapType) => obj.map {
         case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
       }.asJava
+
       // Pyrolite can handle Timestamp
-      case other => obj
+      case (other, _) => other
     }
+
     def rowToArray(row: Row, structType: StructType): Array[Any] = {
       val fields = structType.fields.map(field => field.dataType)
       row.zip(fields).map {
