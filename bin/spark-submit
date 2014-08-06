@@ -50,25 +50,28 @@ if [ $DEPLOY_MODE == "client" ]; then
   # a key value pair delimited either by white space or "=" sign. All
   # spark.driver.* configs must be processed now before it's too late.
   if [ -f "$PROPERTIES_FILE" ]; then
-    echo "Using properties file $PROPERTIES_FILE" 1>&2
-    DRIVER_MEMORY_CONF="spark.driver.memory"
-    DRIVER_EXTRA_JAVA_OPTS="spark.driver.extraJavaOptions"
-    DRIVER_EXTRA_CLASSPATH="spark.driver.extraClassPath"
-    DRIVER_EXTRA_LIBRARY_PATH="spark.driver.extraLibraryPath"
-    # Remove "=" sign and double quotes around the value, if any
-    DRIVER_MEMORY_CONF=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_MEMORY_CONF" | sed "s/$DRIVER_MEMORY_CONF//g" | \
-      sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g" | sed "s/^[[:space:]]*//g" | sed "s/[[:space:]]*$//g")
-    DRIVER_EXTRA_JAVA_OPTS=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_JAVA_OPTS" | sed "s/$DRIVER_EXTRA_JAVA_OPTS//g" | \
-      sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g" | sed "s/^[[:space:]]*//g" | sed "s/[[:space:]]*$//g")
-    DRIVER_EXTRA_CLASSPATH=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_CLASSPATH" | sed "s/$DRIVER_EXTRA_CLASSPATH//g" | \
-      sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g" | sed "s/^[[:space:]]*//g" | sed "s/[[:space:]]*$//g")
-    DRIVER_EXTRA_LIBRARY_PATH=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_LIBRARY_PATH" | sed "s/$DRIVER_EXTRA_LIBRARY_PATH//g" | \
-      sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g" | sed "s/^[[:space:]]*//g" | sed "s/[[:space:]]*$//g")
+    echo "Using properties file $PROPERTIES_FILE." 1>&2
+
+    # Parse the value of the given config
+    # This removes the "=" sign, whitespace, and double quotes around the value (if any)
+    parse_config() {
+      result=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$1" | \
+        sed "s/$1//g" | \
+        sed "s/^[[:space:]]*=//g" | \
+        sed "s/^[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/g" | \
+        sed "s/^[[:space:]]*\(.*\)[[:space:]]*$/\1/g" \
+      )
+    }
+    parse_config "spark.driver.memory";            DRIVER_MEMORY_CONF="$result"
+    parse_config "spark.driver.extraJavaOptions";  DRIVER_EXTRA_JAVA_OPTS="$result"
+    parse_config "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$result"
+    parse_config "spark.driver.extraLibraryPath";  DRIVER_EXTRA_LIBRARY_PATH="$result"
+
     export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
     export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
     export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
   else
-    echo "Warning: properties file $PROPERTIES_FILE does not exist." 1>&2
+    echo "Warning: properties file $PROPERTIES_FILE does not exist!" 1>&2
   fi
 
   # Favor command line memory over config memory
