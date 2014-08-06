@@ -25,6 +25,8 @@ while (($#)); do
     DEPLOY_MODE=$2
   elif [ "$1" = "--driver-memory" ]; then
     DRIVER_MEMORY=$2
+  elif [ "$1" = "--properties-file" ]; then
+    PROPERTIES_FILE=$2
   elif [ "$1" = "--driver-library-path" ]; then
     export SPARK_SUBMIT_LIBRARY_PATH=$2
   elif [ "$1" = "--driver-class-path" ]; then
@@ -36,9 +38,35 @@ while (($#)); do
 done
 
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
+PROPERTIES_FILE=${PROPERTIES_FILE:-"$SPARK_HOME/conf/spark-defaults.conf"}
 
-if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
-  export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
+# For client mode, the driver will be launched in the JVM that launches
+# SparkSubmit, so we need to handle the class paths, java options, and
+# memory pre-emptively in bash. Otherwise, it will be too late by the
+# time the JVM has started.
+
+if [ $DEPLOY_MODE == "client" ]; then
+  if [ -n "$DRIVER_MEMORY" ]; then
+    export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
+  fi
+  # We parse the default properties file here, assuming each line is
+  # a key value pair delimited either by white space or "=" sign. All
+  # spark.driver.* configs must be processed now before it's too late.
+  if [ -f "$PROPERTIES_FILE" ]; then
+    DRIVER_EXTRA_JAVA_OPTS="spark.driver.extraJavaOptions"
+    DRIVER_EXTRA_CLASSPATH="spark.driver.extraClassPath"
+    DRIVER_EXTRA_LIBRARY_PATH="spark.driver.extraLibraryPath"
+    # Remove "=" sign and double quotes around the value, if any
+    DRIVER_EXTRA_JAVA_OPTS=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_JAVA_OPTS" | \
+      sed "s/$DRIVER_EXTRA_JAVA_OPTS//g" | sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g")
+    DRIVER_EXTRA_CLASSPATH=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_CLASSPATH" | \
+      sed "s/$DRIVER_EXTRA_CLASSPATH//g" | sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g")
+    DRIVER_EXTRA_LIBRARY_PATH=$(sed "/^#/ d" "$PROPERTIES_FILE" | grep "$DRIVER_EXTRA_LIBRARY_PATH" | \
+      sed "s/$DRIVER_EXTRA_LIBRARY_PATH//g" | sed "s/^=//g" | sed "s/^\"\(.*\)\"$/\1/g")
+    export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
+    export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
+    export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
+  fi
 fi
 
 exec $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
