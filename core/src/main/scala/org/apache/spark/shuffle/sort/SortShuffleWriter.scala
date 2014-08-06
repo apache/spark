@@ -52,7 +52,7 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
-  val writeMetrics = new ShuffleWriteMetrics()
+  private val writeMetrics = new ShuffleWriteMetrics()
   context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
 
   /** Write a bunch of records to this task's output */

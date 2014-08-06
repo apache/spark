@@ -39,7 +39,7 @@ private[spark] class HashShuffleWriter[K, V](
   // we don't try deleting files, etc twice.
   private var stopping = false
 
-  val writeMetrics = new ShuffleWriteMetrics()
+  private val writeMetrics = new ShuffleWriteMetrics()
   metrics.shuffleWriteMetrics = Some(writeMetrics)
 
   private val blockManager = SparkEnv.get.blockManager

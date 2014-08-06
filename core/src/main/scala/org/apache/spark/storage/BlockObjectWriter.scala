@@ -186,7 +186,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
-    new FileSegment(file, initialPosition, writeMetrics.shuffleBytesWritten)
+    new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
   private def updateBytesWritten() {
