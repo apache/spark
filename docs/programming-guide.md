@@ -1174,7 +1174,9 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 Accumulators are variables that are only "added" to through an associative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
-can add support for new types.
+can add support for new types. If accumulators are created with a name, they will be
+displayed in Spark's UI. This can can be useful for understanding the progress of 
+running stages (NOTE: this is not yet supported in Python).
 
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
 running on the cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
@@ -1188,7 +1190,7 @@ The code below shows an accumulator being used to add up the elements of an arra
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-scala> val accum = sc.accumulator(0)
+scala> val accum = sc.accumulator(0, "My Accumulator")
 accum: spark.Accumulator[Int] = 0
 
 scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
