@@ -146,10 +146,41 @@ if $cygwin; then
 fi
 export CLASSPATH
 
+# Properly escape java options, dealing with whitespace, double quotes and backslashes
+# This accepts a string, and returns the escaped list through ESCAPED_JAVA_OPTS
+escape_java_options() {
+  ESCAPED_JAVA_OPTS=() # return value
+  option_buffer=""     # buffer for collecting parts of an option
+  opened_quotes=0      # whether we are expecting a closing double quotes
+  for word in $1; do
+    contains_quote=$(echo "$word" | grep \" | grep -v \\\\\")
+    if [ -n "$contains_quote" ]; then
+      # Flip the bit
+      opened_quotes=$(((opened_quotes + 1) % 2))
+    fi
+    if [[ $opened_quotes == 0 ]]; then
+      ESCAPED_JAVA_OPTS+=("$(echo "$option_buffer $word" | sed "s/^[[:space:]]*//" | sed "s/\([^\\]\)\"/\1/g")")
+      option_buffer=""
+    else
+      option_buffer="$option_buffer $word"
+    fi
+  done
+  # Something is wrong if we ended with open double quotes
+  if [[ $opened_quotes == 1 ]]; then
+    echo "Java options parse error! Expecting closing double quotes." 1>&2
+    exit 1
+  fi
+}
+
+escape_java_options "$JAVA_OPTS"
+for option in "${ESCAPED_JAVA_OPTS[@]}"; do
+  echo "$option"
+done
+
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   echo -n "Spark Command: " 1>&2
-  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2
+  echo "$RUNNER" -cp "$CLASSPATH" "${ESCAPED_JAVA_OPTS[@]}" "$@" 1>&2
   echo -e "========================================\n" 1>&2
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
+exec "$RUNNER" -cp "$CLASSPATH" "${ESCAPED_JAVA_OPTS[@]}" "$@"

@@ -52,15 +52,14 @@ if [ $DEPLOY_MODE == "client" ]; then
   if [ -f "$PROPERTIES_FILE" ]; then
     echo "Using properties file $PROPERTIES_FILE." 1>&2
 
-    # Parse the value of the given config
-    # This removes the "=" sign, whitespace, and double quotes around the value (if any)
+    # Parse the value of the given config according to the specifications outlined in
+    # http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader)
     parse_config() {
       result=$( \
-        sed "/^#/ d" "$PROPERTIES_FILE" | \
+        sed "/^[#!]/ d" "conf/spark-defaults.conf" | \
         grep "$1" | \
-        sed "s/$1//g" | \
-        sed "s/^[[:space:]]*=//g" | \
-        sed "s/^[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/g" | \
+        sed "s/$1//" | \
+        sed "s/^[[:space:]]*[:=]\{0,1\}//" | \
         sed "s/^[[:space:]]*\(.*\)[[:space:]]*$/\1/g" \
       )
     }
