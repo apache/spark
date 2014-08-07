@@ -413,7 +413,7 @@ class RowMatrix(
    */
   def similarColumns():
   CoordinateMatrix = {
-    similarColumnsDIMSUM(Double.MaxValue)
+    similarColumns(Double.PositiveInfinity)
   }
 
   /**
@@ -425,7 +425,7 @@ class RowMatrix(
    *              and n is the number of columns
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumnsDIMSUM(gamma: Double):
+  def similarColumns(gamma: Double):
   CoordinateMatrix = {
     similarColumnsDIMSUM(columnMagnitudes(), gamma)
   }
