@@ -22,6 +22,7 @@ import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import java.net._
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicInteger
 
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
@@ -72,6 +73,7 @@ private[spark] class ConnectionManager(
 
   // default to 30 second timeout waiting for authentication
   private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
+  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 30)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -836,9 +838,12 @@ private[spark] class ConnectionManager(
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
       : Future[Message] = {
     val promise = Promise[Message]()
+
+    val ackTimeoutMonitor =  new Timer(s"Ack Timeout Monitor-${connectionManagerId}-MessageId(${message.id})", true)
+
     val status = new MessageStatus(message, connectionManagerId, s => {
       s.ackMessage match {
-        case None =>  // Indicates a failure where we either never sent or never got ACK'd
+        case None => // Indicates a failure where we either never sent or never got ACK'd
           promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
         case Some(ackMessage) =>
           if (ackMessage.hasError) {
@@ -846,13 +851,24 @@ private[spark] class ConnectionManager(
               new IOException("sendMessageReliably failed with ACK that signalled a remote error"))
           } else {
             promise.success(ackMessage)
+            ackTimeoutMonitor.cancel()
           }
       }
     })
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
+
+    val timeoutTask = new TimerTask {
+      override def run(): Unit = {
+        status.synchronized {
+          promise.failure(new IOException(s"sendMessageReliably failed because ack was not received within ${ackTimeout} sec"))
+        }
+      }
+    }
+
     sendMessage(connectionManagerId, message)
+    ackTimeoutMonitor.schedule(timeoutTask, ackTimeout * 1000)
     promise.future
   }
 

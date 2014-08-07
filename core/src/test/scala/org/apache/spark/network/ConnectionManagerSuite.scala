@@ -19,14 +19,19 @@ package org.apache.spark.network
 
 import java.io.IOException
 import java.nio._
+import java.util.concurrent.TimeoutException
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.scalatest.FunSuite
 
+import org.mockito.Mockito._
+import org.mockito.Matchers._
+
+import scala.concurrent.TimeoutException
 import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Test the ConnectionManager with various security settings.
@@ -251,6 +256,61 @@ class ConnectionManagerSuite extends FunSuite {
     }
 
     manager.stop()
+    managerServer.stop()
+
+  }
+
+  test("sendMessageRelyably timeout") {
+    import scala.concurrent.ExecutionContext.Implicits.global
+
+    val clientConf = new SparkConf
+    clientConf.set("spark.authenticate", "false")
+    val ackTimeout = 30
+    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}")
+
+    val clientSecurityManager = new SecurityManager(clientConf)
+    val managerClient = spy(new ConnectionManager(0, clientConf, clientSecurityManager))
+
+    val serverConf = new SparkConf
+    serverConf.set("spark.authenticate", "false")
+    val serverSecurityManager = new SecurityManager(serverConf)
+    val managerServer = new ConnectionManager(0, serverConf, serverSecurityManager)
+    managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      // sleep 60 sec > ack timeout for simulating server slow down or hang up
+      Thread.sleep(ackTimeout * 2 * 1000)
+      None
+    })
+
+    val size = 10 * 1024 * 1024
+    val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
+    buffer.flip
+    val bufferMessage = Message.createBufferMessage(buffer.duplicate)
+    val future = managerClient.sendMessageReliably(managerServer.id, bufferMessage)
+ /*   future.onComplete {
+      case Success(_) => {
+        assert(false, "Ack timeout should be occurred but ack was received successfully")
+      }
+      case Failure(_) => {
+        // if timeout occurred, receiveMessage should not be invoked
+        verify(managerClient, times(0)).acceptConnection(any())
+        assert(true)
+      }
+    }
+*/
+    try {
+      Await.result(future, Duration((ackTimeout * 1.5).toInt, SECONDS))
+      assert(false, "Ack timeout should be occurred but ack was received successfully")
+    } catch {
+      case e: TimeoutException => {
+        assert(false, s"Timeout was occurred in ${ackTimeout} but timeout was not occurred")
+      }
+      case e: IOException => {
+        verify(managerClient, times(0)).acceptConnection(any())
+        assert(true)
+      }
+    }
+
+    managerClient.stop()
     managerServer.stop()
 
   }
