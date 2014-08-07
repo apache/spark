@@ -112,6 +112,7 @@ private[spark] object TestUtils {
     out
   }
 
+  /** Find a free port to bind to. */
   def findFreePort(): Int = {
     val socket = new ServerSocket(0)
     val port = socket.getLocalPort
