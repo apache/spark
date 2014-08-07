@@ -269,6 +269,9 @@ class SparkContext(object):
 
     @property
     def conf(self):
+        """
+        The L{SparkConf} object
+        """
         return self._conf
 
     def stop(self):

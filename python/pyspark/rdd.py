@@ -862,11 +862,11 @@ class RDD(object):
         """
         Find the minimum item in this RDD.
 
-        >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
+        >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
         >>> rdd.min()
-        1.0
+        2.0
         >>> rdd.min(lambda a, b: cmp(str(a), str(b)))
-        1.0
+        10.0
         """
         if comp is not None:
             func = lambda a, b: a if comp(a, b) <= 0 else b
@@ -1834,13 +1834,22 @@ class RDD(object):
         """
         Zips this RDD with its element indices.
 
+        The ordering is first based on the partition index and then the
+        ordering of items within each partition. So the first item in
+        the first partition gets index 0, and the last item in the last
+        partition receives the largest index.
+
+        This method needs to trigger a spark job when this RDD contains
+        more than one partitions.
+
         >>> sc.parallelize(range(4), 2).zipWithIndex().collect()
         [(0, 0), (1, 1), (2, 2), (3, 3)]
         """
-        nums = self.glom().map(lambda it: sum(1 for i in it)).collect()
         starts = [0]
-        for i in range(len(nums) - 1):
-            starts.append(starts[-1] + nums[i])
+        if self.getNumPartitions() > 1:
+            nums = self.glom().map(lambda it: sum(1 for i in it)).collect()
+            for i in range(len(nums) - 1):
+                starts.append(starts[-1] + nums[i])
 
         def func(k, it):
             for i, v in enumerate(it):
@@ -1851,6 +1860,11 @@ class RDD(object):
     def zipWithUniqueId(self):
         """
         Zips this RDD with generated unique Long ids.
+
+        Items in the kth partition will get ids k, n+k, 2*n+k, ..., where
+        n is the number of partitions. So there may exist gaps, but this
+        method won't trigger a spark job, which is different from
+        L{zipWithIndex}
 
         >>> sc.parallelize(range(4), 2).zipWithUniqueId().collect()
         [(0, 0), (2, 1), (1, 2), (3, 3)]
