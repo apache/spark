@@ -45,7 +45,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   extends Logging {
 
   def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
-    this(args, new Configuration(), sparkConf)
+    this(args, SparkHadoopUtil.get.newConfiguration(sparkConf), sparkConf)
 
   def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
 

@@ -47,7 +47,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
                         sparkConf: SparkConf) extends Logging {
 
   def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
-    this(args, new Configuration(), sparkConf)
+    this(args, SparkHadoopUtil.get.newConfiguration(sparkConf), sparkConf)
 
   def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
 
@@ -151,7 +151,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
     val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
       .orElse(Option(System.getenv("LOCAL_DIRS")))
- 
+
     localDirs match {
       case None => throw new Exception("Yarn local dirs can't be empty")
       case Some(l) => l

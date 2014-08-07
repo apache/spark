@@ -316,9 +316,9 @@ private[spark] class Executor(
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
-          classOf[Boolean])
-        constructor.newInstance(classUri, parent, userClassPathFirst)
+        val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
+          classOf[ClassLoader], classOf[Boolean])
+        constructor.newInstance(conf, classUri, parent, userClassPathFirst)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")

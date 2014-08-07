@@ -41,12 +41,21 @@ import org.apache.spark.io.CompressionCodec
 private[spark] class FileLogger(
     logDir: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
+    hadoopConf: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true,
     dirPermissions: Option[FsPermission] = None)
   extends Logging {
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf,
+      compress: Boolean = false,
+      overwrite: Boolean = true) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
+      overwrite = overwrite)
+  }
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
