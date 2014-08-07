@@ -91,6 +91,7 @@ def cleanup_dead_children():
     except:
         pass
 
+
 def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
@@ -153,7 +154,7 @@ def manager():
                 except OSError as e:
                     if e.errno in (EAGAIN, EINTR):
                         time.sleep(1)
-                        pid = os.fork() # error here will shutdown daemon
+                        pid = os.fork()  # error here will shutdown daemon
                     else:
                         outfile = sock.makefile('w')
                         write_int(e.errno, outfile)  # Signal that the fork failed
