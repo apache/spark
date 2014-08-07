@@ -1004,7 +1004,7 @@ abstract class RDD[T: ClassTag](
       },
       (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
         h1.addAll(h2)
-        h2
+        h1
       }).cardinality()
   }
 
