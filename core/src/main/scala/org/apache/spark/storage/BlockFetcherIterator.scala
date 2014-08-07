@@ -138,9 +138,7 @@ object BlockFetcherIterator {
         }
         case Failure(exception) => {
           logError("Could not get block(s) from " + cmId, exception)
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
-          }
+          results.put(new FetchResult(req.blocks(0)._1, -1, null))
         }
       }
     }
