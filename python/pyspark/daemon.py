@@ -119,12 +119,15 @@ def manager():
     try:
         while True:
             try:
-                ready_fds = select.select([0, listen_sock], [], [])[0]
+                ready_fds = select.select([0, listen_sock], [], [], 1)[0]
             except select.error as ex:
                 if ex[0] == EINTR:
                     continue
                 else:
                     raise
+
+            # cleanup in signal handler will cause deadlock
+            cleanup_dead_children()
 
             if 0 in ready_fds:
                 try:
@@ -145,8 +148,6 @@ def manager():
                         continue
                     raise
 
-                # cleanup in signal handler will cause deadlock
-                cleanup_dead_children()
 
                 # Launch a worker process
                 try:
