@@ -142,7 +142,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
       }
 
-      appList = newApps.sortBy { info => -info.endTime }
+      appList = newApps.sortBy { info => -info.endTime }.takeRight(conf.getInt("spark.history.retainedApplications", 50))
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
