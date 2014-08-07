@@ -19,12 +19,12 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
+import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
-class ExternalSorterSuite extends FunSuite with LocalSparkContext {
+class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
@@ -34,6 +34,16 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     // Ensure that we actually have multiple batches per spill file
     conf.set("spark.shuffle.spill.batchSize", "10")
     conf
+  }
+
+  private def assertBypassedMergeSort(sorter: ExternalSorter[_, _, _]): Unit = {
+    val bypassMergeSort = PrivateMethod[Boolean]('bypassMergeSort)
+    assert(sorter.invokePrivate(bypassMergeSort()), "sorter did not bypass merge-sort")
+  }
+
+  private def assertDidNotBypassMergeSort(sorter: ExternalSorter[_, _, _]): Unit = {
+    val bypassMergeSort = PrivateMethod[Boolean]('bypassMergeSort)
+    assert(!sorter.invokePrivate(bypassMergeSort()), "sorter bypassed merge-sort")
   }
 
   test("empty data stream") {
@@ -123,7 +133,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
-    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
@@ -147,7 +157,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
-    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
+    assertBypassedMergeSort(sorter)
     sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
@@ -314,7 +324,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter)
     sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
@@ -322,7 +332,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter2 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    assert(!sorter2.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter2)
     sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
@@ -338,14 +348,14 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
+    assertBypassedMergeSort(sorter)
     sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
 
     val sorter2 = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    assert(sorter2.bypassMergeSort, "sorter did not bypass merge-sort")
+    assertBypassedMergeSort(sorter2)
     sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
@@ -364,7 +374,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    assert(!sorter.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter)
     intercept[SparkException] {
       sorter.insertAll((0 until 100000).iterator.map(i => {
         if (i == 99990) {
@@ -386,7 +396,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    assert(sorter.bypassMergeSort, "sorter did not bypass merge-sort")
+    assertBypassedMergeSort(sorter)
     intercept[SparkException] {
       sorter.insertAll((0 until 100000).iterator.map(i => {
         if (i == 99990) {
@@ -681,20 +691,20 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
 
     val sorter1 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
-    assert(sorter1.bypassMergeSort, "sorter did not bypass merge-sort")
+    assertBypassedMergeSort(sorter1)
 
     val sorter2 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(MANY_PARTITIONS)), None, None)
-    assert(!sorter2.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter2)
 
     // Sorters with an ordering or aggregator: should not bypass even if they have few partitions
 
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(FEW_PARTITIONS)), Some(ord), None)
-    assert(!sorter3.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter3)
 
     val sorter4 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
-    assert(!sorter4.bypassMergeSort, "sorter bypassed merge-sort")
+    assertDidNotBypassMergeSort(sorter4)
   }
 }

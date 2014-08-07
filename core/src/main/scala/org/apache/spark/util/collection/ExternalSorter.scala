@@ -137,10 +137,10 @@ private[spark] class ExternalSorter[K, V, C](
   // spilled files, which would happen with the normal code path. The downside is having multiple
   // files open at a time and thus more memory allocated to buffers.
   private val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-  private[collection] val bypassMergeSort =            // private[collection] for unit tests
+  private val bypassMergeSort =
     (numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty)
 
-  // Array of file writers for each partition, used if bypassMergeSort is true
+  // Array of file writers for each partition, used if bypassMergeSort is true and we've spilled
   private var partitionWriters: Array[BlockObjectWriter] = null
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
