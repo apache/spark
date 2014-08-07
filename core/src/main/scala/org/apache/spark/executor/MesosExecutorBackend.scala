@@ -64,7 +64,7 @@ private[spark] class MesosExecutorBackend
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
-      executor.launchTask(this, taskId, taskInfo.getData.asReadOnlyByteBuffer)
+      executor.launchTask(this, taskId, taskInfo.getName, taskInfo.getData.asReadOnlyByteBuffer)
     }
   }
 

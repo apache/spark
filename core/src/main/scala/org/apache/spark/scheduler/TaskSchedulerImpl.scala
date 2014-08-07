@@ -32,6 +32,9 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.BlockManagerId
+import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -86,9 +89,11 @@ private[spark] class TaskSchedulerImpl(
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  private val executorsByHost = new HashMap[String, HashSet[String]]
+  protected val executorsByHost = new HashMap[String, HashSet[String]]
 
-  private val executorIdToHost = new HashMap[String, String]
+  protected val hostsByRack = new HashMap[String, HashSet[String]]
+
+  protected val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -223,6 +228,9 @@ private[spark] class TaskSchedulerImpl(
         executorAdded(o.executorId, o.host)
         newExecAvail = true
       }
+      for (rack <- getRackForHost(o.host)) {
+        hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
+      }
     }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
@@ -241,6 +249,7 @@ private[spark] class TaskSchedulerImpl(
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
+    // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
@@ -257,7 +266,7 @@ private[spark] class TaskSchedulerImpl(
               activeExecutorIds += execId
               executorsByHost(host) += execId
               availableCpus(i) -= CPUS_PER_TASK
-              assert (availableCpus(i) >= 0)
+              assert(availableCpus(i) >= 0)
               launchedTask = true
             }
           }
@@ -313,6 +322,26 @@ private[spark] class TaskSchedulerImpl(
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
+  }
+
+  /**
+   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
+   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  override def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+      blockManagerId: BlockManagerId): Boolean = {
+    val metricsWithStageIds = taskMetrics.flatMap {
+      case (id, metrics) => {
+        taskIdToTaskSetId.get(id)
+          .flatMap(activeTaskSets.get)
+          .map(_.stageId)
+          .map(x => (id, x, metrics))
+      }
+    }
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {
@@ -418,6 +447,12 @@ private[spark] class TaskSchedulerImpl(
     execs -= executorId
     if (execs.isEmpty) {
       executorsByHost -= host
+      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+        hosts -= host
+        if (hosts.isEmpty) {
+          hostsByRack -= rack
+        }
+      }
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
@@ -433,6 +468,10 @@ private[spark] class TaskSchedulerImpl(
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
     executorsByHost.contains(host)
+  }
+
+  def hasHostAliveOnRack(rack: String): Boolean = synchronized {
+    hostsByRack.contains(rack)
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {

@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
  */
 class HiveUdfSuite extends HiveComparisonTest {
 
-  TestHive.hql(
+  TestHive.sql(
     """
       |CREATE EXTERNAL TABLE hiveUdfTestTable (
       |   pair STRUCT<id: INT, value: INT>
@@ -48,16 +48,16 @@ class HiveUdfSuite extends HiveComparisonTest {
     """.stripMargin.format(classOf[PairSerDe].getName)
   )
 
-  TestHive.hql(
+  TestHive.sql(
     "ALTER TABLE hiveUdfTestTable ADD IF NOT EXISTS PARTITION(partition='testUdf') LOCATION '%s'"
       .format(this.getClass.getClassLoader.getResource("data/files/testUdf").getFile)
   )
 
-  TestHive.hql("CREATE TEMPORARY FUNCTION testUdf AS '%s'".format(classOf[PairUdf].getName))
+  TestHive.sql("CREATE TEMPORARY FUNCTION testUdf AS '%s'".format(classOf[PairUdf].getName))
 
-  TestHive.hql("SELECT testUdf(pair) FROM hiveUdfTestTable")
+  TestHive.sql("SELECT testUdf(pair) FROM hiveUdfTestTable")
 
-  TestHive.hql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
+  TestHive.sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {

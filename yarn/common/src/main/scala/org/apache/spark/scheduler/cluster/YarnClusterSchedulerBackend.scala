@@ -27,6 +27,11 @@ private[spark] class YarnClusterSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
 
+  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
+    minRegisteredRatio = 0.8
+    ready = false
+  }
+
   override def start() {
     super.start()
     var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS

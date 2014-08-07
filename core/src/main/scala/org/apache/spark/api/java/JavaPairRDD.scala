@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
@@ -122,12 +122,79 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def sample(withReplacement: Boolean, fraction: Double): JavaPairRDD[K, V] =
     sample(withReplacement, fraction, Utils.random.nextLong)
-    
+
   /**
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sample(withReplacement, fraction, seed))
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use additional passes over
+   * the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values.
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      exact: Boolean,
+      seed: Long): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions, exact, seed))
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use additional passes over
+   * the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values.
+   *
+   * Use Utils.random.nextLong as the default seed for the random number generator
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      exact: Boolean): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, exact, Utils.random.nextLong)
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * Produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with one pass over the RDD via
+   * simple random sampling.
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      seed: Long): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, false, seed)
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * Produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with one pass over the RDD via
+   * simple random sampling.
+   *
+   * Use Utils.random.nextLong as the default seed for the random number generator
+   */
+  def sampleByKey(withReplacement: Boolean, fractions: JMap[K, Double]): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, false, Utils.random.nextLong)
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
@@ -714,6 +781,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def sortByKey(ascending: Boolean): JavaPairRDD[K, V] = {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
     sortByKey(comp, ascending)
+  }
+
+  /**
+   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+   * order of the keys).
+   */
+  def sortByKey(ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    sortByKey(comp, ascending, numPartitions)
   }
 
   /**

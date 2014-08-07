@@ -24,6 +24,7 @@ from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
+
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -64,6 +65,7 @@ def launch_gateway():
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):
+
             def __init__(self, stream):
                 Thread.__init__(self)
                 self.daemon = True

@@ -22,7 +22,7 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.NaiveBayes
-import org.apache.spark.mllib.util.{MLUtils, MulticlassLabelParser}
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * An example naive Bayes app. Run with
@@ -76,7 +76,7 @@ object SparseNaiveBayes {
       if (params.minPartitions > 0) params.minPartitions else sc.defaultMinPartitions
 
     val examples =
-      MLUtils.loadLibSVMFile(sc, params.input, multiclass = true, params.numFeatures, minPartitions)
+      MLUtils.loadLibSVMFile(sc, params.input, params.numFeatures, minPartitions)
     // Cache examples because it will be used in both training and evaluation.
     examples.cache()
 

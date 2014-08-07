@@ -27,7 +27,7 @@ import scala.collection.JavaConversions._
  */
 class PruningSuite extends HiveComparisonTest {
   // MINOR HACK: You must run a query before calling reset the first time.
-  TestHive.hql("SHOW TABLES")
+  TestHive.sql("SHOW TABLES")
 
   // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset
   // the environment to ensure all referenced tables in this suites are not cached in-memory.

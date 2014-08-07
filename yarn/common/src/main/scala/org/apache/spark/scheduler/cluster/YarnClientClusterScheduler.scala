@@ -37,14 +37,4 @@ private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configur
     val retval = YarnAllocationHandler.lookupRack(conf, host)
     if (retval != null) Some(retval) else None
   }
-
-  override def postStartHook() {
-
-    super.postStartHook()
-    // The yarn application is running, but the executor might not yet ready
-    // Wait for a few seconds for the slaves to bootstrap and register with master - best case attempt
-    // TODO It needn't after waitBackendReady
-    Thread.sleep(2000L)
-    logInfo("YarnClientClusterScheduler.postStartHook done")
-  }
 }

@@ -57,9 +57,56 @@ val U: RowMatrix = svd.U // The U factor is a RowMatrix.
 val s: Vector = svd.s // The singular values are stored in a local dense vector.
 val V: Matrix = svd.V // The V factor is a local dense matrix.
 {% endhighlight %}
-</div>
+
 Same code applies to `IndexedRowMatrix`.
 The only difference that the `U` matrix becomes an `IndexedRowMatrix`.
+</div>
+<div data-lang="java" markdown="1">
+In order to run the following standalone application using Spark framework make
+sure that you follow the instructions provided at section [Standalone
+Applications](quick-start.html) of the quick-start guide. What is more, you
+should include to your build file *spark-mllib* as a dependency.
+
+{% highlight java %}
+import java.util.LinkedList;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.SingularValueDecomposition;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+
+public class SVD {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("SVD Example");
+    SparkContext sc = new SparkContext(conf);
+     
+    double[][] array = ...
+    LinkedList<Vector> rowsList = new LinkedList<Vector>();
+    for (int i = 0; i < array.length; i++) {
+      Vector currentRow = Vectors.dense(array[i]);
+      rowsList.add(currentRow);
+    }
+    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
+
+    // Create a RowMatrix from JavaRDD<Vector>.
+    RowMatrix mat = new RowMatrix(rows.rdd());
+
+    // Compute the top 4 singular values and corresponding singular vectors.
+    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(4, true, 1.0E-9d);
+    RowMatrix U = svd.U();
+    Vector s = svd.s();
+    Matrix V = svd.V();
+  }
+}
+{% endhighlight %}
+Same code applies to `IndexedRowMatrix`.
+The only difference that the `U` matrix becomes an `IndexedRowMatrix`.
+</div>
 </div>
 
 ## Principal component analysis (PCA)
@@ -90,5 +137,52 @@ val pc: Matrix = mat.computePrincipalComponents(10) // Principal components are 
 // Project the rows to the linear space spanned by the top 10 principal components.
 val projected: RowMatrix = mat.multiply(pc)
 {% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
+The number of columns should be small, e.g, less than 1000.
+
+{% highlight java %}
+import java.util.LinkedList;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+
+public class PCA {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("PCA Example");
+    SparkContext sc = new SparkContext(conf);
+     
+    double[][] array = ...
+    LinkedList<Vector> rowsList = new LinkedList<Vector>();
+    for (int i = 0; i < array.length; i++) {
+      Vector currentRow = Vectors.dense(array[i]);
+      rowsList.add(currentRow);
+    }
+    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
+
+    // Create a RowMatrix from JavaRDD<Vector>.
+    RowMatrix mat = new RowMatrix(rows.rdd());
+
+    // Compute the top 3 principal components.
+    Matrix pc = mat.computePrincipalComponents(3);
+    RowMatrix projected = mat.multiply(pc);
+  }
+}
+{% endhighlight %}
+
+In order to run the above standalone application using Spark framework make
+sure that you follow the instructions provided at section [Standalone
+Applications](quick-start.html) of the quick-start guide. What is more, you
+should include to your build file *spark-mllib* as a dependency.
 </div>
 </div>

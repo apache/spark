@@ -23,6 +23,14 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
 /**
  * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
+ *
+ * This class is used to house metrics both for in-progress and completed tasks. In executors,
+ * both the task thread and the heartbeat thread write to the TaskMetrics. The heartbeat thread
+ * reads it to send in-progress metrics, and the task thread reads it to send metrics along with
+ * the completed task.
+ *
+ * So, when adding new fields, take into consideration that the whole object can be serialized for
+ * shipping off at any time to consumers of the SparkListener interface.
  */
 @DeveloperApi
 class TaskMetrics extends Serializable {
@@ -75,7 +83,9 @@ class TaskMetrics extends Serializable {
   /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
    */
-  var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+
+  def shuffleReadMetrics = _shuffleReadMetrics
 
   /**
    * If this task writes to shuffle output, metrics on the written shuffle data will be collected
@@ -87,6 +97,21 @@ class TaskMetrics extends Serializable {
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
+
+  /** Adds the given ShuffleReadMetrics to any existing shuffle metrics for this task. */
+  def updateShuffleReadMetrics(newMetrics: ShuffleReadMetrics) = synchronized {
+    _shuffleReadMetrics match {
+      case Some(existingMetrics) =>
+        existingMetrics.shuffleFinishTime = math.max(
+          existingMetrics.shuffleFinishTime, newMetrics.shuffleFinishTime)
+        existingMetrics.fetchWaitTime += newMetrics.fetchWaitTime
+        existingMetrics.localBlocksFetched += newMetrics.localBlocksFetched
+        existingMetrics.remoteBlocksFetched += newMetrics.remoteBlocksFetched
+        existingMetrics.remoteBytesRead += newMetrics.remoteBytesRead
+      case None =>
+        _shuffleReadMetrics = Some(newMetrics)
+    }
+  }
 }
 
 private[spark] object TaskMetrics {
@@ -126,12 +151,12 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Absolute time when this task finished reading shuffle data
    */
-  var shuffleFinishTime: Long = _
+  var shuffleFinishTime: Long = -1
 
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
-  var totalBlocksFetched: Int = _
+  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
 
   /**
    * Number of remote blocks fetched in this shuffle by this task
@@ -165,10 +190,10 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
    */
-  var shuffleBytesWritten: Long = _
+  @volatile var shuffleBytesWritten: Long = _
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  var shuffleWriteTime: Long = _
+  @volatile var shuffleWriteTime: Long = _
 }

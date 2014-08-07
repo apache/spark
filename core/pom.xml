@@ -28,7 +28,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-core_2.10</artifactId>
   <properties>
-     <sbt.project.name>core</sbt.project.name>
+    <sbt.project.name>core</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
@@ -150,7 +150,7 @@
     <dependency>
       <groupId>org.json4s</groupId>
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-      <version>3.2.6</version>
+      <version>3.2.10</version>
     </dependency>
     <dependency>
       <groupId>colt</groupId>
@@ -192,8 +192,8 @@
     </dependency>
     <dependency>
       <groupId>org.tachyonproject</groupId>
-      <artifactId>tachyon</artifactId>
-      <version>0.4.1-thrift</version>
+      <artifactId>tachyon-client</artifactId>
+      <version>0.5.0</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
@@ -263,6 +263,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
@@ -275,7 +280,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.8.1</version>
+      <version>0.8.2.1</version>
     </dependency>
   </dependencies>
   <build>

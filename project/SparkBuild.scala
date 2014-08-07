@@ -21,6 +21,7 @@ import scala.collection.JavaConversions._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
+import sbtunidoc.Plugin.genjavadocSettings
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -29,14 +30,15 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, mllib, repl, spark, sql, streaming,
-  streamingFlume, streamingKafka, streamingMqtt, streamingTwitter, streamingZeromq) =
-    Seq("bagel", "catalyst", "core", "graphx", "hive", "mllib", "repl", "spark", "sql",
-      "streaming", "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq").map(ProjectRef(buildLocation, _))
+  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl, spark,
+  sql, streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt,
+  streamingTwitter, streamingZeromq) =
+    Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+      "spark", "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
+      "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl) =
-    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl")
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
+    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl", "kinesis-asl")
       .map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
@@ -60,7 +62,7 @@ object SparkBuild extends PomBuild {
     var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq.empty
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
-      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pganglia-lgpl flag.")
+      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
@@ -99,7 +101,7 @@ object SparkBuild extends PomBuild {
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
     case Some(v) =>
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.split("=")).foreach(x => System.setProperty(x(0), x(1)))
-    case _ => 
+    case _ =>
   }
 
   override val userPropertiesMap = System.getProperties.toMap
@@ -107,13 +109,14 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
+  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ genjavadocSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
-
+  
+    resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
@@ -155,10 +158,9 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  /* Enable Mima for all projects except spark, hive, catalyst, sql  and repl */
   // TODO: Add Sql to mima checks
-  allProjects.filterNot(y => Seq(spark, sql, hive, catalyst, repl).exists(x => x == y)).
-    foreach (x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
+  allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
+    streamingFlumeSink).contains(x)).foreach(x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -166,8 +168,16 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Catalyst macro settings */
+  enable(Catalyst.settings)(catalyst)
+
+  /* Spark SQL Core console settings */
+  enable(SQL.settings)(sql)
+
   /* Hive console settings */
   enable(Hive.settings)(hive)
+
+  enable(Flume.settings)(streamingFlumeSink)
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
@@ -177,6 +187,36 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](oldDeps)
   }
 
+}
+
+object Flume {
+  lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
+object Catalyst {
+  lazy val settings = Seq(
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
+    // Quasiquotes break compiling scala doc...
+    // TODO: Investigate fixing this.
+    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
+}
+
+object SQL {
+  lazy val settings = Seq(
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+  )
 }
 
 object Hive {
@@ -256,6 +296,7 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("akka")))
         .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
         .map(_.filterNot(_.getCanonicalPath.contains("network")))
+        .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
         .map(_.filterNot(_.getCanonicalPath.contains("executor")))
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
@@ -276,7 +317,7 @@ object Unidoc {
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
       ),
-      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java"),
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
     )
   )
@@ -288,8 +329,10 @@ object TestSettings {
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions in Test += "-Dspark.home=" + sparkHome,
+    javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
+    javaOptions in Test += "-Dspark.ports.maxRetries=100",
+    javaOptions in Test += "-Dspark.ui.port=0",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,

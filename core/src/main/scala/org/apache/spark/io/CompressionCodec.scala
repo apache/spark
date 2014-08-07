@@ -56,7 +56,7 @@ private[spark] object CompressionCodec {
     ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
 
-  val DEFAULT_COMPRESSION_CODEC = classOf[LZFCompressionCodec].getName
+  val DEFAULT_COMPRESSION_CODEC = classOf[SnappyCompressionCodec].getName
 }
 
 
@@ -103,7 +103,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 /**
  * :: DeveloperApi ::
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by spark.io.compression.snappy.block.size.
+ * Block size can be configured by `spark.io.compression.snappy.block.size`.
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
  *       of Spark. This is intended for use as an internal compression utility within a single Spark

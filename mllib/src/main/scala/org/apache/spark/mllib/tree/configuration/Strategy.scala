@@ -17,8 +17,10 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Variance, Entropy, Gini, Impurity}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
@@ -27,7 +29,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * Stores all the configuration options for tree construction
  * @param algo classification or regression
  * @param impurity criterion used for information gain calculation
- * @param maxDepth maximum depth of the tree
+ * @param maxDepth Maximum depth of the tree.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+ * @param numClassesForClassification number of classes for classification. Default value is 2
+ *                                    leads to binary classification
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileCalculationStrategy algorithm for calculating quantiles
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
@@ -44,7 +49,74 @@ class Strategy (
     val algo: Algo,
     val impurity: Impurity,
     val maxDepth: Int,
+    val numClassesForClassification: Int = 2,
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128) extends Serializable
+    val maxMemoryInMB: Int = 128) extends Serializable {
+
+  if (algo == Classification) {
+    require(numClassesForClassification >= 2)
+  }
+  val isMulticlassClassification =
+    algo == Classification && numClassesForClassification > 2
+  val isMulticlassWithCategoricalFeatures
+    = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+
+  /**
+   * Java-friendly constructor.
+   *
+   * @param algo classification or regression
+   * @param impurity criterion used for information gain calculation
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param numClassesForClassification number of classes for classification. Default value is 2
+   *                                    leads to binary classification
+   * @param maxBins maximum number of bins used for splitting features
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example, an entry
+   *                                (n -> k) implies the feature n is categorical with k categories
+   *                                0, 1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   */
+  def this(
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClassesForClassification: Int,
+      maxBins: Int,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
+    this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
+
+  private[tree] def assertValid(): Unit = {
+    algo match {
+      case Classification =>
+        require(numClassesForClassification >= 2,
+          s"DecisionTree Strategy for Classification must have numClassesForClassification >= 2," +
+          s" but numClassesForClassification = $numClassesForClassification.")
+        require(Set(Gini, Entropy).contains(impurity),
+          s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
+          s"  Valid settings: Gini, Entropy")
+      case Regression =>
+        require(impurity == Variance,
+          s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
+          s"  Valid settings: Variance")
+      case _ =>
+        throw new IllegalArgumentException(
+          s"DecisionTree Strategy given invalid algo parameter: $algo." +
+          s"  Valid settings are: Classification, Regression.")
+    }
+    require(maxDepth >= 0, s"DecisionTree Strategy given invalid maxDepth parameter: $maxDepth." +
+      s"  Valid values are integers >= 0.")
+    require(maxBins >= 2, s"DecisionTree Strategy given invalid maxBins parameter: $maxBins." +
+      s"  Valid values are integers >= 2.")
+    categoricalFeaturesInfo.foreach { case (feature, arity) =>
+      require(arity >= 2,
+        s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
+        s" feature $feature has $arity categories.  The number of categories should be >= 2.")
+    }
+  }
+
+}

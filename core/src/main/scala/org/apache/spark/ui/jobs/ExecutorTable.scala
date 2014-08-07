@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.xml.Node
 
 import org.apache.spark.ui.{ToolTips, UIUtils}
+import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Page showing executor summary */
@@ -64,11 +65,9 @@ private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
       executorIdToAddress.put(executorId, address)
     }
 
-    val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
-    executorIdToSummary match {
-      case Some(x) =>
-        x.toSeq.sortBy(_._1).map { case (k, v) => {
-          // scalastyle:off
+    listener.stageIdToData.get(stageId) match {
+      case Some(stageData: StageUIData) =>
+        stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
           <tr>
             <td>{k}</td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
@@ -76,16 +75,20 @@ private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
             <td>{v.failedTasks + v.succeededTasks}</td>
             <td>{v.failedTasks}</td>
             <td>{v.succeededTasks}</td>
-            <td sorttable_customekey={v.inputBytes.toString}>{Utils.bytesToString(v.inputBytes)}</td>
-            <td sorttable_customekey={v.shuffleRead.toString}>{Utils.bytesToString(v.shuffleRead)}</td>
-            <td sorttable_customekey={v.shuffleWrite.toString}>{Utils.bytesToString(v.shuffleWrite)}</td>
-            <td sorttable_customekey={v.memoryBytesSpilled.toString} >{Utils.bytesToString(v.memoryBytesSpilled)}</td>
-            <td sorttable_customekey={v.diskBytesSpilled.toString} >{Utils.bytesToString(v.diskBytesSpilled)}</td>
+            <td sorttable_customekey={v.inputBytes.toString}>
+              {Utils.bytesToString(v.inputBytes)}</td>
+            <td sorttable_customekey={v.shuffleRead.toString}>
+              {Utils.bytesToString(v.shuffleRead)}</td>
+            <td sorttable_customekey={v.shuffleWrite.toString}>
+              {Utils.bytesToString(v.shuffleWrite)}</td>
+            <td sorttable_customekey={v.memoryBytesSpilled.toString}>
+              {Utils.bytesToString(v.memoryBytesSpilled)}</td>
+            <td sorttable_customekey={v.diskBytesSpilled.toString}>
+              {Utils.bytesToString(v.diskBytesSpilled)}</td>
           </tr>
-          // scalastyle:on
         }
-      }
-      case _ => Seq[Node]()
+      case None =>
+        Seq.empty[Node]
     }
   }
 }

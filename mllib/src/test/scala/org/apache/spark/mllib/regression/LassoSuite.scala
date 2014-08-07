@@ -17,10 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
+  LocalSparkContext}
 
 class LassoSuite extends FunSuite with LocalSparkContext {
 
@@ -111,5 +114,21 @@ class LassoSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+}
+
+class LassoClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = LassoWithSGD.train(points, 2)
+    val predictions = model.predict(points.map(_.features))
   }
 }

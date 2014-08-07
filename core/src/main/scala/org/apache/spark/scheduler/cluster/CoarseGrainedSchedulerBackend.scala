@@ -31,6 +31,7 @@ import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.ui.JettyUtils
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -136,6 +137,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         removeExecutor(executorId, reason)
         sender ! true
 
+      case AddWebUIFilter(filterName, filterParams, proxyBase) =>
+        addWebUIFilter(filterName, filterParams, proxyBase)
+        sender ! true
       case DisassociatedEvent(_, address, _) =>
         addressToExecutorId.get(address).foreach(removeExecutor(_,
           "remote Akka client disassociated"))
@@ -275,6 +279,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       return true
     }
     false
+  }
+
+  // Add filters to the SparkUI
+  def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
+    if (proxyBase != null && proxyBase.nonEmpty) {
+      System.setProperty("spark.ui.proxyBase", proxyBase)
+    }
+
+    if (Seq(filterName, filterParams).forall(t => t != null && t.nonEmpty)) {
+      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      conf.set("spark.ui.filters", filterName)
+      conf.set(s"spark.$filterName.params", filterParams)
+      JettyUtils.addFilters(scheduler.sc.ui.getHandlers, conf)
+    }
   }
 }
 
