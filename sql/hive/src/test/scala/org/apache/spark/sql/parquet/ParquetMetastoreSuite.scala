@@ -20,6 +20,7 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
+import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.scalatest.BeforeAndAfterAll
 
 import scala.reflect.ClassTag
@@ -122,5 +123,16 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT COUNT(*) FROM normal_parquet"),
       10
     )
+  }
+
+  test("conversion is working") {
+    assert(
+      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+        case _: HiveTableScan => true
+      }.isEmpty)
+    assert(
+      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+        case _: ParquetTableScan => true
+      }.nonEmpty)
   }
 }
