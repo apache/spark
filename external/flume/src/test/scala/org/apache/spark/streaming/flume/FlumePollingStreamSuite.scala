@@ -146,7 +146,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
     val sink2 = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort + 1))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort2))
     Configurables.configure(sink2, context)
     sink2.setChannel(channel2)
     sink2.start()
