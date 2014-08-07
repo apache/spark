@@ -75,9 +75,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
-    set("spark.sql.dialect", "sql")
+    setConf("spark.sql.dialect", "sql")
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
-    set("spark.sql.dialect", "hiveql")
+    setConf("spark.sql.dialect", "hiveql")
 
   }
 
@@ -436,18 +436,18 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testVal = "val0,val_1,val2.3,my_table"
 
     sql(s"set $testKey=$testVal")
-    assert(get(testKey, testVal + "_") == testVal)
+    assert(getConf(testKey, testVal + "_") == testVal)
 
     sql("set some.property=20")
-    assert(get("some.property", "0") == "20")
+    assert(getConf("some.property", "0") == "20")
     sql("set some.property = 40")
-    assert(get("some.property", "0") == "40")
+    assert(getConf("some.property", "0") == "40")
 
     sql(s"set $testKey=$testVal")
-    assert(get(testKey, "0") == testVal)
+    assert(getConf(testKey, "0") == testVal)
 
     sql(s"set $testKey=")
-    assert(get(testKey, "0") == "")
+    assert(getConf(testKey, "0") == "")
   }
 
   test("SET commands semantics for a HiveContext") {
