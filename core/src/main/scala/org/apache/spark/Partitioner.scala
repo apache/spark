@@ -113,11 +113,10 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private var valRB: Array[K] = Array()
-  private var haveRB: Boolean = false
+  @volatile private var valRB: Array[K] = null
 
-  private def rangeBounds: Array[K] = {
-    if (haveRB) return valRB
+  private def rangeBounds: Array[K] = this.synchronized {
+    if (valRB != null) return valRB
 
     valRB = if (partitions <= 1) {
       Array.empty
@@ -158,7 +157,6 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       }
     }
 
-    haveRB = true
     valRB
   }
 
@@ -230,7 +228,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = this.synchronized {
+    if (valRB != null) return
     val sfactory = SparkEnv.get.serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
@@ -243,7 +242,6 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         Utils.deserializeViaNestedStream(in, ser) { ds =>
           implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
           valRB = ds.readObject[Array[K]]()
-          haveRB = true
         }
     }
   }
