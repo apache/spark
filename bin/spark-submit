@@ -52,6 +52,7 @@ if [ $DEPLOY_MODE == "client" ]; then
   # Parse the default properties file here for spark.driver.* configs
   if [ -f "$PROPERTIES_FILE" ]; then
     echo "Using properties file $PROPERTIES_FILE." 1>&2
+    # This exports the value of the given key into JAVA_PROPERTY_VALUE
     parse_java_property "spark.driver.memory";            DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
     parse_java_property "spark.driver.extraJavaOptions";  DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
     parse_java_property "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
