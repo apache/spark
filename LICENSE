@@ -517,6 +517,7 @@ The following components are provided under a BSD-style license. See project lin
      (The New BSD License) Py4J (net.sf.py4j:py4j:0.8.1 - http://py4j.sourceforge.net/)
      (Two-clause BSD-style license) JUnit-Interface (com.novocode:junit-interface:0.10 - http://github.com/szeiger/junit-interface/)
      (ISC/BSD License) jbcrypt (org.mindrot:jbcrypt:0.3m - http://www.mindrot.org/)
+     (BSD License) Proximal algorithms (https://github.com/cvxgrp/proximal)
 
 ========================================================================
 MIT licenses
