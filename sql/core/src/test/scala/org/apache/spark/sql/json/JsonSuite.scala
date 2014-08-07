@@ -264,10 +264,12 @@ class JsonSuite extends QueryTest {
 
     // Access elements of an array of structs.
     checkAnswer(
-      sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2] from jsonTable"),
+      sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
+        "from jsonTable"),
       (true :: "str1" :: null :: Nil,
       false :: null :: null :: Nil,
-      null :: null :: null :: Nil) :: Nil
+      null :: null :: null :: Nil,
+      null) :: Nil
     )
 
     // Access a struct and fields inside of it.
