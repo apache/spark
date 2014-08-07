@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.net.{URI, URL}
+import java.net.{ServerSocket, URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConversions._
@@ -111,4 +111,12 @@ private[spark] object TestUtils {
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
   }
+
+  def findFreePort(): Int = {
+    val socket = new ServerSocket(0)
+    val port = socket.getLocalPort
+    socket.close()
+    port
+  }
+
 }

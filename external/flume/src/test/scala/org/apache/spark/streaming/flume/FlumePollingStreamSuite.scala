@@ -22,6 +22,8 @@ import java.net.InetSocketAddress
 import java.util.concurrent.{Callable, ExecutorCompletionService, Executors}
 import java.util.Random
 
+import org.apache.spark.TestUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 
@@ -77,7 +79,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   private def testFlumePolling(): Unit = {
-    val testPort = getTestPort
+    val testPort = TestUtils.findFreePort()
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
@@ -111,10 +113,11 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   private def testFlumePollingMultipleHost(): Unit = {
-    val testPort = getTestPort
+    val testPort = TestUtils.findFreePort()
+    val testPort2 = TestUtils.findFreePort()
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val addresses = Seq(testPort, testPort + 1).map(new InetSocketAddress("localhost", _))
+    val addresses = Seq(testPort, testPort2).map(new InetSocketAddress("localhost", _))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
         eventsPerBatch, 5)
