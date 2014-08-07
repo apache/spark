@@ -133,10 +133,11 @@ class SparkSink extends AbstractSink with Logging with Configurable {
   }
 
   private[flume] def getPort(): Int = {
-    val server = serverOpt.getOrElse(
-      throw new RuntimeException("Server was not started!")
-    )
-    server.getPort
+    serverOpt
+      .map(_.getPort)
+      .getOrElse(
+        throw new RuntimeException("Server was not started!")
+      )
   }
 }
 
