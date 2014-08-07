@@ -6,4 +6,4 @@
 # spark.eventLog.enabled           true
 # spark.eventLog.dir               hdfs://namenode:8021/directory
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
-# spark.executor.extraJavaOptions  -XX:+PrintGCDetail -Dmy.property="one two three"
+# spark.executor.extraJavaOptions  -XX:+PrintGCDetail -Dnumbers="one \"two\" three"
