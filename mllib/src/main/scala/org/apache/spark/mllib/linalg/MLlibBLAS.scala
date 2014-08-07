@@ -2,10 +2,17 @@ package org.apache.spark.mllib.linalg
 
 import com.github.fommil.netlib.F2jBLAS
 
+/**
+ * BLAS routines for MLlib's vectors and matrices.
+ */
 private[mllib] object MLlibBLAS {
 
+  // For level-1 routines, we use Java implementation.
   val f2jBLAS = new F2jBLAS
 
+  /**
+   * y += alpha * x
+   */
   def daxpy(alpha: Double, x: Vector, y: Vector) {
     y match {
       case dy: DenseVector =>
@@ -24,12 +31,18 @@ private[mllib] object MLlibBLAS {
     }
   }
 
+  /**
+   * y += alpha * x
+   */
   def daxpy(alpha: Double, x: DenseVector, y: DenseVector) {
     val n = x.size
     require(y.size == x.size)
     f2jBLAS.daxpy(n, alpha, x.values, 1, y.values, 1)
   }
 
+  /**
+   * y += alpha * x
+   */
   def daxpy(alpha: Double, x: SparseVector, y: DenseVector) {
     require(x.size == y.size)
     val nnz = x.indices.size
