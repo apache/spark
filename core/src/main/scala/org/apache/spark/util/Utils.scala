@@ -146,6 +146,9 @@ private[spark] object Utils extends Logging {
     Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
   }
 
+  /** Preferred alternative to Class.forName(className) */
+  def classForName(clazz: String) = Class.forName(clazz, true, getContextOrSparkClassLoader)
+
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
    */
