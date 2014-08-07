@@ -49,7 +49,12 @@ escape_java_options() {
     fi
     if [[ $opened_quotes == 0 ]]; then
       # Remove all non-escaped quotes around the value
-      ESCAPED_JAVA_OPTS+=("$(echo "$option_buffer $word" | sed "s/^[[:space:]]*//" | sed "s/\([^\\]\)\"/\1/g")")
+      ESCAPED_JAVA_OPTS+=("$(
+        echo "$option_buffer $word" | \
+        sed "s/^[[:space:]]*//" | \
+        sed "s/\([^\\]\)\"/\1/g" | \
+        sed "s/\\\\\([\\\"]\)/\1/g"
+      )")
       option_buffer=""
     else
       # We are expecting a closing double quote, so keep buffering
