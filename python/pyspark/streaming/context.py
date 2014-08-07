@@ -146,7 +146,10 @@ class StreamingContext(object):
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
+
+        #tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
+        tempFile = open("/tmp/spark_rdd", "wb")
+
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(test_input):
             c = list(test_input)    # Make it a list so we can compute its length
@@ -157,6 +160,7 @@ class StreamingContext(object):
         else:
             serializer = self._sc._unbatched_serializer
         serializer.dump_stream(test_input, tempFile)
+        tempFile.flush()
         tempFile.close()
         print tempFile.name
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc,
