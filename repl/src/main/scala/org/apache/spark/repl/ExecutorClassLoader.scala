@@ -24,6 +24,7 @@ import java.util.concurrent.{Executors, ExecutorService}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 import org.apache.spark.util.ParentClassLoader
 

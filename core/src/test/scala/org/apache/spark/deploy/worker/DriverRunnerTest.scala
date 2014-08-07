@@ -25,6 +25,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{Command, DriverDescription}
 
 class DriverRunnerTest extends FunSuite {
