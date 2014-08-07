@@ -637,10 +637,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "set_variable_sub",
     "show_create_table_partitioned",
     "show_create_table_delimited",
-    //TODO:add time/user specific properties to nonDeterministicLineIndicators
-    //the test requires a system property, we don't support that yet.
-    //so remove that test from the whitelist
-    //"show_create_table_alter",
+    "show_create_table_alter",
     "show_create_table_view",
     "show_create_table_serde",
     "show_create_table_db_table",

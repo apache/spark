@@ -95,7 +95,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
    * hive test cases assume the system is set up.
    */
-  private def rewritePaths(cmd: String): String =
+  private def rewritePaths(cmd: String): String = {
+    // For some hive test case which contain ${system:test.tmp.dir}
+    System.setProperty("test.tmp.dir",System.getProperty("user.dir") + "/tmp")
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
@@ -103,7 +105,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } else {
       cmd
     }
-
+  }
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
