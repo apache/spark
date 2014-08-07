@@ -98,6 +98,8 @@ object Statistics {
    * expected distribution.
    *
    * Note: the two input Vectors need to have the same size.
+   *       `observed` cannot contain negative values.
+   *       `expected` cannot contain nonpositive values.
    *
    * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @param expected Vector containing the expected categorical counts/relative frequencies.
@@ -114,6 +116,8 @@ object Statistics {
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the uniform
    * distribution, with each category having an expected frequency of `1 / observed.size`.
    *
+   * Note: `observed` cannot contain negative values.
+   *
    * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
@@ -123,14 +127,25 @@ object Statistics {
 
   /**
    * :: Experimental ::
-   * TODO
+   * Conduct Pearson's independence test on the input contingency matrix, which cannot contain
+   * negative entries or columns or rows that sum up to 0.
+   *
+   * @param counts The contingency matrix.
+   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
+   *         the method used, and the null hypothesis.
    */
   @Experimental
   def chiSqTest(counts: Matrix): ChiSquaredTestResult = ChiSquaredTest.chiSquaredMatrix(counts)
 
   /**
    * :: Experimental ::
-   * TODO
+   * Conduct Pearson's independence test for every feature against the label across the input RDD.
+   * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
+   * the chi-squared statistic is computed.
+   *
+   * @param data an `RDD[LabeledPoint]` containing the Labeled dataset.
+   * @return an array containing the ChiSquaredTestResult for every feature against the label.
+   *         The order of the elements in the returned array reflects the order of input features.
    */
   @Experimental
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSquaredTestResult] = {

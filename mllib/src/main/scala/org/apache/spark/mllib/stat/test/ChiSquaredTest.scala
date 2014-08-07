@@ -27,17 +27,16 @@ import org.apache.spark.rdd.RDD
 
 /**
  * Conduct the Chi-squared test for the input RDDs using the specified method.
- * Goodness-of-fit test is conducted on two RDD[Double]s, whereas test of independence is conducted
- * on an input of type RDD[Vector] or RDD[LabeledPoint] in which independence between columns is
- * assessed.
+ * Goodness-of-fit test is conducted on two `Vectors`, whereas test of independence is conducted
+ * on an input of type `Matrix` in which independence between columns is assessed.
+ * We also provide a method for computing the chi-squared statistic between each feature and the
+ * label for an input `RDD[LabeledPoint]`, return an `Array[ChiSquaredTestResult]` of size =
+ * number of features in the inpuy RDD.
  *
  * Supported methods for goodness of fit: `pearson` (default)
  * Supported methods for independence: `pearson` (default)
  *
  * More information on Chi-squared test: http://en.wikipedia.org/wiki/Chi-squared_test
- * More information on Pearson's chi-squared test:
- *   http://en.wikipedia.org/wiki/Pearson%27s_chi-squared_test
- *
  */
 private[stat] object ChiSquaredTest extends Logging {
 
@@ -47,17 +46,20 @@ private[stat] object ChiSquaredTest extends Logging {
    */
   case class Method(name: String, chiSqFunc: (Double, Double) => Double)
 
+  // Pearson's chi-squared test: http://en.wikipedia.org/wiki/Pearson%27s_chi-squared_test
   val PEARSON = new Method("pearson", (observed: Double, expected: Double) => {
     val dev = observed - expected
     dev * dev / expected
   })
 
+  // Null hypothesis for the two different types of chi-squared tests to be included in the result.
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
     val goodnessOfFit = Value("observed follows the same distribution as expected.")
     val independence = Value("observations in each column are statistically independent.")
   }
 
+  // Method identification based on input methodName string
   private def methodFromString(methodName: String): Method = {
     methodName match {
       case PEARSON.name => PEARSON
@@ -67,9 +69,9 @@ private[stat] object ChiSquaredTest extends Logging {
 
   /**
    * Conduct Pearson's independence test for each feature against the label across the input RDD.
-   *
-   * @param data RDD of LabeledPoints.
-   * @return Array[ChiSquareTestResult] containing
+   * The contingency table is constructed from the raw (feature, label) pairs and used to conduct
+   * the independence test.
+   * Returns an array containing the ChiSquaredTestResult for every feature against the label.
    */
   def chiSquaredFeatures(data: RDD[LabeledPoint],
       methodName: String = PEARSON.name): Array[ChiSquaredTestResult] = {
@@ -102,7 +104,8 @@ private[stat] object ChiSquaredTest extends Logging {
   }
 
   /*
-   * Pearon's goodness of fit test. This can be easily made abstract to support other methods.
+   * Pearon's goodness of fit test on the input observed and expected counts/relative frequencies.
+   * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
       expected: Vector = Vectors.dense(Array[Double]()),
@@ -147,20 +150,23 @@ private[stat] object ChiSquaredTest extends Logging {
 
     // compute chi-squared statistic
     var statistic = 0.0
-    i = 0
-    while (i < observed.size) {
-      val obs = observed(i)
+    var j = 0
+    while (j < observed.size) {
+      val obs = observed(j)
       if (obs != 0.0) {
-        statistic += method.chiSqFunc(obs, getExpected(i))
+        statistic += method.chiSqFunc(obs, getExpected(j))
       }
+      j += 1
     }
     val df = size - 1
     val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.goodnessOfFit.toString)
+    new ChiSquaredTestResult(pValue, df, statistic, PEARSON.name,
+      NullHypothesis.goodnessOfFit.toString)
   }
 
   /*
-   * Pearon's independence test. This can be easily made abstract to support other methods.
+   * Pearon's independence test on the input contingency matrix.
+   * TODO: optimize for SparseMatrix when it becomes supported.
    */
   def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSquaredTestResult = {
     val method = methodFromString(methodName)
@@ -182,22 +188,24 @@ private[stat] object ChiSquaredTest extends Logging {
       i += 1
     }
     if (!colSums.forall(_ > 0.0) || !rowSums.forall(_ > 0.0)) {
-      throw new IllegalArgumentException("Chi square statistic cannot be computed for input matrix due to "
-        + "0.0 entries in the expected contingency table.")
+      throw new IllegalArgumentException("Chi square statistic cannot be computed for input matrix "
+        + "due to 0.0 entries in the expected contingency table.")
     }
     val total = colSums.sum
 
     // second pass to collect statistic
     var statistic = 0.0
-    i = 0
-    while (i < colMajorArr.size) {
-      val expected = colSums(i / numRows) * rowSums(i % numRows) / total
-      statistic += method.chiSqFunc(colMajorArr(i), expected)
+    var j = 0
+    while (j < colMajorArr.size) {
+      val expected = colSums(j / numRows) * rowSums(j % numRows) / total
+      statistic += method.chiSqFunc(colMajorArr(j), expected)
+      j += 1
     }
 
     // Second pass to compute chi-squared statistic
     val df = (numCols - 1) * (numRows - 1)
     val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    new ChiSquaredTestResult(pValue, df, statistic, methodName,
+      NullHypothesis.independence.toString)
   }
 }
