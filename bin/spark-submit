@@ -20,6 +20,14 @@
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 ORIG_ARGS=("$@")
 
+# Load utility functions
+. "$SPARK_HOME/bin/utils.sh"
+
+# For client mode, the driver will be launched in the JVM that launches
+# SparkSubmit, so we need to handle the class paths, java options, and
+# memory pre-emptively in bash. Otherwise, it will be too late by the
+# time the JVM has started.
+
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
     DEPLOY_MODE=$2
@@ -40,34 +48,14 @@ done
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$SPARK_HOME/conf/spark-defaults.conf"}
 
-# For client mode, the driver will be launched in the JVM that launches
-# SparkSubmit, so we need to handle the class paths, java options, and
-# memory pre-emptively in bash. Otherwise, it will be too late by the
-# time the JVM has started.
-
 if [ $DEPLOY_MODE == "client" ]; then
-  # We parse the default properties file here, assuming each line is
-  # a key value pair delimited either by white space or "=" sign. All
-  # spark.driver.* configs must be processed now before it's too late.
+  # Parse the default properties file here for spark.driver.* configs
   if [ -f "$PROPERTIES_FILE" ]; then
     echo "Using properties file $PROPERTIES_FILE." 1>&2
-
-    # Parse the value of the given config according to the specifications outlined in
-    # http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader)
-    parse_config() {
-      result=$( \
-        sed "/^[#!]/ d" "conf/spark-defaults.conf" | \
-        grep "$1" | \
-        sed "s/$1//" | \
-        sed "s/^[[:space:]]*[:=]\{0,1\}//" | \
-        sed "s/^[[:space:]]*\(.*\)[[:space:]]*$/\1/g" \
-      )
-    }
-    parse_config "spark.driver.memory";            DRIVER_MEMORY_CONF="$result"
-    parse_config "spark.driver.extraJavaOptions";  DRIVER_EXTRA_JAVA_OPTS="$result"
-    parse_config "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$result"
-    parse_config "spark.driver.extraLibraryPath";  DRIVER_EXTRA_LIBRARY_PATH="$result"
-
+    parse_java_property "spark.driver.memory";            DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraJavaOptions";  DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraLibraryPath";  DRIVER_EXTRA_LIBRARY_PATH="$JAVA_PROPERTY_VALUE"
     if [ -n "$DRIVER_EXTRA_JAVA_OPTS" ]; then
       export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
     fi
@@ -80,7 +68,6 @@ if [ $DEPLOY_MODE == "client" ]; then
   else
     echo "Warning: properties file $PROPERTIES_FILE does not exist!" 1>&2
   fi
-
   # Favor command line memory over config memory
   DRIVER_MEMORY=${DRIVER_MEMORY:-"$DRIVER_MEMORY_CONF"}
   if [ -n "$DRIVER_MEMORY" ]; then
