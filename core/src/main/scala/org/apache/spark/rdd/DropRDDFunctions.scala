@@ -45,12 +45,12 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
     if (n <= 0) return self
 
     // locate partition that includes the nth element
-    val locate = (partitions: Array[Partition], parent: RDD[T], ctx: TaskContext) => {
+    val locate = (partitions: Array[Partition], input: RDD[T], ctx: TaskContext) => {
       var rem = n
       var p = 0
       var np = 0
       while (rem > 0  &&  p < partitions.length) {
-        np = parent.iterator(partitions(p), ctx).length
+        np = input.iterator(partitions(p), ctx).length
         rem -= np
         p += 1
       }
@@ -75,9 +75,9 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
       override def compute(split: Partition, ctx: TaskContext):Iterator[T] = {
         val dp = split.asInstanceOf[PromiseArgPartition]
         val (pFirst, pDrop) = dp.arg[(Int,Int)](0, ctx)
-        val parent = firstParent[T]
-        if (dp.index > pFirst) return parent.iterator(dp.partition, ctx)
-        if (dp.index == pFirst) return parent.iterator(dp.partition, ctx).drop(pDrop)
+        val input = firstParent[T]
+        if (dp.index > pFirst) return input.iterator(dp.partition, ctx)
+        if (dp.index == pFirst) return input.iterator(dp.partition, ctx).drop(pDrop)
         Iterator.empty
       }
     }
@@ -90,12 +90,12 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
   def dropRight(n: Int):RDD[T] = {
     if (n <= 0) return self
 
-    val locate = (partitions: Array[Partition], parent: RDD[T], ctx: TaskContext) => {
+    val locate = (partitions: Array[Partition], input: RDD[T], ctx: TaskContext) => {
       var rem = n
       var p = partitions.length-1
       var np = 0
       while (rem > 0  &&  p >= 0) {
-        np = parent.iterator(partitions(p), ctx).length
+        np = input.iterator(partitions(p), ctx).length
         rem -= np
         p -= 1
       }
@@ -120,9 +120,9 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
       override def compute(split: Partition, ctx: TaskContext):Iterator[T] = {
         val dp = split.asInstanceOf[PromiseArgPartition]
         val (pFirst, pTake) = dp.arg[(Int,Int)](0, ctx)
-        val parent = firstParent[T]
-        if (dp.index < pFirst) return parent.iterator(dp.partition, ctx)
-        if (dp.index == pFirst) return parent.iterator(dp.partition, ctx).take(pTake)
+        val input = firstParent[T]
+        if (dp.index < pFirst) return input.iterator(dp.partition, ctx)
+        if (dp.index == pFirst) return input.iterator(dp.partition, ctx).take(pTake)
         Iterator.empty
       }
     }
@@ -134,11 +134,11 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
    */
   def dropWhile(f: T=>Boolean):RDD[T] = {
 
-    val locate = (partitions: Array[Partition], parent: RDD[T], ctx: TaskContext) => {
+    val locate = (partitions: Array[Partition], input: RDD[T], ctx: TaskContext) => {
       var p = 0
       var np = 0
       while (np <= 0  &&  p < partitions.length) {
-        np = parent.iterator(partitions(p), ctx).dropWhile(f).length
+        np = input.iterator(partitions(p), ctx).dropWhile(f).length
         p += 1
       }
 
@@ -161,9 +161,9 @@ class DropRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Serializ
       override def compute(split: Partition, ctx: TaskContext):Iterator[T] = {
         val dp = split.asInstanceOf[PromiseArgPartition]
         val pFirst = dp.arg[Int](0, ctx)
-        val parent = firstParent[T]
-        if (dp.index > pFirst) return parent.iterator(dp.partition, ctx)
-        if (dp.index == pFirst) return parent.iterator(dp.partition, ctx).dropWhile(f)
+        val input = firstParent[T]
+        if (dp.index > pFirst) return input.iterator(dp.partition, ctx)
+        if (dp.index == pFirst) return input.iterator(dp.partition, ctx).dropWhile(f)
         Iterator.empty
       }
     }    
