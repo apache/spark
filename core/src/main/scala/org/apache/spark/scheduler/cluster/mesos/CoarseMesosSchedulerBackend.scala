@@ -27,11 +27,13 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, Logging, SparkContext, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.util.Utils
+
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
