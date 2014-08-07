@@ -196,7 +196,7 @@ def is_active(instance):
 def get_spark_shark_version(opts):
     spark_shark_map = {
         "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0"
+        "1.0.0": "1.0.0", "1.0.1": "1.0.1", "1.0.2": "1.0.2", "1.1.0": "1.1.0"
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
