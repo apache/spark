@@ -25,16 +25,14 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Matrix, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.random.{RandomRDDGenerators => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
@@ -523,17 +521,8 @@ class PythonMLLibAPI extends Serializable {
 
     val data = dataBytesJRDD.rdd.map(deserializeLabeledPoint)
 
-    val algo: Algo = algoStr match {
-      case "classification" => Classification
-      case "regression" => Regression
-      case _ => throw new IllegalArgumentException(s"Bad algoStr parameter: $algoStr")
-    }
-    val impurity: Impurity = impurityStr match {
-      case "gini" => Gini
-      case "entropy" => Entropy
-      case "variance" => Variance
-      case _ => throw new IllegalArgumentException(s"Bad impurityStr parameter: $impurityStr")
-    }
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
 
     val strategy = new Strategy(
       algo = algo,

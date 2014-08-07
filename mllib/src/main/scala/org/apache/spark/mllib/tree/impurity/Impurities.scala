@@ -15,22 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
-
-import org.apache.spark.annotation.Experimental
+package org.apache.spark.mllib.tree.impurity
 
 /**
- * :: Experimental ::
- * Enum to select the algorithm for the decision tree
+ * Factory for Impurity instances.
  */
-@Experimental
-object Algo extends Enumeration {
-  type Algo = Value
-  val Classification, Regression = Value
+private[mllib] object Impurities {
 
-  private[mllib] def fromString(name: String): Algo = name match {
-    case "classification" => Classification
-    case "regression" => Regression
-    case _ => throw new IllegalArgumentException(s"Did not recognize Algo name: $name")
+  def fromString(name: String): Impurity = name match {
+    case "gini" => Gini
+    case "entropy" => Entropy
+    case "variance" => Variance
+    case _ => throw new IllegalArgumentException(s"Did not recognize Impurity name: $name")
   }
+
 }
