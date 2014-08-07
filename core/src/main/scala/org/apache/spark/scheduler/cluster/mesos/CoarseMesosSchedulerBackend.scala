@@ -34,7 +34,6 @@ import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.worker.CommandUtils
 import org.apache.spark.util.Utils
 
-
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
  * onto each Mesos node for the duration of the Spark job instead of relinquishing cores whenever
