@@ -44,6 +44,8 @@ import org.apache.spark.util.random.XORShiftRandom
 @Experimental
 class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
 
+  strategy.assertValid()
+
   /**
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
@@ -1465,10 +1467,14 @@ object DecisionTree extends Serializable with Logging {
 
 
     /*
-     * Ensure #bins is always greater than the categories. For multiclass classification,
-     * #bins should be greater than 2^(maxCategories - 1) - 1.
+     * Ensure numBins is always greater than the categories. For multiclass classification,
+     * numBins should be greater than 2^(maxCategories - 1) - 1.
      * It's a limitation of the current implementation but a reasonable trade-off since features
      * with large number of categories get favored over continuous features.
+     *
+     * This needs to be checked here instead of in Strategy since numBins can be determined
+     * by the number of training examples.
+     * TODO: Allow this case, where we simply will know nothing about some categories.
      */
     if (strategy.categoricalFeaturesInfo.size > 0) {
       val maxCategoriesForFeatures = strategy.categoricalFeaturesInfo.maxBy(_._2)._2
