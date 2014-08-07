@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
@@ -40,7 +41,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     .map { d => Utils.resolveURI(d) }
     .getOrElse { throw new IllegalArgumentException("Logging directory must be specified.") }
 
-  private val fs = Utils.getHadoopFileSystem(resolvedLogDir)
+  private val fs = Utils.getHadoopFileSystem(resolvedLogDir,
+    SparkHadoopUtil.get.newConfiguration(conf))
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTimeMs = -1L
