@@ -19,6 +19,7 @@ package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.mllib.stat.test.{ChiSquaredTest, ChiSquaredTestResult}
 import org.apache.spark.rdd.RDD
@@ -93,73 +94,46 @@ object Statistics {
 
   /**
    * :: Experimental ::
-   * Conduct the Chi-squared goodness of fit test of the observed data against the
+   * Conduct Pearson's chi-squared goodness of fit test of the observed data against the
    * expected distribution.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
-   * elements in each partition.
+   * Note: the two input Vectors need to have the same size.
    *
-   * @param observed RDD[Double] containing the observed counts.
-   * @param expected RDD[Double] containing the expected counts. If the observed total differs from
-   *                 the expected total, this RDD is rescaled to sum up to the observed total.
-   * @param method String specifying the method to use for the Chi-squared test.
-   *               Supported: `pearson` (default)
+   * @param observed Vector containing the observed categorical counts/relative frequencies.
+   * @param expected Vector containing the expected categorical counts/relative frequencies.
+   *                 `expected` is rescaled if the `expected` sum differs from the `observed` sum.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSquared(observed: RDD[Double],
-      expected: RDD[Double],
-      method: String): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(observed, expected, method)
-  }
+  def chiSqTest(observed: Vector,
+      expected: Vector): ChiSquaredTestResult = ChiSquaredTest.chiSquared(observed, expected)
 
   /**
    * :: Experimental ::
-   * Conduct the Chi-squared goodness of fit test of the observed data against the
-   * expected distribution.
+   * Conduct Pearson's chi-squared goodness of fit test of the observed data against the uniform
+   * distribution, with each category having an expected frequency of `1 / observed.size`.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
-   * elements in each partition.
-   *
-   * @param observed RDD[Double] containing the observed counts.
-   * @param expected RDD[Double] containing the expected counts. If the observed total differs from
-   *                 the expected total, this RDD is rescaled to sum up to the observed total.
+   * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSquared(observed: RDD[Double], expected: RDD[Double]): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(observed, expected)
-  }
+  def chiSqTest(observed: Vector): ChiSquaredTestResult = ChiSquaredTest.chiSquared(observed)
 
   /**
    * :: Experimental ::
-   * Conduct the Chi-squared independence test between the columns in the input matrix.
-   *
-   * @param counts RDD[Vector] containing observations with rows representing categories and columns
-   *               representing separate trials for which independence between trials is assessed.
-   * @param method String specifying the method to use for the Chi-squared test.
-   *               Supported: `pearson` (default)
-   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
-   *         the method used, and the null hypothesis.
+   * TODO
    */
   @Experimental
-  def chiSquared(counts: RDD[Vector], method: String): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquaredMatrix(counts, method)
-  }
+  def chiSqTest(counts: Matrix): ChiSquaredTestResult = ChiSquaredTest.chiSquaredMatrix(counts)
 
   /**
    * :: Experimental ::
-   * Conduct the Chi-squared independence test between the columns in the input matrix.
-   *
-   * @param counts RDD[Vector] containing observations with rows representing categories and columns
-   *               representing separate trials for which independence between trials is assessed.
-   * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
-   *         the method used, and the null hypothesis.
+   * TODO
    */
   @Experimental
-  def chiSquared(counts: RDD[Vector]): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquaredMatrix(counts)
+  def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSquaredTestResult] = {
+    ChiSquaredTest.chiSquaredFeatures(data)
   }
 }

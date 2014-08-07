@@ -17,17 +17,19 @@
 
 package org.apache.spark.mllib.stat.test
 
+import breeze.linalg.{DenseMatrix => BDM}
 import cern.jet.stat.Probability.chiSquareComplemented
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
  * Conduct the Chi-squared test for the input RDDs using the specified method.
  * Goodness-of-fit test is conducted on two RDD[Double]s, whereas test of independence is conducted
- * on an input of type RDD[Vector] in which independence between columns is assessed.
+ * on an input of type RDD[Vector] or RDD[LabeledPoint] in which independence between columns is
+ * assessed.
  *
  * Supported methods for goodness of fit: `pearson` (default)
  * Supported methods for independence: `pearson` (default)
@@ -39,7 +41,16 @@ import org.apache.spark.rdd.RDD
  */
 private[stat] object ChiSquaredTest extends Logging {
 
-  val PEARSON = "pearson"
+  /**
+   * @param name String name for the method.
+   * @param chiSqFunc Function for computing the statistic given the observed and expected counts.
+   */
+  case class Method(name: String, chiSqFunc: (Double, Double) => Double)
+
+  val PEARSON = new Method("pearson", (observed: Double, expected: Double) => {
+    val dev = observed - expected
+    dev * dev / expected
+  })
 
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
@@ -47,124 +58,146 @@ private[stat] object ChiSquaredTest extends Logging {
     val independence = Value("observations in each column are statistically independent.")
   }
 
-  val zeroExpectedError = new IllegalArgumentException("Chi square statistic cannot be computed"
-    + " for input RDD due to nonpositive entries in the expected contingency table.")
-
-  // delegator method for goodness of fit test
-  def chiSquared(observed: RDD[Double],
-      expected: RDD[Double],
-      method: String = PEARSON): ChiSquaredTestResult = {
-    method match {
-      case PEARSON => chiSquaredPearson(observed, expected)
+  private def methodFromString(methodName: String): Method = {
+    methodName match {
+      case PEARSON.name => PEARSON
       case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
     }
   }
 
-  // delegator method for independence test
-  def chiSquaredMatrix(counts: RDD[Vector], method: String = PEARSON): ChiSquaredTestResult = {
-    method match {
-      // Yates' correction doesn't really apply here
-      case PEARSON => chiSquaredPearson(counts)
-      case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
+  /**
+   * Conduct Pearson's independence test for each feature against the label across the input RDD.
+   *
+   * @param data RDD of LabeledPoints.
+   * @return Array[ChiSquareTestResult] containing
+   */
+  def chiSquaredFeatures(data: RDD[LabeledPoint],
+      methodName: String = PEARSON.name): Array[ChiSquaredTestResult] = {
+    val numCols = data.first().features.size
+    val results = new Array[ChiSquaredTestResult](numCols)
+    var labels = Array[Double]()
+    var col = 0
+    while (col < numCols) {
+      val featureVLabel = data.map(p => (p.label, p.features(col)))
+      // The following block of code can be cleaned up and made public as
+      // chiSquared(data: RDD[(V1, V2)])
+      val pairCounts = featureVLabel.countByValue()
+      if (labels.size == 0) {
+        // Do this only once since labels are invariant across features.
+        labels = pairCounts.keys.map(_._1).toArray
+      }
+      val featureValues = pairCounts.keys.map(_._2).toArray
+      val numCols = labels.size
+      val numRows = featureValues.size
+      val contingency = new BDM(numRows, numCols, new Array[Double](numRows * numCols))
+      for (((label, feature), count) <- pairCounts) {
+        val col = labels.indexOf(label)
+        val row = featureValues.indexOf(feature)
+        contingency(row, col) += count
+      }
+      results(col) = chiSquaredMatrix(Matrices.fromBreeze(contingency), methodName)
+      col += 1
     }
-  }
-
-  // Equation for computing Pearson's chi-squared statistic
-  private def pearson = (observed: Double, expected: Double) => {
-    val dev = observed - expected
-    dev * dev / expected
+    results
   }
 
   /*
    * Pearon's goodness of fit test. This can be easily made abstract to support other methods.
-   * Makes two passes over both input RDDs.
    */
-  private def chiSquaredPearson(observed: RDD[Double],
-      expected: RDD[Double]): ChiSquaredTestResult = {
+  def chiSquared(observed: Vector,
+      expected: Vector = Vectors.dense(Array[Double]()),
+      methodName: String = PEARSON.name): ChiSquaredTestResult = {
 
-    // compute the scaling factor and count for the input RDDs and check positivity in one pass
-    val observedStats = observed.stats()
-    if (observedStats.min < 0.0) {
-      throw new IllegalArgumentException("Values in observed must be nonnegative.")
-    }
-    val expectedStats = expected.stats()
-    if (expectedStats.min <= 0.0) {
-      throw new IllegalArgumentException("Values in expected must be positive.")
-    }
-    if (observedStats.count != expectedStats.count) {
+    // Validate input arguments
+    val method = methodFromString(methodName)
+    if (expected.size != 0 && observed.size != expected.size) {
       throw new IllegalArgumentException("observed and expected must be of the same size.")
     }
-
-    val expScaled = if (math.abs(observedStats.sum - expectedStats.sum) < 1e-7) {
-      // No scaling needed since both RDDs have the same total
-      expected
-    } else {
-      expected.map(_ * observedStats.sum / expectedStats.sum)
+    val size = observed.size
+    // Avoid calling toArray on input vectors to avoid memory blow up
+    // (esp if size = Int.MaxValue for a SparseVector).
+    // Check positivity and collect sums
+    var obsSum = 0.0
+    var expSum = if (expected.size == 0.0) 1.0 else 0.0
+    var i = 0
+    while (i < size) {
+      val obs = observed(i)
+      if (obs < 0.0) {
+        throw new IllegalArgumentException("Values in observed must be nonnegative.")
+      }
+      obsSum += obs
+      if (expected.size > 0) {
+        val exp = expected(i)
+        if (exp <= 0.0) {
+          throw new IllegalArgumentException("Values in expected must be positive.")
+        }
+        expSum += exp
+      }
+      i += 1
     }
 
-    // Second pass to compute chi-squared statistic
-    val statistic = observed.zip(expScaled).aggregate(0.0)({ case (sum, (obs, exp)) => {
-      sum + pearson(obs, exp)
-    }}, _ + _)
-    val df = observedStats.count - 1
+    // Determine the scaling factor for expected
+    val scale = if (math.abs(obsSum - expSum) < 1e-7) 1.0 else  obsSum / expSum
+    val getExpected: (Int) => Double = if (expected.size == 0) {
+      // Assume uniform distribution
+      if (scale == 1.0) _ => 1.0 / size else _ => scale / size
+    } else {
+      if (scale == 1.0) (i: Int) => expected(i) else (i: Int) => scale * expected(i)
+    }
+
+    // compute chi-squared statistic
+    var statistic = 0.0
+    i = 0
+    while (i < observed.size) {
+      val obs = observed(i)
+      if (obs != 0.0) {
+        statistic += method.chiSqFunc(obs, getExpected(i))
+      }
+    }
+    val df = size - 1
     val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, Array(df), statistic, PEARSON,
-      NullHypothesis.goodnessOfFit.toString)
+    new ChiSquaredTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.goodnessOfFit.toString)
   }
 
   /*
    * Pearon's independence test. This can be easily made abstract to support other methods.
-   * Makes two passes over the input RDD.
    */
-  private def chiSquaredPearson(counts: RDD[Vector]): ChiSquaredTestResult = {
+  def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSquaredTestResult = {
+    val method = methodFromString(methodName)
+    val numRows = counts.numRows
+    val numCols = counts.numCols
 
-    val numCols = counts.first.size
-
-    // first pass for collecting column sums
-    case class SumNCount(colSums: Array[Double], numRows: Long)
-
-    val result = counts.aggregate(new SumNCount(new Array[Double](numCols), 0L))(
-      (sumNCount, vector) => {
-        val arr = vector.toArray
-        // check that the counts are all non-negative and finite in this pass
-        if (!arr.forall(i => !i.isNaN && !i.isInfinite && i >= 0.0)) {
-          throw new IllegalArgumentException("Values in the input RDD must be nonnegative.")
-        }
-        new SumNCount((sumNCount.colSums, arr).zipped.map(_ + _), sumNCount.numRows + 1)
-      }, (sums1, sums2) => {
-        new SumNCount((sums1.colSums, sums2.colSums).zipped.map(_ + _),
-          sums1.numRows + sums2.numRows)
-      })
-
-    val colSums = result.colSums
-    if (!colSums.forall(_ > 0.0)) {
-      throw zeroExpectedError
+    // get row and column sums
+    val colSums = new Array[Double](numCols)
+    val rowSums = new Array[Double](numRows)
+    val colMajorArr = counts.toArray
+    var i = 0
+    while (i < colMajorArr.size) {
+      val elem = colMajorArr(i)
+      if (elem < 0.0) {
+        throw new IllegalArgumentException("Contingency table cannot contain negative entries.")
+      }
+      colSums(i / numRows) += elem
+      rowSums(i % numRows) += elem
+      i += 1
+    }
+    if (!colSums.forall(_ > 0.0) || !rowSums.forall(_ > 0.0)) {
+      throw new IllegalArgumentException("Chi square statistic cannot be computed for input matrix due to "
+        + "0.0 entries in the expected contingency table.")
     }
     val total = colSums.sum
 
-    // Second pass to compute chi-squared statistic
-    val statistic = counts.aggregate(0.0)(rowStatistic(colSums, total, pearson), _ + _)
-    val df = (numCols - 1) * (result.numRows - 1)
-    val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, Array(df), statistic, PEARSON,
-      NullHypothesis.independence.toString)
-  }
-
-  // returns function to be used as seqOp in the aggregate operation to collect statistic
-  private def rowStatistic(colSums: Array[Double],
-      total: Double,
-      chiSquared: (Double, Double) => Double) = {
-    (statistic: Double, vector: Vector) => {
-      val arr = vector.toArray
-      val rowSum = arr.sum
-      if (rowSum == 0.0) { // rowSum >= 0.0 as ensured by the nonnegative check
-        throw zeroExpectedError
-      }
-      (arr, colSums).zipped.foldLeft(statistic) { case (stat, (observed, colSum)) =>
-        val expected = rowSum * colSum / total
-        val r = stat + chiSquared(observed, expected)
-        r
-      }
+    // second pass to collect statistic
+    var statistic = 0.0
+    i = 0
+    while (i < colMajorArr.size) {
+      val expected = colSums(i / numRows) * rowSums(i % numRows) / total
+      statistic += method.chiSqFunc(colMajorArr(i), expected)
     }
+
+    // Second pass to compute chi-squared statistic
+    val df = (numCols - 1) * (numRows - 1)
+    val pValue = chiSquareComplemented(df, statistic)
+    new ChiSquaredTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
   }
 }

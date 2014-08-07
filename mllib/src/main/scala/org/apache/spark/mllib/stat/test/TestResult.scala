@@ -22,14 +22,26 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Trait for hypothesis test results.
+ * @tparam DF Return type of `degreesOfFreedom`
  */
 @Experimental
-trait TestResult {
+trait TestResult[DF] {
 
+  /**
+   *
+   */
   def pValue: Double
 
-  def degreesOfFreedom: Array[Long]
+  /**
+   *
+   * @return
+   */
+  def degreesOfFreedom: DF
 
+  /**
+   *
+   * @return
+   */
   def statistic: Double
 
   /**
@@ -39,6 +51,7 @@ trait TestResult {
    */
   override def toString: String = {
 
+    // String explaining what the p-value indicates.
     val pValueExplain = if (pValue <= 0.01) {
       "Very strong presumption against null hypothesis."
     } else if (0.01 < pValue && pValue <= 0.05) {
@@ -49,7 +62,7 @@ trait TestResult {
       "No presumption against null hypothesis."
     }
 
-    s"degrees of freedom = ${degreesOfFreedom.mkString} \n" +
+    s"degrees of freedom = ${degreesOfFreedom.toString} \n" +
     s"statistic = $statistic \n" +
     s"pValue = $pValue \n" + pValueExplain
   }
@@ -61,10 +74,10 @@ trait TestResult {
  */
 @Experimental
 case class ChiSquaredTestResult(override val pValue: Double,
-    override val degreesOfFreedom: Array[Long],
+    override val degreesOfFreedom: Int,
     override val statistic: Double,
     val method: String,
-    val nullHypothesis: String) extends TestResult {
+    val nullHypothesis: String) extends TestResult[Int] {
 
   override def toString: String = {
     "Chi squared test summary: \n" +
