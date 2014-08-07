@@ -50,23 +50,17 @@ class StandardScalerSuite extends FunSuite with LocalSparkContext {
     val standardizer2 = new StandardScaler()
     val standardizer3 = new StandardScaler(withMean = true, withStd = false)
 
-    withClue("Using a standardizer before fitting the model should throw exception.") {
-      intercept[IllegalStateException] {
-        data.map(standardizer1.transform)
-      }
-    }
+    val model1 = standardizer1.fit(dataRDD)
+    val model2 = standardizer2.fit(dataRDD)
+    val model3 = standardizer3.fit(dataRDD)
 
-    standardizer1.fit(dataRDD)
-    standardizer2.fit(dataRDD)
-    standardizer3.fit(dataRDD)
+    val data1 = data.map(model1.transform)
+    val data2 = data.map(model2.transform)
+    val data3 = data.map(model3.transform)
 
-    val data1 = data.map(standardizer1.transform)
-    val data2 = data.map(standardizer2.transform)
-    val data3 = data.map(standardizer3.transform)
-
-    val data1RDD = standardizer1.transform(dataRDD)
-    val data2RDD = standardizer2.transform(dataRDD)
-    val data3RDD = standardizer3.transform(dataRDD)
+    val data1RDD = model1.transform(dataRDD)
+    val data2RDD = model2.transform(dataRDD)
+    val data3RDD = model3.transform(dataRDD)
 
     val summary = computeSummary(dataRDD)
     val summary1 = computeSummary(data1RDD)
@@ -129,25 +123,25 @@ class StandardScalerSuite extends FunSuite with LocalSparkContext {
     val standardizer2 = new StandardScaler()
     val standardizer3 = new StandardScaler(withMean = true, withStd = false)
 
-    standardizer1.fit(dataRDD)
-    standardizer2.fit(dataRDD)
-    standardizer3.fit(dataRDD)
+    val model1 = standardizer1.fit(dataRDD)
+    val model2 = standardizer2.fit(dataRDD)
+    val model3 = standardizer3.fit(dataRDD)
 
-    val data2 = data.map(standardizer2.transform)
+    val data2 = data.map(model2.transform)
 
     withClue("Standardization with mean can not be applied on sparse input.") {
       intercept[IllegalArgumentException] {
-        data.map(standardizer1.transform)
+        data.map(model1.transform)
       }
     }
 
     withClue("Standardization with mean can not be applied on sparse input.") {
       intercept[IllegalArgumentException] {
-        data.map(standardizer3.transform)
+        data.map(model3.transform)
       }
     }
 
-    val data2RDD = standardizer2.transform(dataRDD)
+    val data2RDD = model2.transform(dataRDD)
 
     val summary2 = computeSummary(data2RDD)
 
@@ -181,13 +175,13 @@ class StandardScalerSuite extends FunSuite with LocalSparkContext {
     val standardizer2 = new StandardScaler(withMean = true, withStd = false)
     val standardizer3 = new StandardScaler(withMean = false, withStd = true)
 
-    standardizer1.fit(dataRDD)
-    standardizer2.fit(dataRDD)
-    standardizer3.fit(dataRDD)
+    val model1 = standardizer1.fit(dataRDD)
+    val model2 = standardizer2.fit(dataRDD)
+    val model3 = standardizer3.fit(dataRDD)
 
-    val data1 = data.map(standardizer1.transform)
-    val data2 = data.map(standardizer2.transform)
-    val data3 = data.map(standardizer3.transform)
+    val data1 = data.map(model1.transform)
+    val data2 = data.map(model2.transform)
+    val data3 = data.map(model3.transform)
 
     assert(data1.forall(_.toArray.forall(_ == 0.0)),
       "The variance is zero, so the transformed result should be 0.0")

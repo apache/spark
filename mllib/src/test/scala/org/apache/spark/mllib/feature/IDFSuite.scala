@@ -36,18 +36,12 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     val m = localTermFrequencies.size
     val termFrequencies = sc.parallelize(localTermFrequencies, 2)
     val idf = new IDF
-    intercept[IllegalStateException] {
-      idf.idf()
-    }
-    intercept[IllegalStateException] {
-      idf.transform(termFrequencies)
-    }
-    idf.fit(termFrequencies)
+    val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       math.log((m.toDouble + 1.0) / (x + 1.0))
     })
-    assert(idf.idf() ~== expected absTol 1e-12)
-    val tfidf = idf.transform(termFrequencies).cache().zipWithIndex().map(_.swap).collectAsMap()
+    assert(model.idf ~== expected absTol 1e-12)
+    val tfidf = model.transform(termFrequencies).cache().zipWithIndex().map(_.swap).collectAsMap()
     assert(tfidf.size === 3)
     val tfidf0 = tfidf(0L).asInstanceOf[SparseVector]
     assert(tfidf0.indices === Array(1, 3))
