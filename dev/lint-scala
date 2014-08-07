@@ -17,14 +17,7 @@
 # limitations under the License.
 #
 
-#
-# Shell script for starting BeeLine
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
-# Enter posix mode for bash
-set -o posix
-
-# Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
-
-CLASS="org.apache.hive.beeline.BeeLine"
-exec "$FWDIR/bin/spark-class" $CLASS "$@"
+"$SCRIPT_DIR/scalastyle"

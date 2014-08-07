@@ -60,9 +60,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    set("javax.jdo.option.ConnectionURL",
+    setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    set("hive.metastore.warehouse.dir", warehousePath)
+    setConf("hive.metastore.warehouse.dir", warehousePath)
   }
 
   configure() // Must be called before initializing the catalog below.
@@ -76,7 +76,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
   // Change the default SQL dialect to HiveQL
-  override private[spark] def dialect: String = get(SQLConf.DIALECT, "hiveql")
+  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -224,15 +224,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
   @transient protected[hive] lazy val sessionState = {
     val ss = new SessionState(hiveconf)
-    set(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
     ss
   }
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
-  override def set(key: String, value: String): Unit = {
-    super.set(key, value)
+  override def setConf(key: String, value: String): Unit = {
+    super.setConf(key, value)
     runSqlHive(s"SET $key=$value")
   }
 

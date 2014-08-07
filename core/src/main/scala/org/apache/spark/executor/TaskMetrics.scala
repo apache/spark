@@ -190,10 +190,10 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
    */
-  var shuffleBytesWritten: Long = _
+  @volatile var shuffleBytesWritten: Long = _
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  var shuffleWriteTime: Long = _
+  @volatile var shuffleWriteTime: Long = _
 }
