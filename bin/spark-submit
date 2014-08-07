@@ -23,11 +23,6 @@ ORIG_ARGS=("$@")
 # Load utility functions
 . "$SPARK_HOME/bin/utils.sh"
 
-# For client mode, the driver will be launched in the JVM that launches
-# SparkSubmit, so we need to handle the class paths, java options, and
-# memory pre-emptively in bash. Otherwise, it will be too late by the
-# time the JVM has started.
-
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
     DEPLOY_MODE=$2
@@ -46,32 +41,64 @@ while (($#)); do
 done
 
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
-PROPERTIES_FILE=${PROPERTIES_FILE:-"$SPARK_HOME/conf/spark-defaults.conf"}
+DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
+PROPERTIES_FILE=${PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
-if [ $DEPLOY_MODE == "client" ]; then
-  # Parse the default properties file here for spark.driver.* configs
-  if [ -f "$PROPERTIES_FILE" ]; then
-    echo "Using properties file $PROPERTIES_FILE." 1>&2
-    # This exports the value of the given key into JAVA_PROPERTY_VALUE
-    parse_java_property "spark.driver.memory";            DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
-    parse_java_property "spark.driver.extraJavaOptions";  DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
-    parse_java_property "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
-    parse_java_property "spark.driver.extraLibraryPath";  DRIVER_EXTRA_LIBRARY_PATH="$JAVA_PROPERTY_VALUE"
-    if [ -n "$DRIVER_EXTRA_JAVA_OPTS" ]; then
-      export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
-    fi
-    if [ -n "$DRIVER_EXTRA_CLASSPATH" ]; then
-      export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
-    fi
-    if [ -n "$DRIVER_EXTRA_LIBRARY_PATH" ]; then
-      export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
-    fi
-  else
-    echo "Warning: properties file $PROPERTIES_FILE does not exist!" 1>&2
+unset DRIVER_EXTRA_JAVA_OPTIONS
+unset EXECUTOR_EXTRA_JAVA_OPTIONS
+
+# A few Spark configs must be parsed early on before launching the JVM:
+#
+#   [spark.driver.extra*]
+#     These configs encode java options, class paths, and library paths
+#     needed to launch the JVM if we are running Spark in client mode
+#
+#   [spark.*.extraJavaOptions]
+#     The escaped characters in these configs must be preserved for
+#     splitting the arguments in Java later. For these configs, we
+#     export the raw values as environment variables.
+#
+if [[ -f "$PROPERTIES_FILE" ]]; then
+  echo "Using properties file $PROPERTIES_FILE." 1>&2
+  # This exports the value of the given key into JAVA_PROPERTY_VALUE
+  parse_java_property "spark.driver.memory"
+  DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
+  parse_java_property "spark.driver.extraLibraryPath"
+  DRIVER_EXTRA_LIBRARY_PATH="$JAVA_PROPERTY_VALUE"
+  parse_java_property "spark.driver.extraClassPath"
+  DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
+  parse_java_property "spark.driver.extraJavaOptions"
+  DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
+  parse_java_property "spark.executor.extraJavaOptions"
+  EXECUTOR_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
+  if [[ -n "DRIVER_EXTRA_JAVA_OPTS" ]]; then
+    export DRIVER_EXTRA_JAVA_OPTS
+  fi
+  if [[ -n "EXECUTOR_EXTRA_JAVA_OPTS" ]]; then
+    export EXECUTOR_EXTRA_JAVA_OPTS
+  fi
+elif [[ "$PROPERTIES_FILE" != "$DEFAULT_PROPERTIES_FILE" ]]; then
+  echo "Warning: properties file $PROPERTIES_FILE does not exist." 1>&2
+fi
+
+# For client mode, the driver will be launched in the JVM that launches
+# SparkSubmit, so we need to handle the class paths, java options, and
+# memory pre-emptively in bash. Otherwise, it will be too late by the
+# time the JVM has started.
+
+if [[ $DEPLOY_MODE == "client" ]]; then
+  if [[ -n "$DRIVER_EXTRA_JAVA_OPTS" ]]; then
+    export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
+  fi
+  if [[ -n "$DRIVER_EXTRA_CLASSPATH" ]]; then
+    export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
+  fi
+  if [[ -n "$DRIVER_EXTRA_LIBRARY_PATH" ]]; then
+    export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
   fi
   # Favor command line memory over config memory
   DRIVER_MEMORY=${DRIVER_MEMORY:-"$DRIVER_MEMORY_CONF"}
-  if [ -n "$DRIVER_MEMORY" ]; then
+  if [[ -n "$DRIVER_MEMORY" ]]; then
     export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
   fi
 fi
