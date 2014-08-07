@@ -213,7 +213,8 @@ class JsonSuite extends QueryTest {
       StructField("arrayOfStruct", ArrayType(
         StructType(
           StructField("field1", BooleanType, true) ::
-          StructField("field2", StringType, true) :: Nil)), true) ::
+          StructField("field2", StringType, true) ::
+          StructField("field3", StringType, true) :: Nil)), true) ::
       StructField("struct", StructType(
       StructField("field1", BooleanType, true) ::
       StructField("field2", DecimalType, true) :: Nil), true) ::
@@ -264,7 +265,9 @@ class JsonSuite extends QueryTest {
     // Access elements of an array of structs.
     checkAnswer(
       sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2] from jsonTable"),
-      (true :: "str1" :: Nil, false :: null :: Nil, null) :: Nil
+      (true :: "str1" :: null :: Nil,
+      false :: null :: null :: Nil,
+      null :: null :: null :: Nil) :: Nil
     )
 
     // Access a struct and fields inside of it.
