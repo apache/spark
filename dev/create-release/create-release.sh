@@ -35,6 +35,12 @@ RELEASE_VERSION=${RELEASE_VERSION:-1.0.0}
 RC_NAME=${RC_NAME:-rc2}
 USER_NAME=${USER_NAME:-pwendell}
 
+if [ -z "$JAVA_HOME" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+JAVA_7_HOME=${JAVA_7_HOME:-$JAVA_HOME}
+
 set -e
 
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
@@ -130,7 +136,8 @@ scp spark-* \
 cd spark
 sbt/sbt clean
 cd docs
-PRODUCTION=1 jekyll build
+# Compile docs with Java 7 to use nicer format
+JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 ssh $USER_NAME@people.apache.org \
