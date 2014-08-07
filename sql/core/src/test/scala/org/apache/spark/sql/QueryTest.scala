@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.FunSuite
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
-class QueryTest extends PlanTest {
+class QueryTest extends FunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
