@@ -27,6 +27,7 @@ private[spark] class MessageChunkHeader(
     val totalSize: Int,
     val chunkSize: Int,
     val other: Int,
+    val hasError: Boolean,
     val securityNeg: Int,
     val address: InetSocketAddress) {
   lazy val buffer = {
@@ -41,6 +42,7 @@ private[spark] class MessageChunkHeader(
       putInt(totalSize).
       putInt(chunkSize).
       putInt(other).
+      put(if (hasError) 1.asInstanceOf[Byte] else 0.asInstanceOf[Byte]).
       putInt(securityNeg).
       putInt(ip.size).
       put(ip).
@@ -56,7 +58,7 @@ private[spark] class MessageChunkHeader(
 
 
 private[spark] object MessageChunkHeader {
-  val HEADER_SIZE = 44
+  val HEADER_SIZE = 45
 
   def create(buffer: ByteBuffer): MessageChunkHeader = {
     if (buffer.remaining != HEADER_SIZE) {
@@ -67,13 +69,14 @@ private[spark] object MessageChunkHeader {
     val totalSize = buffer.getInt()
     val chunkSize = buffer.getInt()
     val other = buffer.getInt()
+    val hasError = buffer.get() != 0
     val securityNeg = buffer.getInt()
     val ipSize = buffer.getInt()
     val ipBytes = new Array[Byte](ipSize)
     buffer.get(ipBytes)
     val ip = InetAddress.getByAddress(ipBytes)
     val port = buffer.getInt()
-    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, securityNeg,
+    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, hasError, securityNeg,
       new InetSocketAddress(ip, port))
   }
 }

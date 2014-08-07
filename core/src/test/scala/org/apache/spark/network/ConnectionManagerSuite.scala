@@ -17,6 +17,7 @@
 
 package org.apache.spark.network
 
+import java.io.IOException
 import java.nio._
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -25,6 +26,7 @@ import org.scalatest.FunSuite
 import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Try
 
 /**
   * Test the ConnectionManager with various security settings.
@@ -46,7 +48,7 @@ class ConnectionManagerSuite extends FunSuite {
     buffer.flip
 
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(manager.id, bufferMessage)
+    Await.result(manager.sendMessageReliably(manager.id, bufferMessage), 10 seconds)
 
     assert(receivedMessage == true)
 
@@ -79,7 +81,7 @@ class ConnectionManagerSuite extends FunSuite {
 
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-      manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+      Await.result(manager.sendMessageReliably(managerServer.id, bufferMessage), 10 seconds)
     })
 
     assert(numReceivedServerMessages == 10)
@@ -118,7 +120,10 @@ class ConnectionManagerSuite extends FunSuite {
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
     buffer.flip
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+    // Expect managerServer to close connection, which we'll report as an error:
+    intercept[IOException] {
+      Await.result(manager.sendMessageReliably(managerServer.id, bufferMessage), 10 seconds)
+    }
 
     assert(numReceivedServerMessages == 0)
     assert(numReceivedMessages == 0)
@@ -163,6 +168,8 @@ class ConnectionManagerSuite extends FunSuite {
         val g = Await.result(f, 1 second)
         assert(false)
       } catch {
+        case i: IOException =>
+          assert(true)
         case e: TimeoutException => {
           // we should timeout here since the client can't do the negotiation
           assert(true)
@@ -209,7 +216,6 @@ class ConnectionManagerSuite extends FunSuite {
     }).foreach(f => {
       try {
         val g = Await.result(f, 1 second)
-        if (!g.isDefined) assert(false) else assert(true)
       } catch {
         case e: Exception => {
           assert(false)
@@ -223,7 +229,31 @@ class ConnectionManagerSuite extends FunSuite {
     managerServer.stop()
   }
 
+  test("Ack error message") {
+    val conf = new SparkConf
+    conf.set("spark.authenticate", "false")
+    val securityManager = new SecurityManager(conf)
+    val manager = new ConnectionManager(0, conf, securityManager)
+    val managerServer = new ConnectionManager(0, conf, securityManager)
+    managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      throw new Exception
+    })
 
+    val size = 10 * 1024 * 1024
+    val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
+    buffer.flip
+    val bufferMessage = Message.createBufferMessage(buffer)
+
+    val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
+
+    intercept[IOException] {
+      Await.result(future, 1 second)
+    }
+
+    manager.stop()
+    managerServer.stop()
+
+  }
 
 }
 

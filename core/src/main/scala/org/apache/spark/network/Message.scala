@@ -28,6 +28,7 @@ private[spark] abstract class Message(val typ: Long, val id: Int) {
   var startTime = -1L
   var finishTime = -1L
   var isSecurityNeg = false
+  var hasError = false
 
   def size: Int
 
@@ -87,6 +88,7 @@ private[spark] object Message {
       case BUFFER_MESSAGE => new BufferMessage(header.id,
         ArrayBuffer(ByteBuffer.allocate(header.totalSize)), header.other)
     }
+    newMessage.hasError = header.hasError
     newMessage.senderAddress = header.address
     newMessage
   }

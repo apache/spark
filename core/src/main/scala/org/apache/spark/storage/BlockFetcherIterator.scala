@@ -22,6 +22,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
+import scala.util.{Failure, Success}
 
 import io.netty.buffer.ByteBuf
 
@@ -118,8 +119,8 @@ object BlockFetcherIterator {
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
-      future.onSuccess {
-        case Some(message) => {
+      future.onComplete {
+        case Success(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
           for (blockMessage <- blockMessageArray) {
@@ -135,8 +136,8 @@ object BlockFetcherIterator {
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
-        case None => {
-          logError("Could not get block(s) from " + cmId)
+        case Failure(exception) => {
+          logError("Could not get block(s) from " + cmId, exception)
           for ((blockId, size) <- req.blocks) {
             results.put(new FetchResult(blockId, -1, null))
           }
