@@ -41,9 +41,6 @@ import org.apache.spark.util.Utils
 
 class FlumePollingStreamSuite extends TestSuiteBase {
 
-  val random = new Random()
-  /** Return a port in the ephemeral range. */
-  def getTestPort = random.nextInt(16382) + 49152
   val batchCount = 5
   val eventsPerBatch = 100
   val totalEventsPerChannel = batchCount * eventsPerBatch
@@ -80,15 +77,6 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
   private def testFlumePolling(): Unit = {
     val testPort = TestUtils.findFreePort()
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)),
-        StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
-    outputStream.register()
 
     // Start the channel and sink.
     val context = new Context()
@@ -100,10 +88,19 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
     val sink = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink, context)
     sink.setChannel(channel)
     sink.start()
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(conf, batchDuration)
+    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
+      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", sink.getPort())),
+        StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    outputStream.register()
     ssc.start()
 
     writeAndVerify(Seq(channel), ssc, outputBuffer)
@@ -113,19 +110,6 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   private def testFlumePollingMultipleHost(): Unit = {
-    val testPort = TestUtils.findFreePort()
-    val testPort2 = TestUtils.findFreePort()
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val addresses = Seq(testPort, testPort2).map(new InetSocketAddress("localhost", _))
-    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
-        eventsPerBatch, 5)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
-    outputStream.register()
-
     // Start the channel and sink.
     val context = new Context()
     context.put("capacity", channelCapacity.toString)
@@ -139,17 +123,29 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
     val sink = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink, context)
     sink.setChannel(channel)
     sink.start()
 
     val sink2 = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort2))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink2, context)
     sink2.setChannel(channel2)
     sink2.start()
+
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(conf, batchDuration)
+    val addresses = Seq(sink.getPort(), sink2.getPort()).map(new InetSocketAddress("localhost", _))
+    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
+      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
+        eventsPerBatch, 5)
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    outputStream.register()
+
     ssc.start()
     writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
     assertChannelIsEmpty(channel)
