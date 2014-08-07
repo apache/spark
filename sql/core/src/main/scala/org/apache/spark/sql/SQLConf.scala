@@ -69,7 +69,7 @@ trait SQLConf {
   private[spark] def dialect: String = getConf(DIALECT, "sql")
 
   /** When true tables cached using the in-memory columnar caching will be compressed. */
-  private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "false").toBoolean
+  private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "true").toBoolean
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS, "200").toInt
