@@ -35,7 +35,6 @@ import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.worker.CommandUtils
 import org.apache.spark.util.Utils
 
-
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
