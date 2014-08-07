@@ -148,7 +148,6 @@ def manager():
                         continue
                     raise
 
-
                 # Launch a worker process
                 try:
                     pid = os.fork()
