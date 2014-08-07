@@ -112,9 +112,9 @@ if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
 fi
 
-# Escape JAVA_OPTS properly to handle whitespace, double quotes and backslashes
-# This exports the escaped java options into ESCAPED_JAVA_OPTS
-escape_java_options "$JAVA_OPTS"
+# Split JAVA_OPTS properly to handle whitespace, double quotes and backslashes
+# This exports the split java options into SPLIT_JAVA_OPTS
+split_java_options "$JAVA_OPTS"
 
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
@@ -159,10 +159,10 @@ export CLASSPATH
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   # Put quotes around system properties in case they contain spaces
   # This exports the resulting list of java opts into QUOTED_JAVA_OPTS
-  quote_java_property "${ESCAPED_JAVA_OPTS[@]}"
+  quote_java_property "${SPLIT_JAVA_OPTS[@]}"
   echo -n "Spark Command: " 1>&2
   echo "$RUNNER" -cp "$CLASSPATH" "${QUOTED_JAVA_OPTS[@]}" "$@" 1>&2
   echo -e "========================================\n" 1>&2
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" "${ESCAPED_JAVA_OPTS[@]}" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" "${SPLIT_JAVA_OPTS[@]}" "$@"

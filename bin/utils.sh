@@ -35,12 +35,12 @@ parse_java_property() {
   export JAVA_PROPERTY_VALUE
 }
 
-# Properly escape java options, dealing with whitespace, double quotes and backslashes.
-# This accepts a string and returns the escaped list through ESCAPED_JAVA_OPTS.
-escape_java_options() {
-  ESCAPED_JAVA_OPTS=() # return value
-  option_buffer=""     # buffer for collecting parts of an option
-  opened_quotes=0      # whether we are expecting a closing double quotes
+# Properly split java options, dealing with whitespace, double quotes and backslashes.
+# This accepts a string and returns the resulting list through SPLIT_JAVA_OPTS.
+split_java_options() {
+  SPLIT_JAVA_OPTS=()  # return value
+  option_buffer=""    # buffer for collecting parts of an option
+  opened_quotes=0     # whether we are expecting a closing double quotes
   for word in $1; do
     contains_quote=$(echo "$word" | sed "s/\\\\\"//g" | grep "\"")
     if [[ -n "$contains_quote" ]]; then
@@ -49,7 +49,7 @@ escape_java_options() {
     fi
     if [[ $opened_quotes == 0 ]]; then
       # Remove all non-escaped quotes around the value
-      ESCAPED_JAVA_OPTS+=("$(
+      SPLIT_JAVA_OPTS+=("$(
         echo "$option_buffer $word" | \
         sed "s/^[[:space:]]*//" | \
         sed "s/\([^\\]\)\"/\1/g" | \
@@ -66,7 +66,7 @@ escape_java_options() {
     echo "Java options parse error! Expecting closing double quotes." 1>&2
     exit 1
   fi
-  export ESCAPED_JAVA_OPTS
+  export SPLIT_JAVA_OPTS
 }
 
 # Put double quotes around each of the given java options that is a system property.
