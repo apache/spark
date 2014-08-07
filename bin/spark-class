@@ -75,8 +75,10 @@ case "$1" in
 
   # Spark submit uses SPARK_SUBMIT_OPTS and SPARK_JAVA_OPTS
     'org.apache.spark.deploy.SparkSubmit')
-    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_SUBMIT_OPTS \
-      -Djava.library.path=$SPARK_SUBMIT_LIBRARY_PATH"
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_SUBMIT_OPTS"
+    if [ -n "$SPARK_SUBMIT_LIBRARY_PATH" ]; then
+      OUR_JAVA_OPTS="$OUT_JAVA_OPTS -Djava.library.path=$SPARK_SUBMIT_LIBRARY_PATH"
+    fi
     OUR_JAVA_MEM=${SPARK_DRIVER_MEMORY:-$DEFAULT_MEM}
     ;;
 

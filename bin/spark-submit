@@ -68,9 +68,15 @@ if [ $DEPLOY_MODE == "client" ]; then
     parse_config "spark.driver.extraClassPath";    DRIVER_EXTRA_CLASSPATH="$result"
     parse_config "spark.driver.extraLibraryPath";  DRIVER_EXTRA_LIBRARY_PATH="$result"
 
-    export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
-    export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
-    export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
+    if [ -n "$DRIVER_EXTRA_JAVA_OPTS" ]; then
+      export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS $DRIVER_EXTRA_JAVA_OPTS"
+    fi
+    if [ -n "$DRIVER_EXTRA_CLASSPATH" ]; then
+      export SPARK_SUBMIT_CLASSPATH="$SPARK_SUBMIT_CLASSPATH:$DRIVER_EXTRA_CLASSPATH"
+    fi
+    if [ -n "$DRIVER_EXTRA_LIBRARY_PATH" ]; then
+      export SPARK_SUBMIT_LIBRARY_PATH="$SPARK_SUBMIT_LIBRARY_PATH:$DRIVER_EXTRA_LIBRARY_PATH"
+    fi
   else
     echo "Warning: properties file $PROPERTIES_FILE does not exist!" 1>&2
   fi
