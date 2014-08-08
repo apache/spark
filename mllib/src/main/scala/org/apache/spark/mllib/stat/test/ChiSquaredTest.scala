@@ -74,9 +74,9 @@ private[stat] object ChiSqTest extends Logging {
    * Returns an array containing the ChiSquaredTestResult for every feature against the label.
    */
   def chiSquaredFeatures(data: RDD[LabeledPoint],
-      methodName: String = PEARSON.name): Array[ChiSquaredTestResult] = {
+      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
     val numCols = data.first().features.size
-    val results = new Array[ChiSquaredTestResult](numCols)
+    val results = new Array[ChiSqTestResult](numCols)
     var labels = Array[Double]()
     // At most 100 columns at a time
     val batchSize = 100
@@ -120,7 +120,7 @@ private[stat] object ChiSqTest extends Logging {
    */
   def chiSquared(observed: Vector,
       expected: Vector = Vectors.dense(Array[Double]()),
-      methodName: String = PEARSON.name): ChiSquaredTestResult = {
+      methodName: String = PEARSON.name): ChiSqTestResult = {
 
     // Validate input arguments
     val method = methodFromString(methodName)
@@ -171,15 +171,14 @@ private[stat] object ChiSqTest extends Logging {
     }
     val df = size - 1
     val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, df, statistic, PEARSON.name,
-      NullHypothesis.goodnessOfFit.toString)
+    new ChiSqTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.goodnessOfFit.toString)
   }
 
   /*
    * Pearon's independence test on the input contingency matrix.
    * TODO: optimize for SparseMatrix when it becomes supported.
    */
-  def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSquaredTestResult = {
+  def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSqTestResult = {
     val method = methodFromString(methodName)
     val numRows = counts.numRows
     val numCols = counts.numCols
@@ -216,7 +215,6 @@ private[stat] object ChiSqTest extends Logging {
     // Second pass to compute chi-squared statistic
     val df = (numCols - 1) * (numRows - 1)
     val pValue = chiSquareComplemented(df, statistic)
-    new ChiSquaredTestResult(pValue, df, statistic, methodName,
-      NullHypothesis.independence.toString)
+    new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
   }
 }

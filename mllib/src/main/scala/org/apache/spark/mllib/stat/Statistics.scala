@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
-import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSquaredTestResult}
+import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -108,7 +108,7 @@ object Statistics {
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(observed: Vector, expected: Vector): ChiSquaredTestResult = {
+  def chiSqTest(observed: Vector, expected: Vector): ChiSqTestResult = {
     ChiSqTest.chiSquared(observed, expected)
   }
 
@@ -124,7 +124,7 @@ object Statistics {
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(observed: Vector): ChiSquaredTestResult = ChiSqTest.chiSquared(observed)
+  def chiSqTest(observed: Vector): ChiSqTestResult = ChiSqTest.chiSquared(observed)
 
   /**
    * :: Experimental ::
@@ -136,7 +136,7 @@ object Statistics {
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(observed: Matrix): ChiSquaredTestResult = ChiSqTest.chiSquaredMatrix(observed)
+  def chiSqTest(observed: Matrix): ChiSqTestResult = ChiSqTest.chiSquaredMatrix(observed)
 
   /**
    * :: Experimental ::
@@ -150,7 +150,7 @@ object Statistics {
    *         The order of the elements in the returned array reflects the order of input features.
    */
   @Experimental
-  def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSquaredTestResult] = {
+  def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSqTestResult] = {
     ChiSqTest.chiSquaredFeatures(data)
   }
 }
