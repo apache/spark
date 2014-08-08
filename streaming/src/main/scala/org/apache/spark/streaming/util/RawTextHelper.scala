@@ -103,7 +103,7 @@ object RawTextHelper {
     for(i <- 0 to 1) {
       sc.parallelize(1 to 200000, 1000)
         .map(_ % 1331).map(_.toString)
-        .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)
+        .mapPartitions(splitAndCountPartitions).reduceByKey((x: Long, y: Long) => x + y, 10)
         .count()
     }
   }

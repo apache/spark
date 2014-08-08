@@ -285,7 +285,7 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] =
-    map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    map(x => (x, null.asInstanceOf[T])).reduceByKey((x: T, y: T) => x, numPartitions).map(_._1)
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.

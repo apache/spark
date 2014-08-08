@@ -233,7 +233,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
+  @deprecated("Use reduceByKey(func: (V, V) ⇒ V, partitioner: Partitioner)", "1.0.0")
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
+    reduceByKey(func, partitioner)
+  }
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce.
+   */
+  def reduceByKey(func: (V, V) => V, partitioner: Partitioner): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, partitioner)
   }
 
@@ -380,7 +390,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
    */
   def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
-    reduceByKey(new HashPartitioner(numPartitions), func)
+    reduceByKey(func, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -489,7 +499,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * parallelism level.
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
-    reduceByKey(defaultPartitioner(self), func)
+    reduceByKey(func, defaultPartitioner(self))
   }
 
   /**

@@ -267,7 +267,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
       if (!ssc.sparkContext.isLocal) {
-        ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+        ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey((x: Int, y: Int) => x + y, 20).collect()
       }
 
       // Distribute the receivers and start them
