@@ -87,7 +87,8 @@ class KryoSerializer(conf: SparkConf)
         reg.registerClasses(kryo)
       }
     } catch {
-      case e: Exception => logError("Failed to run spark.kryo.registrator", e)
+      case e: Exception => throw
+        new SparkException("Failed to run spark.kryo.registrator", e)
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
