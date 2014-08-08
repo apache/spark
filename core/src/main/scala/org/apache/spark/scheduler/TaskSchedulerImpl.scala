@@ -151,7 +151,9 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def postStartHook() {
-    waitBackendReady()
+    while (!backend.isReady()) {
+      Thread.sleep(100)
+    }
   }
 
   override def submitTasks(taskSet: TaskSet) {
@@ -480,17 +482,6 @@ private[spark] class TaskSchedulerImpl(
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
-
-  private def waitBackendReady(): Unit = {
-    if (backend.isReady) {
-      return
-    }
-    while (!backend.isReady) {
-      synchronized {
-        this.wait(100)
-      }
-    }
-  }
 }
 
 

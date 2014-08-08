@@ -27,13 +27,8 @@ import scala.collection.mutable.ArrayBuffer
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends YarnSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
-
-  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-    ready = false
-  }
 
   var client: Client = null
   var appId: ApplicationId = null
@@ -84,7 +79,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedExecutors.set(args.numExecutors)
+    totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()

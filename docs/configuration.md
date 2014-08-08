@@ -832,7 +832,8 @@ Apart from these, the following properties are also available, and may be useful
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of executors has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code>. Only valid when using YARN
+    for scheduling.
   </td>
 </tr>
 <tr>
@@ -840,7 +841,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>30000</td>
   <td>
     Maximum amount of time to wait for executors to register before scheduling begins
-    (in milliseconds).  
+    (in milliseconds). Only valid when using YARN for scheduling.
   </td>
 </tr>
 </table>
