@@ -103,6 +103,23 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("project partitioning and non-partitioning columns") {
+    checkAnswer(
+      sql("SELECT stringField, p, count(intField) " +
+        "FROM partitioned_parquet GROUP BY p, stringField"),
+      ("part-1", 1, 10) ::
+      ("part-2", 2, 10) ::
+      ("part-3", 3, 10) ::
+      ("part-4", 4, 10) ::
+      ("part-5", 5, 10) ::
+      ("part-6", 6, 10) ::
+      ("part-7", 7, 10) ::
+      ("part-8", 8, 10) ::
+      ("part-9", 9, 10) ::
+      ("part-10", 10, 10) :: Nil
+    )
+  }
+
   test("simple count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM partitioned_parquet"),

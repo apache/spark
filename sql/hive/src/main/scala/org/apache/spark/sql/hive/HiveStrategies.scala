@@ -45,6 +45,9 @@ private[hive] trait HiveStrategies {
    *
    * TODO: Much of this logic is duplicated in HiveTableScan.  Ideally we would do some refactoring
    * but since this is after the code freeze for 1.1 all logic is here to minimize disruption.
+   *
+   * Other issues:
+   *  - Much of this logic assumes case insensitive resolution.
    */
   @Experimental
   object ParquetConversion extends Strategy {
@@ -60,8 +63,14 @@ private[hive] trait HiveStrategies {
           })
     }
 
-    implicit class PhysicalPlanHacks(s: SparkPlan) {
-      def fakeOutput(newOutput: Seq[Attribute]) = OutputFaker(newOutput, s)
+    implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
+      def fakeOutput(newOutput: Seq[Attribute]) =
+        OutputFaker(
+          originalPlan.output.map(a =>
+            newOutput.find(a.name.toLowerCase == _.name.toLowerCase)
+              .getOrElse(
+                sys.error(s"Can't find attribute $a to fake in set ${newOutput.mkString(",")}"))),
+          originalPlan)
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
