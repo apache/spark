@@ -68,6 +68,11 @@ while (($#)); do
       THRIFT_SERVER_ARGS+=($1); shift
       THRIFT_SERVER_ARGS+=($1); shift
       ;;
+      
+    --driver-java-options)
+      shift;
+      export SPARK_SUBMIT_OPTS=$1; shift
+      ;;
 
     *)
       SUBMISSION_ARGS+=($1); shift
