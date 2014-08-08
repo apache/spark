@@ -86,11 +86,16 @@ if [[ -n "$SPARK_TESTING" ]]; then
   exit
 fi
 
+source $FWDIR/bin/utils.sh
+
 # If a python file is provided, directly run spark-submit.
 if [[ "$1" =~ \.py$ ]]; then
   echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
   echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
-  exec $FWDIR/bin/spark-submit "$@"
+  primary=$1
+  shift
+  gatherSparkSubmitOpts $@
+  exec $FWDIR/bin/spark-submit ${SUBMISSION_OPTS[@]} $primary ${APPLICATION_OPTS[@]}
 else
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
