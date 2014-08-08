@@ -57,7 +57,7 @@
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
-      <version>0.7</version>
+      <version>0.8.1</version>
       <exclusions>
         <!-- This is included as a compile-scoped dependency by jtransforms, which is
              a dependency of breeze. -->
