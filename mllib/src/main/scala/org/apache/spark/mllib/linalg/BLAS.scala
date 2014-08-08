@@ -17,17 +17,17 @@
 
 package org.apache.spark.mllib.linalg
 
-import com.github.fommil.netlib.{BLAS, F2jBLAS}
+import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
-private[mllib] object MLlibBLAS extends Serializable {
+private[mllib] object BLAS extends Serializable {
 
-  @transient private var _f2jBLAS: BLAS = _
+  @transient private var _f2jBLAS: NetlibBLAS = _
 
   // For level-1 routines, we use Java implementation.
-  private def f2jBLAS: BLAS = {
+  private def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
       _f2jBLAS = new F2jBLAS
     }

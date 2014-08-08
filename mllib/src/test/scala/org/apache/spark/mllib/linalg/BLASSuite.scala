@@ -20,9 +20,9 @@ package org.apache.spark.mllib.linalg
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.linalg.MLlibBLAS._
+import org.apache.spark.mllib.linalg.BLAS._
 
-class MLlibBLASSuite extends FunSuite {
+class BLASSuite extends FunSuite {
 
   test("copy") {
     val sx = Vectors.sparse(4, Array(0, 2), Array(1.0, -2.0))

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.MLlibBLAS.{axpy, dot, scal}
+import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 
 /**
  * :: DeveloperApi ::
