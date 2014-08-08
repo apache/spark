@@ -25,6 +25,32 @@ import org.apache.spark.sql.hive.HiveContext
 
 /**
  * :: DeveloperApi ::
+ * Analyzes the given table in the current database to generate statistics, which will be
+ * used in query optimizations.
+ *
+ * Right now, it only supports Hive tables and it only updates the size of a Hive table
+ * in the Hive metastore.
+ */
+@DeveloperApi
+case class AnalyzeTable(tableName: String) extends LeafNode with Command {
+
+  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+  def output = Seq.empty
+
+  override protected[sql] lazy val sideEffectResult = {
+    hiveContext.analyze(tableName)
+    Seq.empty[Any]
+  }
+
+  override def execute(): RDD[Row] = {
+    sideEffectResult
+    sparkContext.emptyRDD[Row]
+  }
+}
+
+/**
+ * :: DeveloperApi ::
  * Drops a table from the metastore and removes it if it is cached.
  */
 @DeveloperApi

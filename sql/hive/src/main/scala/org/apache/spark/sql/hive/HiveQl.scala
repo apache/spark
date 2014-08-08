@@ -46,6 +46,8 @@ private[hive] case class AddFile(filePath: String) extends Command
 
 private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends Command
 
+private[hive] case class AnalyzeTable(tableName: String) extends Command
+
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
   protected val nativeCommands = Seq(
@@ -74,7 +76,6 @@ private[hive] object HiveQl {
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
 
-    "TOK_ANALYZE",
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
@@ -92,7 +93,6 @@ private[hive] object HiveQl {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ANALYZE",
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
@@ -239,7 +239,6 @@ private[hive] object HiveQl {
         ShellCommand(sql.drop(1))
       } else {
         val tree = getAst(sql)
-
         if (nativeCommands contains tree.getText) {
           NativeCommand(sql)
         } else {
@@ -387,6 +386,22 @@ private[hive] object HiveQl {
            ifExists) =>
       val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
       DropTable(tableName, ifExists.nonEmpty)
+    // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
+    case Token("TOK_ANALYZE",
+            Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
+            isNoscan) =>
+      // Reference:
+      // https://cwiki.apache.org/confluence/display/Hive/StatsDev#StatsDev-ExistingTables
+      if (partitionSpec.nonEmpty) {
+        // Analyze partitions will be treated as a Hive native command.
+        NativePlaceholder
+      } else if (isNoscan.isEmpty) {
+        // If users do not specify "noscan", it will be treated as a Hive native command.
+        NativePlaceholder
+      } else {
+        val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
+        AnalyzeTable(tableName)
+      }
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>

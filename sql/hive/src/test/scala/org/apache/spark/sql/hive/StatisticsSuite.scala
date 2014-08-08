@@ -19,12 +19,53 @@ package org.apache.spark.sql.hive
 
 import scala.reflect.ClassTag
 
+
 import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
 class StatisticsSuite extends QueryTest {
+
+  test("parse analyze commands") {
+    def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
+      val parsed = HiveQl.parseSql(analyzeCommand)
+      val operators = parsed.collect {
+        case a: AnalyzeTable => a
+        case o => o
+      }
+
+      assert(operators.size === 1)
+      if (operators(0).getClass() != c) {
+        fail(
+          s"""$analyzeCommand expected command: $c, but got ${operators(0)}
+             |parsed command:
+             |$parsed
+           """.stripMargin)
+      }
+    }
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
+      classOf[AnalyzeTable])
+  }
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
@@ -37,7 +78,7 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
 
-    analyze("analyzeTable")
+    sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
@@ -66,7 +107,7 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
 
-    analyze("analyzeTable_part")
+    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
