@@ -98,7 +98,7 @@ quote_java_property() {
   for opt in "$@"; do
     is_system_property=$(echo "$opt" | grep -e "^-D")
     if [[ -n "$is_system_property" ]]; then
-      QUOTED_JAVA_OPTS+=(\"$opt\")
+      QUOTED_JAVA_OPTS+=("\"$opt\"")
     else
       QUOTED_JAVA_OPTS+=("$opt")
     fi
