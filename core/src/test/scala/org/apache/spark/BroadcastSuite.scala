@@ -46,7 +46,10 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 
   test("Accessing HttpBroadcast variables in a local cluster") {
     val numSlaves = 4
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", httpConf)
+    val conf = httpConf.clone
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.broadcast.compress", "true")
+    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
@@ -71,7 +74,10 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 
   test("Accessing TorrentBroadcast variables in a local cluster") {
     val numSlaves = 4
-    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", torrentConf)
+    val conf = torrentConf.clone
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.broadcast.compress", "true")
+    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
