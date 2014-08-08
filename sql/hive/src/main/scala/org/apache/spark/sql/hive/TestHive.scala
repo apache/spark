@@ -70,6 +70,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     set("hive.metastore.warehouse.dir", warehousePath)
   }
 
+  val testTmpDir = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File(System.getProperty("user.dir") + File.separator + "tmp")
+  } else {
+    new File(System.getProperty("user.dir") + File.separator + "sql" + File.separator + "hive" + File.separator + "tmp")
+  }
+
   configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
@@ -97,7 +103,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   private def rewritePaths(cmd: String): String = {
     // For some hive test case which contain ${system:test.tmp.dir}
-    System.setProperty("test.tmp.dir",System.getProperty("user.dir") + "/tmp")
+    System.setProperty("test.tmp.dir", testTmpDir.getCanonicalPath)
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
@@ -110,6 +116,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   hiveFilesTemp.deleteOnExit()
+
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
