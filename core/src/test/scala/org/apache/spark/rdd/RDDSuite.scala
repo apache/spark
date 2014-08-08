@@ -726,6 +726,16 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     jrdd.rdd.retag.collect()
   }
 
+  test("parent method") {
+    val rdd1 = sc.parallelize(1 to 10, 2)
+    val rdd2 = rdd1.filter(_ % 2 == 0)
+    val rdd3 = rdd2.map(_ + 1)
+    val rdd4 = new UnionRDD(sc, List(rdd1, rdd2, rdd3))
+    assert(rdd4.parent(0).isInstanceOf[ParallelCollectionRDD[_]])
+    assert(rdd4.parent(1).isInstanceOf[FilteredRDD[_]])
+    assert(rdd4.parent(2).isInstanceOf[MappedRDD[_, _]])
+  }
+
   test("getNarrowAncestors") {
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.filter(_ % 2 == 0).map(_ + 1)
