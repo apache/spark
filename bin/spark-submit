@@ -83,7 +83,7 @@ fi
 
 # For client mode, the driver will be launched in the JVM that launches
 # SparkSubmit, so we need to handle the class paths, java options, and
-# memory pre-emptively in bash. Otherwise, it will be too late by the
+# memory preemptively in bash. Otherwise, it will be too late by the
 # time the JVM has started.
 
 if [[ $DEPLOY_MODE == "client" ]]; then
