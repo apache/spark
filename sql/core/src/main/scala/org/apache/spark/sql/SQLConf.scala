@@ -30,7 +30,7 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
-  val INCREMENTAL_COLLECT_ENABLED = "spark.sql.thriftServer.incrementalCollect"
+  val INCREMENTAL_COLLECT_ENABLED = "spark.sql.incrementalCollect"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
