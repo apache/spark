@@ -22,12 +22,33 @@
 
 # Parse the value of a config from a java properties file according to the specifications in
 # http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader).
-# This accepts the name of the config and returns the value through JAVA_PROPERTY_VALUE.
-# This currently does not support multi-line configs.
+# This accepts the name of the config as an argument, and expects the path of the property
+# file to be found in PROPERTIES_FILE. The value is returned through JAVA_PROPERTY_VALUE.
 parse_java_property() {
+  JAVA_PROPERTY_VALUE=""  # return value
+  config_buffer=""        # buffer for collecting parts of a config value
+  multi_line=0            # whether this config is spanning multiple lines
+  while read -r line; do
+    # Strip leading and trailing whitespace
+    line=$(echo "$line" | sed "s/^[[:space:]]\(.*\)[[:space:]]*$/\1/")
+    contains_config=$(echo "$line" | grep -e "^$1")
+    if [[ -n "$contains_config" || "$multi_line" == 1 ]]; then
+      has_more_lines=$(echo "$line" | grep -e "\\\\$")
+      if [[ -n "$has_more_lines" ]]; then
+        # Strip trailing backslash
+        line=$(echo "$line" | sed "s/\\\\$//")
+        config_buffer="$config_buffer $line"
+        multi_line=1
+      else
+        JAVA_PROPERTY_VALUE="$config_buffer $line"
+        break
+      fi
+    fi
+  done < "$PROPERTIES_FILE"
+
+  # Actually extract the value of the config
   JAVA_PROPERTY_VALUE=$( \
-    sed "/^[#!]/ d" "conf/spark-defaults.conf" | \
-    grep "$1" | \
+    echo "$JAVA_PROPERTY_VALUE" | \
     sed "s/$1//" | \
     sed "s/^[[:space:]]*[:=]\{0,1\}//" | \
     sed "s/^[[:space:]]*\(.*\)[[:space:]]*$/\1/g" \
@@ -63,7 +84,8 @@ split_java_options() {
   done
   # Something is wrong if we ended with open double quotes
   if [[ $opened_quotes == 1 ]]; then
-    echo "Java options parse error! Expecting closing double quotes." 1>&2
+    echo -e "Java options parse error! Expecting closing double quotes:" 1>&2
+    echo -e "  ${SPLIT_JAVA_OPTS[@]}" 1>&2
     exit 1
   fi
   export SPLIT_JAVA_OPTS
