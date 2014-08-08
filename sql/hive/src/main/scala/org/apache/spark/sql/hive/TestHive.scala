@@ -70,10 +70,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     set("hive.metastore.warehouse.dir", warehousePath)
   }
 
-  val testTmpDir = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+  val testTmpDir = if (System.getProperty("user.dir").endsWith("sql" +
+    File.separator + "hive")) {
     new File(System.getProperty("user.dir") + File.separator + "tmp")
   } else {
-    new File(System.getProperty("user.dir") + File.separator + "sql" + File.separator + "hive" + File.separator + "tmp")
+    new File(System.getProperty("user.dir") + File.separator + "sql" +
+      File.separator + "hive" + File.separator + "tmp")
   }
 
   configure() // Must be called before initializing the catalog below.
