@@ -88,7 +88,21 @@ class TaskMetrics extends Serializable {
    */
   private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
-  def shuffleReadMetrics = _shuffleReadMetrics
+  def shuffleReadMetrics() = _shuffleReadMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating read metrics in
+   * executors.
+   */
+  private[spark] def setShuffleReadMetrics(shuffleReadMetrics: Option[ShuffleReadMetrics]) {
+    _shuffleReadMetrics = shuffleReadMetrics
+  }
+
+  /**
+   * ShuffleReadMetrics per dependency for collecting independently while task is in progress.
+   */
+  @transient private lazy val depsShuffleReadMetrics: ArrayBuffer[ShuffleReadMetrics] =
+    new ArrayBuffer[ShuffleReadMetrics]()
 
   /**
    * This should only be used when recreating TaskMetrics, not when updating read metrics in
