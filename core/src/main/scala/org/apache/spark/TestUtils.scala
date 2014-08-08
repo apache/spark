@@ -111,18 +111,4 @@ private[spark] object TestUtils {
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
   }
-
-  /**
-   * Find a free port to bind to. There is a potential race condition where this method could
-   * return a port number, but the calling method may not have bound to the port yet - but some
-   * other process may have grabbed the same port, in which case this method must be called again
-   * to get a new free port.
-   */
-  def findFreePort(): Int = {
-    val socket = new ServerSocket(0)
-    val port = socket.getLocalPort
-    socket.close()
-    port
-  }
-
 }

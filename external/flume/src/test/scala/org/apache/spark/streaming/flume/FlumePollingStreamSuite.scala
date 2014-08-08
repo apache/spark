@@ -76,8 +76,6 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   private def testFlumePolling(): Unit = {
-    val testPort = TestUtils.findFreePort()
-
     // Start the channel and sink.
     val context = new Context()
     context.put("capacity", channelCapacity.toString)
