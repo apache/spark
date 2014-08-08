@@ -125,4 +125,34 @@ class VectorsSuite extends FunSuite {
       }
     }
   }
+
+  test("zeros") {
+    assert(Vectors.zeros(3) === Vectors.dense(0.0, 0.0, 0.0))
+  }
+
+  test("copy vectors") {
+    val sv = Vectors.sparse(4, Array(0, 2), Array(1.0, 2.0))
+    val svCopy = Vectors.copy(sv)
+    (sv, svCopy) match {
+      case (sv: SparseVector, svCopy: SparseVector) =>
+        assert(sv.size === svCopy.size)
+        assert(sv.indices === svCopy.indices)
+        assert(sv.values === svCopy.values)
+        assert(!sv.indices.eq(svCopy.indices))
+        assert(!sv.values.eq(svCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${svCopy.getClass} on ${sv.getClass}.")
+    }
+
+    val dv = Vectors.dense(1.0, 0.0, 2.0)
+    val dvCopy = Vectors.copy(dv)
+    (dv, dvCopy) match {
+      case (dv: DenseVector, dvCopy: DenseVector) =>
+        assert(dv.size === dvCopy.size)
+        assert(dv.values === dvCopy.values)
+        assert(!dv.values.eq(dvCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${dvCopy.getClass} on ${dv.getClass}.")
+    }
+  }
 }
