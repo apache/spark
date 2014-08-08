@@ -221,7 +221,7 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-
+    libraryDependencies += "com.twitter" % "parquet-hive-bundle" % "1.5.0",
     javaOptions += "-XX:MaxPermSize=1g",
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
     parallelExecution in Test := false,
