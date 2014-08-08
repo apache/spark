@@ -43,8 +43,7 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
         <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
-    UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(), "Environment",
-      parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Environment", content, parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")

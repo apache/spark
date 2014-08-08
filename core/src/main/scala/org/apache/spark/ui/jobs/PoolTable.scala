@@ -59,7 +59,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
       case None => 0
     }
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(parent.getBasePath()), p.name)
+      .format(UIUtils.prependBaseUri(parent.basePath), p.name)
     <tr>
       <td>
         <a href={href}>{p.name}</a>

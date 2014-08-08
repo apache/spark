@@ -49,8 +49,7 @@ private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
         <h4>Summary </h4> ++ poolTable.toNodeSeq ++
         <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(),
-        "Fair Scheduler Pool: " + poolName, parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Fair Scheduler Pool: " + poolName, content, parent)
     }
   }
 }

@@ -32,8 +32,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(), "Storage ",
-      parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Storage", content, parent)
   }
 
   /** Header fields for the RDD table */
@@ -51,7 +50,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.getBasePath()), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>

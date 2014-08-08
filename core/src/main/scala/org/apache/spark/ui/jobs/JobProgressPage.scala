@@ -92,8 +92,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(),
-        "Spark Stages", parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Spark Stages", content, parent)
     }
   }
 }

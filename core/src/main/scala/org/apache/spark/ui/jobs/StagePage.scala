@@ -42,8 +42,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(),
-          "Details for Stage %s".format(stageId), parent.headerTabs, parent)
+        return UIUtils.headerSparkPage("Details for Stage %s".format(stageId), content, parent)
       }
 
       val stageData = stageDataOption.get
@@ -225,8 +224,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(),
-        "Details for Stage %d".format(stageId), parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
   }
 

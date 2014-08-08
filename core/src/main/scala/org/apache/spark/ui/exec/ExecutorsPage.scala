@@ -99,8 +99,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(),
-      "Executors (" + execInfo.size + ")", parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
   }
 
   /** Render an HTML row representing an executor */

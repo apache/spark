@@ -76,7 +76,7 @@ private[spark] class SparkUI(
     }
   }
 
-  def getAppName() = appName
+  def getAppName = appName
 
   /** Set the app name for this UI. */
   def setAppName(name: String) {
@@ -105,7 +105,7 @@ private[spark] class SparkUI(
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
 
-  def getAppName(): String = parent.getAppName()
+  def appName: String = parent.getAppName
 
 }
 

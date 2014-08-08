@@ -50,7 +50,7 @@ private[spark] abstract class WebUI(
   protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
   private val className = Utils.getFormattedClassName(this)
 
-  def getBasePath(): String = basePath
+  def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
   def getSecurityManager: SecurityManager = securityManager
@@ -137,7 +137,7 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   /** Get a list of header tabs from the parent UI. */
   def headerTabs: Seq[WebUITab] = parent.getTabs
 
-  def getBasePath(): String = parent.getBasePath()
+  def basePath: String = parent.getBasePath
 }
 
 
