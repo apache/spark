@@ -32,7 +32,7 @@ function post_message {
   echo "Attempting to post to Github:"
   echo "$data"
 
-  curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data \""$data"\" -H \
+  curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data "\"$data\"" -H \
     "Content-Type: application/json" \
     $COMMENTS_URL | head -n 8
 }
