@@ -25,7 +25,6 @@ import org.apache.spark.sql.hive.HiveContext
 
 /**
  * :: DeveloperApi ::
- *
  * Analyzes the given table in the current database to generate statistics, which will be
  * used in query optimizations.
  *

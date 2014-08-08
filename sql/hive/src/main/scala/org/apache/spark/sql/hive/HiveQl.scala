@@ -396,7 +396,7 @@ private[hive] object HiveQl {
         // Analyze partitions will be treated as a Hive native command.
         NativePlaceholder
       } else if (isNoscan.isEmpty) {
-        // If users do not specific "noscan", it will be treated as a Hive native command.
+        // If users do not specify "noscan", it will be treated as a Hive native command.
         NativePlaceholder
       } else {
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
