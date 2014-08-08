@@ -139,11 +139,6 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
-        <configuration>
-          <systemProperties>
-            <test.tmp.dir>${project.build.directory}/tmp</test.tmp.dir>
-          </systemProperties>
-        </configuration>
       </plugin>
 
       <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->
