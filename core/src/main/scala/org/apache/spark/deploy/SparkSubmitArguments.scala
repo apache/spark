@@ -76,6 +76,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         }
       }
     }
+    // For spark.*.extraJavaOptions, we cannot rely on the Java properties loader because it
+    // un-escapes certain characters (" and \) needed to split the string into java options.
+    // For these configs, use the equivalent environment variables instead.
+    sys.env.get("DRIVER_EXTRA_JAVA_OPTS").foreach { opts =>
+      defaultProperties("spark.driver.extraJavaOptions") = opts
+    }
+    sys.env.get("EXECUTOR_EXTRA_JAVA_OPTS").foreach { opts =>
+      defaultProperties("spark.executor.extraJavaOptions") = opts
+    }
     defaultProperties
   }
 
