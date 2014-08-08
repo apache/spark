@@ -219,7 +219,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    var inSparkOpts = true
     val EQ_SEPARATED_OPT="""(--[^=]+)=(.+)""".r
 
     // Delineates parsing of Spark options from parsing of user options.
