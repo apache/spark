@@ -76,22 +76,34 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.setStepSize(10.0).setNumIterations(20)
 
-    val model = lr.run(testRDD)
+    val lrWithSGD = new LogisticRegressionWithSGD().setIntercept(true)
+    lrWithSGD.optimizer.setStepSize(10.0).setNumIterations(20)
+
+    val lrWithLBFGS = new LogisticRegressionWithLBFGS().setIntercept(true)
+
+    val modelWithSGD = lrWithSGD.run(testRDD)
+    val modelWithLBFGS = lrWithLBFGS.run(testRDD)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.52 relTol 0.01)
-    assert(model.intercept ~== 2.00 relTol 0.01)
+    assert(modelWithSGD.weights(0) ~== -1.52 relTol 0.01)
+    assert(modelWithSGD.intercept ~== 2.00 relTol 0.01)
+    assert(modelWithLBFGS.weights(0) ~== modelWithSGD.weights(0) relTol 0.01)
+    assert(modelWithLBFGS.intercept ~== modelWithSGD.intercept relTol 0.01)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      modelWithSGD.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      modelWithLBFGS.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(
+      validationData.map(row => modelWithSGD.predict(row.features)), validationData)
+    validatePrediction(
+      validationData.map(row => modelWithLBFGS.predict(row.features)), validationData)
   }
 
   test("logistic regression with initial weights") {
@@ -108,22 +120,34 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.setStepSize(10.0).setNumIterations(10)
+    val lrWithSGD = new LogisticRegressionWithSGD().setIntercept(true)
+    lrWithSGD.optimizer.setStepSize(10.0).setNumIterations(10)
 
-    val model = lr.run(testRDD, initialWeights)
+    val lrWithLBFGS = new LogisticRegressionWithLBFGS().setIntercept(true)
+
+    val modelWithSGD = lrWithSGD.run(testRDD, initialWeights)
+    val modelWithLBFGS = lrWithLBFGS.run(testRDD, initialWeights)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.50 relTol 0.01)
-    assert(model.intercept ~== 1.97 relTol 0.01)
+    assert(modelWithSGD.weights(0) ~== -1.50 relTol 0.01)
+    assert(modelWithSGD.intercept ~== 1.97 relTol 0.01)
+
+    assert(modelWithLBFGS.weights(0) ~== modelWithSGD.weights(0) relTol 0.05)
+    assert(modelWithLBFGS.intercept ~== modelWithSGD.intercept relTol 0.05)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      modelWithSGD.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      modelWithLBFGS.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(
+      validationData.map(row => modelWithSGD.predict(row.features)), validationData)
+    validatePrediction(
+      validationData.map(row => modelWithLBFGS.predict(row.features)), validationData)
   }
 }
 
@@ -138,7 +162,14 @@ class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LogisticRegressionWithSGD.train(points, 2)
-    val predictions = model.predict(points.map(_.features))
+    val modelWithSGD = LogisticRegressionWithSGD.train(points, 2)
+    val modelWithLBFGS = LogisticRegressionWithSGD.train(points, 2)
+
+    val predictionsWithSGD = modelWithSGD.predict(points.map(_.features))
+    val predictionsWithLBFGS = modelWithLBFGS.predict(points.map(_.features))
+
+    // Materialize the RDDs
+    predictionsWithSGD.count()
+    predictionsWithLBFGS.count()
   }
 }
