@@ -30,6 +30,7 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
+  val INCREMENTAL_COLLECT_ENABLED = "spark.sql.thriftServer.incrementalCollect"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -103,6 +104,15 @@ trait SQLConf {
    */
   private[spark] def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
+
+  /**
+   * When set to true, the Hive Thrift server will collect SQL result set incrementally (one
+   * partition at a time) to decrease the risk of OOM on driver side. This can be useful when the
+   * result set is potentially large. The cost is that *the last* stage of the RDD DAG generated
+   * from the SQL query plan is executed sequentially, and hurts performance.
+   */
+  private[spark] def incrementalCollectEnabled: Boolean =
+    getConf(INCREMENTAL_COLLECT_ENABLED, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
