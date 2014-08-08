@@ -373,16 +373,14 @@ source copyright:
 Copyright 2010-2012 CS Systèmes d'Information
 ===============================================================================
 
-Proximal algorithms outlined in Proximal object (package org.apache.spark.mllib.optimization)
-are developed by Neal Parikh, Eric Chu, Debasish Das and Stephan Boyd. The code is
-released under a BSD license and distributed with Copyright © 2014 Verizon and Stanford
-University, all rights reserved.
+Proximal algorithms outlined in Proximal.scala (package org.apache.spark.mllib.optimization)
+are based on https://github.com/cvxgrp/proximal (see LICENSE for details) and distributed with 
+Copyright (c) 2014 by Debasish Das (Verizon), all rights reserved.
 ===============================================================================
 
-QuadaraticMinimizer class in package org.apache.spark.mllib.optimization and it's 
-applications to ALS class in package org.apache.spark.mllib.recommendation is
-developed by Debasish Das and distributed with Copyright © 2014 Verizon, all rights
-reserved.
+QuadaraticMinimizer class in package org.apache.spark.mllib.optimization and it’s applications to ALS class
+in package org.apache.spark.mllib.recommendation is distributed with Copyright (c) 2014, Debasish Das (Verizon), 
+all rights reserved.
 ===============================================================================
 
 The creation of the package "o.a.c.m.analysis.integration.gauss" was inspired
