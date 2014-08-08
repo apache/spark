@@ -60,6 +60,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
 
+
+
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
@@ -77,6 +79,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     new File(System.getProperty("user.dir") + File.separator + "sql" +
       File.separator + "hive" + File.separator + "tmp")
   }
+
+  // For some hive test case which contain ${system:test.tmp.dir}
+  System.setProperty("test.tmp.dir", testTmpDir.getCanonicalPath)
 
   configure() // Must be called before initializing the catalog below.
 
@@ -103,9 +108,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
    * hive test cases assume the system is set up.
    */
-  private def rewritePaths(cmd: String): String = {
-    // For some hive test case which contain ${system:test.tmp.dir}
-    System.setProperty("test.tmp.dir", testTmpDir.getCanonicalPath)
+  private def rewritePaths(cmd: String): String =
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
@@ -113,7 +116,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } else {
       cmd
     }
-  }
+
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
