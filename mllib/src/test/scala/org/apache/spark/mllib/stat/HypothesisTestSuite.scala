@@ -21,7 +21,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.test.ChiSquaredTest
+import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -35,9 +35,9 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
     // Results validated against the R command `chisq.test(c(4, 6, 5), p=c(1/3, 1/3, 1/3))`
     assert(pearson.statistic === 0.4)
     assert(pearson.degreesOfFreedom === 2)
-    assert(pearson.pValue ~= 0.8187 relTol 1e-4)
-    assert(pearson.method === ChiSquaredTest.PEARSON.name)
-    assert(pearson.nullHypothesis === ChiSquaredTest.NullHypothesis.goodnessOfFit.toString)
+    assert(pearson.pValue ~== 0.8187 relTol 1e-4)
+    assert(pearson.method === ChiSqTest.PEARSON.name)
+    assert(pearson.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
 
     // different expected and observed sum
     val observed1 = new DenseVector(Array[Double](21, 38, 43, 80))
@@ -46,16 +46,11 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
 
     // Results validated against the R command
     // `chisq.test(c(21, 38, 43, 80), p=c(3/35, 1/7, 1/5, 4/7))`
-    assert(pearson1.statistic ~= 14.1429 relTol 1e-4)
+    assert(pearson1.statistic ~== 14.1429 relTol 1e-4)
     assert(pearson1.degreesOfFreedom === 3)
-    assert(pearson1.pValue ~= 0.002717 relTol 1e-4)
-    assert(pearson1.method === ChiSquaredTest.PEARSON.name)
-    assert(pearson1.nullHypothesis === ChiSquaredTest.NullHypothesis.goodnessOfFit.toString)
-
-    // SparseVector representation to make sure memory doesn't blow up
-    // Commented out because it takes too long for unit tests. Should be run as part of perf test.
-    // val observed2 = new SparseVector(Int.MaxValue, Array(1000005), Array[Double](10.0))
-    // val pearson2 = Statistics.chiSqTest(observed2)
+    assert(pearson1.pValue ~== 0.002717 relTol 1e-4)
+    assert(pearson1.method === ChiSqTest.PEARSON.name)
+    assert(pearson1.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
 
     // Vectors with different sizes
     val observed3 = new DenseVector(Array(1.0, 2.0, 3.0))
@@ -79,11 +74,11 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
     val chi = Statistics.chiSqTest(Matrices.dense(3, 4, data))
     // Results validated against R command
     // `chisq.test(rbind(c(40, 56, 31, 30),c(24, 32, 10, 15), c(29, 42, 0, 12)))`
-    assert(chi.statistic ~= 21.9958 relTol 1e-4)
+    assert(chi.statistic ~== 21.9958 relTol 1e-4)
     assert(chi.degreesOfFreedom === 6)
-    assert(chi.pValue ~= 0.001213 relTol 1e-4)
-    assert(chi.method === ChiSquaredTest.PEARSON.name)
-    assert(chi.nullHypothesis === ChiSquaredTest.NullHypothesis.independence.toString)
+    assert(chi.pValue ~== 0.001213 relTol 1e-4)
+    assert(chi.method === ChiSqTest.PEARSON.name)
+    assert(chi.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
 
     // Negative counts
     val negCounts = Array(4.0, 5.0, 3.0, -3.0)
@@ -114,15 +109,22 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
       val feature1 = chi(0)
       assert(feature1.statistic === 0.75)
       assert(feature1.degreesOfFreedom === 2)
-      assert(feature1.pValue ~= 0.6873 relTol 1e-4)
-      assert(feature1.method === ChiSquaredTest.PEARSON.name)
-      assert(feature1.nullHypothesis === ChiSquaredTest.NullHypothesis.independence.toString)
+      assert(feature1.pValue ~== 0.6873 relTol 1e-4)
+      assert(feature1.method === ChiSqTest.PEARSON.name)
+      assert(feature1.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
       val feature2 = chi(1)
       assert(feature2.statistic === 1.5)
       assert(feature2.degreesOfFreedom === 3)
-      assert(feature2.pValue ~= 0.6823 relTol 1e-4)
-      assert(feature2.method === ChiSquaredTest.PEARSON.name)
-      assert(feature2.nullHypothesis === ChiSquaredTest.NullHypothesis.independence.toString)
+      assert(feature2.pValue ~== 0.6823 relTol 1e-4)
+      assert(feature2.method === ChiSqTest.PEARSON.name)
+      assert(feature2.nullHypothesis === ChiSqTest.NullHypothesis.independence.toString)
     }
+
+    // Test that the right number of results is returned
+    val numCols = 321
+    val sparseData = Array(new LabeledPoint(0.0, Vectors.sparse(numCols, Seq((100, 2.0)))),
+      new LabeledPoint(0.0, Vectors.sparse(numCols, Seq((200, 1.0)))))
+    val chi = Statistics.chiSqTest(sc.parallelize(sparseData))
+    assert(chi.size === numCols)
   }
 }

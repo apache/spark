@@ -22,25 +22,25 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Trait for hypothesis test results.
- * @tparam DF Return type of `degreesOfFreedom`
+ * @tparam DF Return type of `degreesOfFreedom`.
  */
 @Experimental
 trait TestResult[DF] {
 
   /**
-   *
+   * The probability of obtaining a test statistic result at least as extreme as the one that was
+   * actually observed, assuming that the null hypothesis is true.
    */
   def pValue: Double
 
   /**
-   *
-   * @return
+   * Returns the degree(s) of freedom of the hypothesis test.
+   * Return type should be Number(e.g. Int, Double) or tuples of Numbers for toString compatibility.
    */
   def degreesOfFreedom: DF
 
   /**
-   *
-   * @return
+   * Test statistic.
    */
   def statistic: Double
 

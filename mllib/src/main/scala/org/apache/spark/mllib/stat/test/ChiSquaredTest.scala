@@ -26,7 +26,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
- * Conduct the Chi-squared test for the input RDDs using the specified method.
+ * Conduct the chi-squared test for the input RDDs using the specified method.
  * Goodness-of-fit test is conducted on two `Vectors`, whereas test of independence is conducted
  * on an input of type `Matrix` in which independence between columns is assessed.
  * We also provide a method for computing the chi-squared statistic between each feature and the
@@ -38,7 +38,7 @@ import org.apache.spark.rdd.RDD
  *
  * More information on Chi-squared test: http://en.wikipedia.org/wiki/Chi-squared_test
  */
-private[stat] object ChiSquaredTest extends Logging {
+private[stat] object ChiSqTest extends Logging {
 
   /**
    * @param name String name for the method.
@@ -78,27 +78,38 @@ private[stat] object ChiSquaredTest extends Logging {
     val numCols = data.first().features.size
     val results = new Array[ChiSquaredTestResult](numCols)
     var labels = Array[Double]()
-    var col = 0
-    while (col < numCols) {
-      val featureVLabel = data.map(p => (p.label, p.features(col)))
+    // At most 100 columns at a time
+    val batchSize = 100
+    var batch = 0
+    while (batch * batchSize < numCols) {
       // The following block of code can be cleaned up and made public as
       // chiSquared(data: RDD[(V1, V2)])
-      val pairCounts = featureVLabel.countByValue()
+      val startCol = batch * batchSize
+      val endCol = startCol + math.min(batchSize, numCols - startCol)
+      val pairCounts = data.flatMap { p =>
+        // assume dense vectors
+        p.features.toArray.slice(startCol, endCol).zipWithIndex.map { case (feature, col) =>
+          (col, feature, p.label)
+        }
+      }.countByValue()
+
       if (labels.size == 0) {
-        // Do this only once since labels are invariant across features.
-        labels = pairCounts.keys.map(_._1).toArray
+        // Do this only once for the first column since labels are invariant across features.
+        labels = pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct
       }
-      val featureValues = pairCounts.keys.map(_._2).toArray
-      val numCols = labels.size
-      val numRows = featureValues.size
-      val contingency = new BDM(numRows, numCols, new Array[Double](numRows * numCols))
-      for (((label, feature), count) <- pairCounts) {
-        val col = labels.indexOf(label)
-        val row = featureValues.indexOf(feature)
-        contingency(row, col) += count
+      val numLabels = labels.size
+      pairCounts.keys.groupBy(_._1).map { case (col, keys) =>
+        val features = keys.map(_._2).toArray.distinct
+        val numRows = features.size
+        val contingency = new BDM(numRows, numLabels, new Array[Double](numRows * numLabels))
+        keys.foreach { case (_, feature, label) =>
+          val i = features.indexOf(feature)
+          val j = labels.indexOf(label)
+          contingency(i, j) += pairCounts((col, feature, label))
+        }
+        results(col) = chiSquaredMatrix(Matrices.fromBreeze(contingency), methodName)
       }
-      results(col) = chiSquaredMatrix(Matrices.fromBreeze(contingency), methodName)
-      col += 1
+      batch += 1
     }
     results
   }

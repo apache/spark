@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
-import org.apache.spark.mllib.stat.test.{ChiSquaredTest, ChiSquaredTestResult}
+import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSquaredTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -108,8 +108,9 @@ object Statistics {
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(observed: Vector,
-      expected: Vector): ChiSquaredTestResult = ChiSquaredTest.chiSquared(observed, expected)
+  def chiSqTest(observed: Vector, expected: Vector): ChiSquaredTestResult = {
+    ChiSqTest.chiSquared(observed, expected)
+  }
 
   /**
    * :: Experimental ::
@@ -123,19 +124,19 @@ object Statistics {
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(observed: Vector): ChiSquaredTestResult = ChiSquaredTest.chiSquared(observed)
+  def chiSqTest(observed: Vector): ChiSquaredTestResult = ChiSqTest.chiSquared(observed)
 
   /**
    * :: Experimental ::
    * Conduct Pearson's independence test on the input contingency matrix, which cannot contain
    * negative entries or columns or rows that sum up to 0.
    *
-   * @param counts The contingency matrix.
+   * @param observed The contingency matrix (containing either counts or relative frequencies).
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
   @Experimental
-  def chiSqTest(counts: Matrix): ChiSquaredTestResult = ChiSquaredTest.chiSquaredMatrix(counts)
+  def chiSqTest(observed: Matrix): ChiSquaredTestResult = ChiSqTest.chiSquaredMatrix(observed)
 
   /**
    * :: Experimental ::
@@ -143,12 +144,13 @@ object Statistics {
    * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
    * the chi-squared statistic is computed.
    *
-   * @param data an `RDD[LabeledPoint]` containing the Labeled dataset.
+   * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
+   *             Real-valued features will be treated as categorical for each distinct value.
    * @return an array containing the ChiSquaredTestResult for every feature against the label.
    *         The order of the elements in the returned array reflects the order of input features.
    */
   @Experimental
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSquaredTestResult] = {
-    ChiSquaredTest.chiSquaredFeatures(data)
+    ChiSqTest.chiSquaredFeatures(data)
   }
 }
