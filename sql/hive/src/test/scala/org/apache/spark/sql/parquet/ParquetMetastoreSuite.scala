@@ -87,6 +87,22 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
     sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (p=$p)")
   }
 
+  test("project the partitioning column") {
+    checkAnswer(
+      sql("SELECT p, count(*) FROM partitioned_parquet group by p"),
+      (1, 10) ::
+      (2, 10) ::
+      (3, 10) ::
+      (4, 10) ::
+      (5, 10) ::
+      (6, 10) ::
+      (7, 10) ::
+      (8, 10) ::
+      (9, 10) ::
+      (10, 10) :: Nil
+    )
+  }
+
   test("simple count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM partitioned_parquet"),

@@ -76,7 +76,8 @@ private[hive] trait HiveStrategies {
         }).reduceOption(And).getOrElse(Literal(true))
 
         val unresolvedProjection = projectList.map(_ transform {
-          case a: AttributeReference => UnresolvedAttribute(a.name)
+          // Handle non-partitioning columns
+          case a: AttributeReference if !partitionKeyIds.contains(a.exprId) => UnresolvedAttribute(a.name)
         })
 
         if (relation.hiveQlTable.isPartitioned) {
@@ -109,16 +110,27 @@ private[hive] trait HiveStrategies {
           }
 
           org.apache.spark.sql.execution.Union(
-            partitions.par.map(p =>
+            partitions.par.map { p =>
+              val partValues = p.getValues()
+              val internalProjection = unresolvedProjection.map(_ transform {
+                // Handle partitioning columns
+                case a: AttributeReference if partitionKeyIds.contains(a.exprId) => {
+                  val idx = relation.partitionKeys.indexWhere(a.exprId == _.exprId)
+                  val key = relation.partitionKeys(idx)
+
+                  Alias(Cast(Literal(partValues.get(idx), StringType), key.dataType), a.name)()
+                }
+              })
+
               hiveContext
                 .parquetFile(p.getLocation)
                 .lowerCase
                 .where(unresolvedOtherPredicates)
-                .select(unresolvedProjection:_*)
+                .select(internalProjection:_*)
                 .queryExecution
                 .executedPlan
-                .fakeOutput(projectList.map(_.toAttribute))).seq) :: Nil
-
+                .fakeOutput(projectList.map(_.toAttribute))
+            }.seq) :: Nil
         } else {
           hiveContext
             .parquetFile(relation.hiveQlTable.getDataLocation.getPath)
