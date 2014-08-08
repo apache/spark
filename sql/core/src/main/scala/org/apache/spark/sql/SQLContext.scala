@@ -411,11 +411,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def simpleString: String = stringOrError(executedPlan)
 
     override def toString: String =
-      s"""== Logical Plan ==
+      s"""== Parsed Logical Plan ==
+         |${stringOrError(logical)}
+         |== Analyzed Logical Plan ==
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
+         |${stringOrError(executedPlan)}
+         |Code Generation: ${executedPlan.codegenEnabled}
+         |== RDD ==
+         |${stringOrError(toRdd.toDebugString)}
+      """.stripMargin.trim
+
+    def toSimpleString: String =
+      s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
          |Code Generation: ${executedPlan.codegenEnabled}
          |== RDD ==
