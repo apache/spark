@@ -90,7 +90,7 @@ class PromiseRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Seria
   def promiseFromPartitions[V: ClassTag](f: Seq[Iterator[T]] => V): PromiseRDD[V] = {
     val rdd = self
     val plist = rdd.partitions
-    val expr = (ctx: TaskContext) => f(plist.map(s => rdd.iterator(s, ctx)))
+    val expr = self.context.clean((ctx: TaskContext) => f(plist.map(s => rdd.iterator(s, ctx))))
     new PromiseRDD[V](expr, rdd.context, List(new FanOutDep(rdd))) 
   }
 
@@ -104,7 +104,7 @@ class PromiseRDDFunctions[T : ClassTag](self: RDD[T]) extends Logging with Seria
                                              RDD[T], TaskContext) => V): PromiseRDD[V] = {
     val rdd = self
     val plist = rdd.partitions
-    val expr = (ctx: TaskContext) => f(plist, rdd, ctx)
+    val expr = self.context.clean((ctx: TaskContext) => f(plist, rdd, ctx))
     new PromiseRDD[V](expr, rdd.context, List(new FanOutDep(rdd))) 
   }
 
