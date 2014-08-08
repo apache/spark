@@ -1,27 +1,34 @@
 package org.apache.spark.mllib.linalg
 
-import com.github.fommil.netlib.F2jBLAS
+import com.github.fommil.netlib.{BLAS, F2jBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
-private[mllib] object MLlibBLAS {
+private[mllib] object MLlibBLAS extends Serializable {
+
+  @transient private var _f2jBLAS: BLAS = _
 
   // For level-1 routines, we use Java implementation.
-  val f2jBLAS = new F2jBLAS
+  private def f2jBLAS: BLAS = {
+    if (_f2jBLAS == null) {
+      _f2jBLAS = new F2jBLAS
+    }
+    _f2jBLAS
+  }
 
   /**
-   * y += alpha * x
+   * y += a * x
    */
-  def daxpy(alpha: Double, x: Vector, y: Vector) {
+  def daxpy(a: Double, x: Vector, y: Vector): Unit = {
     require(x.size == y.size)
     y match {
       case dy: DenseVector =>
         x match {
           case sx: SparseVector =>
-            daxpy(alpha, sx, dy)
+            daxpy(a, sx, dy)
           case dx: DenseVector =>
-            daxpy(alpha, dx, dy)
+            daxpy(a, dx, dy)
           case _ =>
             throw new UnsupportedOperationException(
               s"daxpy doesn't support x type ${x.getClass}.")
@@ -33,19 +40,19 @@ private[mllib] object MLlibBLAS {
   }
 
   /**
-   * y += alpha * x
+   * y += a * x
    */
-  private def daxpy(alpha: Double, x: DenseVector, y: DenseVector) {
+  private def daxpy(a: Double, x: DenseVector, y: DenseVector): Unit = {
     val n = x.size
-    f2jBLAS.daxpy(n, alpha, x.values, 1, y.values, 1)
+    f2jBLAS.daxpy(n, a, x.values, 1, y.values, 1)
   }
 
   /**
-   * y += alpha * x
+   * y += a * x
    */
-  private def daxpy(alpha: Double, x: SparseVector, y: DenseVector) {
+  private def daxpy(a: Double, x: SparseVector, y: DenseVector): Unit = {
     val nnz = x.indices.size
-    if (alpha == 1.0) {
+    if (a == 1.0) {
       var k = 0
       while (k < nnz) {
         y.values(x.indices(k)) += x.values(k)
@@ -54,7 +61,7 @@ private[mllib] object MLlibBLAS {
     } else {
       var k = 0
       while (k < nnz) {
-        y.values(x.indices(k)) += alpha * x.values(k)
+        y.values(x.indices(k)) += a * x.values(k)
         k += 1
       }
     }
@@ -123,5 +130,54 @@ private[mllib] object MLlibBLAS {
       kx += 1
     }
     sum
+  }
+
+  /**
+   * y = x
+   */
+  def dcopy(x: Vector, y: Vector): Unit = {
+    val n = y.size
+    require(x.size == n)
+    y match {
+      case dy: DenseVector =>
+        x match {
+          case sx: SparseVector =>
+            var i = 0
+            var k = 0
+            val nnz = sx.indices.size
+            while (k < nnz) {
+              val j = sx.indices(k)
+              while (i < j) {
+                dy.values(i) = 0.0
+                i += 1
+              }
+              dy.values(i) = sx.values(k)
+              i += 1
+              k += 1
+            }
+            while (i < n) {
+              dy.values(i) = 0.0
+              i += 1
+            }
+          case dx: DenseVector =>
+            Array.copy(dx.values, 0, dy.values, 0, n)
+        }
+      case _ =>
+        throw new IllegalArgumentException(s"y must be dense in dcopy but got ${y.getClass}")
+    }
+  }
+
+  /**
+   * x = a * x
+   */
+  def dscal(a: Double, x: Vector): Unit = {
+    x match {
+      case sx: SparseVector =>
+        f2jBLAS.dscal(sx.values.size, a, sx.values, 1)
+      case dx: DenseVector =>
+        f2jBLAS.dscal(dx.values.size, a, dx.values, 1)
+      case _ =>
+        throw new IllegalArgumentException(s"dscal doesn't support vector type ${x.getClass}.")
+    }
   }
 }

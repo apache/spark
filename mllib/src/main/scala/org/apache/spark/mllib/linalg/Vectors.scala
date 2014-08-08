@@ -128,6 +128,16 @@ object Vectors {
   }
 
   /**
+   * Creates a dense vector of all zeros.
+   *
+   * @param size vector size
+   * @return a zero vector
+   */
+  def zeros(size: Int): Vector = {
+    new DenseVector(new Array[Double](size))
+  }
+
+  /**
    * Parses a string resulted from `Vector#toString` into
    * an [[org.apache.spark.mllib.linalg.Vector]].
    */
