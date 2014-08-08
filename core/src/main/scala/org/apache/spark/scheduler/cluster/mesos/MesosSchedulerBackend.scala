@@ -242,6 +242,13 @@ private[spark] class MesosSchedulerBackend(
   /** Turn a Spark TaskDescription into a Mesos task */
   def createMesosTask(task: TaskDescription, slaveId: String): MesosTaskInfo = {
     val taskId = TaskID.newBuilder().setValue(task.taskId.toString).build()
+    // adding 32 MB memory to avoid dead lock if all memory is used up on
+    // mesos slave. Mesos only offers resources if there are at least 32 MB "mem" resources allocatable
+    val memResource = Resource.newBuilder()
+      .setName("mem")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Value.Scalar.newBuilder().setValue(32).build())
+      .build()  
     val cpuResource = Resource.newBuilder()
       .setName("cpus")
       .setType(Value.Type.SCALAR)
@@ -253,6 +260,7 @@ private[spark] class MesosSchedulerBackend(
       .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
+      .addResources(memResource)
       .setData(ByteString.copyFrom(task.serializedTask))
       .build()
   }
