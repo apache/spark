@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.parquet.ParquetTableScan
+import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTableScan}
 
 import scala.collection.JavaConversions._
 
@@ -51,6 +51,13 @@ private[hive] trait HiveStrategies {
     implicit class LogicalPlanHacks(s: SchemaRDD) {
       def lowerCase =
         new SchemaRDD(s.sqlContext, LowerCaseSchema(s.logicalPlan))
+
+      def addPartitioningAttributes(attrs: Seq[Attribute]) =
+        new SchemaRDD(
+          s.sqlContext,
+          s.logicalPlan transform {
+            case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
+          })
     }
 
     implicit class PhysicalPlanHacks(s: SparkPlan) {
@@ -76,8 +83,7 @@ private[hive] trait HiveStrategies {
         }).reduceOption(And).getOrElse(Literal(true))
 
         val unresolvedProjection = projectList.map(_ transform {
-          // Handle non-partitioning columns
-          case a: AttributeReference if !partitionKeyIds.contains(a.exprId) => UnresolvedAttribute(a.name)
+          case a: AttributeReference => UnresolvedAttribute(a.name)
         })
 
         if (relation.hiveQlTable.isPartitioned) {
@@ -109,28 +115,15 @@ private[hive] trait HiveStrategies {
             pruningCondition(inputData)
           }
 
-          org.apache.spark.sql.execution.Union(
-            partitions.par.map { p =>
-              val partValues = p.getValues()
-              val internalProjection = unresolvedProjection.map(_ transform {
-                // Handle partitioning columns
-                case a: AttributeReference if partitionKeyIds.contains(a.exprId) => {
-                  val idx = relation.partitionKeys.indexWhere(a.exprId == _.exprId)
-                  val key = relation.partitionKeys(idx)
-
-                  Alias(Cast(Literal(partValues.get(idx), StringType), key.dataType), a.name)()
-                }
-              })
-
-              hiveContext
-                .parquetFile(p.getLocation)
-                .lowerCase
-                .where(unresolvedOtherPredicates)
-                .select(internalProjection:_*)
-                .queryExecution
-                .executedPlan
-                .fakeOutput(projectList.map(_.toAttribute))
-            }.seq) :: Nil
+          hiveContext
+            .parquetFile(partitions.map(_.getLocation).mkString(","))
+            .addPartitioningAttributes(relation.partitionKeys)
+            .lowerCase
+            .where(unresolvedOtherPredicates)
+            .select(unresolvedProjection:_*)
+            .queryExecution
+            .executedPlan
+            .fakeOutput(projectList.map(_.toAttribute)):: Nil
         } else {
           hiveContext
             .parquetFile(relation.hiveQlTable.getDataLocation.getPath)
