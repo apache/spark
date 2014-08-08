@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.net.{ServerSocket, URI, URL}
+import java.net.{URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConversions._
