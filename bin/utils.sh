@@ -63,8 +63,8 @@ split_java_options() {
   option_buffer=""    # buffer for collecting parts of an option
   opened_quotes=0     # whether we are expecting a closing double quotes
   for word in $1; do
-    contains_quote=$(echo "$word" | sed "s/\\\\\"//g" | grep "\"")
-    if [[ -n "$contains_quote" ]]; then
+    num_quotes=$(echo "$word" | sed "s/\\\\\"//g" | grep -o "\"" | grep -c .)
+    if [[ $((num_quotes % 2)) == 1 ]]; then
       # Flip the bit
       opened_quotes=$(((opened_quotes + 1) % 2))
     fi
