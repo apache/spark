@@ -53,7 +53,7 @@ private[spark] object AkkaUtils extends Logging {
     val startService: Int => (ActorSystem, Int) = { actualPort =>
       doCreateActorSystem(name, host, actualPort, conf, securityManager)
     }
-    Utils.startServiceOnPort(port, startService, name.replaceAll("-", " "))
+    Utils.startServiceOnPort(port, startService, name)
   }
 
   private def doCreateActorSystem(
