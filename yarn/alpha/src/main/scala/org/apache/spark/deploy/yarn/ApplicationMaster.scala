@@ -42,19 +42,14 @@ import org.apache.spark.util.{SignalLogger, Utils}
 /**
  * An application master that runs the users driver program and allocates executors.
  */
-class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
-                        sparkConf: SparkConf) extends Logging {
+class ApplicationMaster(args: ApplicationMasterArguments) extends Logging {
 
-  def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
-    this(args, new Configuration(), sparkConf)
-
-  def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
-
-  private val rpc: YarnRPC = YarnRPC.create(conf)
+  private val yarnConf: YarnConfiguration = new YarnConfiguration(new Configuration())
+  private val sparkConf = new SparkConf()
+  private val rpc: YarnRPC = YarnRPC.create(yarnConf)
   private var resourceManager: AMRMProtocol = _
   private var appAttemptId: ApplicationAttemptId = _
   private var userThread: Thread = _
-  private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   private val fs = FileSystem.get(yarnConf)
 
   private var yarnAllocator: YarnAllocationHandler = _
@@ -348,24 +343,14 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   }
   */
 
-  def finishApplicationMaster(status: FinalApplicationStatus, diagnostics: String = "") {
-    synchronized {
-      if (isFinished) {
-        return
-      }
-      isFinished = true
-
-      logInfo("finishApplicationMaster with " + status)
-      if (registered) {
-        val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
-          .asInstanceOf[FinishApplicationMasterRequest]
-        finishReq.setAppAttemptId(appAttemptId)
-        finishReq.setFinishApplicationStatus(status)
-        finishReq.setDiagnostics(diagnostics)
-        finishReq.setTrackingUrl(uiHistoryAddress)
-        resourceManager.finishApplicationMaster(finishReq)
-      }
-    }
+  override protected def finish() = {
+    val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
+      .asInstanceOf[FinishApplicationMasterRequest]
+    finishReq.setAppAttemptId(appAttemptId)
+    finishReq.setFinishApplicationStatus(status)
+    finishReq.setDiagnostics(diagnostics)
+    finishReq.setTrackingUrl(uiHistoryAddress)
+    resourceManager.finishApplicationMaster(finishReq)
   }
 
   /**
@@ -404,6 +389,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 }
 
 object ApplicationMaster extends Logging {
+
+  private var master: ApplicationMaster = _
+
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
   private val ALLOCATE_HEARTBEAT_INTERVAL = 100
@@ -454,7 +442,8 @@ object ApplicationMaster extends Logging {
     SignalLogger.register(log)
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      new ApplicationMaster(args).run()
+      master = new ApplicationMaster(args)
+      master.run()
     }
   }
 }

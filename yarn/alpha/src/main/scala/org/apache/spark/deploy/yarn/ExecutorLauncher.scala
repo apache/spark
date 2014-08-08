@@ -41,15 +41,11 @@ import org.apache.spark.deploy.SparkHadoopUtil
  *
  * This is used only in yarn-client mode.
  */
-class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
-  extends Logging {
+class ExecutorLauncher(args: ApplicationMasterArguments) extends Logging {
 
-  def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
-    this(args, new Configuration(), sparkConf)
-
-  def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
-
-  private val rpc: YarnRPC = YarnRPC.create(conf)
+  private val sparkConf = new SparkConf()
+  private val yarnConf: YarnConfiguration = new YarnConfiguration(new Configuration())
+  private val rpc: YarnRPC = YarnRPC.create(yarnConf)
   private var resourceManager: AMRMProtocol = _
   private var appAttemptId: ApplicationAttemptId = _
   private var reporterThread: Thread = _

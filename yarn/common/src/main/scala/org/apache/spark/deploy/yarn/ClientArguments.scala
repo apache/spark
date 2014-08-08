@@ -37,7 +37,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var numExecutors = 2
   var amQueue = sparkConf.get("QUEUE", "default")
   var amMemory: Int = 512 // MB
-  var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
   var inputFormatInfo: List[InputFormatInfo] = null
   var priority = 0
@@ -80,10 +79,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
-          if (args(0) == "--master-class") {
-            println("--master-class is deprecated. Use --am-class instead.")
-          }
-          amClass = value
+          println(s"${args(0)} is deprecated and is not used anymore.")
           args = tail
 
         case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
@@ -135,9 +131,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case Nil =>
-          if (userClass == null) {
-            throw new IllegalArgumentException(getUsageMessage())
-          }
 
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))

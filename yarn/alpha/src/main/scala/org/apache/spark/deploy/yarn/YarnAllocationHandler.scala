@@ -68,7 +68,7 @@ private[yarn] class YarnAllocationHandler(
     val preferredHostToCount: Map[String, Int],
     val preferredRackToCount: Map[String, Int],
     val sparkConf: SparkConf)
-  extends Logging {
+  extends YarnAllocator with Logging {
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
   // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
   // allocatedContainerToHostMap: container to host mapping.
