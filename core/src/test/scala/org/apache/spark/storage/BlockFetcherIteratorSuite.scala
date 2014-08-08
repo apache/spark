@@ -33,6 +33,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.storage.BlockFetcherIterator._
 import org.apache.spark.network.{ConnectionManager, Message}
+import org.apache.spark.executor.ShuffleReadMetrics
 
 class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 
@@ -70,8 +71,8 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
 
-    val iterator = new BasicBlockFetcherIterator(blockManager,
-      blocksByAddress, null)
+    val iterator = new BasicBlockFetcherIterator(blockManager, blocksByAddress, null,
+      new ShuffleReadMetrics())
 
     iterator.initialize()
 
@@ -121,8 +122,8 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
 
-    val iterator = new BasicBlockFetcherIterator(blockManager,
-      blocksByAddress, null)
+    val iterator = new BasicBlockFetcherIterator(blockManager, blocksByAddress, null,
+      new ShuffleReadMetrics())
 
     iterator.initialize()
 
@@ -165,7 +166,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     )
 
     val iterator = new BasicBlockFetcherIterator(blockManager,
-      blocksByAddress, null)
+      blocksByAddress, null, new ShuffleReadMetrics())
 
     iterator.initialize()
     iterator.foreach{
@@ -219,7 +220,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     )
 
     val iterator = new BasicBlockFetcherIterator(blockManager,
-      blocksByAddress, null)
+      blocksByAddress, null, new ShuffleReadMetrics())
     iterator.initialize()
     iterator.foreach{
       case (_, r) => {
