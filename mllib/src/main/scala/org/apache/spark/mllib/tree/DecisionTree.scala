@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.impl.TreePoint
 import org.apache.spark.mllib.tree.impurity.{Impurities, Gini, Entropy, Impurity}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
@@ -92,7 +93,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     timer.reset()
 
     // Cache input RDD for speedup during multiple passes.
-    val retaggedInput = input.retag(classOf[LabeledPoint]).cache()
+    val retaggedInput = input.retag(classOf[LabeledPoint])
     logDebug("algo = " + strategy.algo)
 
     timer.initTime += timer.elapsed()
@@ -105,6 +106,10 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     logDebug("numBins = " + numBins)
 
     timer.findSplitsBinsTime += timer.elapsed()
+
+    timer.reset()
+    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, strategy, bins)
+    timer.initTime += timer.elapsed()
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -162,8 +167,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
       // Find best split for all nodes at a level.
       timer.reset()
-      val splitsStatsForLevel = DecisionTree.findBestSplits(retaggedInput, parentImpurities,
-        strategy, level, filters, splits, bins, timer, maxLevelForSingleGroup)
+      val splitsStatsForLevel = DecisionTree.findBestSplits(treeInput, parentImpurities,
+        strategy, level, filters, splits, bins, maxLevelForSingleGroup, timer)
       timer.findBestSplitsTime += timer.elapsed()
 
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
@@ -463,7 +468,7 @@ object DecisionTree extends Serializable with Logging {
    * Returns an array of optimal splits for all nodes at a given level. Splits the task into
    * multiple groups if the level-wise training task could lead to memory overflow.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
    *                 parameters for constructing the DecisionTree
@@ -475,22 +480,22 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   protected[tree] def findBestSplits(
-      input: RDD[LabeledPoint],
+      input: RDD[TreePoint],
       parentImpurities: Array[Double],
       strategy: Strategy,
       level: Int,
       filters: Array[List[Filter]],
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
-      timer: TimeTracker,
-      maxLevelForSingleGroup: Int): Array[(Split, InformationGainStats)] = {
+      maxLevelForSingleGroup: Int,
+      timer: TimeTracker = new TimeTracker): Array[(Split, InformationGainStats)] = {
     // split into groups to avoid memory overflow during aggregation
     if (level > maxLevelForSingleGroup) {
       // When information for all nodes at a given level cannot be stored in memory,
       // the nodes are divided into multiple groups at each level with the number of groups
       // increasing exponentially per level. For example, if maxLevelForSingleGroup is 10,
       // numGroups is equal to 2 at level 11 and 4 at level 12, respectively.
-      val numGroups = math.pow(2, (level - maxLevelForSingleGroup)).toInt
+      val numGroups = math.pow(2, level - maxLevelForSingleGroup).toInt
       logDebug("numGroups = " + numGroups)
       var bestSplits = new Array[(Split, InformationGainStats)](0)
       // Iterate over each group of nodes at a level.
@@ -510,7 +515,7 @@ object DecisionTree extends Serializable with Logging {
     /**
    * Returns an array of optimal splits for a group of nodes at a given level
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
    *                 parameters for constructing the DecisionTree
@@ -523,7 +528,7 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   private def findBestSplitsPerGroup(
-      input: RDD[LabeledPoint],
+      input: RDD[TreePoint],
       parentImpurities: Array[Double],
       strategy: Strategy,
       level: Int,
@@ -601,7 +606,7 @@ object DecisionTree extends Serializable with Logging {
      * Find whether the sample is valid input for the current node, i.e., whether it passes through
      * all the filters for the current node.
      */
-    def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
+    def isSampleValid(parentFilters: List[Filter], treePoint: TreePoint): Boolean = {
       // leaf
       if ((level > 0) && (parentFilters.length == 0)) {
         return false
@@ -609,20 +614,20 @@ object DecisionTree extends Serializable with Logging {
 
       // Apply each filter and check sample validity. Return false when invalid condition found.
       for (filter <- parentFilters) {
-        val features = labeledPoint.features
         val featureIndex = filter.split.feature
-        val threshold = filter.split.threshold
         val comparison = filter.comparison
-        val categories = filter.split.categories
         val isFeatureContinuous = filter.split.featureType == Continuous
-        val feature =  features(featureIndex)
+        val binId = treePoint.features(featureIndex)
+        val bin = bins(featureIndex)(binId)
         if (isFeatureContinuous) {
+          val featureValue = bin.highSplit.threshold
+          val threshold = filter.split.threshold
           comparison match {
-            case -1 => if (feature > threshold) return false
-            case 1 => if (feature <= threshold) return false
+            case -1 => if (featureValue > threshold) return false
+            case 1 => if (featureValue <= threshold) return false
           }
         } else {
-          val containsFeature = categories.contains(feature)
+          val containsFeature = filter.split.categories.contains(bin.category)
           comparison match {
             case -1 => if (!containsFeature) return false
             case 1 => if (containsFeature) return false
@@ -635,102 +640,7 @@ object DecisionTree extends Serializable with Logging {
       true
     }
 
-    /**
-     * Find bin for one (labeledPoint, feature).
-     */
-    def findBin(
-        featureIndex: Int,
-        labeledPoint: LabeledPoint,
-        isFeatureContinuous: Boolean,
-        isSpaceSufficientForAllCategoricalSplits: Boolean): Int = {
-      val binForFeatures = bins(featureIndex)
-      val feature = labeledPoint.features(featureIndex)
-
-      /**
-       * Binary search helper method for continuous feature.
-       */
-      def binarySearchForBins(): Int = {
-        var left = 0
-        var right = binForFeatures.length - 1
-        while (left <= right) {
-          val mid = left + (right - left) / 2
-          val bin = binForFeatures(mid)
-          val lowThreshold = bin.lowSplit.threshold
-          val highThreshold = bin.highSplit.threshold
-          if ((lowThreshold < feature) && (highThreshold >= feature)) {
-            return mid
-          }
-          else if (lowThreshold >= feature) {
-            right = mid - 1
-          }
-          else {
-            left = mid + 1
-          }
-        }
-        -1
-      }
-
-      /**
-       * Sequential search helper method to find bin for categorical feature in multiclass
-       * classification. The category is returned since each category can belong to multiple
-       * splits. The actual left/right child allocation per split is performed in the
-       * sequential phase of the bin aggregate operation.
-       */
-      def sequentialBinSearchForUnorderedCategoricalFeatureInClassification(): Int = {
-        labeledPoint.features(featureIndex).toInt
-      }
-
-      /**
-       * Sequential search helper method to find bin for categorical feature
-       * (for classification and regression).
-       */
-      def sequentialBinSearchForOrderedCategoricalFeature(): Int = {
-        val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
-        val featureValue = labeledPoint.features(featureIndex)
-        var binIndex = 0
-        while (binIndex < featureCategories) {
-          val bin = bins(featureIndex)(binIndex)
-          val categories = bin.highSplit.categories
-          if (categories.contains(featureValue)) {
-            return binIndex
-          }
-          binIndex += 1
-        }
-        if (featureValue < 0 || featureValue >= featureCategories) {
-          throw new IllegalArgumentException(
-            s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureCategories - 1}," +
-            s" but a data point gives it value $featureValue.\n" +
-            "  Bad data point: " + labeledPoint.toString)
-        }
-        -1
-      }
-
-      if (isFeatureContinuous) {
-        // Perform binary search for finding bin for continuous features.
-        val binIndex = binarySearchForBins()
-        if (binIndex == -1) {
-          throw new UnknownError("no bin was found for continuous variable.")
-        }
-        binIndex
-      } else {
-        // Perform sequential search to find bin for categorical features.
-        val binIndex = {
-          val isUnorderedFeature =
-            isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits
-          if (isUnorderedFeature) {
-            sequentialBinSearchForUnorderedCategoricalFeatureInClassification()
-          } else {
-            sequentialBinSearchForOrderedCategoricalFeature()
-          }
-        }
-        if (binIndex == -1) {
-          throw new UnknownError("no bin was found for categorical variable.")
-        }
-        binIndex
-      }
-    }
+    // TODO: REMOVED findBin()
 
     /**
      * Finds bins for all nodes (and all features) at a given level.
@@ -748,37 +658,26 @@ object DecisionTree extends Serializable with Logging {
      *            bin index for this labeledPoint
      *            (or InvalidBinIndex if labeledPoint is not handled by this node)
      */
-    def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
+    def findBinsForLevel(treePoint: TreePoint): Array[Double] = {
       // Calculate bin index and label per feature per node.
       val arr = new Array[Double](1 + (numFeatures * numNodes))
       // First element of the array is the label of the instance.
-      arr(0) = labeledPoint.label
+      arr(0) = treePoint.label
       // Iterate over nodes.
       var nodeIndex = 0
       while (nodeIndex < numNodes) {
         val parentFilters = findParentFilters(nodeIndex)
         // Find out whether the sample qualifies for the particular node.
-        val sampleValid = isSampleValid(parentFilters, labeledPoint)
+        val sampleValid = isSampleValid(parentFilters, treePoint)
         val shift = 1 + numFeatures * nodeIndex
         if (!sampleValid) {
           // Mark one bin as -1 is sufficient.
           arr(shift) = InvalidBinIndex
         } else {
           var featureIndex = 0
+          // TODO: Vectorize this
           while (featureIndex < numFeatures) {
-            val featureInfo = strategy.categoricalFeaturesInfo.get(featureIndex)
-            val isFeatureContinuous = featureInfo.isEmpty
-            if (isFeatureContinuous) {
-              arr(shift + featureIndex)
-                = findBin(featureIndex, labeledPoint, isFeatureContinuous, false)
-            } else {
-              val featureCategories = featureInfo.get
-              val isSpaceSufficientForAllCategoricalSplits
-                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
-              arr(shift + featureIndex)
-                = findBin(featureIndex, labeledPoint, isFeatureContinuous,
-                isSpaceSufficientForAllCategoricalSplits)
-            }
+            arr(shift + featureIndex) = treePoint.features(featureIndex)
             featureIndex += 1
           }
         }
