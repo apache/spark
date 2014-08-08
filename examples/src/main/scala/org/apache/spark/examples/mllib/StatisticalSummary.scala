@@ -42,9 +42,10 @@ object StatisticalSummary extends App {
   val defaultParams = Params()
 
   val parser = new OptionParser[Params]("StatisticalSummary") {
-    head("StatisticalSummary: an example app for MultivariateOnlineSummarizer and Statistics (correlation)")
+    head("StatisticalSummary: an example app for MultivariateOnlineSummarizer and Statistics" +
+      " (correlation)")
     opt[String]("input")
-      .text(s"Input paths to labeled examples in LIBSVM format, default: ${defaultParams.input}")
+      .text(s"Input path to labeled examples in LIBSVM format, default: ${defaultParams.input}")
       .action((x, c) => c.copy(input = x))
     note(
       """
@@ -52,7 +53,7 @@ object StatisticalSummary extends App {
         |
         | bin/spark-submit --class org.apache.spark.examples.mllib.StatisticalSummary \
         |  examples/target/scala-*/spark-examples-*.jar \
-        |  data/mllib/sample_linear_regression_data.txt
+        |  --input data/mllib/sample_linear_regression_data.txt
       """.stripMargin)
   }
 
