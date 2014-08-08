@@ -62,7 +62,7 @@ class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-    val gradient = Vectors.copy(data)
+    val gradient = data.copy
     scal(gradientMultiplier, gradient)
     val loss =
       if (label > 0) {
@@ -102,7 +102,7 @@ class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val diff = dot(data, weights) - label
     val loss = diff * diff
-    val gradient = Vectors.copy(data)
+    val gradient = data.copy
     scal(2.0 * diff, gradient)
     (gradient, loss)
   }
@@ -132,7 +132,7 @@ class HingeGradient extends Gradient {
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
     if (1.0 > labelScaled * dotProduct) {
-      val gradient = Vectors.copy(data)
+      val gradient = data.copy
       scal(-labelScaled, gradient)
       (gradient, 1.0 - labelScaled * dotProduct)
     } else {

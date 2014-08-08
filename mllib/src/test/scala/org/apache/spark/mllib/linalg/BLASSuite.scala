@@ -113,7 +113,7 @@ class BLASSuite extends FunSuite {
     assert(dot(sx, sx) ~== 5.0 absTol 1e-15)
     assert(dot(dx, dx) ~== 5.0 absTol 1e-15)
     assert(dot(sx, dx) ~== 5.0 absTol 1e-15)
-    assert(dot(dx, dx) ~== 5.0 absTol 1e-15)
+    assert(dot(dx, sx) ~== 5.0 absTol 1e-15)
 
     val sx1 = Vectors.sparse(10, Array(0, 3, 5, 7, 8), Array(1.0, 2.0, 3.0, 4.0, 5.0))
     val sx2 = Vectors.sparse(10, Array(1, 3, 6, 7, 9), Array(1.0, 2.0, 3.0, 4.0, 5.0))

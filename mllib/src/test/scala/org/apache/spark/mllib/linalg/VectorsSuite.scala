@@ -130,9 +130,9 @@ class VectorsSuite extends FunSuite {
     assert(Vectors.zeros(3) === Vectors.dense(0.0, 0.0, 0.0))
   }
 
-  test("copy vectors") {
+  test("Vector.copy") {
     val sv = Vectors.sparse(4, Array(0, 2), Array(1.0, 2.0))
-    val svCopy = Vectors.copy(sv)
+    val svCopy = sv.copy
     (sv, svCopy) match {
       case (sv: SparseVector, svCopy: SparseVector) =>
         assert(sv.size === svCopy.size)
@@ -145,7 +145,7 @@ class VectorsSuite extends FunSuite {
     }
 
     val dv = Vectors.dense(1.0, 0.0, 2.0)
-    val dvCopy = Vectors.copy(dv)
+    val dvCopy = dv.copy
     (dv, dvCopy) match {
       case (dv: DenseVector, dvCopy: DenseVector) =>
         assert(dv.size === dvCopy.size)

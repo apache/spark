@@ -92,10 +92,10 @@ private[mllib] object BLAS extends Serializable {
     (x, y) match {
       case (dx: DenseVector, dy: DenseVector) =>
         dot(dx, dy)
-      case (dx: DenseVector, sy: SparseVector) =>
-        dot(dx, sy)
       case (sx: SparseVector, dy: DenseVector) =>
         dot(sx, dy)
+      case (dx: DenseVector, sy: SparseVector) =>
+        dot(sy, dx)
       case (sx: SparseVector, sy: SparseVector) =>
         dot(sx, sy)
       case _ =>
@@ -123,13 +123,6 @@ private[mllib] object BLAS extends Serializable {
       k += 1
     }
     sum
-  }
-
-  /**
-   * dot(x, y)
-   */
-  private def dot(x: DenseVector, y: SparseVector): Double = {
-    dot(y, x)
   }
 
   /**

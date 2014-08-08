@@ -235,7 +235,7 @@ object LBFGS extends Logging {
        */
       // The following gradientTotal is actually the regularization part of gradient.
       // Will add the gradientSum computed from the data with weights in the next step.
-      val gradientTotal = Vectors.copy(w)
+      val gradientTotal = w.copy
       axpy(-1.0, updater.compute(w, Vectors.zeros(n), 1, 1, regParam)._1, gradientTotal)
 
       // gradientTotal = gradientSum / numExamples + gradientTotal
