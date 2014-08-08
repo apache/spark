@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.MLlibBLAS.{daxpy, ddot}
+import org.apache.spark.mllib.linalg.MLlibBLAS.{axpy, dot}
 
 /**
  * :: DeveloperApi ::
@@ -60,7 +60,7 @@ abstract class Gradient extends Serializable {
 @DeveloperApi
 class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val margin = -1.0 * ddot(data, weights)
+    val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = data.toBreeze * gradientMultiplier
     val loss =
@@ -78,9 +78,9 @@ class LogisticGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val margin = -1.0 * ddot(data, weights)
+    val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-    daxpy(gradientMultiplier, data, cumGradient)
+    axpy(gradientMultiplier, data, cumGradient)
     if (label > 0) {
       math.log1p(math.exp(margin))
     } else {
@@ -99,7 +99,7 @@ class LogisticGradient extends Gradient {
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val diff = ddot(data, weights) - label
+    val diff = dot(data, weights) - label
     val loss = diff * diff
     val gradient = data.toBreeze * (2.0 * diff)
     (Vectors.fromBreeze(gradient), loss)
@@ -110,8 +110,8 @@ class LeastSquaresGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val diff = ddot(data, weights) - label
-    daxpy(2.0 * diff, data, cumGradient)
+    val diff = dot(data, weights) - label
+    axpy(2.0 * diff, data, cumGradient)
     diff * diff
   }
 }
@@ -125,7 +125,7 @@ class LeastSquaresGradient extends Gradient {
 @DeveloperApi
 class HingeGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val dotProduct = ddot(data, weights)
+    val dotProduct = dot(data, weights)
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
@@ -141,12 +141,12 @@ class HingeGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val dotProduct = ddot(data, weights)
+    val dotProduct = dot(data, weights)
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
     if (1.0 > labelScaled * dotProduct) {
-      daxpy(-labelScaled, data, cumGradient)
+      axpy(-labelScaled, data, cumGradient)
       1.0 - labelScaled * dotProduct
     } else {
       0.0

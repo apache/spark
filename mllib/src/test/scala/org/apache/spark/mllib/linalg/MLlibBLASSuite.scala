@@ -7,48 +7,48 @@ import org.apache.spark.mllib.linalg.MLlibBLAS._
 
 class MLlibBLASSuite extends FunSuite {
 
-  test("dcopy") {
+  test("copy") {
     val sx = Vectors.sparse(4, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0, 0.0)
     val sy = Vectors.sparse(4, Array(0, 1, 3), Array(2.0, 1.0, 1.0))
     val dy = Array(2.0, 1.0, 0.0, 1.0)
 
     val dy1 = Vectors.dense(dy.clone())
-    dcopy(sx, dy1)
+    copy(sx, dy1)
     assert(dy1 ~== dx absTol 1e-15)
 
     val dy2 = Vectors.dense(dy.clone())
-    dcopy(dx, dy2)
+    copy(dx, dy2)
     assert(dy2 ~== dx absTol 1e-15)
 
     intercept[IllegalArgumentException] {
-      dcopy(sx, sy)
+      copy(sx, sy)
     }
 
     intercept[IllegalArgumentException] {
-      dcopy(dx, sy)
+      copy(dx, sy)
     }
 
     withClue("vector sizes must match") {
       intercept[Exception] {
-        dcopy(sx, Vectors.dense(0.0, 1.0, 2.0))
+        copy(sx, Vectors.dense(0.0, 1.0, 2.0))
       }
     }
   }
 
-  test("dscal") {
+  test("scal") {
     val a = 0.1
     val sx = Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0)
 
-    dscal(a, sx)
+    scal(a, sx)
     assert(sx ~== Vectors.sparse(3, Array(0, 2), Array(0.1, -0.2)) absTol 1e-15)
 
-    dscal(a, dx)
+    scal(a, dx)
     assert(dx ~== Vectors.dense(0.1, 0.0, -0.2) absTol 1e-15)
   }
 
-  test("daxpy") {
+  test("axpy") {
     val alpha = 0.1
     val sx = Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0)
@@ -56,46 +56,52 @@ class MLlibBLASSuite extends FunSuite {
     val expected = Vectors.dense(2.1, 1.0, -0.2)
 
     val dy1 = Vectors.dense(dy.clone())
-    daxpy(alpha, sx, dy1)
+    axpy(alpha, sx, dy1)
     assert(dy1 ~== expected absTol 1e-15)
 
     val dy2 = Vectors.dense(dy.clone())
-    daxpy(alpha, dx, dy2)
+    axpy(alpha, dx, dy2)
     assert(dy2 ~== expected absTol 1e-15)
 
     val sy = Vectors.sparse(4, Array(0, 1), Array(2.0, 1.0))
 
     intercept[IllegalArgumentException] {
-      daxpy(alpha, sx, sy)
+      axpy(alpha, sx, sy)
     }
 
     intercept[IllegalArgumentException] {
-      daxpy(alpha, dx, sy)
+      axpy(alpha, dx, sy)
     }
 
     withClue("vector sizes must match") {
       intercept[Exception] {
-        daxpy(alpha, sx, Vectors.dense(1.0, 2.0))
+        axpy(alpha, sx, Vectors.dense(1.0, 2.0))
       }
     }
   }
 
-  test("ddot") {
+  test("dot") {
     val sx = Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0)
     val sy = Vectors.sparse(3, Array(0, 1), Array(2.0, 1.0))
     val dy = Vectors.dense(2.0, 1.0, 0.0)
 
-    assert(ddot(sx, sy) ~== 2.0 absTol 1e-15)
-    assert(ddot(sy, sx) ~== 2.0 absTol 1e-15)
-    assert(ddot(sx, dy) ~== 2.0 absTol 1e-15)
-    assert(ddot(dy, sx) ~== 2.0 absTol 1e-15)
-    assert(ddot(dx, dy) ~== 2.0 absTol 1e-15)
-    assert(ddot(dy, dx) ~== 2.0 absTol 1e-15)
+    assert(dot(sx, sy) ~== 2.0 absTol 1e-15)
+    assert(dot(sy, sx) ~== 2.0 absTol 1e-15)
+    assert(dot(sx, dy) ~== 2.0 absTol 1e-15)
+    assert(dot(dy, sx) ~== 2.0 absTol 1e-15)
+    assert(dot(dx, dy) ~== 2.0 absTol 1e-15)
+    assert(dot(dy, dx) ~== 2.0 absTol 1e-15)
 
-    assert(ddot(sx, sx) ~== 5.0 absTol 1e-15)
-    assert(ddot(dx, dx) ~== 5.0 absTol 1e-15)
-    assert(ddot(sx, dx) ~== 5.0 absTol 1e-15)
-    assert(ddot(dx, dx) ~== 5.0 absTol 1e-15)
+    assert(dot(sx, sx) ~== 5.0 absTol 1e-15)
+    assert(dot(dx, dx) ~== 5.0 absTol 1e-15)
+    assert(dot(sx, dx) ~== 5.0 absTol 1e-15)
+    assert(dot(dx, dx) ~== 5.0 absTol 1e-15)
+
+    withClue("vector sizes must match") {
+      intercept[Exception] {
+        dot(sx, Vectors.dense(2.0, 1.0))
+      }
+    }
   }
 }

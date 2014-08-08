@@ -25,7 +25,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.MLlibBLAS.{daxpy, dcopy}
+import org.apache.spark.mllib.linalg.MLlibBLAS.axpy
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
@@ -207,7 +207,7 @@ object LBFGS extends Logging {
             (grad, loss + l)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            daxpy(1.0, grad2, grad1)
+            axpy(1.0, grad2, grad1)
             (grad1, loss1 + loss2)
           })
 
@@ -235,12 +235,11 @@ object LBFGS extends Logging {
        */
       // The following gradientTotal is actually the regularization part of gradient.
       // Will add the gradientSum computed from the data with weights in the next step.
-      val gradientTotal = Vectors.zeros(n)
-      dcopy(w, gradientTotal)
-      daxpy(-1.0, updater.compute(w, Vectors.zeros(n), 1, 1, regParam)._1, gradientTotal)
+      val gradientTotal = Vectors.copy(w)
+      axpy(-1.0, updater.compute(w, Vectors.zeros(n), 1, 1, regParam)._1, gradientTotal)
 
       // gradientTotal = gradientSum / numExamples + gradientTotal
-      daxpy(1.0 / numExamples, gradientSum, gradientTotal)
+      axpy(1.0 / numExamples, gradientSum, gradientTotal)
 
       (loss, gradientTotal.toBreeze.asInstanceOf[BDV[Double]])
     }

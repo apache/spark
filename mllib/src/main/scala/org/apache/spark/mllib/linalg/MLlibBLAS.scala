@@ -20,29 +20,29 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * y += a * x
    */
-  def daxpy(a: Double, x: Vector, y: Vector): Unit = {
+  def axpy(a: Double, x: Vector, y: Vector): Unit = {
     require(x.size == y.size)
     y match {
       case dy: DenseVector =>
         x match {
           case sx: SparseVector =>
-            daxpy(a, sx, dy)
+            axpy(a, sx, dy)
           case dx: DenseVector =>
-            daxpy(a, dx, dy)
+            axpy(a, dx, dy)
           case _ =>
             throw new UnsupportedOperationException(
-              s"daxpy doesn't support x type ${x.getClass}.")
+              s"axpy doesn't support x type ${x.getClass}.")
         }
       case _ =>
         throw new IllegalArgumentException(
-          s"daxpy only supports adding to a dense vector but got type ${y.getClass}.")
+          s"axpy only supports adding to a dense vector but got type ${y.getClass}.")
     }
   }
 
   /**
    * y += a * x
    */
-  private def daxpy(a: Double, x: DenseVector, y: DenseVector): Unit = {
+  private def axpy(a: Double, x: DenseVector, y: DenseVector): Unit = {
     val n = x.size
     f2jBLAS.daxpy(n, a, x.values, 1, y.values, 1)
   }
@@ -50,7 +50,7 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * y += a * x
    */
-  private def daxpy(a: Double, x: SparseVector, y: DenseVector): Unit = {
+  private def axpy(a: Double, x: SparseVector, y: DenseVector): Unit = {
     val nnz = x.indices.size
     if (a == 1.0) {
       var k = 0
@@ -70,26 +70,26 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * dot(x, y)
    */
-  def ddot(x: Vector, y: Vector): Double = {
+  def dot(x: Vector, y: Vector): Double = {
     require(x.size == y.size)
     (x, y) match {
       case (dx: DenseVector, dy: DenseVector) =>
-        ddot(dx, dy)
+        dot(dx, dy)
       case (dx: DenseVector, sy: SparseVector) =>
-        ddot(sy, dx)
+        dot(dx, sy)
       case (sx: SparseVector, dy: DenseVector) =>
-        ddot(sx, dy)
+        dot(sx, dy)
       case (sx: SparseVector, sy: SparseVector) =>
-        ddot(sx, sy)
+        dot(sx, sy)
       case _ =>
-        throw new IllegalArgumentException(s"ddot doesn't support (${x.getClass}, ${y.getClass}).")
+        throw new IllegalArgumentException(s"dot doesn't support (${x.getClass}, ${y.getClass}).")
     }
   }
 
   /**
    * dot(x, y)
    */
-  private def ddot(x: DenseVector, y: DenseVector): Double = {
+  private def dot(x: DenseVector, y: DenseVector): Double = {
     val n = x.size
     f2jBLAS.ddot(n, x.values, 1, y.values, 1)
   }
@@ -97,7 +97,7 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * dot(x, y)
    */
-  private def ddot(x: SparseVector, y: DenseVector): Double = {
+  private def dot(x: SparseVector, y: DenseVector): Double = {
     val nnz = x.indices.size
     var sum = 0.0
     var k = 0
@@ -111,7 +111,14 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * dot(x, y)
    */
-  private def ddot(x: SparseVector, y: SparseVector): Double = {
+  private def dot(x: DenseVector, y: SparseVector): Double = {
+    dot(y, x)
+  }
+
+  /**
+   * dot(x, y)
+   */
+  private def dot(x: SparseVector, y: SparseVector): Double = {
     var kx = 0
     val nnzx = x.indices.size
     var ky = 0
@@ -135,7 +142,7 @@ private[mllib] object MLlibBLAS extends Serializable {
   /**
    * y = x
    */
-  def dcopy(x: Vector, y: Vector): Unit = {
+  def copy(x: Vector, y: Vector): Unit = {
     val n = y.size
     require(x.size == n)
     y match {
@@ -163,21 +170,21 @@ private[mllib] object MLlibBLAS extends Serializable {
             Array.copy(dx.values, 0, dy.values, 0, n)
         }
       case _ =>
-        throw new IllegalArgumentException(s"y must be dense in dcopy but got ${y.getClass}")
+        throw new IllegalArgumentException(s"y must be dense in copy but got ${y.getClass}")
     }
   }
 
   /**
    * x = a * x
    */
-  def dscal(a: Double, x: Vector): Unit = {
+  def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
         f2jBLAS.dscal(sx.values.size, a, sx.values, 1)
       case dx: DenseVector =>
         f2jBLAS.dscal(dx.values.size, a, dx.values, 1)
       case _ =>
-        throw new IllegalArgumentException(s"dscal doesn't support vector type ${x.getClass}.")
+        throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
   }
 }

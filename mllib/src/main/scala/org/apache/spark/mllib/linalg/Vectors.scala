@@ -137,6 +137,23 @@ object Vectors {
     new DenseVector(new Array[Double](size))
   }
 
+
+  /**
+   * Makes a deep copy of the input vector.
+   */
+  def copy(v: Vector): Vector = {
+    v match {
+      case dv: DenseVector =>
+        new DenseVector(dv.values.clone())
+      case sv: SparseVector =>
+        val indices = sv.indices.clone()
+        val values = sv.values.clone()
+        new SparseVector(sv.size, indices, values)
+      case _ =>
+        throw new SparkException(s"copy doesn't support ${v.getClass}.")
+    }
+  }
+
   /**
    * Parses a string resulted from `Vector#toString` into
    * an [[org.apache.spark.mllib.linalg.Vector]].
@@ -152,7 +169,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-       throw new SparkException(s"Cannot parse $other.")
+        throw new SparkException(s"Cannot parse $other.")
     }
   }
 
