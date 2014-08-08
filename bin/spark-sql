@@ -84,6 +84,11 @@ while (($#)); do
       CLI_ARGS+=($1)
       SUBMISSION_ARGS+=($1); shift
       ;;
+      
+    --driver-java-options)
+      shift;
+      export SPARK_SUBMIT_OPTS=$1; shift
+      ;;
 
     *)
       SUBMISSION_ARGS+=($1); shift
