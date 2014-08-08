@@ -222,7 +222,7 @@ class RowMatrix(
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
-        val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
+        val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
       case SVDMode.DistARPACK =>
         require(k < n, s"k must be smaller than n in dist-eigs mode but got k=$k and n=$n.")
@@ -338,7 +338,7 @@ class RowMatrix(
 
     val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
 
-    val (u: BDM[Double], _, _) = brzSvd(Cov)
+    val brzSvd.SVD(u: BDM[Double], _, _) = brzSvd(Cov)
 
     if (k == n) {
       Matrices.dense(n, k, u.data)
