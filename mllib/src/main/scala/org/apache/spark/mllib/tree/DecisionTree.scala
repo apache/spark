@@ -17,14 +17,18 @@
 
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.api.java.JavaRDD
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Impurities, Gini, Entropy, Impurity}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -39,6 +43,8 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 @Experimental
 class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
+
+  strategy.assertValid()
 
   /**
    * Method to train a decision tree model over an RDD
@@ -200,6 +206,10 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
+   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   *       is recommended to clearly separate classification and regression.
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
@@ -213,10 +223,12 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes.
+   * Method to train a decision tree model.
+   * The method supports binary and multiclass classification and regression.
+   *
+   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   *       is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -237,10 +249,12 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes.
+   * Method to train a decision tree model.
+   * The method supports binary and multiclass classification and regression.
+   *
+   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   *       is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -263,11 +277,12 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The decision tree method supports binary classification and
-   * regression. For the binary classification, the label for each instance should either be 0 or
-   * 1 to denote the two classes. The method also supports categorical features inputs where the
-   * number of categories can specified using the categoricalFeaturesInfo option.
+   * Method to train a decision tree model.
+   * The method supports binary and multiclass classification and regression.
+   *
+   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   *       is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -279,11 +294,9 @@ object DecisionTree extends Serializable with Logging {
    * @param numClassesForClassification number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example,
-   *                                an entry (n -> k) implies the feature n is categorical with k
-   *                                categories 0, 1, 2, ... , k-1. It's important to note that
-   *                                features are zero-indexed.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features.
+   *                                E.g., an entry (n -> k) indicates that feature n is categorical
+   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -299,6 +312,93 @@ object DecisionTree extends Serializable with Logging {
       quantileCalculationStrategy, categoricalFeaturesInfo)
     new DecisionTree(strategy).train(input)
   }
+
+  /**
+   * Method to train a decision tree model for binary or multiclass classification.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              Labels should take values {0, 1, ..., numClasses-1}.
+   * @param numClassesForClassification number of classes for classification.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features.
+   *                                E.g., an entry (n -> k) indicates that feature n is categorical
+   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported values: "gini" (recommended) or "entropy".
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   *                  (suggested value: 4)
+   * @param maxBins maximum number of bins used for splitting features
+   *                 (suggested value: 100)
+   * @return DecisionTreeModel that can be used for prediction
+   */
+  def trainClassifier(
+      input: RDD[LabeledPoint],
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: Map[Int, Int],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
+    val impurityType = Impurities.fromString(impurity)
+    train(input, Classification, impurityType, maxDepth, numClassesForClassification, maxBins, Sort,
+      categoricalFeaturesInfo)
+  }
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   */
+  def trainClassifier(
+      input: JavaRDD[LabeledPoint],
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
+    trainClassifier(input.rdd, numClassesForClassification,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      impurity, maxDepth, maxBins)
+  }
+
+  /**
+   * Method to train a decision tree model for regression.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              Labels are real numbers.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features.
+   *                                E.g., an entry (n -> k) indicates that feature n is categorical
+   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported values: "variance".
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   *                  (suggested value: 4)
+   * @param maxBins maximum number of bins used for splitting features
+   *                 (suggested value: 100)
+   * @return DecisionTreeModel that can be used for prediction
+   */
+  def trainRegressor(
+      input: RDD[LabeledPoint],
+      categoricalFeaturesInfo: Map[Int, Int],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
+    val impurityType = Impurities.fromString(impurity)
+    train(input, Regression, impurityType, maxDepth, 0, maxBins, Sort, categoricalFeaturesInfo)
+  }
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   */
+  def trainRegressor(
+      input: JavaRDD[LabeledPoint],
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
+    trainRegressor(input.rdd,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      impurity, maxDepth, maxBins)
+  }
+
 
   private val InvalidBinIndex = -1
 
@@ -1331,16 +1431,15 @@ object DecisionTree extends Serializable with Logging {
    * Categorical features:
    *   For each feature, there is 1 bin per split.
    *   Splits and bins are handled in 2 ways:
-   *   (a) For multiclass classification with a low-arity feature
+   *   (a) "unordered features"
+   *       For multiclass classification with a low-arity feature
    *       (i.e., if isMulticlass && isSpaceSufficientForAllCategoricalSplits),
    *       the feature is split based on subsets of categories.
-   *       There are 2^(maxFeatureValue - 1) - 1 splits.
-   *   (b) For regression and binary classification,
+   *       There are math.pow(2, maxFeatureValue - 1) - 1 splits.
+   *   (b) "ordered features"
+   *       For regression and binary classification,
    *       and for multiclass classification with a high-arity feature,
-   *       there is one split per category.
-
-   * Categorical case (a) features are called unordered features.
-   * Other cases are called ordered features.
+   *       there is one bin per category.
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
@@ -1368,10 +1467,14 @@ object DecisionTree extends Serializable with Logging {
 
 
     /*
-     * Ensure #bins is always greater than the categories. For multiclass classification,
-     * #bins should be greater than 2^(maxCategories - 1) - 1.
+     * Ensure numBins is always greater than the categories. For multiclass classification,
+     * numBins should be greater than 2^(maxCategories - 1) - 1.
      * It's a limitation of the current implementation but a reasonable trade-off since features
      * with large number of categories get favored over continuous features.
+     *
+     * This needs to be checked here instead of in Strategy since numBins can be determined
+     * by the number of training examples.
+     * TODO: Allow this case, where we simply will know nothing about some categories.
      */
     if (strategy.categoricalFeaturesInfo.size > 0) {
       val maxCategoriesForFeatures = strategy.categoricalFeaturesInfo.maxBy(_._2)._2
