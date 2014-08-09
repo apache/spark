@@ -16,6 +16,14 @@
 # limitations under the License.
 #
 
+# This file tests the various functionalities in bin/utils.sh
+#
+# By default, this prints only the relevant error output at the end if tests fail.
+# For debugging, the user can set SPARK_TESTING_VERBOSE to print more information
+# while tests are still running.
+#
+# This script returns an exit code of 1 on test failure.
+
 SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 PROPERTIES_FILE="$SPARK_HOME/bin/test.conf"
 
@@ -23,6 +31,46 @@ PROPERTIES_FILE="$SPARK_HOME/bin/test.conf"
 . "$SPARK_HOME/bin/utils.sh"
 
 tests_failed=0
+this_test_failed=0
+error_output_buffer=""
+temp_output_buffer=""
+
+# Echo only if the verbose flag is set
+verbose_echo() {
+  if [[ -n "$SPARK_TESTING_VERBOSE" ]]; then
+    echo -e "$1"
+  fi
+}
+
+# Collect error output for echoing at the end if tests fail
+# This also echoes the given string if the verbose flag is set
+log_error() {
+  verbose_echo "$1"
+  if [[ -n "$error_output_buffer" ]]; then
+    error_output_buffer=$(echo -e "$error_output_buffer\n$1")
+  else
+    error_output_buffer="$1"
+  fi
+}
+
+# Collect temporary output for logging
+collect_temp_output() {
+  if [[ -n "$temp_output_buffer" ]]; then
+    temp_output_buffer=$(echo -e "$temp_output_buffer\n$1")
+  else
+    temp_output_buffer="$1"
+  fi
+}
+
+# Print the result of an individual test
+echo_test_result() {
+  if [[ "$this_test_failed" == 1 ]]; then
+    log_error "$temp_output_buffer"
+    tests_failed=1
+  else
+    verbose_echo "$temp_output_buffer"
+  fi
+}
 
 # Test parse_java_property. This takes in three parameters, the name of the config,
 # the expected value, and whether or not to ignore whitespace (e.g. for multi-line).
@@ -30,20 +78,23 @@ test_parse_java_property() {
   key="$1"
   expected_value="$2"
   ignore_whitespace="$3"
+  temp_output_buffer=""
+  this_test_failed=0
   parse_java_property "$key"
   actual_value="$JAVA_PROPERTY_VALUE"
-  echo "  $key -> $actual_value"
+  collect_temp_output "  $key -> $actual_value"
   # Ignore whitespace for multi-line arguments
   if [[ -n "$ignore_whitespace" ]]; then
     expected_value=$(echo "$expected_value" | sed "s/[[:space:]]//g")
     actual_value=$(echo "$actual_value" | sed "s/[[:space:]]//g")
   fi
   if [[ "$actual_value" != "$expected_value" ]]; then
-    echo "    XXXXX TEST FAILED XXXXX"
-    echo "      expected: $expected_value"
-    echo "      actual:   $actual_value"
-    tests_failed=1
+    collect_temp_output "    XXXXX TEST FAILED XXXXX"
+    collect_temp_output "      expected: $expected_value"
+    collect_temp_output "      actual:   $actual_value"
+    this_test_failed=1
   fi
+  echo_test_result
 }
 
 # Test split_java_options. This takes in three or more parameters, the name of the config,
@@ -52,26 +103,30 @@ test_split_java_options() {
   key="$1"
   expected_size="$2"
   expected_values=("${@:3}")
+  temp_output_buffer=""
+  this_test_failed=0
   parse_java_property "$key"
-  echo "  $JAVA_PROPERTY_VALUE"
+  collect_temp_output "  $JAVA_PROPERTY_VALUE"
   split_java_options "$JAVA_PROPERTY_VALUE"
   if [[ "$expected_size" != "${#SPLIT_JAVA_OPTS[@]}" ]]; then
-    echo "    XXXXX TEST FAILED XXXXX"
-    echo "      expected size: $expected_size"
-    echo "      actual size:   ${#SPLIT_JAVA_OPTS[@]}"
+    collect_temp_output "    XXXXX TEST FAILED XXXXX"
+    collect_temp_output "      expected size: $expected_size"
+    collect_temp_output "      actual size:   ${#SPLIT_JAVA_OPTS[@]}"
+    this_test_failed=1
   fi
   for i in $(seq 0 $((expected_size - 1))); do
     expected_value="${expected_values[$i]}"
     actual_value="${SPLIT_JAVA_OPTS[$i]}"
-    echo "    -> $actual_value"
+    collect_temp_output "    -> $actual_value"
     if [[ "$expected_value" != "$actual_value" ]]; then
-      echo "      XXXXX TEST FAILED (key $key) XXXXX"
-      echo "        expected value: $expected_value"
-      echo "        actual value:   $actual_value"
-      tests_failed=1
+      collect_temp_output "      XXXXX TEST FAILED (key $key) XXXXX"
+      collect_temp_output "        expected value: $expected_value"
+      collect_temp_output "        actual value:   $actual_value"
+      this_test_failed=1
       break
     fi
   done
+  echo_test_result
 }
 
 # Test split_java_options. This takes in three or more parameters, the name of the config,
@@ -80,26 +135,29 @@ test_quote_java_property() {
   key="$1"
   expected_size="$2"
   expected_values=("${@:3}")
+  temp_output_buffer=""
+  this_test_failed=0
   parse_java_property "$key"
   split_java_options "$JAVA_PROPERTY_VALUE"
   quote_java_property "${SPLIT_JAVA_OPTS[@]}"
-  echo "  $JAVA_PROPERTY_VALUE"
+  collect_temp_output "  $JAVA_PROPERTY_VALUE"
   for i in $(seq 0 $((expected_size - 1))); do
     expected_value="${expected_values[$i]}"
     actual_value="${QUOTED_JAVA_OPTS[$i]}"
-    echo "    -> $actual_value"
+    collect_temp_output "    -> $actual_value"
     if [[ "$expected_value" != "$actual_value" ]]; then
-      echo "      XXXXX TEST FAILED (key $key) XXXXX"
-      echo "        expected value: $expected_value"
-      echo "        actual value:   $actual_value"
-      tests_failed=1
+      collect_temp_output "      XXXXX TEST FAILED (key $key) XXXXX"
+      collect_temp_output "        expected value: $expected_value"
+      collect_temp_output "        actual value:   $actual_value"
+      this_test_failed=1
       break
     fi
   done
+  echo_test_result
 }
 
 # Test parse_java_property. This should read the literal value as written in the conf file.
-echo "--- Testing parse_java_property ---"
+log_error "--- Testing parse_java_property ---"
 delimiters=("space" "equal" "colon")
 test_parse_java_property "does.not.exist" ""
 for delimiter in "${delimiters[@]}"; do
@@ -120,14 +178,13 @@ for delimiter in "${delimiters[@]}"; do
   test_parse_java_property "spark.$delimiter.12" \
     "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \" -Dcherry=berry" IGNORE_WHITESPACE
 done
-echo
+log_error
 
 # Test split_java_options. Note that this relies on parse_java_property to work correctly.
+log_error "--- Testing split_java_options ---"
 if [[ "$tests_failed" == 1 ]]; then
-  echo "* WARNING: Tests for parse_java_property failed!"
-  echo -e "This should also fail tests for split_java_options\n"
+  log_error "* WARNING: Tests for parse_java_property failed! This should also fail tests for split_java_options"
 fi
-echo "--- Testing split_java_options ---"
 test_split_java_options "spark.space.1" 1 "-Dstraw=berry"
 test_split_java_options "spark.space.2" 1 "-Dstraw=berry"
 test_split_java_options "spark.space.3" 1 "-Dstraw=berry again"
@@ -144,14 +201,13 @@ test_split_java_options "spark.space.11" 4 \
   "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ " "-Dcherry=berry"
 test_split_java_options "spark.space.12" 4 \
   "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ " "-Dcherry=berry"
-echo
+log_error
 
 # Test quote_java_property. Note that this relies on split_java_options to work correctly.
+log_error "--- Testing quote_java_property ---"
 if [[ "$tests_failed" == 1 ]]; then
-  echo "* WARNING: Tests for split_java_options failed!"
-  echo -e "This should also fail tests for quote_java_property\n"
+  log_error "* WARNING: Tests for split_java_options failed! This should also fail tests for quote_java_property"
 fi
-echo "--- Testing quote_java_property ---"
 test_quote_java_property "spark.space.1" 1 "\"-Dstraw=berry\""
 test_quote_java_property "spark.space.2" 1 "\"-Dstraw=berry\""
 test_quote_java_property "spark.space.3" 1 "\"-Dstraw=berry again\""
@@ -168,17 +224,14 @@ test_quote_java_property "spark.space.11" 4 \
   "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \"" "\"-Dcherry=berry\""
 test_quote_java_property "spark.space.12" 4 \
   "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \"" "\"-Dcherry=berry\""
-echo
+log_error
 
 # Final test result
 if [[ "$tests_failed" == 0 ]]; then
-  echo "**********************"
-  echo "      TESTS PASS      "
-  echo "**********************"
+  echo "BASH tests passed."
 else 
-  echo "XXXXXXXXXXXXXXXXXXXXXXXX"
-  echo "XXXXX TESTS FAILED XXXXX"
-  echo "XXXXXXXXXXXXXXXXXXXXXXXX"
+  echo -e "XXXXX BASH tests failed XXXXX\n"
+  echo -e "$error_output_buffer"
   exit 1
 fi
 

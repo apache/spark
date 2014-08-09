@@ -29,6 +29,7 @@ sorttable.js
 .*json
 .*data
 .*log
+.*conf
 cloudpickle.py
 join.py
 SparkExprTyper.scala
