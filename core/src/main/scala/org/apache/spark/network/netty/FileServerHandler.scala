@@ -66,4 +66,3 @@ class FileServerHandler(pResolver: PathResolver)
     ctx.close()
   }
 }
-

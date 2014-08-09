@@ -20,7 +20,7 @@ package org.apache.spark.network.netty
 import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.{ChannelOption, EventLoopGroup}
+import io.netty.channel.{ChannelFuture, ChannelOption, EventLoopGroup}
 import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.oio.OioServerSocketChannel
 
@@ -35,7 +35,7 @@ class FileServer(pResolver: PathResolver, private var port: Int) extends Logging
   private var bossGroup: EventLoopGroup = new OioEventLoopGroup
   private var workerGroup: EventLoopGroup = new OioEventLoopGroup
 
-  private var channelFuture = {
+  private var channelFuture: ChannelFuture = {
     val bootstrap = new ServerBootstrap
     bootstrap.group(bossGroup, workerGroup)
       .channel(classOf[OioServerSocketChannel])

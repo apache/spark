@@ -44,7 +44,7 @@ abstract class FileClientHandler extends SimpleChannelInboundHandler[ByteBuf] {
       handle(ctx, in, currentHeader)
       handlerCalled = true
       currentHeader = null
-      ctx.close
+      ctx.close()
     }
   }
 }
