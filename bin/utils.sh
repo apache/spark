@@ -21,12 +21,13 @@
 function gatherSparkSubmitOpts() {
 
   if [ -z "$SUBMIT_USAGE_FUNCTION" ]; then
-
     echo "Function for printing usage of $0 is not set." 1>&2
     echo "Please set usage function to shell variable 'SUBMIT_USAGE_FUNCTION' in $0" 1>&2
     exit 1
   fi
 
+  # NOTE: If you add or remove spark-sumbmit options,
+  # modify NOT ONLY this script but also SparkSubmitArgument.scala
   SUBMISSION_OPTS=()
   APPLICATION_OPTS=()
   while (($#)); do
