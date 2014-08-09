@@ -199,12 +199,15 @@ class LogisticRegressionWithLBFGS private (
     private var regParam: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
+  /**
+   * Construct a LogisticRegression object with default parameters
+   */
+  def this() = this(1E-4, 100, 0.0)
+
   private val gradient = new LogisticGradient()
   private val updater = new SimpleUpdater()
-  // Have to be lazy since users can change the parameters after the class is created.
-  // PS, after the first train, the optimizer variable will be computed, so the parameters
-  // can not be changed anymore.
-  override lazy val optimizer = new LBFGS(gradient, updater)
+  // Have to return new LBFGS object every time since users can reset the parameters anytime.
+  override def optimizer = new LBFGS(gradient, updater)
     .setNumCorrections(10)
     .setConvergenceTol(convergenceTol)
     .setMaxNumIterations(maxNumIterations)
@@ -213,24 +216,24 @@ class LogisticRegressionWithLBFGS private (
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
-   * Construct a LogisticRegression object with default parameters
-   */
-  def this() = this(1E-4, 100, 0.0)
-
-  /**
    * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    */
-  def setConvergenceTol(tolerance: Double): this.type = {
-    this.convergenceTol = tolerance
+  def setConvergenceTol(convergenceTol: Double): this.type = {
+    this.convergenceTol = convergenceTol
     this
   }
 
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
    */
-  def setMaxNumIterations(iters: Int): this.type = {
-    this.maxNumIterations = iters
+  def setNumIterations(numIterations: Int): this.type = setMaxNumIterations(numIterations)
+
+  /**
+   * Set the maximal number of iterations for L-BFGS. Default 100.
+   */
+  def setMaxNumIterations(maxNumIterations: Int): this.type = {
+    this.maxNumIterations = maxNumIterations
     this
   }
 
