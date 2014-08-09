@@ -17,14 +17,15 @@
 
 package org.apache.spark.broadcast
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, InputStream,
+  ObjectInputStream, ObjectOutputStream, OutputStream}
 
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.Utils
 
 /**
  *  A [[org.apache.spark.broadcast.Broadcast]] implementation that uses a BitTorrent-like
@@ -214,11 +215,15 @@ private[broadcast] object TorrentBroadcast extends Logging {
   private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
   private var initialized = false
   private var conf: SparkConf = null
+  private var compress: Boolean = false
+  private var compressionCodec: CompressionCodec = null
 
   def initialize(_isDriver: Boolean, conf: SparkConf) {
     TorrentBroadcast.conf = conf // TODO: we might have to fix it in tests
     synchronized {
       if (!initialized) {
+        compress = conf.getBoolean("spark.broadcast.compress", true)
+        compressionCodec = CompressionCodec.createCodec(conf)
         initialized = true
       }
     }
@@ -228,8 +233,13 @@ private[broadcast] object TorrentBroadcast extends Logging {
     initialized = false
   }
 
-  def blockifyObject[T](obj: T): TorrentInfo = {
-    val byteArray = Utils.serialize[T](obj)
+  def blockifyObject[T: ClassTag](obj: T): TorrentInfo = {
+    val bos = new ByteArrayOutputStream()
+    val out: OutputStream = if (compress) compressionCodec.compressedOutputStream(bos) else bos
+    val ser = SparkEnv.get.serializer.newInstance()
+    val serOut = ser.serializeStream(out)
+    serOut.writeObject[T](obj).close()
+    val byteArray = bos.toByteArray
     val bais = new ByteArrayInputStream(byteArray)
 
     var blockNum = byteArray.length / BLOCK_SIZE
@@ -255,7 +265,7 @@ private[broadcast] object TorrentBroadcast extends Logging {
     info
   }
 
-  def unBlockifyObject[T](
+  def unBlockifyObject[T: ClassTag](
       arrayOfBlocks: Array[TorrentBlock],
       totalBytes: Int,
       totalBlocks: Int): T = {
@@ -264,7 +274,16 @@ private[broadcast] object TorrentBroadcast extends Logging {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
         i * BLOCK_SIZE, arrayOfBlocks(i).byteArray.length)
     }
-    Utils.deserialize[T](retByteArray, Thread.currentThread.getContextClassLoader)
+
+    val in: InputStream = {
+      val arrIn = new ByteArrayInputStream(retByteArray)
+      if (compress) compressionCodec.compressedInputStream(arrIn) else arrIn
+    }
+    val ser = SparkEnv.get.serializer.newInstance()
+    val serIn = ser.deserializeStream(in)
+    val obj = serIn.readObject[T]()
+    serIn.close()
+    obj
   }
 
   /**

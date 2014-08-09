@@ -281,6 +281,24 @@ Apart from these, the following properties are also available, and may be useful
     overhead per reduce task, so keep it small unless you have a large amount of memory.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.manager</code></td>
+  <td>HASH</td>
+  <td>
+    Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
+    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
+    memory-efficient in environments with small executors, such as YARN. To use that, change
+    this value to <code>SORT</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
+  <td>200</td>
+  <td>
+    (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
+    map-side aggregation and there are at most this many reduce partitions.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -807,21 +825,22 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </tr>
-  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
   <td>0</td>
   <td>
-    The minimum ratio of registered executors (registered executors / total expected executors)
+    The minimum ratio of registered resources (registered resources / total expected resources)
+    (resources are executors in yarn mode, CPU cores in standalone mode)
     to wait for before scheduling begins. Specified as a double between 0 and 1.
-    Regardless of whether the minimum ratio of executors has been reached,
+    Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code> 
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
   <td>30000</td>
   <td>
-    Maximum amount of time to wait for executors to register before scheduling begins
+    Maximum amount of time to wait for resources to register before scheduling begins
     (in milliseconds).  
   </td>
 </tr>
