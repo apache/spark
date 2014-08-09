@@ -201,7 +201,10 @@ class LogisticRegressionWithLBFGS private (
 
   private val gradient = new LogisticGradient()
   private val updater = new SimpleUpdater()
-  override val optimizer = new LBFGS(gradient, updater)
+  // Have to be lazy since users can change the parameters after the class is created.
+  // PS, after the first train, the optimizer variable will be computed, so the parameters
+  // can not be changed anymore.
+  override lazy val optimizer = new LBFGS(gradient, updater)
     .setNumCorrections(10)
     .setConvergenceTol(convergenceTol)
     .setMaxNumIterations(maxNumIterations)
@@ -214,72 +217,25 @@ class LogisticRegressionWithLBFGS private (
    */
   def this() = this(1E-4, 100, 0.0)
 
+  /**
+   * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   */
+  def setConvergenceTol(tolerance: Double): this.type = {
+    this.convergenceTol = tolerance
+    this
+  }
+
+  /**
+   * Set the maximal number of iterations for L-BFGS. Default 100.
+   */
+  def setMaxNumIterations(iters: Int): this.type = {
+    this.maxNumIterations = iters
+    this
+  }
+
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
-  }
-}
-
-/**
- * Top-level methods for calling Logistic Regression using Limited-memory BFGS.
- * NOTE: Labels used in Logistic Regression should be {0, 1}
- */
-object LogisticRegressionWithLBFGS {
-  // NOTE(shivaram): We use multiple train methods instead of default arguments to support
-  // Java programs.
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run the L-BFGS
-   * optimization until it converges to the convergence tolerance or reaches the maximal number of
-   * iterations. The weights used in L-BFGS are initialized using the initial weights provided.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param convergenceTol The convergence tolerance of iterations for L-BFGS.
-   * @param maxNumIterations The maximal number of iterations for L-BFGS.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
-   *        the number of features in the data.
-   */
-  def train(
-      input: RDD[LabeledPoint],
-      convergenceTol: Double,
-      maxNumIterations: Int,
-      initialWeights: Vector): LogisticRegressionModel = {
-    new LogisticRegressionWithLBFGS(convergenceTol, maxNumIterations, 0.0)
-      .run(input, initialWeights)
-  }
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs.We run the L-BFGS
-   * optimization until it converges to the convergence tolerance or reaches the maximal number of
-   * iterations. The weights used in L-BFGS are initialized using the initial weights provided.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param convergenceTol The convergence tolerance of iterations for L-BFGS.
-   * @param maxNumIterations The maximal number of iterations for L-BFGS.
-   */
-  def train(
-      input: RDD[LabeledPoint],
-      convergenceTol: Double,
-      maxNumIterations: Int): LogisticRegressionModel = {
-    new LogisticRegressionWithLBFGS(convergenceTol, maxNumIterations, 0.0)
-      .run(input)
-  }
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs.We run the L-BFGS
-   * optimization until it converges to the convergence tolerance or reaches the maximal number of
-   * iterations. The weights used in L-BFGS are initialized using the initial weights provided.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param maxNumIterations The maximal number of iterations for L-BFGS.
-   */
-  def train(
-      input: RDD[LabeledPoint],
-      maxNumIterations: Int): LogisticRegressionModel = {
-    new LogisticRegressionWithLBFGS(10E-4, maxNumIterations, 0.0)
-      .run(input)
   }
 
 }
