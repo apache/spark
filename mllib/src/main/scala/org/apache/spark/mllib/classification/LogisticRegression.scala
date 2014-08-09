@@ -227,12 +227,7 @@ class LogisticRegressionWithLBFGS private (
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
    */
-  def setNumIterations(numIterations: Int): this.type = setMaxNumIterations(numIterations)
-
-  /**
-   * Set the maximal number of iterations for L-BFGS. Default 100.
-   */
-  def setMaxNumIterations(maxNumIterations: Int): this.type = {
+  def setNumIterations(maxNumIterations: Int): this.type = {
     this.maxNumIterations = maxNumIterations
     this
   }
