@@ -36,6 +36,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
@@ -97,7 +98,6 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int) {
-    totalExpectedExecutors.addAndGet(1)
     logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
@@ -109,5 +109,9 @@ private[spark] class SparkDeploySchedulerBackend(
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason.toString)
+  }
+
+  override def sufficientResourcesRegistered(): Boolean = {
+    totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 }
