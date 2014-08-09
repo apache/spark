@@ -344,21 +344,52 @@ private[sql] class StringColumnStats extends BasicColumnStats(STRING) {
   }
 
   override def contains(row: Row, ordinal: Int) = {
-    !(upperBound eq null) && {
+    (upperBound ne null) && {
       val field = columnType.getField(row, ordinal)
       lowerBound.compareTo(field) <= 0 && field.compareTo(upperBound) <= 0
     }
   }
 
   override def isAbove(row: Row, ordinal: Int) = {
-    !(upperBound eq null) && {
+    (upperBound ne null) && {
       val field = columnType.getField(row, ordinal)
       field.compareTo(upperBound) < 0
     }
   }
 
   override def isBelow(row: Row, ordinal: Int) = {
-    !(lowerBound eq null) && {
+    (lowerBound ne null) && {
+      val field = columnType.getField(row, ordinal)
+      lowerBound.compareTo(field) < 0
+    }
+  }
+}
+
+private[sql] class TimestampColumnStats extends BasicColumnStats(TIMESTAMP) {
+  override def initialBounds = (null, null)
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if ((upperBound eq null) || field.compareTo(upperBound) > 0) _upper = field
+    if ((lowerBound eq null) || field.compareTo(lowerBound) < 0) _lower = field
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    (upperBound ne null) && {
+      val field = columnType.getField(row, ordinal)
+      lowerBound.compareTo(field) <= 0 && field.compareTo(upperBound) <= 0
+    }
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    (lowerBound ne null) && {
+      val field = columnType.getField(row, ordinal)
+      field.compareTo(upperBound) < 0
+    }
+  }
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    (lowerBound ne null) && {
       val field = columnType.getField(row, ordinal)
       lowerBound.compareTo(field) < 0
     }

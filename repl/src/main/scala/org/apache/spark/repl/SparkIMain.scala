@@ -102,7 +102,8 @@ import org.apache.spark.util.Utils
 
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
-    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf))
+    val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
+    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything
@@ -892,11 +893,16 @@ import org.apache.spark.util.Utils
     def definedTypeSymbol(name: String) = definedSymbols(newTypeName(name))
     def definedTermSymbol(name: String) = definedSymbols(newTermName(name))
 
+    val definedClasses = handlers.exists {
+      case _: ClassHandler => true
+      case _ => false
+    }
+
     /** Code to import bound names from previous lines - accessPath is code to
      * append to objectName to access anything bound by request.
      */
     val SparkComputedImports(importsPreamble, importsTrailer, accessPath) =
-      importsCode(referencedNames.toSet)
+      importsCode(referencedNames.toSet, definedClasses)
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {

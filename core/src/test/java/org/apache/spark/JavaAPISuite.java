@@ -25,18 +25,23 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
-
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
+import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.junit.After;
 import org.junit.Assert;
@@ -44,6 +49,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaHadoopRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -118,8 +124,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> intersections = s1.intersection(s2);
     Assert.assertEquals(3, intersections.count());
 
-    List<Integer> list = new ArrayList<Integer>();
-    JavaRDD<Integer> empty = sc.parallelize(list);
+    JavaRDD<Integer> empty = sc.emptyRDD();
     JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
     Assert.assertEquals(0, emptyIntersection.count());
 
@@ -182,6 +187,12 @@ public class JavaAPISuite implements Serializable {
     sortedPairs = sortedRDD.collect();
     Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+  }
+
+  @Test
+  public void emptyRDD() {
+    JavaRDD<String> rdd = sc.emptyRDD();
+    Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
   }
 
   @Test
@@ -1202,5 +1213,77 @@ public class JavaAPISuite implements Serializable {
         });
     pairRDD.collect();  // Works fine
     pairRDD.collectAsMap();  // Used to crash with ClassCastException
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void sampleByKey() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+      new PairFunction<Integer, Integer, Integer>() {
+        @Override
+        public Tuple2<Integer, Integer> call(Integer i) {
+          return new Tuple2<Integer, Integer>(i % 2, 1);
+        }
+      });
+    Map<Integer, Object> fractions = Maps.newHashMap();
+    fractions.put(0, 0.5);
+    fractions.put(1, 1.0);
+    JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
+    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Assert.assertTrue(wrCounts.size() == 2);
+    Assert.assertTrue(wrCounts.get(0) > 0);
+    Assert.assertTrue(wrCounts.get(1) > 0);
+    JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
+    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Assert.assertTrue(worCounts.size() == 2);
+    Assert.assertTrue(worCounts.get(0) > 0);
+    Assert.assertTrue(worCounts.get(1) > 0);
+    JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKey(true, fractions, true, 1L);
+    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Assert.assertTrue(wrExactCounts.size() == 2);
+    Assert.assertTrue(wrExactCounts.get(0) == 2);
+    Assert.assertTrue(wrExactCounts.get(1) == 4);
+    JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKey(false, fractions, true, 1L);
+    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Assert.assertTrue(worExactCounts.size() == 2);
+    Assert.assertTrue(worExactCounts.get(0) == 2);
+    Assert.assertTrue(worExactCounts.get(1) == 4);
+  }
+
+  private static class SomeCustomClass implements Serializable {
+    public SomeCustomClass() {
+      // Intentionally left blank
+    }
+  }
+
+  @Test
+  public void collectUnderlyingScalaRDD() {
+    List<SomeCustomClass> data = new ArrayList<SomeCustomClass>();
+    for (int i = 0; i < 100; i++) {
+      data.add(new SomeCustomClass());
+    }
+    JavaRDD<SomeCustomClass> rdd = sc.parallelize(data);
+    SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
+    Assert.assertEquals(data.size(), collected.length);
+  }
+
+  public void getHadoopInputSplits() {
+    String outDir = new File(tempDir, "output").getAbsolutePath();
+    sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2).saveAsTextFile(outDir);
+
+    JavaHadoopRDD<LongWritable, Text> hadoopRDD = (JavaHadoopRDD<LongWritable, Text>)
+        sc.hadoopFile(outDir, TextInputFormat.class, LongWritable.class, Text.class);
+    List<String> inputPaths = hadoopRDD.mapPartitionsWithInputSplit(
+        new Function2<InputSplit, Iterator<Tuple2<LongWritable, Text>>, Iterator<String>>() {
+      @Override
+      public Iterator<String> call(InputSplit split, Iterator<Tuple2<LongWritable, Text>> it)
+          throws Exception {
+        FileSplit fileSplit = (FileSplit) split;
+        return Lists.newArrayList(fileSplit.getPath().toUri().getPath()).iterator();
+      }
+    }, true).collect();
+    Assert.assertEquals(Sets.newHashSet(inputPaths),
+        Sets.newHashSet(outDir + "/part-00000", outDir + "/part-00001"));
   }
 }

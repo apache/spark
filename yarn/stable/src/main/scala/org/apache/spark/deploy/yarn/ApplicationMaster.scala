@@ -59,6 +59,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private var yarnAllocator: YarnAllocationHandler = _
   private var isFinished: Boolean = false
   private var uiAddress: String = _
+  private var uiHistoryAddress: String = _
   private val maxAppAttempts: Int = conf.getInt(
     YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
   private var isLastAMRetry: Boolean = true
@@ -216,6 +217,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
         if (sparkContext != null) {
           uiAddress = sparkContext.ui.appUIHostPort
+          uiHistoryAddress = YarnSparkHadoopUtil.getUIHistoryAddress(sparkContext, sparkConf)
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             amClient,
@@ -234,10 +236,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
             sparkContext.getConf)
         }
       }
-    } finally {
-      // In case of exceptions, etc - ensure that the loop in
-      // ApplicationMaster#sparkContextInitialized() breaks.
-      ApplicationMaster.doneWithInitialAllocations()
     }
   }
 
@@ -254,16 +252,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         checkNumExecutorsFailed()
         allocateMissingExecutor()
         yarnAllocator.allocateResources()
-        if (iters == ApplicationMaster.ALLOCATOR_LOOP_WAIT_COUNT) {
-          ApplicationMaster.doneWithInitialAllocations()
-        }
         Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
         iters += 1
       }
-    } finally {
-      // In case of exceptions, etc - ensure that the loop in
-      // ApplicationMaster#sparkContextInitialized() breaks.
-      ApplicationMaster.doneWithInitialAllocations()
     }
     logInfo("All executors have launched.")
   }
@@ -323,8 +314,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("Unregistering ApplicationMaster with " + status)
       if (registered) {
-        val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
-        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
+        amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
       }
     }
   }
@@ -365,32 +355,14 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 }
 
 object ApplicationMaster extends Logging {
-  // Number of times to wait for the allocator loop to complete.
-  // Each loop iteration waits for 100ms, so maximum of 3 seconds.
-  // This is to ensure that we have reasonable number of containers before we start
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
-  private val ALLOCATOR_LOOP_WAIT_COUNT = 30
   private val ALLOCATE_HEARTBEAT_INTERVAL = 100
 
   private val applicationMasters = new CopyOnWriteArrayList[ApplicationMaster]()
 
   val sparkContextRef: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
-
-  // Variable used to notify the YarnClusterScheduler that it should stop waiting
-  // for the initial set of executors to be started and get on with its business.
-  val doneWithInitialAllocationsMonitor = new Object()
-
-  @volatile var isDoneWithInitialAllocations = false
-
-  def doneWithInitialAllocations() {
-    isDoneWithInitialAllocations = true
-    doneWithInitialAllocationsMonitor.synchronized {
-      // to wake threads off wait ...
-      doneWithInitialAllocationsMonitor.notifyAll()
-    }
-  }
 
   def register(master: ApplicationMaster) {
     applicationMasters.add(master)
@@ -432,20 +404,6 @@ object ApplicationMaster extends Logging {
 
     // Wait for initialization to complete and at least 'some' nodes to get allocated.
     modified
-  }
-
-  /**
-   * Returns when we've either
-   *  1) received all the requested executors,
-   *  2) waited ALLOCATOR_LOOP_WAIT_COUNT * ALLOCATE_HEARTBEAT_INTERVAL ms,
-   *  3) hit an error that causes us to terminate trying to get containers.
-   */
-  def waitForInitialAllocations() {
-    doneWithInitialAllocationsMonitor.synchronized {
-      while (!isDoneWithInitialAllocations) {
-        doneWithInitialAllocationsMonitor.wait(1000L)
-      }
-    }
   }
 
   def getApplicationAttemptId(): ApplicationAttemptId = {

@@ -58,7 +58,7 @@ while (( "$#" )); do
       exit_with_usage
       ;;
     --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven option -Pyarn"
+      echo "Error: '--with-hive' is no longer supported, use Maven option -Phive"
       exit_with_usage
       ;;
     --skip-java-test)
@@ -128,7 +128,7 @@ if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Okay, exiting."
     exit 1
-  fi 
+  fi
 fi
 
 if [ "$NAME" == "none" ]; then
@@ -150,7 +150,7 @@ else
 fi
 
 # Build uber fat JAR
-cd $FWDIR
+cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
@@ -168,22 +168,22 @@ mkdir -p "$DISTDIR/lib"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
-cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
-cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
+cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
-cp -r $FWDIR/examples/src/main "$DISTDIR/examples/src/" 
+cp -r "$FWDIR"/examples/src/main "$DISTDIR/examples/src/"
 
 if [ "$SPARK_HIVE" == "true" ]; then
-  cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+  cp "$FWDIR"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
 fi
 
 # Copy license and ASF files
 cp "$FWDIR/LICENSE" "$DISTDIR"
 cp "$FWDIR/NOTICE" "$DISTDIR"
 
-if [ -e $FWDIR/CHANGES.txt ]; then
+if [ -e "$FWDIR"/CHANGES.txt ]; then
   cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
 
@@ -199,7 +199,7 @@ cp -r "$FWDIR/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.4.1"
+  TACHYON_VERSION="0.5.0"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`

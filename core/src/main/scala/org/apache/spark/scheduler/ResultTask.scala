@@ -31,8 +31,9 @@ import org.apache.spark.rdd.RDD
  * See [[Task]] for more information.
  *
  * @param stageId id of the stage this task belongs to
- * @param rddBinary broadcast version of of the serialized RDD
- * @param func a function to apply on a partition of the RDD
+ * @param taskBinary broadcasted version of the serialized RDD and the function to apply on each
+ *                   partition of the given RDD. Once deserialized, the type should be
+ *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
@@ -40,35 +41,22 @@ import org.apache.spark.rdd.RDD
  */
 private[spark] class ResultTask[T, U](
     stageId: Int,
-    val rddBinary: Broadcast[Array[Byte]],
-    val func: (TaskContext, Iterator[T]) => U,
-    val partition: Partition,
+    taskBinary: Broadcast[Array[Byte]],
+    partition: Partition,
     @transient locs: Seq[TaskLocation],
     val outputId: Int)
   extends Task[U](stageId, partition.index) with Serializable {
-
-  // TODO: Should we also broadcast func? For that we would need a place to
-  // keep a reference to it (perhaps in DAGScheduler's job object).
-
-  def this(
-      stageId: Int,
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitionId: Int,
-      locs: Seq[TaskLocation],
-      outputId: Int) = {
-    this(stageId, rdd.broadcasted, func, rdd.partitions(partitionId), locs, outputId)
-  }
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
   override def runTask(context: TaskContext): U = {
-    // Deserialize the RDD using the broadcast variable.
+    // Deserialize the RDD and the func using the broadcast variables.
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val rdd = ser.deserialize[RDD[T]](ByteBuffer.wrap(rddBinary.value),
-      Thread.currentThread.getContextClassLoader)
+    val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
+      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+
     metrics = Some(context.taskMetrics)
     try {
       func(context, rdd.iterator(partition, context))

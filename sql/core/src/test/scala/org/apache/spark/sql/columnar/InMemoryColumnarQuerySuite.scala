@@ -73,4 +73,16 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq)
   }
+
+  test("SPARK-2729 regression: timestamp data type") {
+    checkAnswer(
+      sql("SELECT time FROM timestamps"),
+      timestamps.collect().toSeq)
+
+    TestSQLContext.cacheTable("timestamps")
+
+    checkAnswer(
+      sql("SELECT time FROM timestamps"),
+      timestamps.collect().toSeq)
+  }
 }

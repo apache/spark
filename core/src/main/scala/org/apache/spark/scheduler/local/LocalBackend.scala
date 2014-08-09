@@ -23,14 +23,17 @@ import akka.actor.{Actor, ActorRef, Props}
 
 import org.apache.spark.{Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.executor.{TaskMetrics, Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.storage.BlockManagerId
 
 private case class ReviveOffers()
 
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
 private case class KillTask(taskId: Long, interruptThread: Boolean)
+
+private case class StopExecutor()
 
 /**
  * Calls to LocalBackend are all serialized through LocalActor. Using an actor makes the calls on
@@ -57,18 +60,21 @@ private[spark] class LocalActor(
     case StatusUpdate(taskId, state, serializedData) =>
       scheduler.statusUpdate(taskId, state, serializedData)
       if (TaskState.isFinished(state)) {
-        freeCores += 1
+        freeCores += scheduler.CPUS_PER_TASK
         reviveOffers()
       }
 
     case KillTask(taskId, interruptThread) =>
       executor.killTask(taskId, interruptThread)
+
+    case StopExecutor =>
+      executor.stop()
   }
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
     for (task <- scheduler.resourceOffers(offers).flatten) {
-      freeCores -= 1
+      freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, task.taskId, task.name, task.serializedTask)
     }
   }
@@ -91,6 +97,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def stop() {
+    localActor ! StopExecutor
   }
 
   override def reviveOffers() {

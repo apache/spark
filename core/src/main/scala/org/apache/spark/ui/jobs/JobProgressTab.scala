@@ -41,7 +41,7 @@ private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stag
   def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
   def handleKillRequest(request: HttpServletRequest) =  {
-    if (killEnabled) {
+    if ((killEnabled) && (parent.securityManager.checkModifyPermissions(request.getRemoteUser))) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
       if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {

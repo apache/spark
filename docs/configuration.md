@@ -42,13 +42,15 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My fancy app" --master local[4] myApp.jar
+./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
 tool support two ways to load configurations dynamically. The first are command line options,
-such as `--master`, as shown above. Running `./bin/spark-submit --help` will show the entire list
-of options.
+such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
+flag, but uses special flags for properties that play a part in launching the Spark application.
+Running `./bin/spark-submit --help` will show the entire list of these options.
 
 `bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
 each line consists of a key and a value separated by whitespace. For example:
@@ -195,6 +197,23 @@ Apart from these, the following properties are also available, and may be useful
     Spark's dependencies and user dependencies. It is currently an experimental feature.
   </td>
 </tr>
+<tr>
+  <td><code>spark.python.worker.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per python worker process during aggregation, in the same
+    format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
+    used during aggregation goes above this amount, it will spill the data into disks.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
+    process. The user can specify multiple of these and to set multiple environment variables. 
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -228,7 +247,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.3</td>
+  <td>0.2</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
     <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
@@ -247,7 +266,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>100</td>
+  <td>32</td>
   <td>
     Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
     reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
@@ -260,6 +279,24 @@ Apart from these, the following properties are also available, and may be useful
     Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.manager</code></td>
+  <td>HASH</td>
+  <td>
+    Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
+    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
+    memory-efficient in environments with small executors, such as YARN. To use that, change
+    this value to <code>SORT</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
+  <td>200</td>
+  <td>
+    (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
+    map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
 </table>
@@ -369,13 +406,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.serializer.objectStreamReset</code></td>
-  <td>10000</td>
+  <td>100</td>
   <td>
     When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
     objects to prevent writing redundant data, however that stops garbage collection of those
     objects. By calling 'reset' you flush that info from the serializer, and allow old
-    objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
-    By default it will reset the serializer every 10,000 objects.
+    objects to be collected. To turn off this periodic reset set it to -1.
+    By default it will reset the serializer every 100 objects.
   </td>
 </tr>
 <tr>
@@ -389,13 +426,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryoserializer.buffer.mb</code></td>
-  <td>2</td>
+  <td><code>spark.kryo.registrationRequired</code></td>
+  <td>false</td>
   <td>
-    Maximum object size to allow within Kryo (the library needs to create a buffer at least as
-    large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
-    worker.
+    Whether to require registration with Kryo. If set to 'true', Kryo will throw an exception
+    if an unregistered class is serialized. If set to false (the default), Kryo will write
+    unregistered class names along with each object. Writing class names can cause
+    significant performance overhead, so enabling this option can enforce strictly that a
+    user has not omitted classes from registration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryoserializer.buffer.mb</code></td>
+  <td>0.064</td>
+  <td>
+    Initial size of Kryo's serialization buffer, in megabytes. Note that there will be one buffer
+     <i>per core</i> on each worker. This buffer will grow up to
+     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
+  <td>64</td>
+  <td>
+    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
+    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
+    inside Kryo.
   </td>
 </tr>
 </table>
@@ -459,6 +515,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.unrollFraction</code></td>
+  <td>0.2</td>
+  <td>
+    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
+    This is dynamically allocated by dropping existing blocks when there is not enough free
+    storage space to unroll the new block in its entirety.
+  </td>
+</tr>
+<tr>
   <td><code>spark.tachyonStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
@@ -497,10 +562,17 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
     <td>spark.hadoop.validateOutputSpecs</td>
     <td>true</td>
-    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists) 
-    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing 
-    output directories. We recommend that users do not disable this except if trying to achieve compatibility with 
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
+    <td>spark.executor.heartbeatInterval</td>
+    <td>10000</td>
+    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
 </tr>
 </table>
 
@@ -512,6 +584,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(local hostname)</td>
   <td>
     Hostname or IP address for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
   </td>
 </tr>
 <tr>
@@ -519,6 +592,51 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.fileserver.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP file server to listen on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP broadcast server to listen on.
+    This is not relevant for torrent broadcast.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.replClassServer.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP class server to listen on.
+    This is only relevant for the Spark shell.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blockManager.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for all block managers to listen on. These exist on both the driver and the executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the executor to listen on. This is used for communicating with the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.port.maxRetries</code></td>
+  <td>16</td>
+  <td>
+    Maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>
@@ -769,13 +887,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ui.acls.enable</code></td>
+  <td><code>spark.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether Spark web ui acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
-    Also note this requires the user to be known, if the user comes across as null no checks
-    are done. Filters can be used to authenticate and set the user.
+    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view or modify the job.  Note this requires the user to be known, 
+    so if the user comes across as null no checks are done. Filters can be used with the UI
+    to authenticate and set the user.
   </td>
 </tr>
 <tr>
@@ -784,6 +902,23 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.modify.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have modify access to the Spark job. By default only the
+    user that started the Spark job has access to modify it (kill it for example).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
+    This can be used if you run on a shared cluster and have a set of administrators or devs who
+    help debug when things work.
   </td>
 </tr>
 </table>
@@ -861,7 +996,7 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 #### Cluster Managers
-Each cluster manager in Spark has additional configuration options. Configurations 
+Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
  * [YARN](running-on-yarn.html#configuration)

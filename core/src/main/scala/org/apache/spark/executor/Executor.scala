@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark._
 import org.apache.spark.scheduler._
@@ -47,6 +47,8 @@ private[spark] class Executor(
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+
+  @volatile private var isStopped = false
 
   // No ip or host:port - just hostname
   Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
@@ -107,6 +109,8 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
+  startDriverHeartbeater()
+
   def launchTask(
       context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
     val tr = new TaskRunner(context, taskId, taskName, serializedTask)
@@ -119,6 +123,12 @@ private[spark] class Executor(
     if (tr != null) {
       tr.kill(interruptThread)
     }
+  }
+
+  def stop() {
+    env.metricsSystem.report()
+    isStopped = true
+    threadPool.shutdown()
   }
 
   /** Get the Yarn approved local directories. */
@@ -137,11 +147,12 @@ private[spark] class Executor(
   }
 
   class TaskRunner(
-      execBackend: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
-    @volatile private var task: Task[Any] = _
+    @volatile var task: Task[Any] = _
+    @volatile var attemptedTask: Option[Task[Any]] = None
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -158,7 +169,6 @@ private[spark] class Executor(
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
-      var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
       val startGCTime = gcTime
@@ -200,7 +210,6 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.hostname = Utils.localHostName()
           m.executorDeserializeTime = taskStart - startTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
@@ -266,11 +275,10 @@ private[spark] class Executor(
           }
         }
       } finally {
-        // TODO: Unregister shuffle memory only for ResultTask
-        val shuffleMemoryMap = env.shuffleMemoryMap
-        shuffleMemoryMap.synchronized {
-          shuffleMemoryMap.remove(Thread.currentThread().getId)
-        }
+        // Release memory used by this thread for shuffles
+        env.shuffleMemoryManager.releaseMemoryForThisThread()
+        // Release memory used by this thread for unrolling blocks
+        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         runningTasks.remove(taskId)
       }
     }
@@ -347,5 +355,44 @@ private[spark] class Executor(
         }
       }
     }
+  }
+
+  def startDriverHeartbeater() {
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    val retryAttempts = AkkaUtils.numRetries(conf)
+    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
+    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+
+    val t = new Thread() {
+      override def run() {
+        // Sleep a random interval so the heartbeats don't end up in sync
+        Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+
+        while (!isStopped) {
+          val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+          for (taskRunner <- runningTasks.values()) {
+            if (!taskRunner.attemptedTask.isEmpty) {
+              Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
+                metrics.updateShuffleReadMetrics
+                tasksMetrics += ((taskRunner.taskId, metrics))
+              }
+            }
+          }
+
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+          val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+            retryAttempts, retryIntervalMs, timeout)
+          if (response.reregisterBlockManager) {
+            logWarning("Told to re-register on heartbeat")
+            env.blockManager.reregister()
+          }
+          Thread.sleep(interval)
+        }
+      }
+    }
+    t.setDaemon(true)
+    t.setName("Driver Heartbeater")
+    t.start()
   }
 }

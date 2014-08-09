@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
  * when all relations are already filled in and the analyser needs only to resolve attribute
@@ -49,11 +48,13 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
+      UnresolvedHavingClauseAttributes :: 
       typeCoercionRules :_*),
     Batch("Check Analysis", Once,
       CheckResolution),
@@ -109,13 +110,58 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case q: LogicalPlan if q.childrenResolved =>
-        logger.trace(s"Attempting to resolve ${q.simpleString}")
+        logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolve(name).getOrElse(u)
-            logger.debug(s"Resolving $u to $result")
+            val result = q.resolveChildren(name).getOrElse(u)
+            logDebug(s"Resolving $u to $result")
             result
+        }
+    }
+  }
+
+  /**
+   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * clause.  This rule detects such queries and adds the required attributes to the original
+   * projection, so that they will be available during sorting. Another projection is added to
+   * remove these attributes after sorting.
+   */
+  object ResolveSortReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+        val resolved = unresolved.flatMap(child.resolveChildren)
+        val requiredAttributes = resolved.collect { case a: Attribute => a }.toSet
+
+        val missingInProject = requiredAttributes -- p.output
+        if (missingInProject.nonEmpty) {
+          // Add missing attributes and then project them away after the sort.
+          Project(projectList,
+            Sort(ordering,
+              Project(projectList ++ missingInProject, child)))
+        } else {
+          s // Nothing we can do here. Return original plan.
+        }
+      case s @ Sort(ordering, a @ Aggregate(grouping, aggs, child)) if !s.resolved && a.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+        // A small hack to create an object that will allow us to resolve any references that
+        // refer to named expressions that are present in the grouping expressions.
+        val groupingRelation = LocalRelation(
+          grouping.collect { case ne: NamedExpression => ne.toAttribute }
+        )
+
+        logDebug(s"Grouping expressions: $groupingRelation")
+        val resolved = unresolved.flatMap(groupingRelation.resolve).toSet
+        val missingInAggs = resolved -- a.outputSet
+        logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
+        if (missingInAggs.nonEmpty) {
+          // Add missing grouping exprs and then project them away after the sort.
+          Project(a.output,
+            Sort(ordering,
+              Aggregate(grouping, aggs ++ missingInAggs, child)))
+        } else {
+          s // Nothing we can do here. Return original plan.
         }
     }
   }
@@ -149,6 +195,31 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       })
       false
     }
+  }
+
+  /**
+   * This rule finds expressions in HAVING clause filters that depend on
+   * unresolved attributes.  It pushes these expressions down to the underlying
+   * aggregates and then projects them away above the filter.
+   */
+  object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
+          if aggregate.resolved && containsAggregate(havingCondition) => {
+        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+        
+        Project(aggregate.output,
+          Filter(evaluatedCondition.toAttribute,
+            aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+      }
+      
+    }
+    
+    protected def containsAggregate(condition: Expression): Boolean =
+      condition
+        .collect { case ae: AggregateExpression => ae }
+        .nonEmpty
   }
 
   /**

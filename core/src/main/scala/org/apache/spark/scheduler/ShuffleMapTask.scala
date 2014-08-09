@@ -19,41 +19,35 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
+import scala.language.existentials
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
 
 /**
- * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
- * specified in the ShuffleDependency).
- *
- * See [[org.apache.spark.scheduler.Task]] for more information.
- *
+* A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
+* specified in the ShuffleDependency).
+*
+* See [[org.apache.spark.scheduler.Task]] for more information.
+*
  * @param stageId id of the stage this task belongs to
- * @param rddBinary broadcast version of of the serialized RDD
- * @param dep the ShuffleDependency
+ * @param taskBinary broadcast version of of the RDD and the ShuffleDependency. Once deserialized,
+ *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
-    var rddBinary: Broadcast[Array[Byte]],
-    var dep: ShuffleDependency[_, _, _],
+    taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation])
   extends Task[MapStatus](stageId, partition.index) with Logging {
 
-  // TODO: Should we also broadcast the ShuffleDependency? For that we would need a place to
-  // keep a reference to it (perhaps in Stage).
-
-  def this(
-      stageId: Int,
-      rdd: RDD[_],
-      dep: ShuffleDependency[_, _, _],
-      partitionId: Int,
-      locs: Seq[TaskLocation]) = {
-    this(stageId, rdd.broadcasted, dep, rdd.partitions(partitionId), locs)
+  /** A constructor used only in test suites. This does not require passing in an RDD. */
+  def this(partitionId: Int) {
+    this(0, null, new Partition { override def index = 0 }, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
@@ -63,8 +57,8 @@ private[spark] class ShuffleMapTask(
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val rdd = ser.deserialize[RDD[_]](ByteBuffer.wrap(rddBinary.value),
-      Thread.currentThread.getContextClassLoader)
+    val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
+      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
 
     metrics = Some(context.taskMetrics)
     var writer: ShuffleWriter[Any, Any] = null

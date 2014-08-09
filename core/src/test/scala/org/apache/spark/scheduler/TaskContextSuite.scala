@@ -20,31 +20,35 @@ package org.apache.spark.scheduler
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.LocalSparkContext
-import org.apache.spark.Partition
-import org.apache.spark.SparkContext
-import org.apache.spark.TaskContext
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
   test("Calls executeOnCompleteCallbacks after failure") {
-    var completed = false
+    TaskContextSuite.completed = false
     sc = new SparkContext("local", "test")
     val rdd = new RDD[String](sc, List()) {
       override def getPartitions = Array[Partition](StubPartition(0))
       override def compute(split: Partition, context: TaskContext) = {
-        context.addOnCompleteCallback(() => completed = true)
+        context.addOnCompleteCallback(() => TaskContextSuite.completed = true)
         sys.error("failed")
       }
     }
-    val func = (c: TaskContext, i: Iterator[String]) => i.next
-    val task = new ResultTask[String, String](0, rdd, func, 0, Seq(), 0)
+    val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val func = (c: TaskContext, i: Iterator[String]) => i.next()
+    val task = new ResultTask[String, String](
+      0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
     intercept[RuntimeException] {
       task.run(0)
     }
-    assert(completed === true)
+    assert(TaskContextSuite.completed === true)
   }
-
-  case class StubPartition(val index: Int) extends Partition
 }
+
+private object TaskContextSuite {
+  @volatile var completed = false
+}
+
+private case class StubPartition(index: Int) extends Partition

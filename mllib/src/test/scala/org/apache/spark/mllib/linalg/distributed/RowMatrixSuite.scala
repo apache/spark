@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import org.scalatest.FunSuite
+import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
+import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 class RowMatrixSuite extends FunSuite with LocalSparkContext {
 
@@ -98,7 +99,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     for (mat <- Seq(denseMat, sparseMat)) {
       for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
         val localMat = mat.toBreeze()
-        val (localU, localSigma, localVt) = brzSvd(localMat)
+        val brzSvd.SVD(localU, localSigma, localVt) = brzSvd(localMat)
         val localV: BDM[Double] = localVt.t.toDenseMatrix
         for (k <- 1 to n) {
           val skip = (mode == "local-eigs" || mode == "dist-eigs") && k == n
@@ -191,5 +192,29 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
       }
     }
+  }
+}
+
+class RowMatrixClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  var mat: RowMatrix = _
+
+  override def beforeAll() {
+    super.beforeAll()
+    val m = 4
+    val n = 200000
+    val rows = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble())))
+    }
+    mat = new RowMatrix(rows)
+  }
+
+  test("task size should be small in svd") {
+    val svd = mat.computeSVD(1, computeU = true)
+  }
+
+  test("task size should be small in summarize") {
+    val summary = mat.computeColumnSummaryStatistics()
   }
 }

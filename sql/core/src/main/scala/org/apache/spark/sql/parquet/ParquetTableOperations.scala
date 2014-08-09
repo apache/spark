@@ -51,13 +51,19 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
 case class ParquetTableScan(
-    // note: output cannot be transient, see
-    // https://issues.apache.org/jira/browse/SPARK-1367
-    output: Seq[Attribute],
+    attributes: Seq[Attribute],
     relation: ParquetRelation,
-    columnPruningPred: Seq[Expression])(
-    @transient val sqlContext: SQLContext)
+    columnPruningPred: Seq[Expression])
   extends LeafNode {
+
+  // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
+  // by exprId. note: output cannot be transient, see
+  // https://issues.apache.org/jira/browse/SPARK-1367
+  val output = attributes.map { a =>
+    relation.output
+      .find(o => o.exprId == a.exprId)
+      .getOrElse(sys.error(s"Invalid parquet attribute $a in ${relation.output.mkString(",")}"))
+  }
 
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
@@ -99,8 +105,6 @@ case class ParquetTableScan(
       .filter(_ != null) // Parquet's record filters may produce null values
   }
 
-  override def otherCopyArgs = sqlContext :: Nil
-
   /**
    * Applies a (candidate) projection.
    *
@@ -110,10 +114,9 @@ case class ParquetTableScan(
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
     if (success) {
-      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sqlContext)
+      ParquetTableScan(prunedAttributes, relation, columnPruningPred)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
-      this
     }
   }
 
@@ -150,8 +153,7 @@ case class ParquetTableScan(
 case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
-    overwrite: Boolean = false)(
-    @transient val sqlContext: SQLContext)
+    overwrite: Boolean = false)
   extends UnaryNode with SparkHadoopMapReduceUtil {
 
   /**
@@ -171,7 +173,7 @@ case class InsertIntoParquetTable(
 
     val writeSupport =
       if (child.output.map(_.dataType).forall(_.isPrimitive)) {
-        logger.debug("Initializing MutableRowWriteSupport")
+        log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
         classOf[org.apache.spark.sql.parquet.RowWriteSupport]
@@ -202,8 +204,6 @@ case class InsertIntoParquetTable(
   }
 
   override def output = child.output
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   /**
    * Stores the given Row RDD as a Hadoop file.

@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.{Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 
@@ -30,9 +32,36 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("null case",
+    "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
+
+  createQueryTest("single case",
+    """SELECT case when true then 1 else 2 end FROM src LIMIT 1""")
+
+  createQueryTest("double case",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else 2 end FROM src LIMIT 1""")
+
+  createQueryTest("case else null",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src LIMIT 1""")
+
+  createQueryTest("having no references",
+    "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
+
+  createQueryTest("boolean = number",
+    """
+      |SELECT
+      |  1 = true, 1L = true, 1Y = true, true = 1, true = 1L, true = 1Y,
+      |  0 = true, 0L = true, 0Y = true, true = 0, true = 0L, true = 0Y,
+      |  1 = false, 1L = false, 1Y = false, false = 1, false = 1L, false = 1Y,
+      |  0 = false, 0L = false, 0Y = false, false = 0, false = 0L, false = 0Y,
+      |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
+      |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
+      |FROM src LIMIT 1
+    """.stripMargin)
+
   test("CREATE TABLE AS runs once") {
-    hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
-    assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+    sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
+    assert(sql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
       "Incorrect number of rows in created table")
   }
 
@@ -40,15 +69,20 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT * FROM src WHERE key Between 1 and 2")
 
   createQueryTest("div",
-    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2 FROM src LIMIT 1")
+    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2, 100 DIV 51, 100 DIV 49 FROM src LIMIT 1")
+
+  createQueryTest("division",
+    "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
+    setConf("spark.sql.dialect", "sql")
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
+    setConf("spark.sql.dialect", "hiveql")
+
   }
 
   test("Query expressed in HiveQL") {
-    hql("FROM src SELECT key").collect()
-    hiveql("FROM src SELECT key").collect()
+    sql("FROM src SELECT key").collect()
   }
 
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
@@ -164,12 +198,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT * FROM src LATERAL VIEW explode(map(key+3,key+4)) D as k, v")
 
   test("sampling") {
-    hql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
+    sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
   test("SchemaRDD toString") {
-    hql("SHOW TABLES").toString
-    hql("SELECT * FROM src").toString
+    sql("SHOW TABLES").toString
+    sql("SELECT * FROM src").toString
   }
 
   createQueryTest("case statements with key #1",
@@ -197,8 +231,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
 
   test("implement identity function using case statement") {
-    val actual = hql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
-    val expected = hql("SELECT key FROM src").collect().toSet
+    val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
+    val expected = sql("SELECT key FROM src").collect().toSet
     assert(actual === expected)
   }
 
@@ -206,7 +240,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
   ignore("non-boolean conditions in a CaseWhen are illegal") {
     intercept[Exception] {
-      hql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+      sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
     }
   }
 
@@ -218,10 +252,10 @@ class HiveQuerySuite extends HiveComparisonTest {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
-    testData.registerAsTable("REGisteredTABle")
+    testData.registerTempTable("REGisteredTABle")
 
     assertResult(Array(Array(2, "str2"))) {
-      hql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+      sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
         "WHERE TableAliaS.a > 1").collect()
     }
   }
@@ -232,9 +266,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
-    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
-    val rdd = hql("explain select key, count(value) from src group by key")
+    val rdd = sql("explain select key, count(value) from src group by key")
     assert(isExplanation(rdd))
 
     TestHive.reset()
@@ -243,9 +277,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    TestHive.sparkContext.parallelize(fixture).registerTempTable("having_test")
     val results =
-      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
 
@@ -254,39 +288,39 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
-    hql("select key, count(*) c from src group by key having c").collect()
+    sql("select key, count(*) c from src group by key having c").collect()
   }
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
-    assert(hql("select key from src having key > 490").collect().size < 100)
+    assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
     assertResult(0) {
-      hql(s"DROP TABLE IF EXISTS $tableName").count()
+      sql(s"DROP TABLE IF EXISTS $tableName").count()
     }
 
     assertResult(0) {
-      hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+      sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
     }
 
     assert(
-      hql("SHOW TABLES")
+      sql("SHOW TABLES")
         .select('result)
         .collect()
         .map(_.getString(0))
         .contains(tableName))
 
-    assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
+    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
   }
 
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
     // If the table was not created, the following assertion would fail
     assert(Try(table(tableName)).isSuccess)
@@ -296,9 +330,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("DESCRIBE commands") {
-    hql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+    sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
 
-    hql(
+    sql(
       """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
         |SELECT key, value
       """.stripMargin)
@@ -313,7 +347,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("# col_name", "data_type", "comment"),
         Array("dt", "string", null))
     ) {
-      hql("DESCRIBE test_describe_commands1")
+      sql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
@@ -328,14 +362,14 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("# col_name", "data_type", "comment"),
         Array("dt", "string", null))
     ) {
-      hql("DESCRIBE default.test_describe_commands1")
+      sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      hql("DESCRIBE test_describe_commands1 value")
+      sql("DESCRIBE test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -343,7 +377,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      hql("DESCRIBE default.test_describe_commands1 value")
+      sql("DESCRIBE default.test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -361,7 +395,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("", "", ""),
         Array("dt", "string", "None"))
     ) {
-      hql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -372,7 +406,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
-    testData.registerAsTable("test_describe_commands2")
+    testData.registerTempTable("test_describe_commands2")
 
     assertResult(
       Array(
@@ -380,16 +414,16 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("a", "IntegerType", null),
         Array("b", "StringType", null))
     ) {
-      hql("DESCRIBE test_describe_commands2")
+      sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
   }
 
   test("SPARK-2263: Insert Map<K, V> values") {
-    hql("CREATE TABLE m(value MAP<INT, STRING>)")
-    hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
+    sql("CREATE TABLE m(value MAP<INT, STRING>)")
+    sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).map {
       case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
@@ -401,19 +435,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "val0,val_1,val2.3,my_table"
 
-    hql(s"set $testKey=$testVal")
-    assert(get(testKey, testVal + "_") == testVal)
+    sql(s"set $testKey=$testVal")
+    assert(getConf(testKey, testVal + "_") == testVal)
 
-    hql("set mapred.reduce.tasks=20")
-    assert(get("mapred.reduce.tasks", "0") == "20")
-    hql("set mapred.reduce.tasks = 40")
-    assert(get("mapred.reduce.tasks", "0") == "40")
+    sql("set some.property=20")
+    assert(getConf("some.property", "0") == "20")
+    sql("set some.property = 40")
+    assert(getConf("some.property", "0") == "40")
 
-    hql(s"set $testKey=$testVal")
-    assert(get(testKey, "0") == testVal)
+    sql(s"set $testKey=$testVal")
+    assert(getConf(testKey, "0") == testVal)
 
-    hql(s"set $testKey=")
-    assert(get(testKey, "0") == "")
+    sql(s"set $testKey=")
+    assert(getConf(testKey, "0") == "")
   }
 
   test("SET commands semantics for a HiveContext") {
@@ -421,64 +455,62 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
-      key -> value
-    }
 
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(hql("SET").collect().size == 0)
-
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
-    }
-
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(hql("SET").collect())
-    }
-
-    hql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      rowsToPairs(hql("SET").collect())
-    }
-
-    // "set key"
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(hql(s"SET $testKey").collect())
-    }
-
-    assertResult(Array(nonexistentKey -> "<undefined>")) {
-      rowsToPairs(hql(s"SET $nonexistentKey").collect())
-    }
-
-    // Assert that sql() should have the same effects as hql() by repeating the above using sql().
-    clear()
+    // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(sql("SET").collect())
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      rowsToPairs(sql("SET").collect())
+    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
+      sql(s"SET").collect().map(_.getString(0))
     }
 
-    assertResult(Array(testKey -> testVal)) {
-      rowsToPairs(sql(s"SET $testKey").collect())
+    // "set key"
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql(s"SET $testKey").collect().map(_.getString(0))
     }
 
-    assertResult(Array(nonexistentKey -> "<undefined>")) {
-      rowsToPairs(sql(s"SET $nonexistentKey").collect())
+    assertResult(Array(s"$nonexistentKey=<undefined>")) {
+      sql(s"SET $nonexistentKey").collect().map(_.getString(0))
+    }
+
+    // Assert that sql() should have the same effects as sql() by repeating the above using sql().
+    clear()
+    assert(sql("SET").collect().size == 0)
+
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
+    }
+
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql("SET").collect().map(_.getString(0))
+    }
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
+      sql("SET").collect().map(_.getString(0))
+    }
+
+    assertResult(Array(s"$testKey=$testVal")) {
+      sql(s"SET $testKey").collect().map(_.getString(0))
+    }
+
+    assertResult(Array(s"$nonexistentKey=<undefined>")) {
+      sql(s"SET $nonexistentKey").collect().map(_.getString(0))
     }
 
     clear()

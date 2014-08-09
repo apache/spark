@@ -63,9 +63,9 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
   test("loadLibSVMFile") {
     val lines =
       """
-        |+1 1:1.0 3:2.0 5:3.0
-        |-1
-        |-1 2:4.0 4:5.0 6:6.0
+        |1 1:1.0 3:2.0 5:3.0
+        |0
+        |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
     val tempDir = Files.createTempDir()
     tempDir.deleteOnExit()
@@ -73,7 +73,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
 
-    val pointsWithNumFeatures = loadLibSVMFile(sc, path, multiclass = false, 6).collect()
+    val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
     val pointsWithoutNumFeatures = loadLibSVMFile(sc, path).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
@@ -86,11 +86,11 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       assert(points(2).features === Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
     }
 
-    val multiclassPoints = loadLibSVMFile(sc, path, multiclass = true).collect()
+    val multiclassPoints = loadLibSVMFile(sc, path).collect()
     assert(multiclassPoints.length === 3)
     assert(multiclassPoints(0).label === 1.0)
-    assert(multiclassPoints(1).label === -1.0)
-    assert(multiclassPoints(2).label === -1.0)
+    assert(multiclassPoints(1).label === 0.0)
+    assert(multiclassPoints(2).label === 0.0)
 
     Utils.deleteRecursively(tempDir)
   }

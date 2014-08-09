@@ -65,7 +65,7 @@ object KafkaUtils {
    *                    in its own thread.
    * @param storageLevel Storage level to use for storing the received objects
    */
-  def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
+  def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: ClassTag, T <: Decoder[_]: ClassTag](
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
@@ -89,8 +89,6 @@ object KafkaUtils {
       groupId: String,
       topics: JMap[String, JInt]
     ): JavaPairReceiverInputDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
   }
 
@@ -111,8 +109,6 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
   }
@@ -140,13 +136,11 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[K, V] = {
-    implicit val keyCmt: ClassTag[K] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
-    implicit val valueCmt: ClassTag[V] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
 
-    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
-    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
+    implicit val keyCmd: ClassTag[U] = ClassTag(keyDecoderClass)
+    implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)

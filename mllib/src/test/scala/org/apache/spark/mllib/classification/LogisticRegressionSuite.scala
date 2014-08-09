@@ -25,7 +25,8 @@ import org.scalatest.Matchers
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 
 object LogisticRegressionSuite {
 
@@ -81,9 +82,8 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val model = lr.run(testRDD)
 
     // Test the weights
-    val weight0 = model.weights(0)
-    assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
-    assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
+    assert(model.weights(0) ~== -1.52 relTol 0.01)
+    assert(model.intercept ~== 2.00 relTol 0.01)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -113,9 +113,9 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
 
     val model = lr.run(testRDD, initialWeights)
 
-    val weight0 = model.weights(0)
-    assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
-    assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
+    // Test the weights
+    assert(model.weights(0) ~== -1.50 relTol 0.01)
+    assert(model.intercept ~== 1.97 relTol 0.01)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -124,5 +124,21 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+}
+
+class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = LogisticRegressionWithSGD.train(points, 2)
+    val predictions = model.predict(points.map(_.features))
   }
 }

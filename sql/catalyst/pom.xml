@@ -32,23 +32,27 @@
   <name>Spark Project Catalyst</name>
   <url>http://spark.apache.org/</url>
   <properties>
-     <sbt.project.name>catalyst</sbt.project.name>
+    <sbt.project.name>catalyst</sbt.project.name>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.scala-lang</groupId>
+      <artifactId>scala-compiler</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scalamacros</groupId>
+      <artifactId>quasiquotes_${scala.binary.version}</artifactId>
+      <version>${scala.macros.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.typesafe</groupId>
-      <artifactId>scalalogging-slf4j_${scala.binary.version}</artifactId>
-      <version>1.0.1</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
