@@ -19,22 +19,24 @@
 
 # Gather all all spark-submit options into SUBMISSION_OPTS
 function gatherSparkSubmitOpts() {
+
+  if [ -z "$SUBMIT_USAGE_FUNCTION" ]; then
+
+    echo "Function for printing usage of $0 is not set." 1>&2
+    echo "Please set usage function to shell variable 'SUBMIT_USAGE_FUNCTION' in $0" 1>&2
+    exit 1
+  fi
+
   SUBMISSION_OPTS=()
   APPLICATION_OPTS=()
   while (($#)); do
     case $1 in
-      --master | --deploy-mode | --class | --name | --jars | --py-files | --files)
-        ;&
-
-      --conf | --properties-file | --driver-memory | --driver-java-options)
-        ;&
-
-      --driver-library-path | --driver-class-path | --executor-memory | --driver-cores)
-        ;&
-
+      --master | --deploy-mode | --class | --name | --jars | --py-files | --files | \
+      --conf | --properties-file | --driver-memory | --driver-java-options | \
+      --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
       --total-executor-cores | --executor-cores | --queue | --num-executors | --archives)
         if [[ $# -lt 2 ]]; then
-          usage
+          "$SUBMIT_USAGE_FUNCTION"
           exit 1;
         fi
         SUBMISSION_OPTS+=($1); shift

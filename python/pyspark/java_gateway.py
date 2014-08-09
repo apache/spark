@@ -39,7 +39,11 @@ def launch_gateway():
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
         submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
-        command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
+        application_opts = os.environ.get("APPLICATION_OPTS")
+        application_opts = application_opts if application_opts is not None else ""
+        application_opts = shlex.split(application_opts)
+        command = [os.path.join(SPARK_HOME, script)] + submit_args + \
+            ["pyspark-shell"] + application_opts
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
