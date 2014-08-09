@@ -224,7 +224,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
-    /*
+    /**
      * NOTE: If you add or remove spark-submit options,
      * modify NOT ONLY this file but also utils.sh
      */
