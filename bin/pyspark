@@ -23,6 +23,8 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
+source $FWDIR/bin/utils.sh
+
 SCALA_VERSION=2.10
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -67,9 +69,10 @@ fi
 # We export Spark submit arguments as an environment variable because shell.py must run as a
 # PYTHONSTARTUP script, which does not take in arguments. This is required for IPython notebooks.
 
+gatherSparkSubmitOpts $@
 PYSPARK_SUBMIT_ARGS=""
 whitespace="[[:space:]]"
-for i in "$@"; do
+for i in ${SUBMISSION_OPTS[@]}; do
   if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
   if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
   PYSPARK_SUBMIT_ARGS="$PYSPARK_SUBMIT_ARGS $i"
@@ -85,8 +88,6 @@ if [[ -n "$SPARK_TESTING" ]]; then
   fi
   exit
 fi
-
-source $FWDIR/bin/utils.sh
 
 # If a python file is provided, directly run spark-submit.
 if [[ "$1" =~ \.py$ ]]; then
