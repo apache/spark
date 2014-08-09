@@ -72,17 +72,12 @@ case class HiveTableScan(
   }
 
   private def addColumnMetadataToConf(hiveConf: HiveConf) {
-    // Specifies IDs and internal names of columns to be scanned.
-    val neededColumnIDs = attributes.map(a => relation.output.indexWhere(_.name == a.name): Integer)
-    val columnInternalNames = neededColumnIDs.map(HiveConf.getColumnInternalName(_)).mkString(",")
+    // Specifies needed column IDs for those non-partitioning columns.
+    val neededColumnIDs =
+      attributes.map(a =>
+        relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
 
-    if (attributes.size == relation.output.size) {
-      // SQLContext#pruneFilterProject guarantees no duplicated value in `attributes`
-      ColumnProjectionUtils.setFullyReadColumns(hiveConf)
-    } else {
-      ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
-    }
-
+    ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
 
     // Specifies types and object inspectors of columns to be scanned.
@@ -99,7 +94,7 @@ case class HiveTableScan(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, columnInternalNames)
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
 
   addColumnMetadataToConf(context.hiveconf)
