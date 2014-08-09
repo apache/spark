@@ -30,7 +30,7 @@ function gatherSparkSubmitOpts() {
   SUBMISSION_OPTS=()
   APPLICATION_OPTS=()
   while (($#)); do
-    case $1 in
+    case "$1" in
       --master | --deploy-mode | --class | --name | --jars | --py-files | --files | \
       --conf | --properties-file | --driver-memory | --driver-java-options | \
       --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
@@ -39,16 +39,16 @@ function gatherSparkSubmitOpts() {
           "$SUBMIT_USAGE_FUNCTION"
           exit 1;
         fi
-        SUBMISSION_OPTS+=($1); shift
-        SUBMISSION_OPTS+=($1); shift
+        SUBMISSION_OPTS+=("$1"); shift
+        SUBMISSION_OPTS+=("$1"); shift
         ;;
 
       --verbose | -v | --supervise)
-        SUBMISSION_OPTS+=($1); shift
+        SUBMISSION_OPTS+=("$1"); shift
         ;;
 
       *)
-        APPLICATION_OPTS+=($1); shift
+        APPLICATION_OPTS+=("$1"); shift
         ;;
     esac
   done
