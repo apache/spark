@@ -47,6 +47,7 @@ DEFAULT_CONFIGS = {
 
 
 class SparkContext(object):
+
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD}s and
@@ -60,6 +61,7 @@ class SparkContext(object):
     _active_spark_context = None
     _lock = Lock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+    _default_batch_size_for_serialized_input = 10
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
@@ -83,7 +85,7 @@ class SparkContext(object):
         @param serializer: The serializer for RDDs.
         @param conf: A L{SparkConf} object setting Spark properties.
         @param gateway: Use an existing gateway and JVM, otherwise a new JVM
-               will be instatiated.
+               will be instantiated.
 
 
         >>> from pyspark.context import SparkContext
@@ -212,7 +214,7 @@ class SparkContext(object):
 
             if instance:
                 if (SparkContext._active_spark_context and
-                   SparkContext._active_spark_context != instance):
+                        SparkContext._active_spark_context != instance):
                     currentMaster = SparkContext._active_spark_context.master
                     currentAppName = SparkContext._active_spark_context.appName
                     callsite = SparkContext._active_spark_context._callsite
@@ -378,7 +380,7 @@ class SparkContext(object):
         return jm
 
     def sequenceFile(self, path, keyClass=None, valueClass=None, keyConverter=None,
-                     valueConverter=None, minSplits=None):
+                     valueConverter=None, minSplits=None, batchSize=None):
         """
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -398,14 +400,18 @@ class SparkContext(object):
         @param valueConverter:
         @param minSplits: minimum splits in dataset
                (default min(2, sc.defaultParallelism))
+        @param batchSize: The number of Python objects represented as a single
+               Java object. (default sc._default_batch_size_for_serialized_input)
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
+        batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
+        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, path, keyClass, valueClass,
-                                                keyConverter, valueConverter, minSplits)
-        return RDD(jrdd, self, PickleSerializer())
+                                                keyConverter, valueConverter, minSplits, batchSize)
+        return RDD(jrdd, self, ser)
 
     def newAPIHadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
-                         valueConverter=None, conf=None):
+                         valueConverter=None, conf=None, batchSize=None):
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -425,14 +431,19 @@ class SparkContext(object):
         @param valueConverter: (None by default)
         @param conf: Hadoop configuration, passed in as a dict
                (None by default)
+        @param batchSize: The number of Python objects represented as a single
+               Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
+        batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
+        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                                                    valueClass, keyConverter, valueConverter, jconf)
-        return RDD(jrdd, self, PickleSerializer())
+                                                    valueClass, keyConverter, valueConverter,
+                                                    jconf, batchSize)
+        return RDD(jrdd, self, ser)
 
     def newAPIHadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
-                        valueConverter=None, conf=None):
+                        valueConverter=None, conf=None, batchSize=None):
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -449,14 +460,19 @@ class SparkContext(object):
         @param valueConverter: (None by default)
         @param conf: Hadoop configuration, passed in as a dict
                (None by default)
+        @param batchSize: The number of Python objects represented as a single
+               Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
+        batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
+        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputFormatClass, keyClass,
-                                                   valueClass, keyConverter, valueConverter, jconf)
-        return RDD(jrdd, self, PickleSerializer())
+                                                   valueClass, keyConverter, valueConverter,
+                                                   jconf, batchSize)
+        return RDD(jrdd, self, ser)
 
     def hadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
-                   valueConverter=None, conf=None):
+                   valueConverter=None, conf=None, batchSize=None):
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -476,14 +492,19 @@ class SparkContext(object):
         @param valueConverter: (None by default)
         @param conf: Hadoop configuration, passed in as a dict
                (None by default)
+        @param batchSize: The number of Python objects represented as a single
+               Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
+        batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
+        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.hadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                                              valueClass, keyConverter, valueConverter, jconf)
-        return RDD(jrdd, self, PickleSerializer())
+                                              valueClass, keyConverter, valueConverter,
+                                              jconf, batchSize)
+        return RDD(jrdd, self, ser)
 
     def hadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
-                  valueConverter=None, conf=None):
+                  valueConverter=None, conf=None, batchSize=None):
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -500,11 +521,16 @@ class SparkContext(object):
         @param valueConverter: (None by default)
         @param conf: Hadoop configuration, passed in as a dict
                (None by default)
+        @param batchSize: The number of Python objects represented as a single
+               Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
-        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass, valueClass,
-                                             keyConverter, valueConverter, jconf)
-        return RDD(jrdd, self, PickleSerializer())
+        batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
+        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
+        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass,
+                                             valueClass, keyConverter, valueConverter,
+                                             jconf, batchSize)
+        return RDD(jrdd, self, ser)
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)
@@ -534,8 +560,7 @@ class SparkContext(object):
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
         rest = ListConverter().convert(rest, self._gateway._gateway_client)
-        return RDD(self._jsc.union(first, rest), self,
-                   rdds[0]._jrdd_deserializer)
+        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """
@@ -547,8 +572,7 @@ class SparkContext(object):
         pickleSer = PickleSerializer()
         pickled = pickleSer.dumps(value)
         jbroadcast = self._jsc.broadcast(bytearray(pickled))
-        return Broadcast(jbroadcast.id(), value, jbroadcast,
-                         self._pickled_broadcast_vars)
+        return Broadcast(jbroadcast.id(), value, jbroadcast, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """

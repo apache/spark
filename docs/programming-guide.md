@@ -383,16 +383,16 @@ Apart from text files, Spark's Python API also supports several other data forma
 
 * `RDD.saveAsPickleFile` and `SparkContext.pickleFile` support saving an RDD in a simple format consisting of pickled Python objects. Batching is used on pickle serialization, with default batch size 10.
 
-* Details on reading `SequenceFile` and arbitrary Hadoop `InputFormat` are given below.
-
-### SequenceFile and Hadoop InputFormats
+* SequenceFile and Hadoop Input/Output Formats
 
 **Note** this feature is currently marked ```Experimental``` and is intended for advanced users. It may be replaced in future with read/write support based on SparkSQL, in which case SparkSQL is the preferred approach.
 
-#### Writable Support
+**Writable Support**
 
-PySpark SequenceFile support loads an RDD within Java, and pickles the resulting Java objects using
-[Pyrolite](https://github.com/irmen/Pyrolite/). The following Writables are automatically converted:
+PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the 
+resulting Java objects using [Pyrolite](https://github.com/irmen/Pyrolite/). When saving an RDD of key-value pairs to SequenceFile, 
+PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following 
+Writables are automatically converted:
 
 <table class="table">
 <tr><th>Writable Type</th><th>Python Type</th></tr>
@@ -403,32 +403,30 @@ PySpark SequenceFile support loads an RDD within Java, and pickles the resulting
 <tr><td>BooleanWritable</td><td>bool</td></tr>
 <tr><td>BytesWritable</td><td>bytearray</td></tr>
 <tr><td>NullWritable</td><td>None</td></tr>
-<tr><td>ArrayWritable</td><td>list of primitives, or tuple of objects</td></tr>
 <tr><td>MapWritable</td><td>dict</td></tr>
-<tr><td>Custom Class conforming to Java Bean conventions</td>
-    <td>dict of public properties (via JavaBean getters and setters) + __class__ for the class type</td></tr>
 </table>
 
-#### Loading SequenceFiles
+Arrays are not handled out-of-the-box. Users need to specify custom `ArrayWritable` subtypes when reading or writing. When writing, 
+users also need to specify custom converters that convert arrays to custom `ArrayWritable` subtypes. When reading, the default 
+converter will convert custom `ArrayWritable` subtypes to Java `Object[]`, which then get pickled to Python tuples. To get 
+Python `array.array` for arrays of primitive types, users need to specify custom converters.
 
-Similarly to text files, SequenceFiles can be loaded by specifying the path. The key and value
+**Saving and Loading SequenceFiles**
+
+Similarly to text files, SequenceFiles can be saved and loaded by specifying the path. The key and value
 classes can be specified, but for standard Writables this is not required.
 
 {% highlight python %}
->>> rdd = sc.sequenceFile("path/to/sequencefile/of/doubles")
->>> rdd.collect()         # this example has DoubleWritable keys and Text values
-[(1.0, u'aa'),
- (2.0, u'bb'),
- (2.0, u'aa'),
- (3.0, u'cc'),
- (2.0, u'bb'),
- (1.0, u'aa')]
+>>> rdd = sc.parallelize(range(1, 4)).map(lambda x: (x, "a" * x ))
+>>> rdd.saveAsSequenceFile("path/to/file")
+>>> sorted(sc.sequenceFile("path/to/file").collect())
+[(1, u'a'), (2, u'aa'), (3, u'aaa')]
 {% endhighlight %}
 
-#### Loading Other Hadoop InputFormats
+**Saving and Loading Other Hadoop Input/Output Formats**
 
-PySpark can also read any Hadoop InputFormat, for both 'new' and 'old' Hadoop APIs. If required,
-a Hadoop configuration can be passed in as a Python dict. Here is an example using the
+PySpark can also read any Hadoop InputFormat or write any Hadoop OutputFormat, for both 'new' and 'old' Hadoop MapReduce APIs. 
+If required, a Hadoop configuration can be passed in as a Python dict. Here is an example using the
 Elasticsearch ESInputFormat:
 
 {% highlight python %}
@@ -447,8 +445,7 @@ Note that, if the InputFormat simply depends on a Hadoop configuration and/or in
 the key and value classes can easily be converted according to the above table,
 then this approach should work well for such cases.
 
-If you have custom serialized binary data (such as loading data from Cassandra / HBase) or custom
-classes that don't conform to the JavaBean requirements, then you will first need to 
+If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to 
 transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
 A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided 
 for this. Simply extend this trait and implement your transformation code in the ```convert``` 
@@ -456,11 +453,8 @@ method. Remember to ensure that this class, along with any dependencies required
 classpath.
 
 See the [Python examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python) and 
-the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/pythonconverters) 
-for examples of using HBase and Cassandra ```InputFormat```.
-
-Future support for writing data out as ```SequenceFileOutputFormat``` and other ```OutputFormats```, 
-is forthcoming.
+the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/pythonconverters) 
+for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat``` with custom converters.
 
 </div>
 
@@ -1180,7 +1174,9 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 Accumulators are variables that are only "added" to through an associative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
-can add support for new types.
+can add support for new types. If accumulators are created with a name, they will be
+displayed in Spark's UI. This can can be useful for understanding the progress of 
+running stages (NOTE: this is not yet supported in Python).
 
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
 running on the cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
@@ -1194,7 +1190,7 @@ The code below shows an accumulator being used to add up the elements of an arra
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-scala> val accum = sc.accumulator(0)
+scala> val accum = sc.accumulator(0, "My Accumulator")
 accum: spark.Accumulator[Int] = 0
 
 scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
