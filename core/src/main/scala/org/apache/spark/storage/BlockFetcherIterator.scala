@@ -138,6 +138,11 @@ object BlockFetcherIterator {
         }
         case Failure(exception) => {
           logError("Could not get block(s) from " + cmId, exception)
+          /**
+           * In current implementation, only pass the first element is enough
+           * because when iterator get FetchResult which size is -1,
+           * FetchFailedException is thrown immediately.
+           */
           results.put(new FetchResult(req.blocks(0)._1, -1, null))
         }
       }
