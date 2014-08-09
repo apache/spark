@@ -62,11 +62,10 @@ private[spark] object FileHeader {
     new FileHeader(length, blockId)
   }
 
-  def main (args:Array[String]) {
+  def main(args:Array[String]) {
     val header = new FileHeader(25, TestBlockId("my_block"))
     val buf = header.buffer
     val newHeader = FileHeader.create(buf)
     System.out.println("id=" + newHeader.blockId + ",size=" + newHeader.fileLen)
   }
 }
-
