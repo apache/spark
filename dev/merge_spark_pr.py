@@ -74,8 +74,10 @@ def fail(msg):
 
 def run_cmd(cmd):
     if isinstance(cmd, list):
+        print " ".join(cmd)
         return subprocess.check_output(cmd)
     else:
+        print cmd
         return subprocess.check_output(cmd.split(" "))
 
 
