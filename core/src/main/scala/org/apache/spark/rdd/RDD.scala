@@ -1214,9 +1214,9 @@ abstract class RDD[T: ClassTag](
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = {
-    val short: String = sc.getLocalProperty(name + Utils.CALL_SITE_SHORT)
+    val short: String = sc.getLocalProperty(Utils.CALL_SITE_SHORT)
     if (short != null) {
-      CallSite(short, sc.getLocalProperty(name + Utils.CALL_SITE_LONG))
+      CallSite(short, sc.getLocalProperty(Utils.CALL_SITE_LONG))
     } else {
       Utils.getCallSite
     }

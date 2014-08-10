@@ -33,20 +33,19 @@ class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
     mapSideCombine: Boolean = true
   ) extends DStream[(K,C)] (parent.ssc) {
 
-  setName("ShuffledRDD")
-
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
-    setCallSite
+    val prevCallSite = getCallSite
+    setCreationCallSite
     val rdd: Option[RDD[(K,C)]] = parent.getOrCompute(validTime) match {
       case Some(rdd) => Some(rdd.combineByKey[C](
           createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine))
       case None => None
     }
-    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    setCallSite(prevCallSite)
     return rdd
   }
 }

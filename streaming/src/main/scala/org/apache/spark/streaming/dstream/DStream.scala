@@ -106,22 +106,25 @@ abstract class DStream[T: ClassTag] (
   /** Return the StreamingContext associated with this DStream */
   def context = ssc
 
-  private[streaming] val RDD_NAME: String = "rddName";
-
-  @transient var name: String = null
-
-  /** Assign a name to this DStream */
-  def setName(_name: String) = {
-    name = _name
-  }
-
   /* Find the creation callSite */
   val creationSite = Utils.getCallSite
 
   /* Store the creation callSite in threadlocal */
-  private[streaming] def setCallSite = {
-    ssc.sparkContext.setLocalProperty(name + Utils.CALL_SITE_SHORT, creationSite.short)
-    ssc.sparkContext.setLocalProperty(name + Utils.CALL_SITE_LONG, creationSite.long)
+  private[streaming] def setCreationCallSite() = {
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, creationSite.short)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, creationSite.long)
+  }
+
+  /* Store the supplied callSite in threadlocal */
+  private[streaming] def setCallSite(callSite: CallSite) = {
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, callSite.short)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, callSite.long)
+  }
+
+  /* Return the current callSite */
+  private[streaming] def getCallSite() = {
+    CallSite(ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_SHORT),
+             ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_LONG))
   }
 
   /** Persist the RDDs of this DStream with the given storage level */

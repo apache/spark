@@ -27,16 +27,15 @@ class FilteredDStream[T: ClassTag](
     filterFunc: T => Boolean
   ) extends DStream[T](parent.ssc) {
 
-  setName("FilteredRDD")
-
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    setCallSite
+    val prevCallSite = getCallSite
+    setCreationCallSite
     val rdd: Option[RDD[T]] = parent.getOrCompute(validTime).map(_.filter(filterFunc))
-    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    setCallSite(prevCallSite)
     return rdd
   }
 }

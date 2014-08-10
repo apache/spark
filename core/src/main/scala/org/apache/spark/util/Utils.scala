@@ -838,7 +838,7 @@ private[spark] object Utils extends Logging {
             SCALA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined ||
             AKKA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined ||
             JAVA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
-          lastSparkMethod = if (el.getMethodName == "<init>") {
+            lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
           } else {

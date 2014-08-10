@@ -28,16 +28,15 @@ class MapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](
     mapValueFunc: V => U
   ) extends DStream[(K, U)](parent.ssc) {
 
-  setName("MappedValuesRDD")
-
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
-    setCallSite
+    val prevCallSite = getCallSite
+    setCreationCallSite
     val rdd: Option[RDD[(K, U)]] = parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))
-    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    setCallSite(prevCallSite)
     return rdd
   }
 }

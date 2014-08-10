@@ -112,7 +112,6 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) {
       new SparkContext(cp_.sparkConf)
     } else {
-      sc_.setCallSite(Utils.getCallSite.short)
       sc_
     }
   }

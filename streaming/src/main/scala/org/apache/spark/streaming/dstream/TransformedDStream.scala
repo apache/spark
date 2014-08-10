@@ -32,17 +32,16 @@ class TransformedDStream[U: ClassTag] (
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")
 
-  setName("TransformedRDD")
-
   override def dependencies = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    setCallSite
+    val prevCallSite = getCallSite
+    setCreationCallSite
     val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
     val rdd: Option[RDD[U]] = Some(transformFunc(parentRDDs, validTime))
-    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    setCallSite(prevCallSite)
     return rdd
   }
 }

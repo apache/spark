@@ -20,6 +20,7 @@ package org.apache.spark.streaming.dstream
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
+import org.apache.spark.util.Utils
 
 private[streaming]
 class MappedDStream[T: ClassTag, U: ClassTag] (
@@ -27,16 +28,15 @@ class MappedDStream[T: ClassTag, U: ClassTag] (
     mapFunc: T => U
   ) extends DStream[U](parent.ssc) {
 
-  setName("MappedRDD")
-
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    setCallSite
+    val prevCallSite = getCallSite
+    setCreationCallSite
     val rdd: Option[RDD[U]] = parent.getOrCompute(validTime).map(_.map[U](mapFunc))
-    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    setCallSite(prevCallSite)
     return rdd
   }
 }
