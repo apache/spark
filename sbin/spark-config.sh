@@ -17,7 +17,7 @@
 
 # included in all the spark scripts with source command
 # should not be executable directly
-# also should not be passed any arguments, since we need original $*
+# depends on SPARK_HOME being properly set in the sourcing script
 
 # resolve links - $0 may be a softlink
 this="${BASH_SOURCE:-$0}"

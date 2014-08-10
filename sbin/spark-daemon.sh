@@ -37,10 +37,16 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
 # get arguments
 
@@ -86,7 +92,7 @@ spark_rotate_log ()
     fi
 }
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
@@ -205,13 +211,13 @@ case $option in
       else
         echo $pid file is present but $command not running
         exit 1
-      fi  
+      fi
     else
       echo $command not running.
       exit 2
-    fi  
+    fi
     ;;
-  
+
   (*)
     echo $usage
     exit 1

@@ -19,17 +19,22 @@
 
 # Starts the master on the machine this script is executed on.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
 ORIGINAL_ARGS="$@"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
 START_TACHYON=false
 
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
-      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
+      if [ ! -e "$SPARK_HOME/tachyon/bin/tachyon" ]; then
         echo "Error: --with-tachyon specified, but tachyon not found."
         exit -1
       fi
@@ -39,9 +44,8 @@ case $1 in
 shift
 done
 
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
@@ -60,7 +64,7 @@ fi
   $ORIGINAL_ARGS
 
 if [ "$START_TACHYON" == "true" ]; then
-  "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
-  "$sbin"/../tachyon/bin/tachyon format -s
-  "$sbin"/../tachyon/bin/tachyon-start.sh master
+  "$SPARK_HOME/tachyon/bin/tachyon" bootstrap-conf $SPARK_MASTER_IP
+  "$SPARK_HOME/tachyon/bin/tachyon" format -s
+  "$SPARK_HOME/tachyon/bin/tachyon-start.sh" master
 fi

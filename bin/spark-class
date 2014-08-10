@@ -18,7 +18,16 @@
 #
 
 # Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
+
+# Export this as SPARK_HOME
+export SPARK_HOME="$FWDIR"
 
 . "$SPARK_HOME"/bin/load-spark-env.sh
 

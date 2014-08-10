@@ -17,9 +17,17 @@
 # limitations under the License.
 #
 
-SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
 
+# Export this as SPARK_HOME
+export SPARK_HOME="$FWDIR"
 exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"

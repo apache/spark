@@ -21,14 +21,14 @@
 #
 # Environment Variables
 #
-#   SPARK_WORKER_INSTANCES  The number of worker instances to run on this 
+#   SPARK_WORKER_INSTANCES  The number of worker instances to run on this
 #                           slave.  Default is 1.
-#   SPARK_WORKER_PORT       The base port number for the first worker. If set, 
+#   SPARK_WORKER_PORT       The base port number for the first worker. If set,
 #                           subsequent workers will increment this number.  If
 #                           unset, Spark will find a valid port number, but
 #                           with no guarantee of a predictable pattern.
 #   SPARK_WORKER_WEBUI_PORT The base port for the web interface of the first
-#                           worker.  Subsequent workers will increment this 
+#                           worker.  Subsequent workers will increment this
 #                           number.  Default is 8081.
 
 usage="Usage: start-slave.sh <spark-master-URL> where <spark-master-URL> is like spark://localhost:7077"
@@ -82,4 +82,3 @@ else
     start_instance $(( 1 + $i )) "$@"
   done
 fi
-

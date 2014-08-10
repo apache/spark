@@ -19,16 +19,21 @@
 
 # Starts a slave instance on each machine specified in the conf/slaves file.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
 START_TACHYON=false
 
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
-      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
+      if [ ! -e "$SPARK_HOME/tachyon/bin/tachyon" ]; then
         echo "Error: --with-tachyon specified, but tachyon not found."
         exit -1
       fi
@@ -38,9 +43,8 @@ case $1 in
 shift
 done
 
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 # Find the port number for the master
 if [ "$SPARK_MASTER_PORT" = "" ]; then
@@ -55,7 +59,7 @@ if [ "$START_TACHYON" == "true" ]; then
   "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon bootstrap-conf "$SPARK_MASTER_IP"
 
   # set -t so we can call sudo
-  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/../tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
+  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$SPARK_HOME/sbin/slaves.sh" cd "$SPARK_HOME" \; "$SPARK_HOME/tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
 fi
 
 # Launch the slaves

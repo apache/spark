@@ -24,10 +24,16 @@
 # Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 $@

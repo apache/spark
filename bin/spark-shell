@@ -28,8 +28,15 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-export FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
 
 # SPARK-4161: scala does not assume use of the java classpath,
 # so we need to add the "-Dscala.usejavacp=true" flag manually. We
