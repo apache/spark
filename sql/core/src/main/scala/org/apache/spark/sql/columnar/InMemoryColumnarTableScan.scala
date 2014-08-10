@@ -45,7 +45,6 @@ private[sql] case class InMemoryRelation(
   if (_cachedColumnBuffers == null) {
     val output = child.output
     val cached = child.execute().mapPartitions { baseIterator =>
-
       new Iterator[Array[ByteBuffer]] {
         def next() = {
           val columnBuilders = output.map { attribute =>
