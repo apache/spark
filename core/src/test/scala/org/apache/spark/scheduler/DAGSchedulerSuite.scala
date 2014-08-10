@@ -482,6 +482,44 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(sparkListener.failedStages.size == 1)
   }
 
+  test("run trivial shuffle with repeated fetch failure") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    // the 2nd ResultTask failed
+    complete(taskSets(1), Seq(
+      (Success, 42),
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0), null)))
+    scheduler.resubmitFailedStages()
+
+    runEvent(CompletionEvent(taskSets(0).tasks.head, FetchFailed(makeBlockManagerId("hostA"),
+      shuffleId, 0, 0), null, Map[Long, Any](), null, null))
+    // tasks in taskSets(0) should not cause resubmit stage
+    // when it is not in stage's pendingTasks
+    assert(scheduler.failedStages.isEmpty)
+
+    // have the 2nd attempt pass
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    // we can see both result blocks now
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
+      Array("hostA", "hostB"))
+    complete(taskSets(3), Seq((Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    // all done
+    assertDataStructuresEmpty
+
+    runEvent(CompletionEvent(taskSets(2).tasks.head, FetchFailed(makeBlockManagerId("hostA"),
+      shuffleId, 0, 0), null, Map[Long, Any](), null, null))
+    // tasks in taskSets(2) should not cause resubmit stage
+    // when stage is not in scheduler's runningStages
+    assert(scheduler.failedStages.isEmpty)
+  }
+
   test("ignore late map task completions") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
