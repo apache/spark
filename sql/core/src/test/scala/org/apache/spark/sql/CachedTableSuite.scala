@@ -22,8 +22,18 @@ import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableSca
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
+case class BigData(s: String)
+
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
+
+  test("too big for memory") {
+    val data = "*" * 10000
+    sparkContext.parallelize(1 to 1000000, 1).map(_ => BigData(data)).registerTempTable("bigData")
+    cacheTable("bigData")
+    assert(table("bigData").count() === 1000000L)
+    uncacheTable("bigData")
+  }
 
   test("SPARK-1669: cacheTable should be idempotent") {
     assume(!table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
