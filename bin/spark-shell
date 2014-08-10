@@ -37,7 +37,10 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-function main(){
+source $FWDIR/bin/utils.sh
+gatherSparkSubmitOpts $@
+
+function main() {
     if $cygwin; then
         # Workaround for issue involving JLine and Cygwin
         # (see http://sourceforge.net/p/jline/bugs/40/).
@@ -46,11 +49,11 @@ function main(){
         # (see https://github.com/sbt/sbt/issues/562).
         stty -icanon min 1 -echo > /dev/null 2>&1
         export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main spark-shell "$@"
+        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main ${SUBMISSION_OPTS[@]} spark-shell ${APPLICATION_OPTS[@]}
         stty icanon echo > /dev/null 2>&1
     else
         export SPARK_SUBMIT_OPTS
-        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main spark-shell "$@"
+        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main ${SUBMISSION_OPTS[@]} spark-shell ${APPLICATION_OPTS[@]}
     fi
 }
 
