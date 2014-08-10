@@ -37,7 +37,7 @@ class CachedTableSuite extends QueryTest {
 
     cacheTable("testData")
     table("testData").queryExecution.analyzed match {
-      case InMemoryRelation(_, _, _: InMemoryColumnarTableScan) =>
+      case InMemoryRelation(_, _, _, _: InMemoryColumnarTableScan) =>
         fail("cacheTable is not idempotent")
 
       case _ =>
