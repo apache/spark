@@ -19,7 +19,15 @@
 
 SCALA_VERSION=2.10
 
-FWDIR="$(cd `dirname $0`/..; pwd)"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
+
 export SPARK_HOME="$FWDIR"
 EXAMPLES_DIR="$FWDIR"/examples
 

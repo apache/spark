@@ -20,13 +20,18 @@
 # Start all spark daemons.
 # Run this on the master nde
 
-
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
 # Load the Spark configuration
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
 # Stop the slaves, then the master
-"$sbin"/stop-slaves.sh
-"$sbin"/stop-master.sh
+"$SPARK_HOME/stop-slaves.sh"
+"$SPARK_HOME/stop-master.sh"

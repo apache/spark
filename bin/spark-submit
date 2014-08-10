@@ -19,7 +19,18 @@
 
 # NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
 
-export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
+
+# Export this as SPARK_HOME
+export SPARK_HOME="$FWDIR"
+
 ORIG_ARGS=("$@")
 
 while (($#)); do

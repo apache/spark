@@ -19,13 +19,19 @@
 
 # Starts the master on the machine this script is executed on.
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
+"$SPARK_HOME/sbin/spark-daemon.sh" stop org.apache.spark.deploy.master.Master 1
 
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin"/../tachyon/bin/tachyon killAll tachyon.master.Master
+if [ -e "$SPARK_HOME/tachyon/bin/tachyon" ]; then
+  "$SPARK_HOME/tachyon/bin/tachyon" killAll tachyon.master.Master
 fi

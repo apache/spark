@@ -27,7 +27,13 @@ CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 CLASS_NOT_FOUND_EXIT_STATUS=1
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
 
 function usage {
   echo "Usage: ./bin/spark-sql [options] [cli option]"

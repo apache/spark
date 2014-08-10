@@ -17,22 +17,27 @@
 # limitations under the License.
 #
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 # do before the below calls as they exec
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
+if [ -e "$SPARK_HOME/tachyon/bin/tachyon" ]; then
+  "$SPARK_HOME/sbin/slaves.sh" cd "$SPARK_HOME" \; "$SPARK_HOME"/tachyon/bin/tachyon killAll tachyon.worker.Worker
 fi
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
+  "$SPARK_HOME/sbin/spark-daemons.sh" stop org.apache.spark.deploy.worker.Worker 1
 else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+    "$SPARK_HOME/sbin/spark-daemons.sh" stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
 fi
