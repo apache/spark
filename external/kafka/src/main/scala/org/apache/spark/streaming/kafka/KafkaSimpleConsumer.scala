@@ -268,3 +268,4 @@ object KafkaSimpleConsumer extends Logging {
     list.toSeq
   }
 }
+
