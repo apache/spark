@@ -158,7 +158,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * ::Experimental::
-   *
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
@@ -176,7 +175,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * ::Experimental::
-   *
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *

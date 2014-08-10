@@ -1246,12 +1246,12 @@ public class JavaAPISuite implements Serializable {
   public void sampleByKeyExact() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
     JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
-            new PairFunction<Integer, Integer, Integer>() {
-                @Override
-                public Tuple2<Integer, Integer> call(Integer i) {
-                    return new Tuple2<Integer, Integer>(i % 2, 1);
-                }
-            });
+      new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer i) {
+              return new Tuple2<Integer, Integer>(i % 2, 1);
+          }
+      });
     Map<Integer, Object> fractions = Maps.newHashMap();
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);

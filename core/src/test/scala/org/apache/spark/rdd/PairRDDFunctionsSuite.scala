@@ -592,7 +592,8 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
       sampleCounts.foreach { case (k, v) =>
-        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate)) }
+        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate))
+      }
       val groupedByKey = takeSample.groupBy(_._1)
       for ((key, v) <- groupedByKey) {
         if (expectedSampleSize(key) >= 100 && samplingRate >= 0.1) {
@@ -606,7 +607,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
           }
         }
       }
-      takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
+      takeSample.foreach(x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]"))
     }
   }
 
