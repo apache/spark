@@ -42,8 +42,12 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
   test("corr(x, y) pearson, 1 value in data") {
     val x = sc.parallelize(Array(1.0))
     val y = sc.parallelize(Array(4.0))
-    assert(Statistics.corr(x, y, "pearson").isNaN)
-    assert(Statistics.corr(x, y, "spearman").isNaN)
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "pearson")
+    }
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "spearman")
+    }
   }
 
   test("corr(x, y) default, pearson") {
