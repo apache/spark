@@ -261,15 +261,13 @@ class ConnectionManagerSuite extends FunSuite {
   }
 
   test("sendMessageRelyably timeout") {
-    import scala.concurrent.ExecutionContext.Implicits.global
-
     val clientConf = new SparkConf
     clientConf.set("spark.authenticate", "false")
     val ackTimeout = 30
     clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}")
 
     val clientSecurityManager = new SecurityManager(clientConf)
-    val managerClient = spy(new ConnectionManager(0, clientConf, clientSecurityManager))
+    val manager = new ConnectionManager(0, clientConf, clientSecurityManager)
 
     val serverConf = new SparkConf
     serverConf.set("spark.authenticate", "false")
@@ -277,7 +275,7 @@ class ConnectionManagerSuite extends FunSuite {
     val managerServer = new ConnectionManager(0, serverConf, serverSecurityManager)
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       // sleep 60 sec > ack timeout for simulating server slow down or hang up
-      Thread.sleep(ackTimeout * 2 * 1000)
+      Thread.sleep(ackTimeout * 3 * 1000)
       None
     })
 
@@ -285,34 +283,18 @@ class ConnectionManagerSuite extends FunSuite {
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
     buffer.flip
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    val future = managerClient.sendMessageReliably(managerServer.id, bufferMessage)
- /*   future.onComplete {
-      case Success(_) => {
-        assert(false, "Ack timeout should be occurred but ack was received successfully")
-      }
-      case Failure(_) => {
-        // if timeout occurred, receiveMessage should not be invoked
-        verify(managerClient, times(0)).acceptConnection(any())
-        assert(true)
-      }
-    }
-*/
-    try {
-      Await.result(future, Duration((ackTimeout * 1.5).toInt, SECONDS))
-      assert(false, "Ack timeout should be occurred but ack was received successfully")
-    } catch {
-      case e: TimeoutException => {
-        assert(false, s"Timeout was occurred in ${ackTimeout} but timeout was not occurred")
-      }
-      case e: IOException => {
-        verify(managerClient, times(0)).acceptConnection(any())
-        assert(true)
-      }
+
+    val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
+
+    // Future should throw IOException in 30 sec.
+    // Otherwise TimeoutExcepton is thrown from Await.result.
+    // We expect TimeoutException is not thrown.
+    intercept[IOException] {
+      Await.result(future, (ackTimeout * 2) second)
     }
 
-    managerClient.stop()
+    manager.stop()
     managerServer.stop()
-
   }
 
 }
