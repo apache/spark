@@ -68,7 +68,7 @@ class KafkaSimpleReceiver[U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
     val firstOffset = kac.getEarliestOffset()
     if (currentOffset < firstOffset) {
       logWarning(s"""at present, the first offset is ${firstOffset}, the messages which is 
-      	|from ${currentOffset} to ${firstOffset} might been pruned.""".stripMargin)
+        |from ${currentOffset} to ${firstOffset} might been pruned.""".stripMargin)
       currentOffset = firstOffset
     }
     while (true) {
@@ -84,13 +84,14 @@ class KafkaSimpleReceiver[U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
         currentOffset = messageAndOffset.offset
         store((currentOffset, bytes))
         hasMessage = true
-        if (autoCommitOffset)
+        if (autoCommitOffset) {
           kac.commitOffsetToZookeeper(currentOffset)
+        }
       }
       if (hasMessage) {
         currentOffset += 1
       }
-      Thread.sleep(10)
+      Thread.sleep(1000)
     }
   }
 }

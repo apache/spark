@@ -42,7 +42,7 @@ class KafkaSimpleConsumer(
   private var leader: String = _
   private var consumer: SimpleConsumer = null
   private val soTimeout = 60000
-  private var bufferSize = 1024
+  private val bufferSize = maxBatchByteSize
   private var replicaBrokers: Seq[(String)] = null
 
   private def init(): Unit = {
@@ -171,7 +171,7 @@ class KafkaSimpleConsumer(
       result = findLeaderAndReplicaBrokers(broker)
     }
     if (result == null) {
-    	throw new Exception("not found leader.")
+      throw new Exception("not found leader.")
     } else {
       result
     }
@@ -250,7 +250,7 @@ object KafkaSimpleConsumer extends Logging {
 
   def getTopicPartitionList(zkQuorum: String, topic: String): Seq[Int] = {
     val list = new ArrayBuffer[Int]()
-    val dir = "/brokers/topics/" + topic+"/partitions"
+    val dir = "/brokers/topics/" + topic + "/partitions"
     val zk = new ZkClient(zkQuorum, 30 * 1000, 30 * 1000, ZKStringSerializer)
     try {
       if (zk.exists(dir)) {

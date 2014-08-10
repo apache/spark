@@ -149,16 +149,16 @@ object KafkaUtils {
   /**
    * Create an input stream that pulls messages from a Kafka Broker,
    *  in according to the specified starting position.
-   * @param ssc      	StreamingContext object
-   * @param zkQuorum 	Zookeeper quorum (hostname:port,hostname:port,..).
-   * @param groupId   	The group id for this consumer
-   * @param topic	 	a topic to consume
-   * @param partition 	partition of this topic
-   * @param startPositionOffset	beginning to consume from this offset position
-   * @param autoCommitOffset	whether need to commit automatically the latest offset
+   * @param ssc         StreamingContext object
+   * @param zkQuorum    Zookeeper quorum (hostname:port,hostname:port,..).
+   * @param groupId     The group id for this consumer
+   * @param topic       a topic to consume
+   * @param partition   partition of this topic
+   * @param startPositionOffset beginning to consume from this offset position
+   * @param autoCommitOffset    whether need to commit automatically the latest offset
    *  in this batch messages into zookeeper, in order to recover pulling message
    *  from this offset position when consuming this streaming again
-   * @param maxBatchByteSize	max buffer size for a fetch request, at least it's longer 
+   * @param maxBatchByteSize    max buffer size for a fetch request, at least it's longer 
    *  than a max-length message, it will contain more message if possible
    * @param storageLevel RDD storage level.
    */
@@ -180,16 +180,16 @@ object KafkaUtils {
  /**
    * Create an input stream that pulls messages from a Kafka Broker,
    *  in according to the specified starting position.
-   * @param jssc      	JavaStreamingContext object
-   * @param zkQuorum 	Zookeeper quorum (hostname:port,hostname:port,..).
-   * @param groupId   	The group id for this consumer
-   * @param topic	 	a topic to consume
-   * @param partition 	partition of this topic
-   * @param startPositionOffset	beginning to consume from this offset position
-   * @param autoCommitOffset	whether need to commit automatically the latest offset
+   * @param jssc        JavaStreamingContext object
+   * @param zkQuorum    Zookeeper quorum (hostname:port,hostname:port,..).
+   * @param groupId     The group id for this consumer
+   * @param topic       a topic to consume
+   * @param partition   partition of this topic
+   * @param startPositionOffset beginning to consume from this offset position
+   * @param autoCommitOffset    whether need to commit automatically the latest offset
    *  in this batch messages into zookeeper, in order to recover pulling message
    *  from this offset position when consuming this streaming again
-   * @param maxBatchByteSize	max buffer size for a fetch request, at least it's longer 
+   * @param maxBatchByteSize    max buffer size for a fetch request, at least it's longer 
    *  than a max-length message, it will contain more message if possible
    * @param storageLevel RDD storage level.
    */
