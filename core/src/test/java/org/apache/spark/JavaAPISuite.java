@@ -1239,12 +1239,28 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(worCounts.size() == 2);
     Assert.assertTrue(worCounts.get(0) > 0);
     Assert.assertTrue(worCounts.get(1) > 0);
-    JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKey(true, fractions, true, 1L);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void sampleByKeyExact() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+      new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer i) {
+              return new Tuple2<Integer, Integer>(i % 2, 1);
+          }
+      });
+    Map<Integer, Object> fractions = Maps.newHashMap();
+    fractions.put(0, 0.5);
+    fractions.put(1, 1.0);
+    JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
     Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
     Assert.assertTrue(wrExactCounts.size() == 2);
     Assert.assertTrue(wrExactCounts.get(0) == 2);
     Assert.assertTrue(wrExactCounts.get(1) == 4);
-    JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKey(false, fractions, true, 1L);
+    JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
     Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
     Assert.assertTrue(worExactCounts.size() == 2);
     Assert.assertTrue(worExactCounts.get(0) == 2);
