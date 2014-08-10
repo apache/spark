@@ -162,7 +162,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
                " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
                " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
-    val gcTime = "GC_TIME=" + taskMetrics.jvmGCTime
+    val gcTime = " GC_TIME=" + taskMetrics.jvmGCTime
     val inputMetrics = taskMetrics.inputMetrics match {
       case Some(metrics) =>
         " READ_METHOD=" + metrics.readMethod.toString +
