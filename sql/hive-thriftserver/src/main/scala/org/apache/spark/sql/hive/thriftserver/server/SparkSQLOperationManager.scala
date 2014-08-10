@@ -134,7 +134,9 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
           hiveContext.sparkContext.setJobGroup(groupId, statement)
           iter = {
             val resultRdd = result.queryExecution.toRdd
-            if (hiveContext.incrementalCollectEnabled) {
+            val useIncrementalCollect =
+              hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+            if (useIncrementalCollect) {
               resultRdd.toLocalIterator
             } else {
               resultRdd.collect().iterator
