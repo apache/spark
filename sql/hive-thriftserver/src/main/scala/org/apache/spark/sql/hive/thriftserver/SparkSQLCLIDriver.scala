@@ -118,7 +118,10 @@ private[hive] object SparkSQLCLIDriver {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    // This should be executed before shutdown hook of FileSystem to avoid race condition of FileSystem operation
+    /**
+     This should be executed before shutdown hook of
+     * FileSystem to avoid race condition of FileSystem operation
+     */
     ShutdownHookManager.get.addShutdownHook(
       new Thread() {
         override def run() {
