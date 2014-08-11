@@ -100,10 +100,10 @@ class StreamingContext(object):
         """
         Wait for the execution to stop.
         """
-        if timeout:
-            self._jssc.awaitTermination(timeout)
-        else:
+        if timeout is None:
             self._jssc.awaitTermination()
+        else:
+            self._jssc.awaitTermination(timeout)
 
     # start from simple one. storageLevel is not passed for now.
     def socketTextStream(self, hostname, port):
@@ -137,6 +137,7 @@ class StreamingContext(object):
 
     def checkpoint(self, directory):
         """
+        Not tested
         """
         self._jssc.checkpoint(directory)
 
@@ -147,8 +148,7 @@ class StreamingContext(object):
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
 
-        #tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
-        tempFile = open("/tmp/spark_rdd", "wb")
+        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
 
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(test_input):
@@ -160,10 +160,8 @@ class StreamingContext(object):
         else:
             serializer = self._sc._unbatched_serializer
         serializer.dump_stream(test_input, tempFile)
-        tempFile.flush()
-        tempFile.close()
-        print tempFile.name
+
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc,
                                                         tempFile.name,
                                                         numSlices).asJavaDStream()
-        return DStream(jinput_stream, self, UTF8Deserializer())
+        return DStream(jinput_stream, self, PickleSerializer())
