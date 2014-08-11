@@ -71,6 +71,9 @@ For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN
   </tbody>
 </table>
 
+To build against HBase 0.98.x releases, "hbase-hadoop1" is the default profile. This means hbase-0.98.x-hadoop1 would be used.
+When building against hadoop-2, "hbase-hadoop2" profile should be specified.
+
 Examples:
 
 {% highlight bash %}
