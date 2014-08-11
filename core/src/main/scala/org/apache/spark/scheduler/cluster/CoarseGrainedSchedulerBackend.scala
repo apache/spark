@@ -30,7 +30,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
 import org.apache.spark.ui.JettyUtils
 
 /**
@@ -61,7 +61,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
 
-  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
+  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
+
+    override protected def log = CoarseGrainedSchedulerBackend.this.log
+
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
@@ -79,7 +82,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
-    def receive = {
+    def receiveWithLogging = {
       case RegisterExecutor(executorId, hostPort, cores) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorActor.contains(executorId)) {

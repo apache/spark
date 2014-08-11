@@ -27,12 +27,14 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
  */
-private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends Actor with Logging {
+private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
+  extends Actor with ActorLogReceive with Logging {
+
   var masterActor: ActorSelection = _
   val timeout = AkkaUtils.askTimeout(conf)
 
@@ -114,7 +116,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
     }
   }
 
-  override def receive = {
+  override def receiveWithLogging = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)

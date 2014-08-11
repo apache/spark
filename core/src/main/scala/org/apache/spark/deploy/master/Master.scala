@@ -42,14 +42,14 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
     val securityMgr: SecurityManager)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
@@ -167,7 +167,7 @@ private[spark] class Master(
     context.stop(leaderElectionAgent)
   }
 
-  override def receive = {
+  override def receiveWithLogging = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
