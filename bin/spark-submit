@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+echo "SPARK-SUBMIT PRINTING 1"
+
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 ORIG_ARGS=("$@")
 
@@ -35,11 +37,15 @@ while (($#)); do
   shift
 done
 
+echo "SPARK-SUBMIT PRINTING 2"
+
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 
 if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
   export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
 fi
+
+echo "SPARK-SUBMIT PRINTING 3"
 
 exec $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
 
