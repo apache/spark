@@ -846,7 +846,8 @@ private[spark] class ConnectionManager(
       : Future[Message] = {
     val promise = Promise[Message]()
 
-    val ackTimeoutMonitor =  new Timer(s"Ack Timeout Monitor-${connectionManagerId}-MessageId(${message.id})", true)
+    val ackTimeoutMonitor =  new Timer(s"Ack Timeout Monitor-" +
+      "${connectionManagerId}-MessageId(${message.id})", true)
 
     val status = new MessageStatus(message, connectionManagerId, s => {
       ackTimeoutMonitor.cancel()
