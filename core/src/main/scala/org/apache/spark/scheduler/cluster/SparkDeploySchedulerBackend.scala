@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
@@ -40,6 +40,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var registrationDone = false
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
@@ -50,6 +51,7 @@ private[spark] class SparkDeploySchedulerBackend(
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
       cp.split(java.io.File.pathSeparator)
     }
@@ -58,12 +60,13 @@ private[spark] class SparkDeploySchedulerBackend(
         cp.split(java.io.File.pathSeparator)
       }
 
-    val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
-      classPathEntries, libraryPathEntries, extraJavaOpts)
-    val sparkHome = sc.getSparkHome()
+    // Start executors with a few necessary configs for registering with the scheduler
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
+      sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
@@ -105,7 +108,6 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int) {
-    totalExpectedExecutors.addAndGet(1)
     logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
@@ -117,6 +119,10 @@ private[spark] class SparkDeploySchedulerBackend(
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason.toString)
+  }
+
+  override def sufficientResourcesRegistered(): Boolean = {
+    totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 
   override def applicationId(): Option[String] = Some(appId)

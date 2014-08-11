@@ -83,6 +83,85 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(valuesFor2.toList.sorted === List(1))
   }
 
+  test("sampleByKey") {
+
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(100, 1000, 1000000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // Use the same data for the rest of the tests
+    val fractionPositive = 0.3
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+
+    // vary seed
+    for (seed <- defaultSeed to defaultSeed + 5L) {
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, seed, n)
+    }
+
+    // vary sampling rate
+    for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+  }
+
+  test("sampleByKeyExact") {
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(100, 1000, 1000000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // Use the same data for the rest of the tests
+    val fractionPositive = 0.3
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+
+    // vary seed
+    for (seed <- defaultSeed to defaultSeed + 5L) {
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, seed, n)
+    }
+
+    // vary sampling rate
+    for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
+  }
+
   test("reduceByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_+_).collect()
@@ -438,6 +517,98 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
+  }
+
+  private object StratifiedAuxiliary {
+    def stratifier (fractionPositive: Double) = {
+      (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
+    }
+
+    def checkSize(exact: Boolean,
+        withReplacement: Boolean,
+        expected: Long,
+        actual: Long,
+        p: Double): Boolean = {
+      if (exact) {
+        return expected == actual
+      }
+      val stdev = if (withReplacement) math.sqrt(expected) else math.sqrt(expected * p * (1 - p))
+      // Very forgiving margin since we're dealing with very small sample sizes most of the time
+      math.abs(actual - expected) <= 6 * stdev
+    }
+
+    def testSampleExact(stratifiedData: RDD[(String, Int)],
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      testBernoulli(stratifiedData, true, samplingRate, seed, n)
+      testPoisson(stratifiedData, true, samplingRate, seed, n)
+    }
+
+    def testSample(stratifiedData: RDD[(String, Int)],
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      testBernoulli(stratifiedData, false, samplingRate, seed, n)
+      testPoisson(stratifiedData, false, samplingRate, seed, n)
+    }
+
+    // Without replacement validation
+    def testBernoulli(stratifiedData: RDD[(String, Int)],
+        exact: Boolean,
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey()
+        .mapValues(count => math.ceil(count * samplingRate).toInt)
+      val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
+      val sample = if (exact) {
+        stratifiedData.sampleByKeyExact(false, fractions, seed)
+      } else {
+        stratifiedData.sampleByKey(false, fractions, seed)
+      }
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      sampleCounts.foreach { case(k, v) =>
+        assert(checkSize(exact, false, expectedSampleSize(k), v, samplingRate)) }
+      assert(takeSample.size === takeSample.toSet.size)
+      takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
+    }
+
+    // With replacement validation
+    def testPoisson(stratifiedData: RDD[(String, Int)],
+        exact: Boolean,
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
+        math.ceil(count * samplingRate).toInt)
+      val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
+      val sample = if (exact) {
+        stratifiedData.sampleByKeyExact(true, fractions, seed)
+      } else {
+        stratifiedData.sampleByKey(true, fractions, seed)
+      }
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      sampleCounts.foreach { case (k, v) =>
+        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate))
+      }
+      val groupedByKey = takeSample.groupBy(_._1)
+      for ((key, v) <- groupedByKey) {
+        if (expectedSampleSize(key) >= 100 && samplingRate >= 0.1) {
+          // sample large enough for there to be repeats with high likelihood
+          assert(v.toSet.size < expectedSampleSize(key))
+        } else {
+          if (exact) {
+            assert(v.toSet.size <= expectedSampleSize(key))
+          } else {
+            assert(checkSize(false, true, expectedSampleSize(key), v.toSet.size, samplingRate))
+          }
+        }
+      }
+      takeSample.foreach(x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]"))
+    }
   }
 
 }

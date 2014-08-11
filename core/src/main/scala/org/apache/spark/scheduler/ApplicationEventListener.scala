@@ -30,7 +30,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
   var startTime: Option[Long] = None
   var endTime: Option[Long] = None
   var viewAcls: Option[String] = None
-  var enableViewAcls = false
+  var adminAcls: Option[String] = None
 
   def applicationStarted = startTime.isDefined
 
@@ -56,7 +56,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
       val environmentDetails = environmentUpdate.environmentDetails
       val allProperties = environmentDetails("Spark Properties").toMap
       viewAcls = allProperties.get("spark.ui.view.acls")
-      enableViewAcls = allProperties.getOrElse("spark.ui.acls.enable", "false").toBoolean
+      adminAcls = allProperties.get("spark.admin.acls")
     }
   }
 }

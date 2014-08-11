@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -288,8 +288,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             out.println(cmd)
           }
 
-          ret = driver.run(cmd).getResponseCode
+          val rc = driver.run(cmd)
+          ret = rc.getResponseCode
           if (ret != 0) {
+            console.printError(rc.getErrorMessage())
             driver.close()
             return ret
           }

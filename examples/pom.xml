@@ -34,6 +34,19 @@
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
 
+  <profiles>
+    <profile>
+      <id>kinesis-asl</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+  
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>

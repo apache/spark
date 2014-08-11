@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-hive-thriftserver_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Hive</name>
+  <name>Spark Project Hive Thrift Server</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>hive-thriftserver</sbt.project.name>

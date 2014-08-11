@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.TestSQLContext._
  * Note: this is only a rough example of how TGFs can be expressed, the final version will likely
  * involve a lot more sugar for cleaner use in Scala/Java/etc.
  */
-case class ExampleTGF(input: Seq[Attribute] = Seq('name, 'age)) extends Generator {
+case class ExampleTGF(input: Seq[Expression] = Seq('name, 'age)) extends Generator {
   def children = input
   protected def makeOutput() = 'nameAndAge.string :: Nil
 

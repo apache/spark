@@ -38,11 +38,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     conf.getInt("spark.history.updateInterval", 10)) * 1000
 
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
-  if (logDir == null) {
-    throw new IllegalArgumentException("Logging directory must be specified.")
-  }
+  private val resolvedLogDir = Option(logDir)
+    .map { d => Utils.resolveURI(d) }
+    .getOrElse { throw new IllegalArgumentException("Logging directory must be specified.") }
 
-  private val fs = Utils.getHadoopFileSystem(logDir)
+  private val fs = Utils.getHadoopFileSystem(resolvedLogDir)
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTimeMs = -1L
@@ -83,14 +83,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private def initialize() {
     // Validate the log directory.
-    val path = new Path(logDir)
+    val path = new Path(resolvedLogDir)
     if (!fs.exists(path)) {
       throw new IllegalArgumentException(
-        "Logging directory specified does not exist: %s".format(logDir))
+        "Logging directory specified does not exist: %s".format(resolvedLogDir))
     }
     if (!fs.getFileStatus(path).isDir) {
       throw new IllegalArgumentException(
-        "Logging directory specified is not a directory: %s".format(logDir))
+        "Logging directory specified is not a directory: %s".format(resolvedLogDir))
     }
 
     checkForLogs()
@@ -119,10 +119,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
 
         val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-        ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+        ui.getSecurityManager.setAcls(uiAclsEnabled)
+        // make sure to set admin acls before view acls so properly picked up
+        ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
         ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
-          appListener.viewAcls.getOrElse(""))
-        ui
+         appListener.viewAcls.getOrElse(""))
+         ui
       })
     } catch {
       case e: FileNotFoundException => None
@@ -130,7 +132,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   override def getConfig(): Map[String, String] =
-    Map(("Event Log Location" -> logDir))
+    Map("Event Log Location" -> resolvedLogDir.toString)
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -141,7 +143,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     lastLogCheckTimeMs = getMonotonicTimeMs()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
-      val logStatus = fs.listStatus(new Path(logDir))
+      val logStatus = fs.listStatus(new Path(resolvedLogDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
 
       // Load all new logs from the log directory. Only directories that have a modification time
@@ -216,24 +218,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
-  }
-
-  private def loadAppUI(logDir: FileStatus, appId: String): SparkUI = {
-    val (replayBus, appListener) = createReplayBus(logDir)
-    val ui: SparkUI = {
-      val conf = this.conf.clone()
-      val appSecManager = new SecurityManager(conf)
-      new SparkUI(conf, appSecManager, replayBus, appId, s"${HistoryServer.UI_PATH_PREFIX}/$appId")
-      // Do not call ui.bind() to avoid creating a new server for each application
-    }
-
-    replayBus.replay()
-
-    val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-    ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-    ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
-      appListener.viewAcls.getOrElse(""))
-    ui
   }
 
   private def createReplayBus(logDir: FileStatus) = {

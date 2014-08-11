@@ -52,13 +52,13 @@ class KMeans private (
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
-  def setK(k: Int): KMeans = {
+  def setK(k: Int): this.type = {
     this.k = k
     this
   }
 
   /** Set maximum number of iterations to run. Default: 20. */
-  def setMaxIterations(maxIterations: Int): KMeans = {
+  def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
   }
@@ -68,7 +68,7 @@ class KMeans private (
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    */
-  def setInitializationMode(initializationMode: String): KMeans = {
+  def setInitializationMode(initializationMode: String): this.type = {
     if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
       throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
     }
@@ -83,7 +83,7 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Experimental
-  def setRuns(runs: Int): KMeans = {
+  def setRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
     }
@@ -95,7 +95,7 @@ class KMeans private (
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
    */
-  def setInitializationSteps(initializationSteps: Int): KMeans = {
+  def setInitializationSteps(initializationSteps: Int): this.type = {
     if (initializationSteps <= 0) {
       throw new IllegalArgumentException("Number of initialization steps must be positive")
     }
@@ -107,7 +107,7 @@ class KMeans private (
    * Set the distance threshold within which we've consider centers to have converged.
    * If all centers move less than this Euclidean distance, we stop iterating one run.
    */
-  def setEpsilon(epsilon: Double): KMeans = {
+  def setEpsilon(epsilon: Double): this.type = {
     this.epsilon = epsilon
     this
   }
