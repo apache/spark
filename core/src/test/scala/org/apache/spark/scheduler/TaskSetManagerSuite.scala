@@ -607,6 +607,40 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
   }
 
+  test("Ensure TaskSetManager is usable after addition of levels") {
+    // Regression test for SPARK-2931
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host2", "execB.1")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    // All tasks added to no-pref list since no preferred location is available
+    assert(manager.pendingTasksWithNoPrefs.size === 2)
+    // Only ANY is valid
+    assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+    // Add a new executor
+    sched.addExecutor("execA", "host1")
+    sched.addExecutor("execB.2", "host2")
+    manager.executorAdded()
+    assert(manager.pendingTasksWithNoPrefs.size === 0)
+    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    assert(manager.resourceOffer("execA", "host1", ANY) !== None)
+    clock.advance(LOCALITY_WAIT * 4)
+    assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
+    sched.removeExecutor("execA")
+    sched.removeExecutor("execB.2")
+    manager.executorLost("execA", "host1")
+    manager.executorLost("execB.2", "host2")
+    clock.advance(LOCALITY_WAIT * 4)
+    sched.addExecutor("execC", "host3")
+    manager.executorAdded()
+    assert(manager.resourceOffer("execC", "host3", ANY) !== None)
+  }
+
+
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
     new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
