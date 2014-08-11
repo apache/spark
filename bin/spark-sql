@@ -29,7 +29,7 @@ CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 function usage {
-  echo "Usage: ./sbin/spark-sql [options] [cli option]"
+  echo "Usage: ./bin/spark-sql [options] [cli option]"
   pattern="usage"
   pattern+="\|Spark assembly has been built with Hive"
   pattern+="\|NOTE: SPARK_PREPEND_CLASSES is set"
