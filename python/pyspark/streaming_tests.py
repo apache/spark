@@ -142,10 +142,54 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
-    def _run_stream(self, test_input, test_func, expected_output):
+    def test_mapValues(self):
+        """Basic operation test for DStream.mapValues"""
+        test_input = [["a", "a", "b"], ["", ""], []]
+
+        def test_func(dstream):
+            return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add).mapValues(lambda x: x + 10)
+        expected_output = [[("a", 12), ("b", 11)], [("", 12)], []]
+        output = self._run_stream(test_input, test_func, expected_output)
+        self.assertEqual(expected_output, output)
+
+    def test_flatMapValues(self):
+        """Basic operation test for DStream.flatMapValues"""
+        test_input = [["a", "a", "b"], ["", ""], []]
+
+        def test_func(dstream):
+            return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add).flatMapValues(lambda x: (x, x + 10))
+        expected_output = [[("a", 2), ("a", 12), ("b", 1), ("b", 11)], [("", 2), ("", 12)], []]
+        output = self._run_stream(test_input, test_func, expected_output)
+        self.assertEqual(expected_output, output)
+
+    def test_glom(self):
+        """Basic operation test for DStream.glom"""
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+        numSlices = 2
+
+        def test_func(dstream):
+            dstream.pyprint()
+            return dstream.glom()
+        expected_output = [[[1,2], [3,4]],[[5,6], [7,8]],[[9,10], [11,12]]]
+        output = self._run_stream(test_input, test_func, expected_output, numSlices)
+        self.assertEqual(expected_output, output)
+
+    def test_mapPartitions(self):
+        """Basic operation test for DStream.mapPartitions"""
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+        numSlices = 2
+
+        def test_func(dstream):
+            dstream.pyprint()
+            return dstream.mapPartitions(lambda x: reduce(operator.add, x))
+        expected_output = [[3, 7],[11, 15],[19, 23]]
+        output = self._run_stream(test_input, test_func, expected_output, numSlices)
+        self.assertEqual(expected_output, output)
+
+    def _run_stream(self, test_input, test_func, expected_output, numSlices=None):
         """Start stream and return the output"""
         # Generate input stream with user-defined input
-        test_input_stream = self.ssc._testInputStream(test_input)
+        test_input_stream = self.ssc._testInputStream(test_input, numSlices)
         # Apply test function to stream
         test_stream = test_func(test_input_stream)
         # Add job to get output from stream
