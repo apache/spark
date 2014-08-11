@@ -444,6 +444,17 @@ class TestSaveAsFilesSuite(PySparkStreamingTestCase):
     def tearDownClass(cls):
         PySparkStreamingTestCase.tearDownClass()
 
+        start_time = time.time()
+        while True:
+            current_time = time.time()
+            # check time out
+            if (current_time - start_time) > self.timeout:
+                self.ssc.stop()
+                break
+            self.ssc.awaitTermination(50)
+            if buff.result is not None:
+                break
+        return buff.result
 
 if __name__ == "__main__":
     unittest.main()

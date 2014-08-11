@@ -236,6 +236,7 @@ class DStream(object):
         operator, so this DStream will be registered as an output stream and there materialized.
         """
         def takeAndPrint(rdd, time):
+            print "take and print ==================="
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
@@ -418,7 +419,6 @@ class DStream(object):
 # TODO: implement join
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
-
 
 
 class PipelinedDStream(DStream):
