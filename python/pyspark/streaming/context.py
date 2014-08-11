@@ -19,12 +19,7 @@ import sys
 from signal import signal, SIGTERM, SIGINT
 from tempfile import NamedTemporaryFile
 
-from pyspark.conf import SparkConf
-from pyspark.files import SparkFiles
-from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
-from pyspark.storagelevel import *
-from pyspark.rdd import RDD
 from pyspark.context import SparkContext
 from pyspark.streaming.dstream import DStream
 
