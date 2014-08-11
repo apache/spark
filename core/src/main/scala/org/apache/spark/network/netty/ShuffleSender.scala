@@ -32,7 +32,7 @@ private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver) ext
     server.stop()
   }
 
-  def port: Int = server.getPort()
+  def port: Int = server.getPort
 }
 
 
