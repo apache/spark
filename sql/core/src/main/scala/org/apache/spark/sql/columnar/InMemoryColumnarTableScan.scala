@@ -103,22 +103,39 @@ private[sql] case class InMemoryColumnarTableScan(
   import org.apache.spark.sql.catalyst.expressions._
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
-  val partitionFilters = {
-    predicates.collect {
-      case EqualTo(a: AttributeReference, l: Literal) =>
-        val aStats = relation.partitionStatistics.forAttribute(a)
-         l >= aStats.lowerBound && l <= aStats.upperBound
-      case EqualTo(l: Literal, a: AttributeReference) =>
-        val aStats = relation.partitionStatistics.forAttribute(a)
-        l >= aStats.lowerBound && l <= aStats.upperBound
-    }
+  /**   */
+  val buildFilter: PartialFunction[Expression, Expression] = {
+    case EqualTo(a: AttributeReference, l: Literal) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l >= aStats.lowerBound && l <= aStats.upperBound
+    case EqualTo(l: Literal, a: AttributeReference) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l >= aStats.lowerBound && l <= aStats.upperBound
   }
 
-  logInfo(s"Partition Filters: $partitionFilters")
+  val partitionFilters = {
+    predicates.flatMap { p =>
+      val filter = buildFilter.lift(p)
+      val boundFilter =
+        filter.map(
+          BindReferences.bindReference(
+            _,
+            relation.partitionStatistics.schema,
+            allowFailures = true))
+
+      boundFilter.foreach(_ =>
+        filter.foreach(f => logWarning(s"Predicate $p generates partition filter: $f")))
+
+      // If the filter can't be resolved then we are missing required statistics.
+      boundFilter.filter(_.resolved)
+    }
+  }
 
   val readPartitions = sparkContext.accumulator(0)
 
   override def execute() = {
+    readPartitions.setValue(0)
+
     relation.cachedColumnBuffers.mapPartitions { iterator =>
       val partitionFilter =
         newPredicate(
