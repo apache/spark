@@ -143,7 +143,7 @@ class HingeGradient extends Gradient {
     val brzWeights = weights.toBreeze
     val dotProduct = brzWeights.dot(brzData)
 
-    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
 
@@ -163,7 +163,7 @@ class HingeGradient extends Gradient {
     val brzWeights = weights.toBreeze
     val dotProduct = brzWeights.dot(brzData)
 
-    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
 
@@ -173,5 +173,79 @@ class HingeGradient extends Gradient {
     } else {
       0.0
     }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Compute gradient and loss for MLE of Poisson Regression with log link function.
+ * The gradient is calculated as follows:
+ *                    f' = x_i*(exp(x_i*w)-y_i)
+ */
+@DeveloperApi
+class PoissonGradient extends Gradient {
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProd = brzWeights.dot(brzData)
+    val diff = math.exp(dotProd) - label
+    val loss = -dotProd * label + math.exp(dotProd)
+    val gradient = brzData * diff
+
+    (Vectors.fromBreeze(gradient), loss)
+  }
+
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProd = brzWeights.dot(brzData)
+    val diff = math.exp(dotProd) - label
+    val loss = -dotProd * label + math.exp(dotProd)
+
+    brzAxpy(diff, brzData, cumGradient.toBreeze)
+
+    loss
+  }
+}
+
+  /**
+ * :: DeveloperApi ::
+ * Compute gradient and loss for MLE of Gamma Regression with log link function.
+ *       f = (-y*exp(-x_i*w)-x_i*w)/(1/v) +v*log(v)+(v-1)log(y)-log(Gamma(v))
+ *       f'= (y*x_i*exp(-x_i*w)-x_i)/(1/v)
+ * We use v = 1 as the dispersion parameter.
+ * See also the documentation for the precise formulation.
+ */
+@DeveloperApi
+class GammaLogGradient extends Gradient {
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProd = brzWeights.dot(brzData)
+    val diff = -1.0 * label * math.exp(-1.0 * dotProd) + 1.0
+    val loss = 1.0 * label * math.exp(-1.0 * dotProd) + dotProd
+    val gradient = brzData * diff
+
+    (Vectors.fromBreeze(gradient), loss)
+  }
+
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProd = brzWeights.dot(brzData)
+    val diff = -1.0 * label * math.exp(-1.0 * dotProd) + 1.0
+    val loss = 1.0 * label * math.exp(-1.0 * dotProd) + dotProd
+
+    brzAxpy(diff, brzData, cumGradient.toBreeze)
+
+    loss
   }
 }
