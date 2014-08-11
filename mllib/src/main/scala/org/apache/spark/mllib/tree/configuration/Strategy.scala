@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.configuration
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Variance, Entropy, Gini, Impurity}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
@@ -88,6 +88,35 @@ class Strategy (
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
     this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
+
+  private[tree] def assertValid(): Unit = {
+    algo match {
+      case Classification =>
+        require(numClassesForClassification >= 2,
+          s"DecisionTree Strategy for Classification must have numClassesForClassification >= 2," +
+          s" but numClassesForClassification = $numClassesForClassification.")
+        require(Set(Gini, Entropy).contains(impurity),
+          s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
+          s"  Valid settings: Gini, Entropy")
+      case Regression =>
+        require(impurity == Variance,
+          s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
+          s"  Valid settings: Variance")
+      case _ =>
+        throw new IllegalArgumentException(
+          s"DecisionTree Strategy given invalid algo parameter: $algo." +
+          s"  Valid settings are: Classification, Regression.")
+    }
+    require(maxDepth >= 0, s"DecisionTree Strategy given invalid maxDepth parameter: $maxDepth." +
+      s"  Valid values are integers >= 0.")
+    require(maxBins >= 2, s"DecisionTree Strategy given invalid maxBins parameter: $maxBins." +
+      s"  Valid values are integers >= 2.")
+    categoricalFeaturesInfo.foreach { case (feature, arity) =>
+      require(arity >= 2,
+        s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
+        s" feature $feature has $arity categories.  The number of categories should be >= 2.")
+    }
   }
 
 }

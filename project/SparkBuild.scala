@@ -30,11 +30,11 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl, spark,
+  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
   sql, streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt,
   streamingTwitter, streamingZeromq) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "spark", "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
+      "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
       "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
@@ -44,8 +44,9 @@ object BuildCommons {
   val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
     .map(ProjectRef(buildLocation, _))
 
-  val tools = "tools"
-
+  val tools = ProjectRef(buildLocation, "tools")
+  // Root project.
+  val spark = ProjectRef(buildLocation, "spark")
   val sparkHome = buildLocation
 }
 
@@ -115,7 +116,8 @@ object SparkBuild extends PomBuild {
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
-
+  
+    resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
@@ -123,26 +125,6 @@ object SparkBuild extends PomBuild {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  )
-
-  /** Following project only exists to pull previous artifacts of Spark for generating
-    Mima ignores. For more information see: SPARK 2071 */
-  lazy val oldDeps = Project("oldDeps", file("dev"), settings = oldDepsSettings)
-
-  def versionArtifact(id: String): Option[sbt.ModuleID] = {
-    val fullId = id + "_2.10"
-    Some("org.apache.spark" % fullId % "1.0.0")
-  }
-
-  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
-    name := "old-deps",
-    scalaVersion := "2.10.4",
-    retrieveManaged := true,
-    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
-      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -183,13 +165,38 @@ object SparkBuild extends PomBuild {
     super.projectDefinitions(baseDirectory).map { x =>
       if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
       else x.settings(Seq[Setting[_]](): _*)
-    } ++ Seq[Project](oldDeps)
+    } ++ Seq[Project](OldDeps.project)
   }
 
 }
 
 object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
+/**
+ * Following project only exists to pull previous artifacts of Spark for generating
+ * Mima ignores. For more information see: SPARK 2071
+ */
+object OldDeps {
+
+  lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+
+  def versionArtifact(id: String): Option[sbt.ModuleID] = {
+    val fullId = id + "_2.10"
+    Some("org.apache.spark" % fullId % "1.0.0")
+  }
+
+  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+    name := "old-deps",
+    scalaVersion := "2.10.4",
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
+      "spark-core").map(versionArtifact(_).get intransitive())
+  )
 }
 
 object Catalyst {
@@ -284,9 +291,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(repl, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(repl, bagel, graphx, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {

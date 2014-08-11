@@ -83,6 +83,8 @@ private[hive] trait HiveStrategies {
 
       case DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
+      case AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
+
       case describe: logical.DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed
         resolvedTable match {

@@ -15,22 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
+package org.apache.spark.network.netty
 
-import org.apache.spark.annotation.Experimental
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.socket.SocketChannel
+import io.netty.handler.codec.string.StringEncoder
 
-/**
- * :: Experimental ::
- * Enum to select the algorithm for the decision tree
- */
-@Experimental
-object Algo extends Enumeration {
-  type Algo = Value
-  val Classification, Regression = Value
 
-  private[mllib] def fromString(name: String): Algo = name match {
-    case "classification" => Classification
-    case "regression" => Regression
-    case _ => throw new IllegalArgumentException(s"Did not recognize Algo name: $name")
+class FileClientChannelInitializer(handler: FileClientHandler)
+  extends ChannelInitializer[SocketChannel] {
+
+  def initChannel(channel: SocketChannel) {
+    channel.pipeline.addLast("encoder", new StringEncoder).addLast("handler", handler)
   }
 }
