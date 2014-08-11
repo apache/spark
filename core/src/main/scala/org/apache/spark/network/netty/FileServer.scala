@@ -64,6 +64,7 @@ class FileServer(pResolver: PathResolver, private var port: Int) extends Logging
           case e: InterruptedException =>
             logError("File server start got interrupted", e)
         }
+        // NOTE: bootstrap is shutdown in stop()
       }
     }
     blockingThread.setDaemon(true)

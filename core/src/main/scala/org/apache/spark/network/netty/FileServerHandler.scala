@@ -29,7 +29,7 @@ class FileServerHandler(pResolver: PathResolver)
   extends SimpleChannelInboundHandler[String] with Logging {
 
   override def channelRead0(ctx: ChannelHandlerContext, blockIdString: String): Unit = {
-    val blockId: BlockId = BlockId.apply(blockIdString)
+    val blockId: BlockId = BlockId(blockIdString)
     val fileSegment: FileSegment = pResolver.getBlockLocation(blockId)
     if (fileSegment == null) {
       return
