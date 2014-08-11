@@ -123,14 +123,14 @@ class StreamingContext(object):
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
-    def stop(self, stopSparkContext=True):
+    def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
         Stop the execution of the streams immediately (does not wait for all received data
         to be processed).
         """
         
         try:
-            self._jssc.stop(stopSparkContext)
+            self._jssc.stop(stopSparkContext, stopGraceFully)
         finally:
             # Stop Callback server
             SparkContext._gateway.shutdown()
@@ -141,27 +141,34 @@ class StreamingContext(object):
         """
         self._jssc.checkpoint(directory)
 
-    def _testInputStream(self, test_input, numSlices=None):
-
+    def _testInputStream(self, test_inputs, numSlices=None):
+        """
+        Generate multiple files to make "stream" in Scala side for test.
+        Scala chooses one of the files and generates RDD using PythonRDD.readRDDFromFile.
+        """
         numSlices = numSlices or self._sc.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
 
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
+        tempFiles = list()
+        for test_input in test_inputs:
+            tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
 
-        # Make sure we distribute data evenly if it's smaller than self.batchSize
-        if "__len__" not in dir(test_input):
-            c = list(test_input)    # Make it a list so we can compute its length
-        batchSize = min(len(test_input) // numSlices, self._sc._batchSize)
-        if batchSize > 1:
-            serializer = BatchedSerializer(self._sc._unbatched_serializer,
-                                           batchSize)
-        else:
-            serializer = self._sc._unbatched_serializer
-        serializer.dump_stream(test_input, tempFile)
+            # Make sure we distribute data evenly if it's smaller than self.batchSize
+            if "__len__" not in dir(test_input):
+                c = list(test_input)    # Make it a list so we can compute its length
+            batchSize = min(len(test_input) // numSlices, self._sc._batchSize)
+            if batchSize > 1:
+                serializer = BatchedSerializer(self._sc._unbatched_serializer,
+                                               batchSize)
+            else:
+                serializer = self._sc._unbatched_serializer
+            serializer.dump_stream(test_input, tempFile)
+            tempFiles.append(tempFile.name)
 
+        jtempFiles = ListConverter().convert(tempFiles, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc,
-                                                        tempFile.name,
+                                                        jtempFiles,
                                                         numSlices).asJavaDStream()
         return DStream(jinput_stream, self, PickleSerializer())
