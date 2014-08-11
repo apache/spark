@@ -154,8 +154,8 @@ private[stat] object ChiSqTest extends Logging {
           throw new IllegalArgumentException("Chi-squared statistic undefined for input vectors due"
             + " to 0.0 values in both observed and expected.")
         } else {
-          return new ChiSqTestResult(Double.PositiveInfinity, size - 1, Double.PositiveInfinity,
-            PEARSON.name, NullHypothesis.goodnessOfFit.toString)
+          return new ChiSqTestResult(0.0, size - 1, Double.PositiveInfinity, PEARSON.name,
+            NullHypothesis.goodnessOfFit.toString)
         }
       }
       if (scale == 1.0) {

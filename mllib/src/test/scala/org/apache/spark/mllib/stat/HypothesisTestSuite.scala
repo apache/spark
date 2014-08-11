@@ -66,7 +66,7 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
     val inf = Statistics.chiSqTest(observed, zeroExpected)
     assert(inf.statistic === Double.PositiveInfinity)
     assert(inf.degreesOfFreedom === 2)
-    assert(inf.pValue === Double.PositiveInfinity)
+    assert(inf.pValue === 0.0)
     assert(inf.method === ChiSqTest.PEARSON.name)
     assert(inf.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
 
