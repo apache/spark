@@ -623,6 +623,23 @@ abstract class DStream[T: ClassTag] (
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 
+
+  def print(label: String = null) {
+    def foreachFunc = (rdd: RDD[T], time: Time) => {
+      val first11 = rdd.take(11)
+      println ("-------------------------------------------")
+      println ("Time: " + time)
+      println ("-------------------------------------------")
+      if(label != null){
+        println (label)
+      }
+      first11.take(10).foreach(println)
+      if (first11.size > 10) println("...")
+      println()
+    }
+    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+  }
+
   /**
    * Return a new DStream in which each RDD contains all the elements in seen in a
    * sliding window of time over this DStream. The new DStream generates RDDs with

@@ -17,9 +17,14 @@
 
 package org.apache.spark.streaming.api.python
 
+import java.io._
+import java.io.{ObjectInputStream, IOException}
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.collection.JavaConversions._
+
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -51,6 +56,8 @@ class PythonDStream[T: ClassTag](
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     parent.getOrCompute(validTime) match{
       case Some(rdd) =>
+        logInfo("RDD ID in python DStream     ===========")
+        logInfo("RDD id " + rdd.id)
         val pythonRDD = new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning, pythonExec, broadcastVars, accumulator)
         Some(pythonRDD.asJavaRDD.rdd)
       case None => None
@@ -77,7 +84,7 @@ DStream[Array[Byte]](prev.ssc){
         val pairwiseRDD = new PairwiseRDD(rdd)
         /*
          * Since python operation is executed by Scala after StreamingContext.start.
-         * What PairwiseDStream does is equivalent to following python code in pySpark.
+         * What PythonPairwiseDStream does is equivalent to python code in pySpark.
          *
          * with _JavaStackTrace(self.context) as st:
          *    pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
@@ -142,14 +149,6 @@ class PythonTestInputStream(ssc_ : JavaStreamingContext, filename: String, numPa
 
   def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     logInfo("Computing RDD for time " + validTime)
-    //val index = ((validTime - zeroTime) / slideDuration - 1).toInt
-    //val selectedInput = if (index < input.size) input(index) else Seq[T]()
-
-    // lets us test cases where RDDs are not created
-    //if (filename == null)
-    //  return None
-
-    //val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
     val rdd = PythonRDD.readRDDFromFile(JavaSparkContext.fromSparkContext(ssc_.sparkContext), filename, numPartitions).rdd
     logInfo("Created RDD " + rdd.id + " with " + filename)
     Some(rdd)

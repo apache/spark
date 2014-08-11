@@ -47,7 +47,7 @@ class DStream(object):
         """
         return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
-    def print_(self):
+    def print_(self, label=None):
         """
         Since print is reserved name for python, we cannot define a print method function.
         This function prints serialized data in RDD in DStream because Scala and Java cannot
@@ -56,7 +56,7 @@ class DStream(object):
         Call DStream.print().
         """
         # a hack to call print function in DStream
-        getattr(self._jdstream, "print")()
+        getattr(self._jdstream, "print")(label)
 
     def filter(self, f):
         """
@@ -217,6 +217,7 @@ class DStream(object):
 
         """
         def takeAndPrint(rdd, time):
+            print "take and print ==================="
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
@@ -229,11 +230,24 @@ class DStream(object):
 
         self.foreachRDD(takeAndPrint)
 
-    #def transform(self, func):
+    #def transform(self, func): - TD
     #    from utils import RDDFunction
     #    wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
     #    jdstream = self.ctx._jvm.PythonTransformedDStream(self._jdstream.dstream(), wrapped_func).toJavaDStream
-    #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW 
+    #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW
+
+    def _test_output(self, buff):
+        """
+        This function is only for testcase.
+        Store data in dstream to buffer to valify the result in tesecase
+        """
+        def get_output(rdd, time):
+            taken = rdd.take(11)
+            buff.result = taken
+        self.foreachRDD(get_output)
+
+    def output(self):
+        self._jdstream.outputToFile()
 
 
 class PipelinedDStream(DStream):
