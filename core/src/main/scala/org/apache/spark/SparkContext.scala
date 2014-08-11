@@ -1553,7 +1553,7 @@ object SparkContext extends Logging {
           logWarning(
             "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
         }
-        try {
+        val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
@@ -1564,6 +1564,18 @@ object SparkContext extends Logging {
             throw new SparkException("YARN mode not available ?", e)
           }
         }
+        val backend = try {
+          val clazz =
+            Class.forName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
+          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
+          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
+        } catch {
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
+          }
+        }
+        scheduler.initialize(backend)
+        scheduler
 
       case "yarn-client" =>
         val scheduler = try {

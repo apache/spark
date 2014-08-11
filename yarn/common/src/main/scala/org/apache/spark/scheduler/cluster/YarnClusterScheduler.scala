@@ -34,8 +34,6 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
 
   def this(sc: SparkContext) = this(sc, new Configuration())
 
-  initialize(new YarnClusterSchedulerBackend(this, sc))
-
   // Nothing else for now ... initialize application master : which needs a SparkContext to
   // determine how to allocate.
   // Note that only the first creation of a SparkContext influences (and ideally, there must be
