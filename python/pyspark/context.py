@@ -787,14 +787,12 @@ class SparkContext(object):
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
 
-    def runApproximateJob(self, rdd, func, evaluator, timeout):
-        """
-        :: DeveloperApi ::
-        Run a job that can return approximate results.
-
-        Not implemented.
-        """
-        raise NotImplementedError
+    # TODO
+    # def runApproximateJob(self, rdd, func, evaluator, timeout):
+    #     """
+    #     :: DeveloperApi ::
+    #     Run a job that can return approximate results.
+    #     """
 
 
 def _test():
