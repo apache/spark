@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty;
+package org.apache.spark.network.netty
 
-import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.FileSegment;
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.socket.SocketChannel
+import io.netty.handler.codec.string.StringEncoder
 
-public interface PathResolver {
-  /** Get the file segment in which the given block resides. */
-  FileSegment getBlockLocation(BlockId blockId);
+
+class FileClientChannelInitializer(handler: FileClientHandler)
+  extends ChannelInitializer[SocketChannel] {
+
+  def initChannel(channel: SocketChannel) {
+    channel.pipeline.addLast("encoder", new StringEncoder).addLast("handler", handler)
+  }
 }
