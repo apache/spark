@@ -1821,14 +1821,12 @@ class RDD(object):
                                         other._jrdd_deserializer)
         return RDD(pairRDD, self.ctx, deserializer)
 
-    def zipPartitions(self, other, f, preservesPartitioning=False):
-        """
-        Zip this RDD's partitions with one (or more) RDD(s) and return a
-        new RDD by applying a function to the zipped partitions.
-
-        Not implemented.
-        """
-        raise NotImplementedError
+    # TODO
+    # def zipPartitions(self, other, f, preservesPartitioning=False):
+    #     """
+    #     Zip this RDD's partitions with one (or more) RDD(s) and return a
+    #     new RDD by applying a function to the zipped partitions.
+    #     """
 
     def zipWithIndex(self):
         """
@@ -1943,13 +1941,10 @@ class RDD(object):
     # on the key; we need to compare the hash of the key to the hash of the
     # keys in the pairs.  This could be an expensive operation, since those
     # hashes aren't retained.
-    def lookup(self, key):
-        """
-        Return the list of values in the RDD for key key.
-
-        Not Implemented
-        """
-        raise NotImplementedError
+    # def lookup(self, key):
+    #     """
+    #     Return the list of values in the RDD for key key.
+    #     """
 
     def _is_pickled(self):
         """ Return this RDD is serialized by Pickle or not. """
@@ -1987,14 +1982,12 @@ class RDD(object):
         """
         return self._to_jrdd().countApproxDistinct(relativeSD)
 
-    def countApproxDistinctByKey(self, timeout, confidence=0.95):
-        """
-        :: Experimental ::
-        Return approximate number of distinct values for each key in this RDD.
-
-        Not implemented.
-        """
-        raise NotImplementedError
+    # TODO
+    # def countApproxDistinctByKey(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental ::
+    #     Return approximate number of distinct values for each key in this RDD.
+    #     """
 
     def countApprox(self, timeout, confidence=0.95):
         """
@@ -2041,24 +2034,21 @@ class RDD(object):
         r = jdrdd.meanApprox(timeout, confidence).getFinalValue()
         return BoundedFloat(r.mean(), r.confidence(), r.low(), r.high())
 
-    def countByKeyApprox(self, timeout, confidence=0.95):
-        """
-        :: Experimental ::
-        Approximate version of countByKey that can return a partial result
-        if it does not finish within a timeout.
-
-        Not implemented.
-        """
-        raise NotImplementedError
-
-    def countByValueApprox(self, timeout, confidence=0.95):
-        """
-        :: Experimental::
-        Approximate version of countByValue().
-
-        Not implemented.
-        """
-        return self.map(lambda x: (x, None)).countByKeyApprox(timeout, confidence)
+    # TODO
+    # def countByKeyApprox(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental ::
+    #     Approximate version of countByKey that can return a partial result
+    #     if it does not finish within a timeout.
+    #     """
+    #
+    # def countByValueApprox(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental::
+    #     Approximate version of countByValue().
+    #
+    #     """
+    #     return self.map(lambda x: (x, None)).countByKeyApprox(timeout, confidence)
 
 
 class PipelinedRDD(RDD):
