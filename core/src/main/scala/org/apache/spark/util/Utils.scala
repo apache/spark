@@ -52,8 +52,8 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
 private[spark] object Utils extends Logging {
   val random = new Random()
 
-  private[spark] val CALL_SITE_SHORT: String = ".callSite.short"
-  private[spark] val CALL_SITE_LONG: String = ".callSite.long"
+  private[spark] val CALL_SITE_SHORT: String = "callSite.short"
+  private[spark] val CALL_SITE_LONG: String = "callSite.long"
 
   def sparkBin(sparkHome: String, which: String): File = {
     val suffix = if (isWindows) ".cmd" else ""
