@@ -230,7 +230,6 @@ class DStream(object):
 
         """
         def takeAndPrint(rdd, time):
-            print "take and print ==================="
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
@@ -255,12 +254,9 @@ class DStream(object):
         Store data in dstream to buffer to valify the result in tesecase
         """
         def get_output(rdd, time):
-            taken = rdd.take(11)
-            buff.result = taken
+            taken = rdd.collect()
+            buff.append(taken)
         self.foreachRDD(get_output)
-
-    def output(self):
-        self._jdstream.outputToFile()
 
 
 class PipelinedDStream(DStream):
