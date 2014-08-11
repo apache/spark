@@ -635,6 +635,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     clock.advance(LOCALITY_WAIT * 4)
     sched.addExecutor("execC", "host3")
     manager.executorAdded()
+    // Prior to the fix, this line resulted in an ArrayIndexOutOfBoundsException:
     assert(manager.resourceOffer("execC", "host3", ANY) !== None)
   }
 
