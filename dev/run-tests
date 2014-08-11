@@ -93,17 +93,14 @@ if [ -n "$_RUN_SQL_TESTS" ]; then
   SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
 fi
 
-echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS clean package assembly/assembly | \
-  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-
-echo "\n\nRUNNING EXAMPLE!\n\n"
-bin/run-example SparkPi
+echo -e "\n\nULIMIT!\n\n"
+ulimit -a
 echo "----- DONE -----"
 
 # echo "q" is needed because sbt on encountering a build file with failure 
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.
-echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS test | \
+echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS clean package assembly/assembly test | \
   grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo ""
