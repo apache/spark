@@ -22,8 +22,6 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import scala.deprecated
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
-import scala.util.control.Breaks._
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.{BlockRDD, RDD}
@@ -563,7 +561,6 @@ abstract class DStream[T: ClassTag] (
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
       assert(rdds.length == 1)
-      // if transformfunc is fine, it is okay
       cleanedF(rdds.head.asInstanceOf[RDD[T]], time)
     }
     new TransformedDStream[U](Seq(this), realTransformFunc)
