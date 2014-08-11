@@ -119,7 +119,7 @@ private[hive] object SparkSQLCLIDriver {
 
     // Clean up after we exit
     /**
-     This should be executed before shutdown hook of
+     * This should be executed before shutdown hook of
      * FileSystem to avoid race condition of FileSystem operation
      */
     ShutdownHookManager.get.addShutdownHook(
