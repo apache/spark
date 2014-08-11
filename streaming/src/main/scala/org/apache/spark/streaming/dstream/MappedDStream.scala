@@ -20,7 +20,6 @@ package org.apache.spark.streaming.dstream
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
-import org.apache.spark.util.Utils
 
 private[streaming]
 class MappedDStream[T: ClassTag, U: ClassTag] (
