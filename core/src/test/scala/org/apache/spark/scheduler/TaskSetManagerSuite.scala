@@ -616,8 +616,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Seq(TaskLocation("host2", "execB.1")))
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
-    // All tasks added to no-pref list since no preferred location is available
-    assert(manager.pendingTasksWithNoPrefs.size === 2)
     // Only ANY is valid
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
     // Add a new executor
