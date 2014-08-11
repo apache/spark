@@ -115,11 +115,11 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
     </dependency>
 
 
-## A Note About HiveServer and CLI for SparkSQL
+## A Note About Thrift JDBC server and CLI for Spark SQL
 
-SparkSQL supports HiveServer and CLI.
-See README.md in sql project for more information about those features.
-You can use those features by setting `-Phive-thriftserver` when building spark as follows.
+Spark SQL supports Thrift JDBC server and CLI.
+See sql-programming-guide.md for more information about those features.
+You can use those features by setting `-Phive-thriftserver` when building Spark as follows.
 
     $ sbt/sbt -Phive-thriftserver assembly
 

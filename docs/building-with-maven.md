@@ -96,11 +96,11 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-# Building HiveServer and CLI for SparkSQL
+# Building Thrift JDBC server and CLI for Spark SQL
 
-SparkSQL supports HiveServer and CLI.
-See README.md in sql project for more information about those features.
-You can use those features by setting `-Phive-thriftserver` when building spark as follows.
+Spark SQL supports Thrift JDBC server and CLI.
+See sql-programming-guide.md for more information about those features.
+You can use those features by setting `-Phive-thriftserver` when building Spark as follows.
 {% highlight bash %}
 mvn -Phive-thriftserver assembly
 {% endhighlight %}
