@@ -18,6 +18,9 @@
 #
 
 echo "SPARK-SUBMIT PRINTING 1"
+echo "ULIMIT IS..."
+ulimit -a
+echo "..."
 
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 ORIG_ARGS=("$@")
