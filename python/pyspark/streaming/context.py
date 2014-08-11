@@ -140,6 +140,8 @@ class StreamingContext(object):
         """
         Generate multiple files to make "stream" in Scala side for test.
         Scala chooses one of the files and generates RDD using PythonRDD.readRDDFromFile.
+
+        QueStream maybe good way to implement this function
         """
         numSlices = numSlices or self._sc.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
