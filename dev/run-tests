@@ -97,16 +97,6 @@ echo -e "\n\nULIMIT!\n\n"
 ulimit -a
 echo "----- DONE -----"
 
-dem_ports() {
-  while true; do
-    numPorts=$(netstat -a | grep LISTEN | awk '{print $4}' | awk -F "." '{print $2}' | grep -e [0-9] | sort -n | uniq | wc -l | sed s/[[:space:]]//g)
-    echo "### NUM OPEN PORTS $numPorts ###"
-    sleep 1
-  done
-}
-
-dem_ports &
-
 # echo "q" is needed because sbt on encountering a build file with failure 
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.
