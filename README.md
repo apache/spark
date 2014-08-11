@@ -115,6 +115,15 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
     </dependency>
 
 
+## A Note About HiveServer and CLI for SparkSQL
+
+SparkSQL supports HiveServer and CLI.
+See README.md in sql project for more information about those features.
+You can use those features by setting `-Phive-thriftserver` when building spark as follows.
+
+    $ sbt/sbt -Phive-thriftserver assembly
+
+
 ## Configuration
 
 Please refer to the [Configuration guide](http://spark.apache.org/docs/latest/configuration.html)
