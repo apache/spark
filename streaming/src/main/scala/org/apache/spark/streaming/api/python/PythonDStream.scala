@@ -56,8 +56,6 @@ class PythonDStream[T: ClassTag](
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     parent.getOrCompute(validTime) match{
       case Some(rdd) =>
-        logInfo("RDD ID in python DStream     ===========")
-        logInfo("RDD id " + rdd.id)
         val pythonRDD = new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning, pythonExec, broadcastVars, accumulator)
         Some(pythonRDD.asJavaRDD.rdd)
       case None => None
