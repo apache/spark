@@ -49,7 +49,7 @@ class DStream(object):
 
     def print_(self, label=None):
         """
-        Since print is reserved name for python, we cannot define a print method function.
+        Since print is reserved name for python, we cannot define a "print" method function.
         This function prints serialized data in RDD in DStream because Scala and Java cannot
         deserialized pickled python object. Please use DStream.pyprint() instead to print results.
 
@@ -159,8 +159,8 @@ class DStream(object):
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
-        def add_shuffle_key(split, iterator):
 
+        def add_shuffle_key(split, iterator):
             buckets = defaultdict(list)
 
             for (k, v) in iterator:
@@ -205,6 +205,11 @@ class DStream(object):
 
     def foreachRDD(self, func):
         """
+        Apply userdefined function to all RDD in a DStream.
+        This python implementation could be expensive because it uses callback server
+        in order to apply function to RDD in DStream.
+        This is an output operator, so this DStream will be registered as an output
+        stream and there materialized.
         """
         from utils import RDDFunction
         wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
@@ -214,7 +219,6 @@ class DStream(object):
         """
         Print the first ten elements of each RDD generated in this DStream. This is an output
         operator, so this DStream will be registered as an output stream and there materialized.
-
         """
         def takeAndPrint(rdd, time):
             taken = rdd.take(11)
@@ -235,14 +239,15 @@ class DStream(object):
     #    jdstream = self.ctx._jvm.PythonTransformedDStream(self._jdstream.dstream(), wrapped_func).toJavaDStream
     #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW
 
-    def _test_output(self, buff):
+    def _test_output(self, result):
         """
-        This function is only for testcase.
-        Store data in dstream to buffer to valify the result in tesecase
+        This function is only for test case.
+        Store data in a DStream to result to verify the result in tese case
         """
         def get_output(rdd, time):
             taken = rdd.collect()
-            buff.append(taken)
+            result.append(taken)
+
         self.foreachRDD(get_output)
 
 
