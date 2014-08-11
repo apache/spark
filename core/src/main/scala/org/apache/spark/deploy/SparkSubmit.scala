@@ -25,6 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
+import org.apache.spark.Logging
 
 /**
  * Main gateway of launching a Spark application.
@@ -32,7 +33,23 @@ import org.apache.spark.util.Utils
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit {
+object SparkSubmit extends Logging {
+
+  import java.net.ServerSocket
+  val openPorts = (1 to 65535).filter { i =>
+    var s: Option[ServerSocket] = None
+    try {
+      s = Some(new ServerSocket(i))
+      true
+    } catch {
+      case e: Exception => false
+    } finally {
+      s.foreach(_.close())
+    }
+  }
+  println("*********** I HAVE " + openPorts + " OPEN PORTS!")
+  System.err.println("*********** I HAVE " + openPorts + " OPEN PORTS! (stderr)")
+  logError("*********** I HAVE " + openPorts + " OPEN PORTS! (logError)")
 
   // Cluster managers
   private val YARN = 1
