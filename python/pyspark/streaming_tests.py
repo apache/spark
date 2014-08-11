@@ -449,12 +449,11 @@ class TestSaveAsFilesSuite(PySparkStreamingTestCase):
             current_time = time.time()
             # check time out
             if (current_time - start_time) > self.timeout:
-                self.ssc.stop()
                 break
             self.ssc.awaitTermination(50)
-            if buff.result is not None:
+            if len(expected_output) == len(StreamOutput.result):
                 break
-        return buff.result
+        return StreamOutput.result
 
 if __name__ == "__main__":
     unittest.main()
