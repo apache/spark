@@ -35,6 +35,8 @@ import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
+import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
+
 /**
  *  Entry in vocabulary 
  */
@@ -258,6 +260,23 @@ class Word2Vec extends Serializable with Logging {
     syn1
   }
   
+  private def merge(syn1:PrimitiveKeyOpenHashMap[Int, Array[Float]],
+                    syn2:PrimitiveKeyOpenHashMap[Int, Array[Float]],
+                    weight1:Float,
+                    weight2:Float):PrimitiveKeyOpenHashMap[Int, Array[Float]] = {
+    syn2 foreach {
+      case(w, vec) =>
+        syn1.changeValue(w, vec, v => {
+          val n = v.length
+          blas.sscal(n, weight1, v, 1)
+          blas.saxpy(n, weight2, vec, 1, v, 1)
+          v
+        }
+      )
+    }
+    syn1
+  }
+
   /**
    * Computes the vector representation of each word in vocabulary.
    * @param dataset an RDD of words
@@ -312,17 +331,30 @@ class Word2Vec extends Serializable with Logging {
     val bcLocalVocab = sc.broadcast(localVocab)
     val trainWordsCounts = localVocab.map(x => x.values.reduce(_ + _))
     val bcTrainWordsCounts = sc.broadcast(trainWordsCounts)
+
+    var syn0Global = new PrimitiveKeyOpenHashMap[Int, Array[Float]](vocabSize)
+    var syn1Global = new PrimitiveKeyOpenHashMap[Int, Array[Float]](vocabSize)
+    var index = 0
+    while(index < vocabSize) {
+      syn0Global.update(index, Array.fill(vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize))
+      syn1Global.update(index, new Array[Float](vectorSize))
+      index += 1
+    }
     
-    var syn0Global = mutable.HashMap.empty[Int, Array[Float]]
-    var syn1Global = mutable.HashMap.empty[Int, Array[Float]]
     var alpha = startingAlpha
-    
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
-        val syn0Local = syn0Global.filter{ case (k, v) => bcLocalVocab.value(idx).contains(k) }
-        val syn1Local = syn1Global.filter{ case (k, v) => bcLocalVocab.value(idx).contains(k) }
-
+        val syn0Local = new PrimitiveKeyOpenHashMap[Int, Array[Float]]
+        val syn1Local = new PrimitiveKeyOpenHashMap[Int, Array[Float]]
+        index = 0
+        while(index < vocabSize) {
+          if(bcLocalVocab.value(idx).contains(index)) {
+            syn0Local.update(index, syn0Global(index))
+            syn1Local.update(index, syn1Global(index))
+          }
+          index += 1
+        }
         val model = iter.foldLeft((syn0Local, syn1Local, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
@@ -348,14 +380,13 @@ class Word2Vec extends Serializable with Logging {
                   if (c >= 0 && c < sentence.size) {
                     val lastWord = sentence(c)
                     val neu1e = new Array[Float](vectorSize)
-                    val vecLastWord = syn0.getOrElseUpdate(lastWord, 
-                      Array.fill(vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize))
+                    val vecLastWord = syn0(lastWord)
                     // Hierarchical softmax
                     var d = 0
                     while (d < bcVocab.value(word).codeLen) {
                       val l2 = bcVocab.value(word).point(d)
                       // Propagate hidden -> output
-                      val vecWord = syn1.getOrElseUpdate(l2, new Array[Float](vectorSize)) 
+                      val vecWord = syn1.changeValue(l2, new Array[Float](vectorSize), v => v)
                       var f = blas.sdot(vectorSize, vecLastWord, 1, vecWord, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
