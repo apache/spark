@@ -314,9 +314,14 @@ def _hijack_namedtuple():
 
     _old_namedtuple = _copy_func(collections.namedtuple)
 
-    def namedtuple(name, fields, verbose=False, rename=False):
-        cls = _old_namedtuple(name, fields, verbose, rename)
-        return _hack_namedtuple(cls)
+    if sys.version_info[0:2] == (2, 6):
+        def namedtuple(name, fields, verbose=False):
+            cls = _old_namedtuple(name, fields, verbose)
+            return _hack_namedtuple(cls)
+    else:
+        def namedtuple(name, fields, verbose=False, rename=False):
+            cls = _old_namedtuple(name, fields, verbose, rename)
+            return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
     collections.namedtuple.func_globals["_old_namedtuple"] = _old_namedtuple
