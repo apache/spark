@@ -34,7 +34,7 @@ import zipfile
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int
+from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
@@ -317,6 +317,14 @@ class TestRDDFunctions(PySparkTestCase):
         jane = Person(2, "Jane", "Doe")
         theDoes = self.sc.parallelize([jon, jane])
         self.assertEquals([jon, jane], theDoes.collect())
+
+    def test_zip_with_different_serializers(self):
+        a = self.sc.parallelize(range(5))
+        b = self.sc.parallelize(range(100, 105))
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
+        a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
+        b = b._reserialize(MarshalSerializer())
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
 
 
 class TestIO(PySparkTestCase):
