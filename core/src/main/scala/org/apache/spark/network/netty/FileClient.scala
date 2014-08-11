@@ -20,28 +20,63 @@ package org.apache.spark.network.netty
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.Bootstrap
-import io.netty.channel.{Channel, ChannelOption, EventLoopGroup}
+import io.netty.buffer.PooledByteBufAllocator
+import io.netty.channel.{Channel, ChannelOption}
+import io.netty.channel.epoll.{EpollEventLoopGroup, EpollSocketChannel}
+import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
+import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
-class FileClient(handler: FileClientHandler, connectTimeout: Int) extends Logging {
+
+class FileClient(handler: FileClientHandler, conf: SparkConf) extends Logging {
 
   private var channel: Channel = _
   private var bootstrap: Bootstrap = _
-  private var group: EventLoopGroup = _
   private val sendTimeout = 60
 
+  /** Initialize FileClient. */
   def init(): Unit = {
-    group = new OioEventLoopGroup
+    val threadFactory = Utils.namedThreadFactory("spark-shuffle-client")
     bootstrap = new Bootstrap
-    bootstrap.group(group)
-      .channel(classOf[OioSocketChannel])
+    def initOio(): Unit = {
+      bootstrap.group(new OioEventLoopGroup(0, threadFactory))
+        .channel(classOf[OioSocketChannel])
+    }
+    def initNio(): Unit = {
+      bootstrap.group(new NioEventLoopGroup(0, threadFactory))
+        .channel(classOf[NioSocketChannel])
+    }
+    def initEpoll(): Unit = {
+      bootstrap.group(new EpollEventLoopGroup(0, threadFactory))
+        .channel(classOf[EpollSocketChannel])
+    }
+    conf.get("spark.shuffle.io.mode", "auto").toLowerCase match {
+      case "nio" => initNio()
+      case "oio" => initOio()
+      case "epoll" => initEpoll()
+      case "auto" =>
+        // For auto mode, first try epoll (only available on Linux), then nio.
+        try {
+          initEpoll()
+        } catch {
+          case e: IllegalStateException => initNio()
+        }
+    }
+
+    // Default time out 60 secs
+    val connectionTimeout = conf.getInt("spark.shuffle.io.connectionTimeout", 60) * 1000
+
+    bootstrap.handler(new FileClientChannelInitializer(handler))
+      // Use pooled byte buf allocator to reduce temporary buffer allocation
+      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
       .option(ChannelOption.SO_KEEPALIVE, java.lang.Boolean.TRUE)
+      // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, java.lang.Boolean.TRUE)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Integer.valueOf(connectTimeout))
-      .handler(new FileClientChannelInitializer(handler))
+      .option[java.lang.Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, connectionTimeout)
   }
 
   def connect(host: String, port: Int) {
@@ -56,7 +91,7 @@ class FileClient(handler: FileClientHandler, connectTimeout: Int) extends Loggin
 
   def waitForClose(): Unit = {
     try {
-      channel.closeFuture.sync()
+      channel.closeFuture().sync()
     } catch {
       case e: InterruptedException =>
         logWarning("FileClient interrupted", e)
@@ -75,11 +110,11 @@ class FileClient(handler: FileClientHandler, connectTimeout: Int) extends Loggin
     }
   }
 
+  /** Shutdown the client. */
   def close(): Unit = {
-    if (group != null) {
-      group.shutdownGracefully()
-      group = null
-      bootstrap = null
+    if (bootstrap != null && bootstrap.group() != null) {
+      bootstrap.group().shutdownGracefully()
     }
+    bootstrap = null
   }
 }

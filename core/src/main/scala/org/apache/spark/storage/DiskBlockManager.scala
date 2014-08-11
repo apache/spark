@@ -23,7 +23,7 @@ import java.util.{Date, Random, UUID}
 
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
+import org.apache.spark.network.netty.{BlockServer, PathResolver}
 import org.apache.spark.util.Utils
 import org.apache.spark.shuffle.sort.SortShuffleManager
 
@@ -52,7 +52,7 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
-  private var shuffleSender : ShuffleSender = null
+  private var nettyBlockServer: BlockServer = _
 
   addShutdownHook()
 
@@ -187,14 +187,14 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
       }
     }
 
-    if (shuffleSender != null) {
-      shuffleSender.stop()
+    if (nettyBlockServer != null) {
+      nettyBlockServer.stop()
     }
   }
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
-    shuffleSender = new ShuffleSender(port, this)
-    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
-    shuffleSender.port
+    nettyBlockServer = new BlockServer(shuffleBlockManager.conf, this)
+    logInfo(s"Created NettyBlockServer binding to port: ${nettyBlockServer.port}")
+    nettyBlockServer.port
   }
 }

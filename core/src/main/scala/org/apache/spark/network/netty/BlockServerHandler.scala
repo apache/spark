@@ -17,18 +17,12 @@
 
 package org.apache.spark.network.netty
 
-import io.netty.channel.ChannelInitializer
-import io.netty.channel.socket.SocketChannel
-import io.netty.handler.codec.{DelimiterBasedFrameDecoder, Delimiters}
-import io.netty.handler.codec.string.StringDecoder
+import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
-class FileServerChannelInitializer(pResolver: PathResolver)
-  extends ChannelInitializer[SocketChannel] {
+/** A handler that writes the content of a block to the channel. */
+class BlockServerHandler(pResolver: PathResolver) extends SimpleChannelInboundHandler[String] {
 
-  override def initChannel(channel: SocketChannel): Unit = {
-    channel.pipeline
-      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter : _*))
-      .addLast("stringDecoder", new StringDecoder)
-      .addLast("handler", new FileServerHandler(pResolver))
+  override def channelRead0(ctx: ChannelHandlerContext, blockId: String): Unit = {
+    // TODO: Fill in request.
   }
 }
