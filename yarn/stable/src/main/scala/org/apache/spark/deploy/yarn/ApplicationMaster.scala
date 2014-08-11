@@ -224,7 +224,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
             appAttemptId,
             args,
             sparkContext.preferredNodeLocationData,
-            sparkContext.getConf)
+            sparkContext.getConf,
+            sparkContext.sparkUser,
+            sparkContext.ui)
         } else {
           logWarning("Unable to retrieve SparkContext in spite of waiting for %d, maxNumTries = %d".
             format(numTries * waitTime, maxNumTries))
@@ -233,7 +235,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
             amClient,
             appAttemptId,
             args,
-            sparkContext.getConf)
+            sparkContext.getConf,
+            sparkContext.sparkUser,
+            sparkContext.ui)
         }
       }
     }

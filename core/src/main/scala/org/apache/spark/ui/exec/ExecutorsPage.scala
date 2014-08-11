@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -40,7 +41,8 @@ private case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long)
+    maxMemory: Long,
+    logLocation: String)
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   private val appName = parent.appName
@@ -78,6 +80,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
               Shuffle Write
             </span>
           </th>
+          {if (SparkHadoopUtil.get.isYarnMode)
+            <th>Logs</th>
+          }
         </thead>
         <tbody>
           {execInfoSorted.map(execRow)}
@@ -104,6 +109,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     UIUtils.headerSparkPage(content, basePath, appName, "Executors (" + execInfo.size + ")",
       parent.headerTabs, parent)
   }
+
+  // The log location string used when the log location is unknown
+  private val NoLogs = "-none-"
 
   /** Render an HTML row representing an executor */
   private def execRow(info: ExecutorSummaryInfo): Seq[Node] = {
@@ -137,6 +145,13 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
+      {if (SparkHadoopUtil.get.isYarnMode) <td>
+        {if (info.logLocation == NoLogs)
+          <span>&#9940;</span>  // Unicode "do not enter" sign
+        else
+          <a href={info.logLocation}>&#9654;</a>  // Unicode right black triangle
+        }
+      </td>}
     </tr>
   }
 
@@ -157,6 +172,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
+    val logLocation = parent.executorToLogLocation.getOrElse(execId, NoLogs)
 
     new ExecutorSummaryInfo(
       execId,
@@ -172,7 +188,8 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      maxMem
+      maxMem,
+      logLocation
     )
   }
 }

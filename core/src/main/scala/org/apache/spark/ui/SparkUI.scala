@@ -57,6 +57,9 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
+  // The executors tab created during initialize()
+  private var executorsTab : ExecutorsTab = null
+
   initialize()
 
   /** Initialize all components of the server. */
@@ -66,7 +69,8 @@ private[spark] class SparkUI(
     attachTab(jobProgressTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
-    attachTab(new ExecutorsTab(this))
+    executorsTab = new ExecutorsTab(this)
+    attachTab(executorsTab)
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/stages", basePath = basePath))
     attachHandler(
@@ -84,6 +88,11 @@ private[spark] class SparkUI(
   /** Register the given listener with the listener bus. */
   def registerListener(listener: SparkListener) {
     listenerBus.addListener(listener)
+  }
+
+  /** Update the location of an executor's logs reported in the executors tab. */
+  def updateExecutorLogLocation(executorId: String, logs: String) {
+    executorsTab.updateExecutorLogLocation(executorId, logs)
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
