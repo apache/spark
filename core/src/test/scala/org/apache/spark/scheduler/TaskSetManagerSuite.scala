@@ -154,6 +154,11 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   val LOCALITY_WAIT = conf.getLong("spark.locality.wait", 3000)
   val MAX_TASK_FAILURES = 4
 
+  override def beforeEach() {
+    super.beforeEach()
+    FakeRackUtil.cleanUp()
+  }
+
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -471,7 +476,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("new executors get added and lost") {
     // Assign host2 to rack2
-    FakeRackUtil.cleanUp()
     FakeRackUtil.assignHostToRack("host2", "rack2")
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc)
@@ -504,7 +508,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   test("test RACK_LOCAL tasks") {
-    FakeRackUtil.cleanUp()
     // Assign host1 to rack1
     FakeRackUtil.assignHostToRack("host1", "rack1")
     // Assign host2 to rack1
