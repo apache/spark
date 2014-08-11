@@ -17,9 +17,14 @@
 
 package org.apache.spark.streaming.api.python
 
+import java.io._
+import java.io.{ObjectInputStream, IOException}
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.collection.JavaConversions._
+
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -51,6 +56,8 @@ class PythonDStream[T: ClassTag](
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     parent.getOrCompute(validTime) match{
       case Some(rdd) =>
+        logInfo("RDD ID in python DStream     ===========")
+        logInfo("RDD id " + rdd.id)
         val pythonRDD = new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning, pythonExec, broadcastVars, accumulator)
         Some(pythonRDD.asJavaRDD.rdd)
       case None => None
@@ -152,7 +159,7 @@ DStream[Array[Byte]](prev.ssc){
         val pairwiseRDD = new PairwiseRDD(rdd)
         /*
          * Since python operation is executed by Scala after StreamingContext.start.
-         * What PairwiseDStream does is equivalent to following python code in pySpark.
+         * What PythonPairwiseDStream does is equivalent to python code in pySpark.
          *
          * with _JavaStackTrace(self.context) as st:
          *    pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()

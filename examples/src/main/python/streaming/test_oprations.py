@@ -9,15 +9,22 @@ if __name__ == "__main__":
     conf = SparkConf()
     conf.setAppName("PythonStreamingNetworkWordCount")
     ssc = StreamingContext(conf=conf, duration=Seconds(1))
-    ssc.checkpoint("/tmp/spark_ckp")
 
-    test_input = ssc._testInputStream([[1],[1],[1]])
-#    ssc.checkpoint("/tmp/spark_ckp")
-    fm_test = test_input.flatMap(lambda x: x.split(" "))
-    mapped_test = fm_test.map(lambda x: (x, 1))
+    test_input = ssc._testInputStream([1,2,3])
+    class buff:
+        pass
+   
+    fm_test = test_input.map(lambda x: (x, 1))
+    fm_test.test_output(buff)
 
-
-    mapped_test.print_()
     ssc.start()
-#    ssc.awaitTermination()
-#    ssc.stop()
+    while True:
+        ssc.awaitTermination(50)
+        try:
+            buff.result
+            break
+        except AttributeError:
+            pass
+
+    ssc.stop()
+    print buff.result
