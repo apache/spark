@@ -35,16 +35,15 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
   /**
    * Calling reset to avoid memory leak:
    * http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
-   * But only call it every 10,000th time to avoid bloated serialization streams (when
+   * But only call it every 100th time to avoid bloated serialization streams (when
    * the stream 'resets' object class descriptions have to be re-written)
    */
   def writeObject[T: ClassTag](t: T): SerializationStream = {
     objOut.writeObject(t)
+    counter += 1
     if (counterReset > 0 && counter >= counterReset) {
       objOut.reset()
       counter = 0
-    } else {
-      counter += 1
     }
     this
   }
@@ -108,7 +107,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
  */
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
-  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)
+  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
 
   def newInstance(): SerializerInstance = new JavaSerializerInstance(counterReset)
 

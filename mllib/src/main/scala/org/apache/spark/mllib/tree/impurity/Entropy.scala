@@ -31,23 +31,46 @@ object Entropy extends Impurity {
 
   /**
    * :: DeveloperApi ::
-   * entropy calculation
-   * @param c0 count of instances with label 0
-   * @param c1 count of instances with label 1
-   * @return entropy value
+   * information calculation for multiclass classification
+   * @param counts Array[Double] with counts for each label
+   * @param totalCount sum of counts for all labels
+   * @return information value, or 0 if totalCount = 0
    */
   @DeveloperApi
-  override def calculate(c0: Double, c1: Double): Double = {
-    if (c0 == 0 || c1 == 0) {
-      0
-    } else {
-      val total = c0 + c1
-      val f0 = c0 / total
-      val f1 = c1 / total
-      -(f0 * log2(f0)) - (f1 * log2(f1))
+  override def calculate(counts: Array[Double], totalCount: Double): Double = {
+    if (totalCount == 0) {
+      return 0
     }
+    val numClasses = counts.length
+    var impurity = 0.0
+    var classIndex = 0
+    while (classIndex < numClasses) {
+      val classCount = counts(classIndex)
+      if (classCount != 0) {
+        val freq = classCount / totalCount
+        impurity -= freq * log2(freq)
+      }
+      classIndex += 1
+    }
+    impurity
   }
 
+  /**
+   * :: DeveloperApi ::
+   * variance calculation
+   * @param count number of instances
+   * @param sum sum of labels
+   * @param sumSquares summation of squares of the labels
+   * @return information value, or 0 if count = 0
+   */
+  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
+
+  /**
+   * Get this impurity instance.
+   * This is useful for passing impurity parameters to a Strategy in Java.
+   */
+  def instance = this
+
 }

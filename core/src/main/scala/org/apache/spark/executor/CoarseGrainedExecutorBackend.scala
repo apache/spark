@@ -88,6 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
@@ -98,8 +99,13 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-    workerUrl: Option[String]) {
+
+  private def run(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      workerUrl: Option[String]) {
 
     SignalLogger.register(log)
 
@@ -109,8 +115,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
+      val port = executorConf.getInt("spark.executor.port", 0)
       val (fetcher, _) = AkkaUtils.createActorSystem(
-        "driverPropsFetcher", hostname, 0, executorConf, new SecurityManager(executorConf))
+        "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
       val driver = fetcher.actorSelection(driverUrl)
       val timeout = AkkaUtils.askTimeout(executorConf)
       val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
@@ -120,7 +127,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Create a new ActorSystem using driver's Spark properties to run the backend.
       val driverConf = new SparkConf().setAll(props)
       val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-        "sparkExecutor", hostname, 0, driverConf, new SecurityManager(driverConf))
+        "sparkExecutor", hostname, port, driverConf, new SecurityManager(driverConf))
       // set it
       val sparkHostPort = hostname + ":" + boundPort
       actorSystem.actorOf(

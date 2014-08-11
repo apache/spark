@@ -116,7 +116,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          new ArrayType(toDataType(field))
+          ArrayType(toDataType(field), containsNull = false)
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -130,7 +130,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
           val valueType = toDataType(keyValueGroup.getFields.apply(1))
           assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-          new MapType(keyType, valueType)
+          // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
+          // at here.
+          MapType(keyType, valueType)
         }
         case _ => {
           // Note: the order of these checks is important!
@@ -140,10 +142,12 @@ private[parquet] object ParquetTypesConverter extends Logging {
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
             val valueType = toDataType(keyValueGroup.getFields.apply(1))
             assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-            new MapType(keyType, valueType)
+            // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
+            // at here.
+            MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
-            new ArrayType(elementType)
+            ArrayType(elementType, containsNull = false)
           } else { // everything else: StructType
             val fields = groupType
               .getFields
@@ -151,7 +155,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
               ptype.getName,
               toDataType(ptype),
               ptype.getRepetition != Repetition.REQUIRED))
-            new StructType(fields)
+            StructType(fields)
           }
         }
       }
@@ -234,7 +238,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
     }.getOrElse {
       ctype match {
-        case ArrayType(elementType) => {
+        case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
             CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
@@ -248,7 +252,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           }
           new ParquetGroupType(repetition, name, fields)
         }
-        case MapType(keyType, valueType) => {
+        case MapType(keyType, valueType, _) => {
           val parquetKeyType =
             fromDataType(
               keyType,
@@ -369,8 +373,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     ParquetRelation.enableLogForwarding()
 
-    val children = fs.listStatus(path).filterNot {
-      _.getPath.getName == FileOutputCommitter.SUCCEEDED_FILE_NAME
+    val children = fs.listStatus(path).filterNot { status =>
+      val name = status.getPath.getName
+      name(0) == '.' || name == FileOutputCommitter.SUCCEEDED_FILE_NAME
     }
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row

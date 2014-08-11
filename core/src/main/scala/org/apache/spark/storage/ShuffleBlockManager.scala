@@ -28,6 +28,8 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
+import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -58,6 +60,7 @@ private[spark] trait ShuffleWriterGroup {
  * each block stored in each file. In order to find the location of a shuffle block, we search the
  * files within a ShuffleFileGroups associated with the block's reducer.
  */
+// TODO: Factor this into a separate class for each ShuffleManager implementation
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   def conf = blockManager.conf
@@ -67,7 +70,11 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
-  private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  // Are we using sort-based shuffle?
+  val sortBasedShuffle =
+    conf.get("spark.shuffle.manager", "") == classOf[SortShuffleManager].getName
+
+  private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   /**
    * Contains all the state related to a particular shuffle. This includes a pool of unused
@@ -91,7 +98,22 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
 
-  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
+  /**
+   * Register a completed map without getting a ShuffleWriterGroup. Used by sort-based shuffle
+   * because it just writes a single file by itself.
+   */
+  def addCompletedMap(shuffleId: Int, mapId: Int, numBuckets: Int): Unit = {
+    shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
+    val shuffleState = shuffleStates(shuffleId)
+    shuffleState.completedMapTasks.add(mapId)
+  }
+
+  /**
+   * Get a ShuffleWriterGroup for the given map task, which will register it as complete
+   * when the writers are closed successfully
+   */
+  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
+      writeMetrics: ShuffleWriteMetrics) = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
@@ -101,7 +123,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize,
+            writeMetrics)
         }
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
@@ -116,7 +139,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
               logWarning(s"Failed to remove existing shuffle file $blockFile")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize, writeMetrics)
         }
       }
 
@@ -124,7 +147,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
         if (consolidateShuffleFiles) {
           if (success) {
             val offsets = writers.map(_.fileSegment().offset)
-            fileGroup.recordMapOutput(mapId, offsets)
+            val lengths = writers.map(_.fileSegment().length)
+            fileGroup.recordMapOutput(mapId, offsets, lengths)
           }
           recycleFileGroup(fileGroup)
         } else {
@@ -182,7 +206,14 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
-        if (consolidateShuffleFiles) {
+        if (sortBasedShuffle) {
+          // There's a single block ID for each map, plus an index file for it
+          for (mapId <- state.completedMapTasks) {
+            val blockId = new ShuffleBlockId(shuffleId, mapId, 0)
+            blockManager.diskBlockManager.getFile(blockId).delete()
+            blockManager.diskBlockManager.getFile(blockId.name + ".index").delete()
+          }
+        } else if (consolidateShuffleFiles) {
           for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
             file.delete()
           }
@@ -220,6 +251,8 @@ object ShuffleBlockManager {
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
    */
   private class ShuffleFileGroup(val shuffleId: Int, val fileId: Int, val files: Array[File]) {
+    private var numBlocks: Int = 0
+
     /**
      * Stores the absolute index of each mapId in the files of this group. For instance,
      * if mapId 5 is the first block in each file, mapIdToIndex(5) = 0.
@@ -227,23 +260,27 @@ object ShuffleBlockManager {
     private val mapIdToIndex = new PrimitiveKeyOpenHashMap[Int, Int]()
 
     /**
-     * Stores consecutive offsets of blocks into each reducer file, ordered by position in the file.
-     * This ordering allows us to compute block lengths by examining the following block offset.
+     * Stores consecutive offsets and lengths of blocks into each reducer file, ordered by
+     * position in the file.
      * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
      * reducer.
      */
     private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
       new PrimitiveVector[Long]()
     }
-
-    def numBlocks = mapIdToIndex.size
+    private val blockLengthsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
+      new PrimitiveVector[Long]()
+    }
 
     def apply(bucketId: Int) = files(bucketId)
 
-    def recordMapOutput(mapId: Int, offsets: Array[Long]) {
+    def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
+      assert(offsets.length == lengths.length)
       mapIdToIndex(mapId) = numBlocks
+      numBlocks += 1
       for (i <- 0 until offsets.length) {
         blockOffsetsByReducer(i) += offsets(i)
+        blockLengthsByReducer(i) += lengths(i)
       }
     }
 
@@ -251,16 +288,11 @@ object ShuffleBlockManager {
     def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
       val file = files(reducerId)
       val blockOffsets = blockOffsetsByReducer(reducerId)
+      val blockLengths = blockLengthsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)
       if (index >= 0) {
         val offset = blockOffsets(index)
-        val length =
-          if (index + 1 < numBlocks) {
-            blockOffsets(index + 1) - offset
-          } else {
-            file.length() - offset
-          }
-        assert(length >= 0)
+        val length = blockLengths(index)
         Some(new FileSegment(file, offset, length))
       } else {
         None

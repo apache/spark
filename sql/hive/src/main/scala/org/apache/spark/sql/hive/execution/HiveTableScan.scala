@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
-import org.apache.spark.util.MutablePair
 
 /**
  * :: DeveloperApi ::
@@ -50,8 +49,7 @@ case class HiveTableScan(
     relation: MetastoreRelation,
     partitionPruningPred: Option[Expression])(
     @transient val context: HiveContext)
-  extends LeafNode
-  with HiveInspectors {
+  extends LeafNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
@@ -67,68 +65,19 @@ case class HiveTableScan(
   }
 
   @transient
-  private[this] val hadoopReader = new HadoopTableReader(relation.tableDesc, context)
-
-  /**
-   * The hive object inspector for this table, which can be used to extract values from the
-   * serialized row representation.
-   */
-  @transient
-  private[this] lazy val objectInspector =
-    relation.tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
-
-  /**
-   * Functions that extract the requested attributes from the hive output.  Partitioned values are
-   * casted from string to its declared data type.
-   */
-  @transient
-  protected lazy val attributeFunctions: Seq[(Any, Array[String]) => Any] = {
-    attributes.map { a =>
-      val ordinal = relation.partitionKeys.indexOf(a)
-      if (ordinal >= 0) {
-        val dataType = relation.partitionKeys(ordinal).dataType
-        (_: Any, partitionKeys: Array[String]) => {
-          castFromString(partitionKeys(ordinal), dataType)
-        }
-      } else {
-        val ref = objectInspector.getAllStructFieldRefs
-          .find(_.getFieldName == a.name)
-          .getOrElse(sys.error(s"Can't find attribute $a"))
-        val fieldObjectInspector = ref.getFieldObjectInspector
-
-        val unwrapHiveData = fieldObjectInspector match {
-          case _: HiveVarcharObjectInspector =>
-            (value: Any) => value.asInstanceOf[HiveVarchar].getValue
-          case _: HiveDecimalObjectInspector =>
-            (value: Any) => BigDecimal(value.asInstanceOf[HiveDecimal].bigDecimalValue())
-          case _ =>
-            identity[Any] _
-        }
-
-        (row: Any, _: Array[String]) => {
-          val data = objectInspector.getStructFieldData(row, ref)
-          val hiveData = unwrapData(data, fieldObjectInspector)
-          if (hiveData != null) unwrapHiveData(hiveData) else null
-        }
-      }
-    }
-  }
+  private[this] val hadoopReader = new HadoopTableReader(attributes, relation, context)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
   }
 
   private def addColumnMetadataToConf(hiveConf: HiveConf) {
-    // Specifies IDs and internal names of columns to be scanned.
-    val neededColumnIDs = attributes.map(a => relation.output.indexWhere(_.name == a.name): Integer)
-    val columnInternalNames = neededColumnIDs.map(HiveConf.getColumnInternalName(_)).mkString(",")
+    // Specifies needed column IDs for those non-partitioning columns.
+    val neededColumnIDs =
+      attributes.map(a =>
+        relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
 
-    if (attributes.size == relation.output.size) {
-      ColumnProjectionUtils.setFullyReadColumns(hiveConf)
-    } else {
-      ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
-    }
-
+    ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
 
     // Specifies types and object inspectors of columns to be scanned.
@@ -145,16 +94,10 @@ case class HiveTableScan(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, columnInternalNames)
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
 
   addColumnMetadataToConf(context.hiveconf)
-
-  private def inputRdd = if (!relation.hiveQlTable.isPartitioned) {
-    hadoopReader.makeRDDForTable(relation.hiveQlTable)
-  } else {
-    hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
-  }
 
   /**
    * Prunes partitions not involve the query plan.
@@ -179,44 +122,10 @@ case class HiveTableScan(
     }
   }
 
-  override def execute() = {
-    inputRdd.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val mutableRow = new GenericMutableRow(attributes.length)
-        val mutablePair = new MutablePair[Any, Array[String]]()
-        val buffered = iterator.buffered
-
-        // NOTE (lian): Critical path of Hive table scan, unnecessary FP style code and pattern
-        // matching are avoided intentionally.
-        val rowsAndPartitionKeys = buffered.head match {
-          // With partition keys
-          case _: Array[Any] =>
-            buffered.map { case array: Array[Any] =>
-              val deserializedRow = array(0)
-              val partitionKeys = array(1).asInstanceOf[Array[String]]
-              mutablePair.update(deserializedRow, partitionKeys)
-            }
-
-          // Without partition keys
-          case _ =>
-            val emptyPartitionKeys = Array.empty[String]
-            buffered.map { deserializedRow =>
-              mutablePair.update(deserializedRow, emptyPartitionKeys)
-            }
-        }
-
-        rowsAndPartitionKeys.map { pair =>
-          var i = 0
-          while (i < attributes.length) {
-            mutableRow(i) = attributeFunctions(i)(pair._1, pair._2)
-            i += 1
-          }
-          mutableRow: Row
-        }
-      }
-    }
+  override def execute() = if (!relation.hiveQlTable.isPartitioned) {
+    hadoopReader.makeRDDForTable(relation.hiveQlTable)
+  } else {
+    hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
   }
 
   override def output = attributes

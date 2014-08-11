@@ -29,7 +29,11 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 class ExpressionEvaluationSuite extends FunSuite {
 
   test("literals") {
-    assert((Literal(1) + Literal(1)).eval(null) === 2)
+    checkEvaluation(Literal(1), 1)
+    checkEvaluation(Literal(true), true)
+    checkEvaluation(Literal(0L), 0L)
+    checkEvaluation(Literal("test"), "test")
+    checkEvaluation(Literal(1) + Literal(1), 2)
   }
 
   /**
@@ -61,10 +65,8 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("3VL Not") {
     notTrueTable.foreach {
       case (v, answer) =>
-        val expr = ! Literal(v, BooleanType)
-        val result = expr.eval(null)
-        if (result != answer)
-          fail(s"$expr should not evaluate to $result, expected: $answer")    }
+        checkEvaluation(!Literal(v, BooleanType), answer)
+    }
   }
 
   booleanLogicTest("AND", _ && _,
@@ -127,6 +129,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
   }
 
+  test("IN") {
+    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
+    checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
+    checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
+  }
+
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal(null, StringType).like("a"), null)
     checkEvaluation(Literal("a", StringType).like(Literal(null, StringType)), null)
@@ -158,7 +167,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
-    
+
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
 
@@ -203,7 +212,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.0"
+    val sts = "1970-01-01 00:00:01.1"
     val ts = Timestamp.valueOf(sts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
@@ -232,21 +241,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
     checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
-    checkEvaluation("23" cast DoubleType, 23)
+    checkEvaluation("23" cast DoubleType, 23d)
     checkEvaluation("23" cast IntegerType, 23)
-    checkEvaluation("23" cast FloatType, 23)
-    checkEvaluation("23" cast DecimalType, 23)
-    checkEvaluation("23" cast ByteType, 23)
-    checkEvaluation("23" cast ShortType, 23)
+    checkEvaluation("23" cast FloatType, 23f)
+    checkEvaluation("23" cast DecimalType, 23: BigDecimal)
+    checkEvaluation("23" cast ByteType, 23.toByte)
+    checkEvaluation("23" cast ShortType, 23.toShort)
     checkEvaluation("2012-12-11" cast DoubleType, null)
     checkEvaluation(Literal(123) cast IntegerType, 123)
 
-    checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24)
+    checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24d)
     checkEvaluation(Literal(23) + Cast(true, IntegerType), 24)
-    checkEvaluation(Literal(23f) + Cast(true, FloatType), 24)
-    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType), 24)
-    checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24)
-    checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24)
+    checkEvaluation(Literal(23f) + Cast(true, FloatType), 24f)
+    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType), 24: BigDecimal)
+    checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24.toByte)
+    checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24.toShort)
 
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
 
@@ -293,7 +302,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
-  
+
   test("null checking") {
     val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
     val c1 = 'a.string.at(0)
@@ -301,18 +310,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     val c3 = 'a.boolean.at(2)
     val c4 = 'a.boolean.at(3)
 
-    checkEvaluation(IsNull(c1), false, row)
-    checkEvaluation(IsNotNull(c1), true, row)
+    checkEvaluation(c1.isNull, false, row)
+    checkEvaluation(c1.isNotNull, true, row)
 
-    checkEvaluation(IsNull(c2), true, row)
-    checkEvaluation(IsNotNull(c2), false, row)
+    checkEvaluation(c2.isNull, true, row)
+    checkEvaluation(c2.isNotNull, false, row)
 
-    checkEvaluation(IsNull(Literal(1, ShortType)), false)
-    checkEvaluation(IsNotNull(Literal(1, ShortType)), true)
+    checkEvaluation(Literal(1, ShortType).isNull, false)
+    checkEvaluation(Literal(1, ShortType).isNotNull, true)
 
-    checkEvaluation(IsNull(Literal(null, ShortType)), true)
-    checkEvaluation(IsNotNull(Literal(null, ShortType)), false)
-    
+    checkEvaluation(Literal(null, ShortType).isNull, true)
+    checkEvaluation(Literal(null, ShortType).isNotNull, false)
+
     checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
@@ -323,14 +332,14 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(If(Literal(null, BooleanType), c2, c1), "^Ba*n", row)
     checkEvaluation(If(Literal(true, BooleanType), c1, c2), "^Ba*n", row)
     checkEvaluation(If(Literal(false, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(false, BooleanType), 
+    checkEvaluation(If(Literal(false, BooleanType),
       Literal("a", StringType), Literal("b", StringType)), "b", row)
 
-    checkEvaluation(In(c1, c1 :: c2 :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType), 
-      Literal("^Ba*n", StringType) :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType),
-      Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
+    checkEvaluation(c1 in (c1, c2), true, row)
+    checkEvaluation(
+      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType)), true, row)
+    checkEvaluation(
+      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType), c2), true, row)
   }
 
   test("case when") {
@@ -378,7 +387,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("complex type") {
     val row = new GenericRow(Array[Any](
-      "^Ba*n",                                  // 0 
+      "^Ba*n",                                  // 0
       null.asInstanceOf[String],                // 1
       new GenericRow(Array[Any]("aa", "bb")),   // 2
       Map("aa"->"bb"),                          // 3
@@ -391,21 +400,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
       Literal(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
       Literal(null, IntegerType)), null, row)
 
-    checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
+    checkEvaluation(GetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
     checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
@@ -413,13 +422,15 @@ class ExpressionEvaluationSuite extends FunSuite {
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2,
-      AttributeReference("c", typeS)()), "a").nullable === true)
-    assert(GetField(BoundReference(2,
-      AttributeReference("c", typeS_notNullable, nullable = false)()), "a").nullable === false)
+    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
     assert(GetField(Literal(null, typeS), "a").nullable === true)
     assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+
+    checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
+    checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
+    checkEvaluation('c.struct(typeS).at(2).getField("a"), "aa", row)
   }
 
   test("arithmetic") {
@@ -447,11 +458,13 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("BinaryComparison") {
-    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val row = new GenericRow(Array[Any](1, 2, 3, null, 3, null))
     val c1 = 'a.int.at(0)
     val c2 = 'a.int.at(1)
     val c3 = 'a.int.at(2)
     val c4 = 'a.int.at(3)
+    val c5 = 'a.int.at(4)
+    val c6 = 'a.int.at(5)
 
     checkEvaluation(LessThan(c1, c4), null, row)
     checkEvaluation(LessThan(c1, c2), true, row)
@@ -465,8 +478,35 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 >= c2, false, row)
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
+    checkEvaluation(c4 <=> c1, false, row)
+    checkEvaluation(c1 <=> c4, false, row)
+    checkEvaluation(c4 <=> c6, true, row)
+    checkEvaluation(c3 <=> c5, true, row)
+    checkEvaluation(Literal(true) <=> Literal(null, BooleanType), false, row)
+    checkEvaluation(Literal(null, BooleanType) <=> Literal(true), false, row)
   }
-  
+
+  test("StringComparison") {
+    val row = new GenericRow(Array[Any]("abc", null))
+    val c1 = 'a.string.at(0)
+    val c2 = 'a.string.at(1)
+
+    checkEvaluation(c1 contains "b", true, row)
+    checkEvaluation(c1 contains "x", false, row)
+    checkEvaluation(c2 contains "b", null, row)
+    checkEvaluation(c1 contains Literal(null, StringType), null, row)
+
+    checkEvaluation(c1 startsWith "a", true, row)
+    checkEvaluation(c1 startsWith "b", false, row)
+    checkEvaluation(c2 startsWith "a", null, row)
+    checkEvaluation(c1 startsWith Literal(null, StringType), null, row)
+
+    checkEvaluation(c1 endsWith "c", true, row)
+    checkEvaluation(c1 endsWith "b", false, row)
+    checkEvaluation(c2 endsWith "b", null, row)
+    checkEvaluation(c1 endsWith Literal(null, StringType), null, row)
+  }
+
   test("Substring") {
     val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
 
@@ -521,5 +561,10 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
     assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
     assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+
+    checkEvaluation(s.substr(0, 2), "ex", row)
+    checkEvaluation(s.substr(0), "example", row)
+    checkEvaluation(s.substring(0, 2), "ex", row)
+    checkEvaluation(s.substring(0), "example", row)
   }
 }

@@ -42,9 +42,11 @@ private[hive] case class ShellCommand(cmd: String) extends Command
 
 private[hive] case class SourceCommand(filePath: String) extends Command
 
-private[hive] case class AddJar(jarPath: String) extends Command
-
 private[hive] case class AddFile(filePath: String) extends Command
+
+private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends Command
+
+private[hive] case class AnalyzeTable(tableName: String) extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -74,7 +76,6 @@ private[hive] object HiveQl {
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
 
-    "TOK_ANALYZE",
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
@@ -92,13 +93,11 @@ private[hive] object HiveQl {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ANALYZE",
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
-    "TOK_DROPTABLE",
     "TOK_MSCK",
 
     // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
@@ -229,7 +228,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8))
+        NativeCommand(sql)
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
       } else if (sql.trim.toLowerCase.startsWith("dfs")) {
@@ -240,7 +239,6 @@ private[hive] object HiveQl {
         ShellCommand(sql.drop(1))
       } else {
         val tree = getAst(sql)
-
         if (nativeCommands contains tree.getText) {
           NativeCommand(sql)
         } else {
@@ -298,8 +296,11 @@ private[hive] object HiveQl {
       matches.headOption
     }
 
-    assert(remainingNodes.isEmpty,
-      s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
+    if (remainingNodes.nonEmpty) {
+      sys.error(
+        s"""Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}.
+           |You are likely trying to use an unsupported Hive feature."""".stripMargin)
+    }
     clauses
   }
 
@@ -379,6 +380,28 @@ private[hive] object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
+    // Special drop table that also uncaches.
+    case Token("TOK_DROPTABLE",
+           Token("TOK_TABNAME", tableNameParts) ::
+           ifExists) =>
+      val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
+      DropTable(tableName, ifExists.nonEmpty)
+    // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
+    case Token("TOK_ANALYZE",
+            Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
+            isNoscan) =>
+      // Reference:
+      // https://cwiki.apache.org/confluence/display/Hive/StatsDev#StatsDev-ExistingTables
+      if (partitionSpec.nonEmpty) {
+        // Analyze partitions will be treated as a Hive native command.
+        NativePlaceholder
+      } else if (isNoscan.isEmpty) {
+        // If users do not specify "noscan", it will be treated as a Hive native command.
+        NativePlaceholder
+      } else {
+        val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
+        AnalyzeTable(tableName)
+      }
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
@@ -612,7 +635,7 @@ private[hive] object HiveQl {
         // TOK_DESTINATION means to overwrite the table.
         val resultDestination =
           (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
-        val overwrite = if (intoClause.isEmpty) true else false
+        val overwrite = intoClause.isEmpty
         nodeToDest(
           resultDestination,
           withLimit,
@@ -743,7 +766,10 @@ private[hive] object HiveQl {
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
-      assert(other.size <= 1, s"Unhandled join child $other")
+      if (!(other.size <= 1)) {
+        sys.error(s"Unsupported join operation: $other")
+      }
+
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
@@ -751,7 +777,6 @@ private[hive] object HiveQl {
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
       }
-      assert(other.size <= 1, "Unhandled join clauses.")
       Join(nodeToRelation(relation1),
         nodeToRelation(relation2),
         joinType,
@@ -927,11 +952,14 @@ private[hive] object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
-    case Token(DIV(), left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token(DIV(), left :: right:: Nil) =>
+      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("==", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("<=>", left :: right:: Nil) => EqualNullSafe(nodeToExpr(left), nodeToExpr(right))
     case Token("!=", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
     case Token("<>", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))

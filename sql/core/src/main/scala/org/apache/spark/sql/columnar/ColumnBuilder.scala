@@ -109,13 +109,16 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class TimestampColumnBuilder
+  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
+
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 
 // TODO (lian) Add support for array, struct and map
 private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
 
 private[sql] object ColumnBuilder {
-  val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104
+  val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
 
   private[columnar] def ensureFreeSpace(orig: ByteBuffer, size: Int) = {
     if (orig.remaining >= size) {
@@ -151,6 +154,7 @@ private[sql] object ColumnBuilder {
       case STRING.typeId  => new StringColumnBuilder
       case BINARY.typeId  => new BinaryColumnBuilder
       case GENERIC.typeId => new GenericColumnBuilder
+      case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 
     builder.initialize(initialSize, columnName, useCompression)

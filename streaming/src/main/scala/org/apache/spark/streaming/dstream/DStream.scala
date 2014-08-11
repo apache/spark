@@ -111,14 +111,14 @@ abstract class DStream[T: ClassTag] (
 
   /* Store the creation callSite in threadlocal */
   private[streaming] def setCreationCallSite() = {
-    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, creationSite.short)
-    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, creationSite.long)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, creationSite.shortForm)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, creationSite.longForm)
   }
 
   /* Store the supplied callSite in threadlocal */
   private[streaming] def setCallSite(callSite: CallSite) = {
-    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, callSite.short)
-    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, callSite.long)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, callSite.shortForm)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, callSite.longForm)
   }
 
   /* Return the current callSite */

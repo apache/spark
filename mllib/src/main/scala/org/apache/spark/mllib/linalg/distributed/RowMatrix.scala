@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
 
-import breeze.linalg.{Vector => BV, DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
 import breeze.linalg.{svd => brzSvd, axpy => brzAxpy}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
+import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 
 /**
@@ -79,7 +80,7 @@ class RowMatrix(
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-    rows.aggregate(BDV.zeros[Double](n))(
+    rows.treeAggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
         val rBrz = r.toBreeze
         val a = rBrz.dot(vbr.value)
@@ -91,9 +92,7 @@ class RowMatrix(
             s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
         U
-      },
-      combOp = (U1, U2) => U1 += U2
-    )
+      }, combOp = (U1, U2) => U1 += U2)
   }
 
   /**
@@ -104,13 +103,11 @@ class RowMatrix(
     val nt: Int = n * (n + 1) / 2
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.aggregate(new BDV[Double](new Array[Double](nt)))(
+    val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
       seqOp = (U, v) => {
         RowMatrix.dspr(1.0, v, U.data)
         U
-      },
-      combOp = (U1, U2) => U1 += U2
-    )
+      }, combOp = (U1, U2) => U1 += U2)
 
     RowMatrix.triuToFull(n, GU.data)
   }
@@ -225,7 +222,7 @@ class RowMatrix(
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
-        val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
+        val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
       case SVDMode.DistARPACK =>
         require(k < n, s"k must be smaller than n in dist-eigs mode but got k=$k and n=$n.")
@@ -290,9 +287,10 @@ class RowMatrix(
         s"We need at least $mem bytes of memory.")
     }
 
-    val (m, mean) = rows.aggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
+    val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
       seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
-      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) => (s1._1 + s2._1, s1._2 += s2._2)
+      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
+        (s1._1 + s2._1, s1._2 += s2._2)
     )
 
     updateNumRows(m)
@@ -340,7 +338,7 @@ class RowMatrix(
 
     val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
 
-    val (u: BDM[Double], _, _) = brzSvd(Cov)
+    val brzSvd.SVD(u: BDM[Double], _, _) = brzSvd(Cov)
 
     if (k == n) {
       Matrices.dense(n, k, u.data)
@@ -353,10 +351,9 @@ class RowMatrix(
    * Computes column-wise summary statistics.
    */
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
-    val summary = rows.aggregate[MultivariateOnlineSummarizer](new MultivariateOnlineSummarizer)(
+    val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-    )
+      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
     updateNumRows(summary.count)
     summary
   }
@@ -377,9 +374,9 @@ class RowMatrix(
       s"Only support dense matrix at this time but found ${B.getClass.getName}.")
 
     val Bb = rows.context.broadcast(B.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
-    val AB = rows.mapPartitions({ iter =>
+    val AB = rows.mapPartitions { iter =>
       val Bi = Bb.value
-      iter.map(row => {
+      iter.map { row =>
         val v = BDV.zeros[Double](k)
         var i = 0
         while (i < k) {
@@ -387,8 +384,8 @@ class RowMatrix(
           i += 1
         }
         Vectors.fromBreeze(v)
-      })
-    }, preservesPartitioning = true)
+      }
+    }
 
     new RowMatrix(AB, nRows, B.numCols)
   }

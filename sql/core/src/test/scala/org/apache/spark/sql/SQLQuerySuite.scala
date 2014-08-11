@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -34,6 +32,21 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
       "test")
+  }
+
+  test("SPARK-2407 Added Parser of SQL SUBSTR()") {
+    checkAnswer(
+      sql("SELECT substr(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substr(tableName, 3) FROM tableName"),
+      "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substring(tableName, 3) FROM tableName"),
+      "st")
   }
 
   test("index into array") {
@@ -409,26 +422,107 @@ class SQLQuerySuite extends QueryTest {
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Seq(Seq(testKey, testVal))
+      Seq(Seq(s"$testKey=$testVal"))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
       Seq(
-        Seq(testKey, testVal),
-        Seq(testKey + testKey, testVal + testVal))
+        Seq(s"$testKey=$testVal"),
+        Seq(s"${testKey + testKey}=${testVal + testVal}"))
     )
 
     // "set key"
     checkAnswer(
       sql(s"SET $testKey"),
-      Seq(Seq(testKey, testVal))
+      Seq(Seq(s"$testKey=$testVal"))
     )
     checkAnswer(
       sql(s"SET $nonexistentKey"),
-      Seq(Seq(nonexistentKey, "<undefined>"))
+      Seq(Seq(s"$nonexistentKey=<undefined>"))
     )
     clear()
+  }
+
+  test("apply schema") {
+    val schema1 = StructType(
+      StructField("f1", IntegerType, false) ::
+      StructField("f2", StringType, false) ::
+      StructField("f3", BooleanType, false) ::
+      StructField("f4", IntegerType, true) :: Nil)
+
+    val rowRDD1 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
+    }
+
+    val schemaRDD1 = applySchema(rowRDD1, schema1)
+    schemaRDD1.registerTempTable("applySchema1")
+    checkAnswer(
+      sql("SELECT * FROM applySchema1"),
+      (1, "A1", true, null) ::
+      (2, "B2", false, null) ::
+      (3, "C3", true, null) ::
+      (4, "D4", true, 2147483644) :: Nil)
+
+    checkAnswer(
+      sql("SELECT f1, f4 FROM applySchema1"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
+
+    val schema2 = StructType(
+      StructField("f1", StructType(
+        StructField("f11", IntegerType, false) ::
+        StructField("f12", BooleanType, false) :: Nil), false) ::
+      StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+
+    val rowRDD2 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
+    }
+
+    val schemaRDD2 = applySchema(rowRDD2, schema2)
+    schemaRDD2.registerTempTable("applySchema2")
+    checkAnswer(
+      sql("SELECT * FROM applySchema2"),
+      (Seq(1, true), Map("A1" -> null)) ::
+      (Seq(2, false), Map("B2" -> null)) ::
+      (Seq(3, true), Map("C3" -> null)) ::
+      (Seq(4, true), Map("D4" -> 2147483644)) :: Nil)
+
+    checkAnswer(
+      sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
+
+    // The value of a MapType column can be a mutable map.
+    val rowRDD3 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
+    }
+
+    val schemaRDD3 = applySchema(rowRDD3, schema2)
+    schemaRDD3.registerTempTable("applySchema3")
+
+    checkAnswer(
+      sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
   }
 }

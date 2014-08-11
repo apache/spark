@@ -25,6 +25,8 @@ import scala.collection.Map
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
+
 
 import org.apache.spark.executor.{DataReadMethod, InputMetrics, ShuffleReadMetrics,
   ShuffleWriteMetrics, TaskMetrics}
@@ -190,10 +192,13 @@ private[spark] object JsonProtocol {
     ("Details" -> stageInfo.details) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
-    ("Failure Reason" -> failureReason)
+    ("Failure Reason" -> failureReason) ~
+    ("Accumulables" -> JArray(
+        stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
+    val accumUpdateMap = taskInfo.accumulables
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
     ("Attempt" -> taskInfo.attempt) ~
@@ -204,7 +209,15 @@ private[spark] object JsonProtocol {
     ("Speculative" -> taskInfo.speculative) ~
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
-    ("Failed" -> taskInfo.failed)
+    ("Failed" -> taskInfo.failed) ~
+    ("Accumulables" -> JArray(taskInfo.accumulables.map(accumulableInfoToJson).toList))
+  }
+
+  def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
+    ("ID" -> accumulableInfo.id) ~
+    ("Name" -> accumulableInfo.name) ~
+    ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
+    ("Value" -> accumulableInfo.value)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -237,7 +250,6 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
     ("Shuffle Finish Time" -> shuffleReadMetrics.shuffleFinishTime) ~
-    ("Total Blocks Fetched" -> shuffleReadMetrics.totalBlocksFetched) ~
     ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
@@ -258,7 +270,8 @@ private[spark] object JsonProtocol {
     val reason = Utils.getFormattedClassName(taskEndReason)
     val json = taskEndReason match {
       case fetchFailed: FetchFailed =>
-        val blockManagerAddress = blockManagerIdToJson(fetchFailed.bmAddress)
+        val blockManagerAddress = Option(fetchFailed.bmAddress).
+          map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
@@ -480,16 +493,23 @@ private[spark] object JsonProtocol {
     val stageId = (json \ "Stage ID").extract[Int]
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
-    val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson)
+    val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson(_))
     val details = (json \ "Details").extractOpt[String].getOrElse("")
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
+    val accumulatedValues = (json \ "Accumulables").extractOpt[List[JValue]] match {
+      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case None => Seq[AccumulableInfo]()
+    }
 
     val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos, details)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
+    for (accInfo <- accumulatedValues) {
+      stageInfo.accumulables(accInfo.id) = accInfo
+    }
     stageInfo
   }
 
@@ -505,13 +525,26 @@ private[spark] object JsonProtocol {
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
+    val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
+      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case None => Seq[AccumulableInfo]()
+    }
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
+    accumulables.foreach { taskInfo.accumulables += _ }
     taskInfo
+  }
+
+  def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
+    val id = (json \ "ID").extract[Long]
+    val name = (json \ "Name").extract[String]
+    val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
+    val value = (json \ "Value").extract[String]
+    AccumulableInfo(id, name, update, value)
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
@@ -527,8 +560,8 @@ private[spark] object JsonProtocol {
     metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
     metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
     metrics.diskBytesSpilled = (json \ "Disk Bytes Spilled").extract[Long]
-    metrics.shuffleReadMetrics =
-      Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson)
+    metrics.setShuffleReadMetrics(
+      Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
     metrics.inputMetrics =
@@ -547,7 +580,6 @@ private[spark] object JsonProtocol {
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
     metrics.shuffleFinishTime = (json \ "Shuffle Finish Time").extract[Long]
-    metrics.totalBlocksFetched = (json \ "Total Blocks Fetched").extract[Int]
     metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
     metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
     metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
