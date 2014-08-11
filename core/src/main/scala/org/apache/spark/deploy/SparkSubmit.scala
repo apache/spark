@@ -47,9 +47,9 @@ object SparkSubmit extends Logging {
       s.foreach(_.close())
     }
   }
-  println("*********** I HAVE " + openPorts + " OPEN PORTS!")
-  System.err.println("*********** I HAVE " + openPorts + " OPEN PORTS! (stderr)")
-  logError("*********** I HAVE " + openPorts + " OPEN PORTS! (logError)")
+  println("*********** I HAVE " + openPorts.size + " OPEN PORTS!")
+  System.err.println("*********** I HAVE " + openPorts.size + " OPEN PORTS! (stderr)")
+  logError("*********** I HAVE " + openPorts.size + " OPEN PORTS! (logError)")
 
   // Cluster managers
   private val YARN = 1
