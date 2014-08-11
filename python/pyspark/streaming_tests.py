@@ -23,18 +23,10 @@ This file will merged to tests.py. But for now, this file is separated due
 to focusing to streaming test case
 
 """
-from fileinput import input
-from glob import glob
 from itertools import chain
 import os
-import re
-import shutil
-import subprocess
-import sys
-import tempfile
 import time
 import unittest
-import zipfile
 import operator
 
 from pyspark.context import SparkContext
@@ -44,11 +36,13 @@ from pyspark.streaming.duration import *
 
 SPARK_HOME = os.environ["SPARK_HOME"]
 
+
 class StreamOutput:
     """
     a class to store the output from stream
     """
     result = list()
+
 
 class PySparkStreamingTestCase(unittest.TestCase):
     def setUp(self):
@@ -69,6 +63,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         time.sleep(5)
         SparkContext._gateway._shutdown_callback_server()
 
+
 class TestBasicOperationsSuite(PySparkStreamingTestCase):
     """
     Input and output of this TestBasicOperationsSuite is the equivalent to 
@@ -77,7 +72,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     def setUp(self):
         PySparkStreamingTestCase.setUp(self)
         StreamOutput.result = list()
-        self.timeout = 10 # seconds
+        self.timeout = 10  # seconds
 
     def tearDown(self):
         PySparkStreamingTestCase.tearDown(self)
@@ -88,7 +83,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_map(self):
         """Basic operation test for DStream.map"""
-        test_input = [range(1,5), range(5,9), range(9, 13)]
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+
         def test_func(dstream):
             return dstream.map(lambda x: str(x))
         expected_output = map(lambda x: map(lambda y: str(y), x), test_input)
@@ -97,17 +93,19 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_flatMap(self):
         """Basic operation test for DStream.faltMap"""
-        test_input = [range(1,5), range(5,9), range(9, 13)]
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+
         def test_func(dstream):
             return dstream.flatMap(lambda x: (x, x * 2))
         expected_output = map(lambda x: list(chain.from_iterable((map(lambda y: [y, y * 2], x)))), 
-                       test_input)
+                              test_input)
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
     def test_filter(self):
         """Basic operation test for DStream.filter"""
-        test_input = [range(1,5), range(5,9), range(9, 13)]
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+
         def test_func(dstream):
             return dstream.filter(lambda x: x % 2 == 0)
         expected_output = map(lambda x: filter(lambda y: y % 2 == 0, x), test_input)
@@ -116,7 +114,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_count(self):
         """Basic operation test for DStream.count"""
-        test_input = [[], [1], range(1, 3), range(1,4), range(1,5)]
+        test_input = [[], [1], range(1, 3), range(1, 4), range(1, 5)]
+
         def test_func(dstream):
             return dstream.count()
         expected_output = map(lambda x: [len(x)], test_input)
@@ -125,7 +124,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         
     def test_reduce(self):
         """Basic operation test for DStream.reduce"""
-        test_input = [range(1,5), range(5,9), range(9, 13)]
+        test_input = [range(1, 5), range(5, 9), range(9, 13)]
+
         def test_func(dstream):
             return dstream.reduce(operator.add)
         expected_output = map(lambda x: [reduce(operator.add, x)], test_input)
@@ -135,9 +135,10 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     def test_reduceByKey(self):
         """Basic operation test for DStream.reduceByKey"""
         test_input = [["a", "a", "b"], ["", ""], []]
+
         def test_func(dstream):
             return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add)
-        expected_output = [[("a", 2), ("b", 1)],[("", 2)], []]
+        expected_output = [[("a", 2), ("b", 1)], [("", 2)], []]
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
@@ -145,9 +146,9 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         """Start stream and return the output"""
         # Generate input stream with user-defined input
         test_input_stream = self.ssc._testInputStream(test_input)
-        # Applyed test function to stream
+        # Applied test function to stream
         test_stream = test_func(test_input_stream)
-        # Add job to get outpuf from stream
+        # Add job to get output from stream
         test_stream._test_output(StreamOutput.result)
         self.ssc.start()
 
