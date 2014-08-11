@@ -61,9 +61,18 @@ class HypothesisTestSuite extends FunSuite with LocalSparkContext {
     val negObs = new DenseVector(Array(1.0, 2.0, 3.0, -4.0))
     intercept[IllegalArgumentException](Statistics.chiSqTest(negObs, expected1))
 
-    // count = 0.0 in expected
+    // count = 0.0 in expected but not observed
     val zeroExpected = new DenseVector(Array(1.0, 0.0, 3.0))
-    intercept[IllegalArgumentException](Statistics.chiSqTest(observed, zeroExpected))
+    val inf = Statistics.chiSqTest(observed, zeroExpected)
+    assert(inf.statistic === Double.PositiveInfinity)
+    assert(inf.degreesOfFreedom === 2)
+    assert(inf.pValue === Double.PositiveInfinity)
+    assert(inf.method === ChiSqTest.PEARSON.name)
+    assert(inf.nullHypothesis === ChiSqTest.NullHypothesis.goodnessOfFit.toString)
+
+    // 0.0 in expected and observed simultaneously
+    val zeroObserved = new DenseVector(Array(2.0, 0.0, 1.0))
+    intercept[IllegalArgumentException](Statistics.chiSqTest(zeroObserved, zeroExpected))
   }
 
   test("chi squared pearson matrix independence") {

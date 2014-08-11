@@ -77,7 +77,7 @@ private[stat] object ChiSqTest extends Logging {
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
     val numCols = data.first().features.size
     val results = new Array[ChiSqTestResult](numCols)
-    var labels = Array[Double]()
+    var labels: Map[Double, Int] = null
     // At most 100 columns at a time
     val batchSize = 100
     var batch = 0
@@ -93,18 +93,19 @@ private[stat] object ChiSqTest extends Logging {
         }
       }.countByValue()
 
-      if (labels.size == 0) {
+      if (labels == null) {
         // Do this only once for the first column since labels are invariant across features.
-        labels = pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct
+        labels =
+          pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct.zipWithIndex.toMap
       }
       val numLabels = labels.size
       pairCounts.keys.groupBy(_._1).map { case (col, keys) =>
-        val features = keys.map(_._2).toArray.distinct
+        val features = keys.map(_._2).toArray.distinct.zipWithIndex.toMap
         val numRows = features.size
         val contingency = new BDM(numRows, numLabels, new Array[Double](numRows * numLabels))
         keys.foreach { case (_, feature, label) =>
-          val i = features.indexOf(feature)
-          val j = labels.indexOf(label)
+          val i = features(feature)
+          val j = labels(label)
           contingency(i, j) += pairCounts((col, feature, label))
         }
         results(col) = chiSquaredMatrix(Matrices.fromBreeze(contingency), methodName)
@@ -128,46 +129,40 @@ private[stat] object ChiSqTest extends Logging {
       throw new IllegalArgumentException("observed and expected must be of the same size.")
     }
     val size = observed.size
-    // Avoid calling toArray on input vectors to avoid memory blow up
-    // (esp if size = Int.MaxValue for a SparseVector).
-    // Check positivity and collect sums
-    var obsSum = 0.0
-    var expSum = if (expected.size == 0.0) 1.0 else 0.0
-    var i = 0
-    while (i < size) {
-      val obs = observed(i)
-      if (obs < 0.0) {
-        throw new IllegalArgumentException("Values in observed must be nonnegative.")
-      }
-      obsSum += obs
-      if (expected.size > 0) {
-        val exp = expected(i)
-        if (exp <= 0.0) {
-          throw new IllegalArgumentException("Values in expected must be positive.")
-        }
-        expSum += exp
-      }
-      i += 1
+    if (size > 1000) {
+      logWarning("Chi-squared approximation may not be accurate due to low expected frequencies "
+        + s" as a result of a large number of categories: $size.")
+    }
+    val obsArr = observed.toArray
+    val expArr = if (expected.size == 0) Array.tabulate(size)(_ => 1.0 / size) else expected.toArray
+    if (!obsArr.forall(_ >= 0.0)) {
+      throw new IllegalArgumentException("Negative entries disallowed in the observed vector.")
+    }
+    if (expected.size != 0 && ! expArr.forall(_ >= 0.0)) {
+      throw new IllegalArgumentException("Negative entries disallowed in the expected vector.")
     }
 
     // Determine the scaling factor for expected
-    val scale = if (math.abs(obsSum - expSum) < 1e-7) 1.0 else  obsSum / expSum
-    val getExpected: (Int) => Double = if (expected.size == 0) {
-      // Assume uniform distribution
-      if (scale == 1.0) _ => 1.0 / size else _ => scale / size
-    } else {
-      if (scale == 1.0) (i: Int) => expected(i) else (i: Int) => scale * expected(i)
-    }
+    val obsSum = obsArr.sum
+    val expSum = if (expected.size == 0.0) 1.0 else expArr.sum
+    val scale = if (math.abs(obsSum - expSum) < 1e-7) 1.0 else obsSum / expSum
 
     // compute chi-squared statistic
-    var statistic = 0.0
-    var j = 0
-    while (j < observed.size) {
-      val obs = observed(j)
-      if (obs != 0.0) {
-        statistic += method.chiSqFunc(obs, getExpected(j))
+    val statistic = obsArr.zip(expArr).foldLeft(0.0) { case (stat, (obs, exp)) =>
+      if (exp == 0.0) {
+        if (obs == 0.0) {
+          throw new IllegalArgumentException("Chi-squared statistic undefined for input vectors due"
+            + " to 0.0 values in both observed and expected.")
+        } else {
+          return new ChiSqTestResult(Double.PositiveInfinity, size - 1, Double.PositiveInfinity,
+            PEARSON.name, NullHypothesis.goodnessOfFit.toString)
+        }
       }
-      j += 1
+      if (scale == 1.0) {
+        stat + method.chiSqFunc(obs, exp)
+      } else {
+        stat + method.chiSqFunc(obs, exp * scale)
+      }
     }
     val df = size - 1
     val pValue = chiSquareComplemented(df, statistic)
@@ -197,22 +192,28 @@ private[stat] object ChiSqTest extends Logging {
       rowSums(i % numRows) += elem
       i += 1
     }
-    if (!colSums.forall(_ > 0.0) || !rowSums.forall(_ > 0.0)) {
-      throw new IllegalArgumentException("Chi square statistic cannot be computed for input matrix "
-        + "due to 0.0 entries in the expected contingency table.")
-    }
     val total = colSums.sum
 
     // second pass to collect statistic
     var statistic = 0.0
     var j = 0
     while (j < colMajorArr.size) {
-      val expected = colSums(j / numRows) * rowSums(j % numRows) / total
+      val col = j / numRows
+      val colSum = colSums(col)
+      if (colSum == 0.0) {
+        throw new IllegalArgumentException("Chi-squared statistic undefined for input matrix due to"
+          + s"0 sum in column [$col].")
+      }
+      val row = j % numRows
+      val rowSum = rowSums(row)
+      if (rowSum == 0.0) {
+        throw new IllegalArgumentException("Chi-squared statistic undefined for input matrix due to"
+          + s"0 sum in row [$row].")
+      }
+      val expected = colSum * rowSum / total
       statistic += method.chiSqFunc(colMajorArr(j), expected)
       j += 1
     }
-
-    // Second pass to compute chi-squared statistic
     val df = (numCols - 1) * (numRows - 1)
     val pValue = chiSquareComplemented(df, statistic)
     new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
