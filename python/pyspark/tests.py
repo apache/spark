@@ -29,8 +29,13 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 import zipfile
+
+if sys.version_info[:2] <= (2, 6):
+    import unittest2 as unittest
+else:
+    import unittest
+
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
@@ -605,6 +610,7 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
 
+    @unittest.skipIf(sys.version_info[:2] <= (2, 6), "Skipped on 2.6 until SPARK-2951 is fixed")
     def test_newhadoop(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
@@ -905,8 +911,9 @@ class TestSparkSubmit(unittest.TestCase):
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         content = re.sub(pattern, '', content.strip())
         path = os.path.join(self.programDir, name + ".zip")
-        with zipfile.ZipFile(path, 'w') as zip:
-            zip.writestr(name, content)
+        zip = zipfile.ZipFile(path, 'w')
+        zip.writestr(name, content)
+        zip.close()
         return path
 
     def test_single_script(self):
