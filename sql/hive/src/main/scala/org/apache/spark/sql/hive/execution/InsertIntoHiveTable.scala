@@ -160,8 +160,6 @@ case class InsertIntoHiveTable(
   }
 
   def getDynamicPartDir(tableInfo: TableDesc, row: Row, dynamicPartNum2: Int) :String = {
-    println("tableInfo.class:" + tableInfo.getClass + "|row(2):" + row(2))
-    println(tableInfo.getProperties.getProperty("columns") + "|" + tableInfo.getProperties.getProperty("partition_columns"))
     dynamicPartNum2 match {
       case 0 =>""
       case i => {
