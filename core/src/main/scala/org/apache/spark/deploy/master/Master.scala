@@ -312,10 +312,10 @@ private[spark] class Master(
               if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
                 schedule()
               } else {
-                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                  s"${appInfo.retryCount} times; removing it")
                 val execs = idToApp(appId).executors.values
                 if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                    s"${appInfo.retryCount} times; removing it")
                   removeApplication(appInfo, ApplicationState.FAILED)
                 }
               }
