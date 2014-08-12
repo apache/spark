@@ -132,7 +132,16 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
           logDebug(result.queryExecution.toString())
           val groupId = round(random * 1000000).toString
           hiveContext.sparkContext.setJobGroup(groupId, statement)
-          iter = result.queryExecution.toRdd.toLocalIterator
+          iter = {
+            val resultRdd = result.queryExecution.toRdd
+            val useIncrementalCollect =
+              hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+            if (useIncrementalCollect) {
+              resultRdd.toLocalIterator
+            } else {
+              resultRdd.collect().iterator
+            }
+          }
           dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
           setHasResultSet(true)
         } catch {
