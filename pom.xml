@@ -143,11 +143,10 @@
 
   <repositories>
     <repository>
-      <id>maven-repo</id>
+      <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <!-- HTTPS is unavailable for Maven Central -->
-      <url>http://repo.maven.apache.org/maven2</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -213,7 +212,7 @@
     <repository>
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
-      <url>http://repo.spring.io/libs-release</url>
+      <url>https://repo.spring.io/libs-release</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -222,6 +221,18 @@
       </snapshots>
     </repository>
   </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>central</id>
+      <url>https://repo1.maven.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
 
   <dependencyManagement>
     <dependencies>

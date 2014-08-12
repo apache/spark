@@ -25,16 +25,14 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Matrix, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.random.{RandomRDDGenerators => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
@@ -271,6 +269,7 @@ class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     if (regType == "l2") {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
@@ -341,16 +340,27 @@ class PythonMLLibAPI extends Serializable {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      initialWeightsBA: Array[Byte],
+      regType: String,
+      intercept: Boolean): java.util.List[java.lang.Object] = {
+    val SVMAlg = new SVMWithSGD()
+    SVMAlg.setIntercept(intercept)
+    SVMAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
+    if (regType == "l2") {
+      SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      SVMAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType != "none") {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
-        SVMWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+        SVMAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -363,15 +373,28 @@ class PythonMLLibAPI extends Serializable {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+      initialWeightsBA: Array[Byte],
+      regParam: Double,
+      regType: String,
+      intercept: Boolean): java.util.List[java.lang.Object] = {
+    val LogRegAlg = new LogisticRegressionWithSGD()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
+    if (regType == "l2") {
+      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      LogRegAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType != "none") {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: [l1, l2, none].")
+    }
     trainRegressionModel(
       (data, initialWeights) =>
-        LogisticRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          miniBatchFraction,
-          initialWeights),
+        LogRegAlg.run(data, initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -498,17 +521,8 @@ class PythonMLLibAPI extends Serializable {
 
     val data = dataBytesJRDD.rdd.map(deserializeLabeledPoint)
 
-    val algo: Algo = algoStr match {
-      case "classification" => Classification
-      case "regression" => Regression
-      case _ => throw new IllegalArgumentException(s"Bad algoStr parameter: $algoStr")
-    }
-    val impurity: Impurity = impurityStr match {
-      case "gini" => Gini
-      case "entropy" => Entropy
-      case "variance" => Variance
-      case _ => throw new IllegalArgumentException(s"Bad impurityStr parameter: $impurityStr")
-    }
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
 
     val strategy = new Strategy(
       algo = algo,

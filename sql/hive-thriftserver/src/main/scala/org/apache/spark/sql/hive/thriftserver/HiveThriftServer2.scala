@@ -40,7 +40,6 @@ private[hive] object HiveThriftServer2 extends Logging {
     val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
 
     if (!optionsProcessor.process(args)) {
-      logWarning("Error starting HiveThriftServer2 with given arguments")
       System.exit(-1)
     }
 
@@ -61,7 +60,7 @@ private[hive] object HiveThriftServer2 extends Logging {
     Runtime.getRuntime.addShutdownHook(
       new Thread() {
         override def run() {
-          SparkSQLEnv.sparkContext.stop()
+          SparkSQLEnv.stop()
         }
       }
     )

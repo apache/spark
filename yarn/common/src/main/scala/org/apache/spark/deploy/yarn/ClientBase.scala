@@ -259,6 +259,14 @@ trait ClientBase extends Logging {
     localResources
   }
 
+  /** Get all application master environment variables set on this SparkConf */
+  def getAppMasterEnv: Seq[(String, String)] = {
+    val prefix = "spark.yarn.appMasterEnv."
+    sparkConf.getAll.filter{case (k, v) => k.startsWith(prefix)}
+      .map{case (k, v) => (k.substring(prefix.length), v)}
+  }
+
+
   def setupLaunchEnv(
       localResources: HashMap[String, LocalResource],
       stagingDir: String): HashMap[String, String] = {
@@ -276,6 +284,11 @@ trait ClientBase extends Logging {
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
+    getAppMasterEnv.foreach { case (key, value) =>
+      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
+    }
+
+    // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       // Allow users to specify some environment variables.
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs, File.pathSeparator)
