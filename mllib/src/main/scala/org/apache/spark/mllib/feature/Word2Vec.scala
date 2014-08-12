@@ -351,10 +351,17 @@ class Word2Vec extends Serializable with Logging {
         while(index < vocabSize) {
           if(bcLocalVocab.value(idx).contains(index)) {
             syn0Local.update(index, syn0Global(index))
-            syn1Local.update(index, syn1Global(index))
+            var j = 0
+            val codeLen = bcVocab.value(index).codeLen
+            while (j < codeLen) {
+              val index1 = bcVocab.value(index).point(j)
+              syn1Local.update(index1, syn1Global(index1))
+              j += 1
+            }
           }
           index += 1
         }
+
         val model = iter.foldLeft((syn0Local, syn1Local, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
@@ -386,7 +393,7 @@ class Word2Vec extends Serializable with Logging {
                     while (d < bcVocab.value(word).codeLen) {
                       val l2 = bcVocab.value(word).point(d)
                       // Propagate hidden -> output
-                      val vecWord = syn1.changeValue(l2, new Array[Float](vectorSize), v => v)
+                      val vecWord = syn1(l2)
                       var f = blas.sdot(vectorSize, vecLastWord, 1, vecWord, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
