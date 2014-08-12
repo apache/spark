@@ -23,7 +23,9 @@ import java.util.{Date, Random, UUID}
 
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{BlockFetchingClientFactory, BlockServer, PathResolver}
+import org.apache.spark.network.netty.PathResolver
+import org.apache.spark.network.netty.client.BlockFetchingClientFactory
+import org.apache.spark.network.netty.server.BlockServer
 import org.apache.spark.util.Utils
 import org.apache.spark.shuffle.sort.SortShuffleManager
 

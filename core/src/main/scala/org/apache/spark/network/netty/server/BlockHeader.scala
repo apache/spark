@@ -15,29 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.network.netty.server
 
 /**
- * A simple iterator that lazily initializes the underlying iterator.
+ * Header describing a block. This is used only in the server pipeline.
  *
- * The use case is that sometimes we might have many iterators open at the same time, and each of
- * the iterator might initialize its own buffer (e.g. decompression buffer, deserialization buffer).
- * This could lead to too many buffers open. If this iterator is used, we lazily initialize those
- * buffers.
+ * [[BlockServerHandler]] creates this, and [[BlockHeaderEncoder]] encodes it.
+ *
+ * @param blockSize length of the block content, excluding the length itself.
+ *                 If positive, this is the header for a block (not part of the header).
+ *                 If negative, this is the header and content for an error message.
+ * @param blockId block id
+ * @param error some error message from reading the block
  */
-class LazyInitIterator(createIterator: => Iterator[Any]) extends Iterator[Any] {
-
-  lazy val proxy = createIterator
-
-  override def hasNext: Boolean = {
-    val gotNext = proxy.hasNext
-    if (!gotNext) {
-      close()
-    }
-    gotNext
-  }
-
-  override def next(): Any = proxy.next()
-
-  def close(): Unit = Unit
-}
+private[server]
+class BlockHeader(val blockSize: Int, val blockId: String, val error: Option[String] = None)

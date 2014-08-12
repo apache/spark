@@ -18,8 +18,7 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
-
-import org.apache.spark.network.netty.{LazyInitIterator, ReferenceCountedBuffer}
+import org.apache.spark.network.netty.client.{LazyInitIterator, ReferenceCountedBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet

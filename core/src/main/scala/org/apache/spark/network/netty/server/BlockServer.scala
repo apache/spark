@@ -15,29 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.network.netty.server
 
-import java.io.FileInputStream
 import java.net.InetSocketAddress
-import java.nio.channels.FileChannel
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.buffer.{ByteBuf, PooledByteBufAllocator}
-import io.netty.channel._
-import io.netty.channel.epoll.{EpollEventLoopGroup, EpollServerSocketChannel}
+import io.netty.buffer.PooledByteBufAllocator
+import io.netty.channel.socket.SocketChannel
+import io.netty.channel.{ChannelInitializer, ChannelOption, ChannelFuture}
+import io.netty.channel.epoll.{EpollServerSocketChannel, EpollEventLoopGroup}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
-import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
-import io.netty.handler.codec.{MessageToByteEncoder, LineBasedFrameDecoder}
+import io.netty.handler.codec.LineBasedFrameDecoder
 import io.netty.handler.codec.string.StringDecoder
 import io.netty.util.CharsetUtil
 
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.storage.{TestBlockId, FileSegment, BlockId}
+import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.network.netty.{PathResolver, NettyConfig}
 import org.apache.spark.util.Utils
-
 
 // TODO: Remove dependency on BlockId. This layer should not be coupled with storage.
 
@@ -45,22 +42,9 @@ import org.apache.spark.util.Utils
 
 // TODO: Allow user-configured port
 
-/** A simple main function for testing the server. */
-object BlockServer {
-  def main(args: Array[String]): Unit = {
-    new BlockServer(new SparkConf, new PathResolver {
-      override def getBlockLocation(blockId: BlockId): FileSegment = {
-        val file = new java.io.File(blockId.asInstanceOf[TestBlockId].id)
-        new FileSegment(file, 0, file.length())
-      }
-    })
-    Thread.sleep(1000000)
-  }
-}
-
-
 /**
- * Server for serving Spark data blocks. This should be used together with [[BlockFetchingClient]].
+ * Server for serving Spark data blocks.
+ * This should be used together with [[org.apache.spark.network.netty.client.BlockFetchingClient]].
  *
  * Protocol for requesting blocks (client to server):
  *   One block id per line, e.g. to request 3 blocks: "block1\nblock2\nblock3\n"
@@ -174,117 +158,5 @@ class BlockServer(conf: NettyConfig, pResolver: PathResolver) extends Logging {
       bootstrap.childGroup().shutdownGracefully()
     }
     bootstrap = null
-  }
-}
-
-
-/** A handler that writes the content of a block to the channel. */
-class BlockServerHandler(p: PathResolver)
-  extends SimpleChannelInboundHandler[String] with Logging {
-
-  override def channelRead0(ctx: ChannelHandlerContext, blockId: String): Unit = {
-    // client in the form of hostname:port
-    val client = {
-      val remoteAddr = ctx.channel.remoteAddress.asInstanceOf[InetSocketAddress]
-      remoteAddr.getHostName + ":" + remoteAddr.getPort
-    }
-
-    // A helper function to send error message back to the client.
-    def respondWithError(error: String): Unit = {
-      ctx.writeAndFlush(new BlockHeader(-1, blockId, Some(error))).addListener(
-        new ChannelFutureListener {
-          override def operationComplete(future: ChannelFuture) {
-            if (!future.isSuccess) {
-              // TODO: Maybe log the success case as well.
-              logError(s"Error sending error back to $client", future.cause)
-              ctx.close()
-            }
-          }
-        }
-      )
-    }
-
-    logTrace(s"Received request from $client to fetch block $blockId")
-
-    var fileChannel: FileChannel = null
-    var offset: Long = 0
-    var blockSize: Long = 0
-
-    // First make sure we can find the block. If not, send error back to the user.
-    try {
-      val segment = p.getBlockLocation(BlockId(blockId))
-      fileChannel = new FileInputStream(segment.file).getChannel
-      offset = segment.offset
-      blockSize = segment.length
-    } catch {
-      case e: Exception =>
-        logError(s"Error opening block $blockId for request from $client", e)
-        blockSize = -1
-        respondWithError(e.getMessage)
-    }
-
-    // Send error message back if the block is too large. Even though we are capable of sending
-    // large (2G+) blocks, the receiving end cannot handle it so let's fail fast.
-    // Once we fixed the receiving end to be able to process large blocks, this should be removed.
-    // Also make sure we update BlockHeaderEncoder to support length > 2G.
-    if (blockSize > Int.MaxValue) {
-      respondWithError(s"Block $blockId size ($blockSize) greater than 2G")
-    }
-
-    // Found the block. Send it back.
-    if (fileChannel != null && blockSize >= 0) {
-      val listener = new ChannelFutureListener {
-        override def operationComplete(future: ChannelFuture) {
-          if (future.isSuccess) {
-            logTrace(s"Sent block $blockId ($blockSize B) back to $client")
-          } else {
-            logError(s"Error sending block $blockId to $client; closing connection", future.cause)
-            ctx.close()
-          }
-        }
-      }
-      val region = new DefaultFileRegion(fileChannel, offset, blockSize)
-      ctx.writeAndFlush(new BlockHeader(blockSize.toInt, blockId)).addListener(listener)
-      ctx.writeAndFlush(region).addListener(listener)
-    }
-  }  // end of channelRead0
-}
-
-
-/**
- * Header describing a block. This is used only in the server pipeline.
- *
- * [[BlockServerHandler]] creates this, and [[BlockHeaderEncoder]] encodes it.
- *
- * @param blockSize length of the block content, excluding the length itself.
- *                 If positive, this is the header for a block (not part of the header).
- *                 If negative, this is the header and content for an error message.
- * @param blockId block id
- * @param error some error message from reading the block
- */
-class BlockHeader(val blockSize: Int, val blockId: String, val error: Option[String] = None)
-
-
-/**
- * A simple encoder for BlockHeader. See [[BlockServer]] for the server to client protocol.
- */
-class BlockHeaderEncoder extends MessageToByteEncoder[BlockHeader] {
-  override def encode(ctx: ChannelHandlerContext, msg: BlockHeader, out: ByteBuf): Unit = {
-    // message = message length (4 bytes) + block id length (4 bytes) + block id + block data
-    // message length = block id length (4 bytes) + size of block id + size of block data
-    val blockId = msg.blockId.getBytes
-    msg.error match {
-      case Some(errorMsg) =>
-        val errorBytes = errorMsg.getBytes
-        out.writeInt(-(4 + blockId.length + errorBytes.size))
-        out.writeInt(blockId.length)
-        out.writeBytes(blockId)
-        out.writeBytes(errorBytes)
-      case None =>
-        val blockId = msg.blockId.getBytes
-        out.writeInt(4 + blockId.length + msg.blockSize)
-        out.writeInt(blockId.length)
-        out.writeBytes(blockId)
-    }
   }
 }

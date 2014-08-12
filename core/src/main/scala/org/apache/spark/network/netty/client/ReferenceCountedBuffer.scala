@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.network.netty.client
 
 import java.io.InputStream
 import java.nio.ByteBuffer
 
-import io.netty.buffer.{ByteBufInputStream, ByteBuf}
+import io.netty.buffer.{ByteBuf, ByteBufInputStream}
 
 
 /**
@@ -30,6 +30,7 @@ import io.netty.buffer.{ByteBufInputStream, ByteBuf}
  * The buffer's life cycle is NOT managed by the JVM, and thus requiring explicit declaration of
  * reference by the retain method and release method.
  */
+private[spark]
 class ReferenceCountedBuffer(val underlying: ByteBuf) extends AnyVal {
 
   /** Return the nio ByteBuffer view of the underlying buffer. */
