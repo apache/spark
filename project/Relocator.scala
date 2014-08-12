@@ -88,18 +88,9 @@ class RelocatorRemapper(relocators: List[Relocator]) extends Remapper {
  * should be relocated are moved to a new location, and all classes are passed through the
  * remapper so that references to relocated classes are fixed.
  *
- * Note about `preferLocal`: this is a hack to make sure that we always ship the Spark-compiled
- * version of Guava's `Optional` class. Unlike maven, sbt-assembly doesn't seem to allow filtering
- * of specific entries in dependencies. It also does not provide information about where does
- * a particular file come from. The only hint is that the temp path for the file ends with a "_dir"
- * when it comes from a directory, and with a hash when it comes from a jar file. So for classes
- * that match a regex in the `preferLocal` list, we choose the first class file in a local
- * directory.
- *
  * @param relocators List of relocators to apply to classes being shaded.
- * @param preferLocal List of regexes that match classes for which a local version is preferred.
  */
-class ShadeStrategy(relocators: List[Relocator], preferLocal: List[Regex]) extends MergeStrategy {
+class ShadeStrategy(relocators: List[Relocator]) extends MergeStrategy {
 
   private val remapper = new RelocatorRemapper(relocators)
 
@@ -111,7 +102,7 @@ class ShadeStrategy(relocators: List[Relocator], preferLocal: List[Regex]) exten
         (files.head, path)
       } else {
         val className = path.substring(0, path.length() - ".class".length())
-        (remap(chooseFile(path, files), tempDir), remapper.rename(className) + ".class")
+        (remap(files.head, tempDir), remapper.rename(className) + ".class")
       }
     Right(Seq(file -> newPath))
   }
@@ -136,20 +127,6 @@ class ShadeStrategy(relocators: List[Relocator], preferLocal: List[Regex]) exten
     } finally {
       in.foreach { _.close() }
       out.foreach { _.close() }
-    }
-  }
-
-  private def chooseFile(path: String, files: Seq[File]): File = {
-    if (!preferLocal.filter { r => r.pattern.matcher(path).matches() }.isEmpty) {
-      def isLocal(f: File) = {
-        val abs = f.getAbsolutePath()
-        val dir = abs.substring(0, abs.length() - path.length())
-        dir.endsWith("_dir")
-      }
-
-      files.filter(isLocal).orElse(files)(0)
-    } else {
-      files.head
     }
   }
 

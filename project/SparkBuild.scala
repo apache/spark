@@ -30,10 +30,12 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl, spark,
+  val coreProject@Seq(core) = Seq("core").map(ProjectRef(buildLocation, _))
+
+  val allProjects@Seq(bagel, catalyst, graphx, hive, hiveThriftServer, mllib, repl, spark,
   sql, streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt,
   streamingTwitter, streamingZeromq) =
-    Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+    Seq("bagel", "catalyst", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "spark", "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
       "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
@@ -152,14 +154,18 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
+  (coreProject ++ allProjects ++ optionallyEnabledProjects ++ assemblyProjects)
+    .foreach(enable(sharedSettings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
-  (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
+  (coreProject ++ allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   // TODO: Add Sql to mima checks
-  allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
+  (coreProject ++ allProjects).filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
     streamingFlumeSink).contains(x)).foreach(x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
+
+  /* Set up assembly settings for the core project. */
+  coreProject.foreach(enable(CoreAssembly.settings))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -255,9 +261,7 @@ object Assembly {
   private val relocators = List(
     new Relocator("com.google", "org.spark-project.guava", Seq("com\\.google\\.common\\..*".r),
       Seq("com\\.google\\.common\\.base\\.Optional.*".r)))
-  private val localFilters = List(
-    "com/google/common/base/Optional.*".r)
-  private val shade = new ShadeStrategy(relocators, localFilters)
+  private val shade = new ShadeStrategy(relocators)
 
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
@@ -275,6 +279,35 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
+
+}
+
+object CoreAssembly {
+  import sbtassembly.Plugin._
+  import AssemblyKeys._
+
+  lazy val settings = assemblySettings ++ Seq(
+    publishArtifact in (Compile, packageBin) := false,
+    test in assembly := {},
+    jarName in assembly <<= (name, scalaVersion, version) map {
+      _ + "_" + _ + "-" + _ + "-assembly.jar"
+    },
+    excludedJars in assembly := {
+      val cp = (fullClasspath in assembly).value
+      cp filter {!_.data.getName.startsWith("guava")}
+    },
+    mergeStrategy in assembly := {
+      case PathList("com", "google", "common", xs @ _*) =>
+        if (xs.size == 2 && xs(0) == "base" && xs(1).startsWith("Optional")) {
+          MergeStrategy.first
+        } else {
+          MergeStrategy.discard
+        }
+      case PathList("META-INF", "maven", "com.google.guava", xs @ _*) => MergeStrategy.discard
+      case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
+      case _                                                   => MergeStrategy.first
+    }
+  ) ++ addArtifact(Artifact("spark-core"), assembly).settings
 
 }
 

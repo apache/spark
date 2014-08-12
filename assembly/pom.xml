@@ -102,12 +102,6 @@
           </artifactSet>
           <filters>
             <filter>
-              <artifact>com.google.guava:guava</artifact>
-              <excludes>
-                <exclude>com/google/common/base/Optional*</exclude>
-              </excludes>
-            </filter>
-            <filter>
               <artifact>*:*</artifact>
               <excludes>
                 <exclude>org/datanucleus/**</exclude>
