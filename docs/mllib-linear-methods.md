@@ -47,9 +47,10 @@ and are discussed here.
 The objective function `$f$` has two parts:
 the regularizer that controls the complexity of the model,
 and the loss that measures the error of the model on the training data.
-The loss function `$L(\wv;.)$` is typically a convex function in `$\wv$`.
-The fixed regularization parameter `$\lambda \ge 0$` (`regParam` in the code) defines the trade-off
-between the two goals of minimizing the loss (i.e., training error) and minimizing model complexity (i.e., to avoid overfitting).
+The loss function `$L(\wv;.)$` is typically a convex function in `$\wv$`.  The
+fixed regularization parameter `$\lambda \ge 0$` (`regParam` in the code)
+defines the trade-off between the two goals of minimizing the loss (i.e.,
+training error) and minimizing model complexity (i.e., to avoid overfitting).
 
 ### Loss functions
 
@@ -131,8 +132,10 @@ By default, linear SVMs are trained with an L2 regularization.
 We also support alternative L1 regularization. In this case,
 the problem becomes a [linear program](http://en.wikipedia.org/wiki/Linear_programming).
 
-The linear SVMs algorithm outputs an SVMs model. Given a new data point, denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
-By the default, if $\wv^T \x \geq 0$ then the outcome is positive, and negative otherwise.
+The linear SVMs algorithm outputs an SVM model. Given a new data point,
+denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
+By the default, if $\wv^T \x \geq 0$ then the outcome is positive, and negative
+otherwise.
 
 ### Logistic regression
 
