@@ -201,8 +201,8 @@ object ParquetFilters {
         (leftFilter, rightFilter) match {
           case (None, Some(filter)) => Some(filter)
           case (Some(filter), None) => Some(filter)
-          case (Some(rightF), Some(leftF)) =>
-            Some(new AndFilter(rightF, leftF))
+          case (Some(leftF), Some(rightF)) =>
+            Some(new AndFilter(leftF, rightF))
           case _ => None
         }
       }
