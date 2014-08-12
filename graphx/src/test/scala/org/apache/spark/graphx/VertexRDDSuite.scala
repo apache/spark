@@ -29,6 +29,10 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     VertexRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
   }
 
+  def verticesDup(sc: SparkContext, n: Int) = {
+    VertexRDD(sc.parallelize((-n to n).map(x => (math.abs(x.toLong), x)), 5)
+  }
+
   test("filter") {
     withSpark { sc =>
       val n = 100
@@ -99,4 +103,14 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  // TODO:
+  // need edges in apply function
+  test("apply.mergeFunc") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      assert(evens.count === (0 to n).filter(_ % 2 == 0).size)
+    }
+  }
 }
