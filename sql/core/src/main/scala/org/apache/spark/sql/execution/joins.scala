@@ -178,6 +178,9 @@ case class HashOuterJoin(
   @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
 
+  @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
+  @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
+
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose. 
 
