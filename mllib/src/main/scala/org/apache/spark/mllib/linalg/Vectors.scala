@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.linalg
 
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
-import java.util.Arrays
+import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
@@ -30,6 +30,8 @@ import org.apache.spark.SparkException
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
+ *
+ * Note: Users should not implement this interface.
  */
 trait Vector extends Serializable {
 
@@ -46,12 +48,12 @@ trait Vector extends Serializable {
   override def equals(other: Any): Boolean = {
     other match {
       case v: Vector =>
-        Arrays.equals(this.toArray, v.toArray)
+        util.Arrays.equals(this.toArray, v.toArray)
       case _ => false
     }
   }
 
-  override def hashCode(): Int = Arrays.hashCode(this.toArray)
+  override def hashCode(): Int = util.Arrays.hashCode(this.toArray)
 
   /**
    * Converts the instance to a breeze vector.
@@ -63,6 +65,13 @@ trait Vector extends Serializable {
    * @param i index
    */
   def apply(i: Int): Double = toBreeze(i)
+
+  /**
+   * Makes a deep copy of this vector.
+   */
+  def copy: Vector = {
+    throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
+  }
 }
 
 /**
@@ -128,6 +137,16 @@ object Vectors {
   }
 
   /**
+   * Creates a dense vector of all zeros.
+   *
+   * @param size vector size
+   * @return a zero vector
+   */
+  def zeros(size: Int): Vector = {
+    new DenseVector(new Array[Double](size))
+  }
+
+  /**
    * Parses a string resulted from `Vector#toString` into
    * an [[org.apache.spark.mllib.linalg.Vector]].
    */
@@ -142,7 +161,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-       throw new SparkException(s"Cannot parse $other.")
+        throw new SparkException(s"Cannot parse $other.")
     }
   }
 
@@ -183,6 +202,10 @@ class DenseVector(val values: Array[Double]) extends Vector {
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int) = values(i)
+
+  override def copy: DenseVector = {
+    new DenseVector(values.clone())
+  }
 }
 
 /**
@@ -211,6 +234,10 @@ class SparseVector(
       i += 1
     }
     data
+  }
+
+  override def copy: SparseVector = {
+    new SparseVector(size, indices.clone(), values.clone())
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
