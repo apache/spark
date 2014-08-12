@@ -50,7 +50,7 @@ object BlockServer {
         val file = new java.io.File(blockId.asInstanceOf[TestBlockId].id)
         new FileSegment(file, 0, file.length())
       }
-    }).init()
+    })
     Thread.sleep(1000000)
   }
 }
@@ -71,13 +71,16 @@ private[spark]
 class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
 
   // TODO: Allow random port selection
-  val port: Int = conf.getInt("spark.shuffle.io.port", 12345)
+  var port: Int = //conf.getInt("spark.shuffle.io.port", 12345)
+    0
 
   private var bootstrap: ServerBootstrap = _
   private var channelFuture: ChannelFuture = _
 
+  init()
+
   /** Initialize the server. */
-  def init(): Unit = {
+  private def init(): Unit = {
     bootstrap = new ServerBootstrap
     val bossThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-boss")
     val workerThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-worker")
@@ -148,6 +151,7 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
     channelFuture.sync()
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
+    port = addr.getPort
     println("address: " + addr.getAddress + "  port: " + addr.getPort)
   }
 
@@ -227,7 +231,7 @@ class BlockServerHandler(p: PathResolver)
       val listener = new ChannelFutureListener {
         override def operationComplete(future: ChannelFuture) {
           if (future.isSuccess) {
-            logTrace(s"Sent block $blockId back to $client")
+            logTrace(s"Sent block $blockId ($blockLength B) back to $client")
           } else {
             logError(s"Error sending block $blockId to $client; closing connection", future.cause)
             ctx.close()

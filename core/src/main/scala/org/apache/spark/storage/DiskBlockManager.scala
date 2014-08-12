@@ -23,7 +23,7 @@ import java.util.{Date, Random, UUID}
 
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{BlockServer, PathResolver}
+import org.apache.spark.network.netty.{BlockFetchingClientFactory, BlockServer, PathResolver}
 import org.apache.spark.util.Utils
 import org.apache.spark.shuffle.sort.SortShuffleManager
 
@@ -52,7 +52,10 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+
+  // TODO: This is kind of a hack. We should move this into SparkEnv once this is feature complete.
   private var nettyBlockServer: BlockServer = _
+  private[storage] var nettyBlockClientFactory: BlockFetchingClientFactory = _
 
   addShutdownHook()
 
@@ -187,12 +190,16 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
       }
     }
 
+    if (nettyBlockClientFactory != null) {
+      nettyBlockClientFactory.stop()
+    }
     if (nettyBlockServer != null) {
       nettyBlockServer.stop()
     }
   }
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
+    nettyBlockClientFactory = new BlockFetchingClientFactory(shuffleBlockManager.conf)
     nettyBlockServer = new BlockServer(shuffleBlockManager.conf, this)
     logInfo(s"Created NettyBlockServer binding to port: ${nettyBlockServer.port}")
     nettyBlockServer.port

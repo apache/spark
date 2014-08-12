@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeoutException
 
@@ -100,6 +101,12 @@ class BlockFetchingClientFactory(conf: SparkConf) {
    */
   def createClient(remoteHost: String, remotePort: Int): BlockFetchingClient = {
     new BlockFetchingClient(this, remoteHost, remotePort)
+  }
+
+  def stop(): Unit = {
+    if (workerGroup != null) {
+      workerGroup.shutdownGracefully()
+    }
   }
 }
 
@@ -210,12 +217,10 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
 }
 
 
-class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] {
+class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] with Logging {
 
   var blockFetchSuccessCallback: (String, ByteBuffer) => Unit = _
   var blockFetchFailureCallback: (String, String) => Unit = _
-
-  var remainingBlocks = java.util.Collections.synchronizedSet(new java.util.HashSet[String])
 
   override def channelRead0(ctx: ChannelHandlerContext, in: ByteBuf) {
     val totalLen = in.readInt()
@@ -224,6 +229,12 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] {
     in.readBytes(blockIdBytes)
     val blockId = new String(blockIdBytes)
     val blockLen = math.abs(totalLen) - blockIdLen - 4
+
+    logTrace {
+      val remoteAddr = ctx.channel.remoteAddress.asInstanceOf[InetSocketAddress]
+      val server = remoteAddr.getHostName + ":" + remoteAddr.getPort
+      s"Received block $blockId ($blockLen B) from $server"
+    }
 
     // totalLen is negative when it is an error message.
     if (totalLen < 0) {
