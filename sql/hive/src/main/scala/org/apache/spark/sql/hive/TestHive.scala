@@ -75,7 +75,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   testTempDir.mkdir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", testTmpDir.getCanonicalPath)
+  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
 
   configure() // Must be called before initializing the catalog below.
 
