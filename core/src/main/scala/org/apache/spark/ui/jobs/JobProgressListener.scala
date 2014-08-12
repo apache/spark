@@ -84,11 +84,14 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   private def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
-      val notActiveStages = stages.filter(s => !activeStages.contains(s.stageId))
-      notActiveStages.take(toRemove).foreach { s =>
-        stageIdToData.remove(s.stageId)
+      var removedNum = 0
+      for (stage <- stages if removedNum < toRemove) {
+        if (!activeStages.contains(stage.stageId)) {
+          stageIdToData.remove(stage.stageId)
+          stages -= stage
+          removedNum += 1
+        }
       }
-      notActiveStages.trimStart(toRemove)
     }
   }
 
