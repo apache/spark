@@ -27,7 +27,7 @@ import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -212,7 +212,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
-  private[spark] val addedJars = HashMap[String, Long]()
+  private[spark] val addedJars = HashSet[String]()
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
@@ -989,8 +989,8 @@ class SparkContext(config: SparkConf) extends Logging {
         }
       }
       if (key != null) {
-        addedJars(key) = System.currentTimeMillis
-        logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+        addedJars += key
+        logInfo("Added JAR " + path + " at " + key)
       }
     }
     postEnvironmentUpdate()
@@ -1291,7 +1291,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postEnvironmentUpdate() {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
+      val addedJarPaths = addedJars.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
       val environmentDetails =
         SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)

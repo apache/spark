@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
@@ -109,7 +109,7 @@ private[spark] object Task {
   def serializeWithDependencies(
       task: Task[_],
       currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
+      currentJars: HashSet[String],
       serializer: SerializerInstance)
     : ByteBuffer = {
 
@@ -125,9 +125,8 @@ private[spark] object Task {
 
     // Write currentJars
     dataOut.writeInt(currentJars.size)
-    for ((name, timestamp) <- currentJars) {
+    for (name <- currentJars) {
       dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
     }
 
     // Write the task itself and finish
@@ -145,7 +144,7 @@ private[spark] object Task {
    * @return (taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (HashMap[String, Long], HashSet[String], ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
@@ -158,10 +157,10 @@ private[spark] object Task {
     }
 
     // Read task's JARs
-    val taskJars = new HashMap[String, Long]()
+    val taskJars = new HashSet[String]()
     val numJars = dataIn.readInt()
     for (i <- 0 until numJars) {
-      taskJars(dataIn.readUTF()) = dataIn.readLong()
+      taskJars += dataIn.readUTF()
     }
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
