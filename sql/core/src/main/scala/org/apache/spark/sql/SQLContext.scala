@@ -273,7 +273,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         currentTable.logicalPlan
 
       case _ =>
-        InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+        InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
     }
 
     catalog.registerTable(None, tableName, asInMemoryRelation)
@@ -284,7 +284,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     table(tableName).queryExecution.analyzed match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
+      case inMem @ InMemoryRelation(_, _, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
