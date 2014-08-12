@@ -33,9 +33,9 @@ import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.handler.codec.{MessageToByteEncoder, LineBasedFrameDecoder}
 import io.netty.handler.codec.string.StringDecoder
 import io.netty.util.CharsetUtil
-import org.apache.spark.storage.{TestBlockId, FileSegment, BlockId}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.storage.{TestBlockId, FileSegment, BlockId}
 import org.apache.spark.util.Utils
 
 
@@ -74,7 +74,11 @@ object BlockServer {
  *
  */
 private[spark]
-class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
+class BlockServer(conf: NettyConfig, pResolver: PathResolver) extends Logging {
+
+  def this(sparkConf: SparkConf, pResolver: PathResolver) = {
+    this(new NettyConfig(sparkConf), pResolver)
+  }
 
   def port: Int = _port
 
@@ -94,6 +98,7 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
     def initNio(): Unit = {
       val bossGroup = new NioEventLoopGroup(1, bossThreadFactory)
       val workerGroup = new NioEventLoopGroup(0, workerThreadFactory)
+      workerGroup.setIoRatio(conf.ioRatio)
       bootstrap.group(bossGroup, workerGroup).channel(classOf[NioServerSocketChannel])
     }
     def initOio(): Unit = {
@@ -104,10 +109,11 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
     def initEpoll(): Unit = {
       val bossGroup = new EpollEventLoopGroup(1, bossThreadFactory)
       val workerGroup = new EpollEventLoopGroup(0, workerThreadFactory)
+      workerGroup.setIoRatio(conf.ioRatio)
       bootstrap.group(bossGroup, workerGroup).channel(classOf[EpollServerSocketChannel])
     }
 
-    conf.get("spark.shuffle.io.mode", "auto").toLowerCase match {
+    conf.ioMode match {
       case "nio" => initNio()
       case "oio" => initOio()
       case "epoll" => initEpoll()
@@ -128,18 +134,14 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
     bootstrap.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
 
     // Various (advanced) user-configured settings.
-    conf.getOption("spark.shuffle.io.backLog").foreach { backLog =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_BACKLOG, backLog.toInt)
+    conf.backLog.foreach { backLog =>
+      bootstrap.option[java.lang.Integer](ChannelOption.SO_BACKLOG, backLog)
     }
-    // Note: the optimal size for receive buffer and send buffer should be
-    //  latency * network_bandwidth.
-    // Assuming latency = 1ms, network_bandwidth = 10Gbps
-    // buffer size should be ~ 1.25MB
-    conf.getOption("spark.shuffle.io.receiveBuffer").foreach { receiveBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf.toInt)
+    conf.receiveBuf.foreach { receiveBuf =>
+      bootstrap.option[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf)
     }
-    conf.getOption("spark.shuffle.io.sendBuffer").foreach { sendBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf.toInt)
+    conf.sendBuf.foreach { sendBuf =>
+      bootstrap.option[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf)
     }
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel] {
@@ -147,7 +149,6 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
         ch.pipeline
           .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
           .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
-          //.addLast("stringEncoder", new StringEncoder(CharsetUtil.UTF_8))
           .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
           .addLast("handler", new BlockServerHandler(pResolver))
       }
@@ -207,19 +208,18 @@ class BlockServerHandler(p: PathResolver)
 
     var fileChannel: FileChannel = null
     var offset: Long = 0
-    var blockLength: Long = 0
+    var blockSize: Long = 0
 
-    // First make sure we can find the block.
+    // First make sure we can find the block. If not, send error back to the user.
     try {
       val segment = p.getBlockLocation(BlockId(blockId))
       fileChannel = new FileInputStream(segment.file).getChannel
       offset = segment.offset
-      blockLength = segment.length
+      blockSize = segment.length
     } catch {
       case e: Exception =>
-        // If we fail to find the block and get its size, send error back.
         logError(s"Error opening block $blockId for request from $client", e)
-        blockLength = -1
+        blockSize = -1
         respondWithError(e.getMessage)
     }
 
@@ -227,24 +227,24 @@ class BlockServerHandler(p: PathResolver)
     // large (2G+) blocks, the receiving end cannot handle it so let's fail fast.
     // Once we fixed the receiving end to be able to process large blocks, this should be removed.
     // Also make sure we update BlockHeaderEncoder to support length > 2G.
-    if (blockLength > Int.MaxValue) {
-      respondWithError(s"Block $blockId size ($blockLength) greater than 2G")
+    if (blockSize > Int.MaxValue) {
+      respondWithError(s"Block $blockId size ($blockSize) greater than 2G")
     }
 
     // Found the block. Send it back.
-    if (fileChannel != null && blockLength >= 0) {
+    if (fileChannel != null && blockSize >= 0) {
       val listener = new ChannelFutureListener {
         override def operationComplete(future: ChannelFuture) {
           if (future.isSuccess) {
-            logTrace(s"Sent block $blockId ($blockLength B) back to $client")
+            logTrace(s"Sent block $blockId ($blockSize B) back to $client")
           } else {
             logError(s"Error sending block $blockId to $client; closing connection", future.cause)
             ctx.close()
           }
         }
       }
-      val region = new DefaultFileRegion(fileChannel, offset, blockLength)
-      ctx.writeAndFlush(new BlockHeader(blockLength.toInt, blockId)).addListener(listener)
+      val region = new DefaultFileRegion(fileChannel, offset, blockSize)
+      ctx.writeAndFlush(new BlockHeader(blockSize.toInt, blockId)).addListener(listener)
       ctx.writeAndFlush(region).addListener(listener)
     }
   }  // end of channelRead0
@@ -256,13 +256,13 @@ class BlockServerHandler(p: PathResolver)
  *
  * [[BlockServerHandler]] creates this, and [[BlockHeaderEncoder]] encodes it.
  *
- * @param blockLen length of the block content, excluding the length itself.
+ * @param blockSize length of the block content, excluding the length itself.
  *                 If positive, this is the header for a block (not part of the header).
  *                 If negative, this is the header and content for an error message.
  * @param blockId block id
  * @param error some error message from reading the block
  */
-class BlockHeader(val blockLen: Int, val blockId: String, val error: Option[String] = None)
+class BlockHeader(val blockSize: Int, val blockId: String, val error: Option[String] = None)
 
 
 /**
@@ -282,7 +282,7 @@ class BlockHeaderEncoder extends MessageToByteEncoder[BlockHeader] {
         out.writeBytes(errorBytes)
       case None =>
         val blockId = msg.blockId.getBytes
-        out.writeInt(4 + blockId.length + msg.blockLen)
+        out.writeInt(4 + blockId.length + msg.blockSize)
         out.writeInt(blockId.length)
         out.writeBytes(blockId)
     }

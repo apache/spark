@@ -24,18 +24,23 @@ import io.netty.buffer.{ByteBufInputStream, ByteBuf}
 
 
 /**
- * A buffer abstraction based on Netty's ByteBuf.
+ * A buffer abstraction based on Netty's ByteBuf so we don't expose Netty.
+ * This is a Scala value class.
  *
  * The buffer's life cycle is NOT managed by the JVM, and thus requiring explicit declaration of
  * reference by the retain method and release method.
  */
-class ReferenceCountedBuffer(underlying: ByteBuf) {
+class ReferenceCountedBuffer(val underlying: ByteBuf) extends AnyVal {
 
+  /** Return the nio ByteBuffer view of the underlying buffer. */
   def byteBuffer(): ByteBuffer = underlying.nioBuffer
 
+  /** Creates a new input stream that starts from the current position of the buffer. */
   def inputStream(): InputStream = new ByteBufInputStream(underlying)
 
+  /** Increment the reference counter by one. */
   def retain(): Unit = underlying.retain()
 
+  /** Decrement the reference counter by one and release the buffer if the ref count is 0. */
   def release(): Unit = underlying.release()
 }

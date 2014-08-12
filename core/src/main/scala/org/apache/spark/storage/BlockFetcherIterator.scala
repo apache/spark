@@ -286,6 +286,8 @@ object BlockFetcherIterator {
         blocks,
         (blockId: String, refBuf: ReferenceCountedBuffer) => {
           // Increment the reference count so the buffer won't be recycled.
+          // TODO: This could result in memory leaks when the task is stopped due to exception
+          // before the iterator is exhausted.
           refBuf.retain()
           val buf = refBuf.byteBuffer()
           val blockSize = buf.remaining()

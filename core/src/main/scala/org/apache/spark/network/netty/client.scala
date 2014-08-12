@@ -33,7 +33,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.string.StringEncoder
 import io.netty.util.CharsetUtil
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 
 
@@ -44,24 +44,20 @@ import org.apache.spark.util.Utils
  * Concurrency: It is possible to have multiple instances of this class, but we should only use
  * a single instance and use that to create multiple [[BlockFetchingClient]]s.
  */
-class BlockFetchingClientFactory(conf: SparkConf) {
+class BlockFetchingClientFactory(val conf: NettyConfig) {
 
-  /** IO mode: nio, oio, epoll, or auto (try epoll first and then nio). */
-  val ioMode = conf.get("spark.shuffle.io.mode", "auto").toLowerCase
-
-  /** Connection timeout in secs. Default 60 secs. */
-  val connectionTimeoutMs = conf.getInt("spark.shuffle.io.connectionTimeout", 60) * 1000
+  def this(sparkConf: SparkConf) = this(new NettyConfig(sparkConf))
 
   /** A thread factory so the threads are named (for debugging). */
   val threadFactory = Utils.namedThreadFactory("spark-shuffle-client")
 
-  /** The following two are instantiated by the [[init]] method, depending the [[ioMode]]. */
+  /** The following two are instantiated by the [[init]] method, depending ioMode. */
   var socketChannelClass: Class[_ <: Channel] = _
   var workerGroup: EventLoopGroup = _
 
   init()
 
-  /** Initialize [[socketChannelClass]] and [[workerGroup]] based on the value of [[ioMode]]. */
+  /** Initialize [[socketChannelClass]] and [[workerGroup]] based on ioMode. */
   private def init(): Unit = {
     def initOio(): Unit = {
       socketChannelClass = classOf[OioSocketChannel]
@@ -76,7 +72,7 @@ class BlockFetchingClientFactory(conf: SparkConf) {
       workerGroup = new EpollEventLoopGroup(0, threadFactory)
     }
 
-    ioMode match {
+    conf.ioMode match {
       case "nio" => initNio()
       case "oio" => initOio()
       case "epoll" => initEpoll()
@@ -135,7 +131,7 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, java.lang.Boolean.TRUE)
       .option(ChannelOption.SO_KEEPALIVE, java.lang.Boolean.TRUE)
-      .option[java.lang.Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, factory.connectionTimeoutMs)
+      .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, factory.conf.connectTimeoutMs)
 
     b.handler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
@@ -151,9 +147,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
 
   /** Netty ChannelFuture for the connection. */
   private val cf: ChannelFuture = bootstrap.connect(hostname, port)
-  if (!cf.awaitUninterruptibly(factory.connectionTimeoutMs)) {
+  if (!cf.awaitUninterruptibly(factory.conf.connectTimeoutMs)) {
     throw new TimeoutException(
-      s"Connecting to $hostname:$port timed out (${factory.connectionTimeoutMs} ms)")
+      s"Connecting to $hostname:$port timed out (${factory.conf.connectTimeoutMs} ms)")
   }
 
   /**
