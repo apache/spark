@@ -20,12 +20,11 @@ package org.apache.spark.sql.columnar
 import java.nio.ByteBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
 import org.apache.spark.sql.Row
-import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 
 object InMemoryRelation {
   def apply(useCompression: Boolean, batchSize: Int, child: SparkPlan): InMemoryRelation =
@@ -48,7 +47,9 @@ private[sql] case class InMemoryRelation(
       new Iterator[Array[ByteBuffer]] {
         def next() = {
           val columnBuilders = output.map { attribute =>
-            ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
+            val columnType = ColumnType(attribute.dataType)
+            val initialBufferSize = columnType.defaultSize * batchSize
+            ColumnBuilder(columnType.typeId, initialBufferSize, attribute.name, useCompression)
           }.toArray
 
           var row: Row = null
