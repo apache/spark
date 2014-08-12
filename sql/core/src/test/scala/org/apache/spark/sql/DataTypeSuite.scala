@@ -30,7 +30,7 @@ class DataTypeSuite extends FunSuite {
   test("construct an MapType") {
     val map = MapType(StringType, IntegerType)
 
-    assert(MapType(StringType, IntegerType, false) === map)
+    assert(MapType(StringType, IntegerType, true) === map)
   }
 
   test("extract fields from a StructType") {

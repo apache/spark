@@ -372,7 +372,7 @@ object MapType {
    * The `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, false)
+    MapType(keyType: DataType, valueType: DataType, true)
 }
 
 /**
