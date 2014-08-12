@@ -65,19 +65,14 @@ while (($#)); do
   case $1 in
     --hiveconf)
       ensure_arg_number $# 2
-      THRIFT_SERVER_ARGS+=($1); shift
-      THRIFT_SERVER_ARGS+=($1); shift
-      ;;
-      
-    --driver-java-options)
-      shift;
-      export SPARK_SUBMIT_OPTS=$1; shift
+      THRIFT_SERVER_ARGS+=("$1"); shift
+      THRIFT_SERVER_ARGS+=("$1"); shift
       ;;
 
     *)
-      SUBMISSION_ARGS+=($1); shift
+      SUBMISSION_ARGS+=("$1"); shift
       ;;
   esac
 done
 
-eval exec "$FWDIR"/bin/spark-submit --class $CLASS ${SUBMISSION_ARGS[*]} spark-internal ${THRIFT_SERVER_ARGS[*]}
+exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${THRIFT_SERVER_ARGS[@]}"
