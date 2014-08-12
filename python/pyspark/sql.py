@@ -912,6 +912,8 @@ class SQLContext:
         """Create a new SQLContext.
 
         @param sparkContext: The SparkContext to wrap.
+        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -1314,6 +1316,18 @@ class HiveContext(SQLContext):
     Configuration for Hive is read from hive-site.xml on the classpath.
     It supports running both SQL and HiveQL commands.
     """
+
+    def __init__(self, sparkContext, hiveContext=None):
+        """Create a new HiveContext.
+
+        @param sparkContext: The SparkContext to wrap.
+        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        HiveContext in the JVM, instead we make all calls to this object.
+        """
+        SQLContext.__init__(self, sparkContext)
+
+        if hiveContext:
+            self._scala_HiveContext = hiveContext
 
     @property
     def _ssql_ctx(self):

@@ -99,7 +99,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     for (mat <- Seq(denseMat, sparseMat)) {
       for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
         val localMat = mat.toBreeze()
-        val (localU, localSigma, localVt) = brzSvd(localMat)
+        val brzSvd.SVD(localU, localSigma, localVt) = brzSvd(localMat)
         val localV: BDM[Double] = localVt.t.toDenseMatrix
         for (k <- 1 to n) {
           val skip = (mode == "local-eigs" || mode == "dist-eigs") && k == n
