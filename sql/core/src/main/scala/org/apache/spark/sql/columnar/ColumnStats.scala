@@ -23,7 +23,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types._
 
-class ColumnStatisticsSchema(a: Attribute) extends Serializable {
+/** Provides the Attributes that can be used to query statistics for a given column. */
+private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = false)()
   val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = false)()
   val nullCount =  AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()
@@ -31,7 +32,10 @@ class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val schema = Seq(lowerBound, upperBound, nullCount)
 }
 
-class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
+/**
+ * Provides the Attributes that can be used to access
+ */
+private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
   val (forAttribute, schema) = {
     val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
     (AttributeMap(allStats), allStats.map(_._2.schema).foldLeft(Seq.empty[Attribute])(_ ++ _))
