@@ -118,9 +118,9 @@ class KafkaSimpleConsumer(
       if (numErrors > 5) {
         throw new Exception("Error fetching data from the Broker:" + leader + " Reason: " + code)
       }
-      if (code == ErrorMapping.OffsetOutOfRangeCode) {
-        return fetch(getLatestOffset())
-      }
+//      if (code == ErrorMapping.OffsetOutOfRangeCode) {
+//        return fetch(getLatestOffset())
+//      }
       close
       val data = findNewLeader(leader, replicaBrokers)
       leader = data._1
