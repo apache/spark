@@ -652,19 +652,17 @@ private[spark] class ConnectionManager(
           }
         }
         if (bufferMessage.hasAckId()) {
-          val sentMessageStatus = messageStatuses.synchronized {
+          messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
               case Some(status) => {
                 messageStatuses -= bufferMessage.ackId
-                status
+                status.markDone(Some(message))
               }
               case None => {
-                throw new Exception("Could not find reference for received ack message " +
-                  message.id)
+                logError("Could not find reference for received ack message " + message.id)
               }
             }
           }
-          sentMessageStatus.markDone(Some(message))
         } else {
           var ackMessage : Option[Message] = None
           try {
