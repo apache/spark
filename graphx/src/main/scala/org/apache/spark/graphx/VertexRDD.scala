@@ -410,9 +410,10 @@ object VertexRDD {
   def apply[VD: ClassTag](
       vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD, mergeFunc: (VD, VD) => VD
     ): VertexRDD[VD] = {
-    val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
-      case Some(p) => vertices
-      case None => vertices.copartitionWithVertices(new HashPartitioner(vertices.partitions.size))
+    val verticesDedup = vertices.reduceByKey((VD1, VD2) => mergeFunc(VD1, VD2))
+    val vPartitioned: RDD[(VertexId, VD)] = verticesDedup.partitioner match {
+      case Some(p) => verticesDedup
+      case None => verticesDedup.copartitionWithVertices(new HashPartitioner(verticesDedup.partitions.size))
     }
     val routingTables = createRoutingTables(edges, vPartitioned.partitioner.get)
     val vertexPartitions = vPartitioned.zipPartitions(routingTables, preservesPartitioning = true) {
