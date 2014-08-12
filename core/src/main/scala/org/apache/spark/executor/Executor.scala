@@ -343,16 +343,20 @@ private[spark] class Executor(
         currentFiles(name) = timestamp
       }
       for (name <- newJars if !currentJars.contains(name)) {
-        logInfo("Fetching " + name)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
-        currentJars += name
-        // Add it to our class loader
         val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-        if (!urlClassLoader.getURLs.contains(url)) {
-          logInfo("Adding " + url + " to class loader")
-          urlClassLoader.addURL(url)
+        val destinationFile = new File(SparkFiles.getRootDirectory, localName)
+        // Check to see if we already have the file (e.g. if the Worker downloaded it for us)
+        if (!destinationFile.exists()) {
+          logInfo("Fetching " + name)
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+          // Add it to our class loader
+          val url = destinationFile.toURI.toURL
+          if (!urlClassLoader.getURLs.contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
+          }
         }
+        currentJars += name
       }
     }
   }
