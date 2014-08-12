@@ -389,7 +389,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("test filter by predicate pushdown") {
     for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
-      println(s"testing field $myval")
       val query1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
       assert(
         query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
