@@ -18,7 +18,6 @@
 package org.apache.spark.network.netty
 
 import java.net.InetSocketAddress
-import java.nio.ByteBuffer
 import java.util.concurrent.TimeoutException
 
 import io.netty.bootstrap.Bootstrap
@@ -173,7 +172,7 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
    */
   def fetchBlocks(
       blockIds: Seq[String],
-      blockFetchSuccessCallback: (String, ByteBuffer) => Unit,
+      blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit,
       blockFetchFailureCallback: (String, String) => Unit): Unit = {
     // It's best to limit the number of "write" calls since it needs to traverse the whole pipeline.
     // It's also best to limit the number of "flush" calls since it requires system calls.
@@ -212,14 +211,14 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
   }
 
   def close(): Unit = {
-    // TODO: What do we need to do to close the client?
+    // TODO: Should we ever close the client? Probably ...
   }
 }
 
 
 class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] with Logging {
 
-  var blockFetchSuccessCallback: (String, ByteBuffer) => Unit = _
+  var blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit = _
   var blockFetchFailureCallback: (String, String) => Unit = _
 
   override def channelRead0(ctx: ChannelHandlerContext, in: ByteBuf) {
@@ -230,18 +229,21 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
     val blockId = new String(blockIdBytes)
     val blockLen = math.abs(totalLen) - blockIdLen - 4
 
-    logTrace {
+    def server = {
       val remoteAddr = ctx.channel.remoteAddress.asInstanceOf[InetSocketAddress]
-      val server = remoteAddr.getHostName + ":" + remoteAddr.getPort
-      s"Received block $blockId ($blockLen B) from $server"
+      remoteAddr.getHostName + ":" + remoteAddr.getPort
     }
 
     // totalLen is negative when it is an error message.
     if (totalLen < 0) {
       val errorMessageBytes = new Array[Byte](blockLen)
-      blockFetchFailureCallback(blockId, new String(errorMessageBytes))
+      in.readBytes(errorMessageBytes)
+      val errorMsg = new String(errorMessageBytes)
+      logTrace(s"Received block $blockId ($blockLen B) with error $errorMsg from $server")
+      blockFetchFailureCallback(blockId, errorMsg)
     } else {
-      blockFetchSuccessCallback(blockId, in.nioBuffer())
+      logTrace(s"Received block $blockId ($blockLen B) from $server")
+      blockFetchSuccessCallback(blockId, new ReferenceCountedBuffer(in))
     }
   }
 }
@@ -261,8 +263,8 @@ object BlockFetchingClient {
       blocks,
       (blockId, data) => {
         println("got block id " + blockId)
-        val bytes = new Array[Byte](data.remaining())
-        data.get(bytes)
+        val bytes = new Array[Byte](data.byteBuffer.remaining())
+        data.byteBuffer.get(bytes)
         println("data in string: " + new String(bytes))
       },
       (blockId, errorMessage) => {

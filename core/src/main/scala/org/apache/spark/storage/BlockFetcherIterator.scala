@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
+import org.apache.spark.network.netty.{LazyInitIterator, ReferenceCountedBuffer}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
@@ -52,18 +54,28 @@ trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] wi
 private[storage]
 object BlockFetcherIterator {
 
-  // A request to fetch one or more blocks, complete with their sizes
+  /**
+   * A request to fetch blocks from a remote BlockManager.
+   * @param address remote BlockManager to fetch from.
+   * @param blocks Sequence of tuple, where the first element is the block id,
+   *               and the second element is the estimated size, used to calculate bytesInFlight.
+   */
   class FetchRequest(val address: BlockManagerId, val blocks: Seq[(BlockId, Long)]) {
     val size = blocks.map(_._2).sum
   }
 
-  // A result of a fetch. Includes the block ID, size in bytes, and a function to deserialize
-  // the block (since we want all deserializaton to happen in the calling thread); can also
-  // represent a fetch failure if size == -1.
+  /**
+   * Result of a fetch from a remote block. A failure is represented as size == -1.
+   * @param blockId block id
+   * @param size estimated size of the block, used to calculate bytesInFlight.
+   *             Note that this is NOT the exact bytes.
+   * @param deserialize closure to return the result in the form of an Iterator.
+   */
   class FetchResult(val blockId: BlockId, val size: Long, val deserialize: () => Iterator[Any]) {
     def failed: Boolean = size == -1
   }
 
+  // TODO: Refactor this whole thing to make code more reusable.
   class BasicBlockFetcherIterator(
       private val blockManager: BlockManager,
       val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
@@ -273,11 +285,24 @@ object BlockFetcherIterator {
 
       client.fetchBlocks(
         blocks,
-        (blockId: String, buf: ByteBuffer) => {
+        (blockId: String, refBuf: ReferenceCountedBuffer) => {
+          // Increment the reference count so the buffer won't be recycled.
+          refBuf.retain()
+          val buf = refBuf.byteBuffer()
           val blockSize = buf.remaining()
           val bid = BlockId(blockId)
-          results.put(new FetchResult(bid, blockSize,
-            () => blockManager.dataDeserialize(bid, buf, serializer)))
+
+          // TODO: remove code duplication between here and BlockManager.dataDeserialization.
+          results.put(new FetchResult(bid, sizeMap(bid), () => {
+            def createIterator: Iterator[Any] = {
+              val stream = blockManager.wrapForCompression(bid, refBuf.inputStream())
+              serializer.newInstance().deserializeStream(stream).asIterator
+            }
+            new LazyInitIterator(createIterator) {
+              // Release the buffer when we are done traversing it.
+              override def close(): Unit = refBuf.release()
+            }
+          }))
 
           readMetrics.remoteBytesRead += blockSize
           readMetrics.remoteBlocksFetched += 1
@@ -290,6 +315,14 @@ object BlockFetcherIterator {
           }
         }
       )
+    }
+
+    def clone(buf: ByteBuffer): ByteBuffer = {
+      val clone = ByteBuffer.allocate(buf.remaining)
+      //buf.rewind()
+      clone.put(buf)
+      clone.flip()
+      clone
     }
   }
   // End of NettyBlockFetcherIterator

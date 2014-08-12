@@ -41,6 +41,9 @@ import org.apache.spark.util.Utils
 
 // TODO: Remove dependency on BlockId. This layer should not be coupled with storage.
 
+// TODO: PathResolver is not general enough. It only works for on-disk blocks.
+
+// TODO: Allow user-configured port
 
 /** A simple main function for testing the server. */
 object BlockServer {
@@ -64,16 +67,18 @@ object BlockServer {
  *
  * Protocol for sending blocks (server to client):
  *   frame-length (4 bytes), block-id-length (4 bytes), block-id, block-data.
+ *
+ *   frame-length should not include the length of itself.
  *   If frame-length is negative, then this is an error message rather than block-data. The real
  *   length is the absolute value of the frame-length.
+ *
  */
 private[spark]
 class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
 
-  // TODO: Allow random port selection
-  var port: Int = //conf.getInt("spark.shuffle.io.port", 12345)
-    0
+  def port: Int = _port
 
+  private var _port: Int = 0
   private var bootstrap: ServerBootstrap = _
   private var channelFuture: ChannelFuture = _
 
@@ -147,12 +152,11 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
       }
     })
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(port))
+    channelFuture = bootstrap.bind(new InetSocketAddress(_port))
     channelFuture.sync()
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
-    port = addr.getPort
-    println("address: " + addr.getAddress + "  port: " + addr.getPort)
+    _port = addr.getPort
   }
 
   /** Shutdown the server. */
