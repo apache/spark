@@ -90,18 +90,19 @@ class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
     val bossThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-boss")
     val workerThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-worker")
 
+    // Use only one thread to accept connections, and 2 * num_cores for worker.
     def initNio(): Unit = {
-      val bossGroup = new NioEventLoopGroup(0, bossThreadFactory)
+      val bossGroup = new NioEventLoopGroup(1, bossThreadFactory)
       val workerGroup = new NioEventLoopGroup(0, workerThreadFactory)
       bootstrap.group(bossGroup, workerGroup).channel(classOf[NioServerSocketChannel])
     }
     def initOio(): Unit = {
-      val bossGroup = new OioEventLoopGroup(0, bossThreadFactory)
+      val bossGroup = new OioEventLoopGroup(1, bossThreadFactory)
       val workerGroup = new OioEventLoopGroup(0, workerThreadFactory)
       bootstrap.group(bossGroup, workerGroup).channel(classOf[OioServerSocketChannel])
     }
     def initEpoll(): Unit = {
-      val bossGroup = new EpollEventLoopGroup(0, bossThreadFactory)
+      val bossGroup = new EpollEventLoopGroup(1, bossThreadFactory)
       val workerGroup = new EpollEventLoopGroup(0, workerThreadFactory)
       bootstrap.group(bossGroup, workerGroup).channel(classOf[EpollServerSocketChannel])
     }
