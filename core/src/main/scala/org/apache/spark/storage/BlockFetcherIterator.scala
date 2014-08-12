@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
 import org.apache.spark.network.netty.{LazyInitIterator, ReferenceCountedBuffer}
@@ -315,14 +314,6 @@ object BlockFetcherIterator {
           }
         }
       )
-    }
-
-    def clone(buf: ByteBuffer): ByteBuffer = {
-      val clone = ByteBuffer.allocate(buf.remaining)
-      //buf.rewind()
-      clone.put(buf)
-      clone.flip()
-      clone
     }
   }
   // End of NettyBlockFetcherIterator
