@@ -80,10 +80,10 @@ methods MLlib supports:
 
 ### Regularizers
 
-The purpose of the [regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
-encourage simple models and avoid
-overfitting.
-We support the following regularizers in MLlib:
+The purpose of the
+[regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
+encourage simple models and avoid overfitting.  We support the following
+regularizers in MLlib:
 
 <table class="table">
   <thead>
@@ -112,13 +112,16 @@ especially when the number of training examples is small.
 
 ## Binary classification
 
-[Binary classification](http://en.wikipedia.org/wiki/Binary_classification) aims to divide items into
-two categories: positive and negative.  MLlib supports two linear methods for binary classification:
-linear support vector machines (SVMs) and logistic regression.  The training data set is represented
-by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the mathematical
-formulation in this guide, a training label $y$ is denoted as either $+1$ (positive) or $-1$ (negative), which is convenient
-for the formulation.  *However*, the negative label is represented by $0$ in MLlib instead of $-1$,
-to be consistent with multiclass labeling.
+[Binary classification](http://en.wikipedia.org/wiki/Binary_classification)
+aims to divide items into two categories: positive and negative.  MLlib
+supports two linear methods for binary classification: linear support vector
+machines (SVMs) and logistic regression. For both methods, MLlib supports
+L1 and L2 regularized variants. The training data set is represented by an RDD
+of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the
+mathematical formulation in this guide, a training label $y$ is denoted as
+either $+1$ (positive) or $-1$ (negative), which is convenient for the
+formulation.  *However*, the negative label is represented by $0$ in MLlib
+instead of $-1$, to be consistent with multiclass labeling.
 
 ### Linear support vector machines (SVMs)
 
