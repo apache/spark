@@ -60,8 +60,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
 
-
-
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
@@ -72,13 +70,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     set("hive.metastore.warehouse.dir", warehousePath)
   }
 
-  val testTmpDir = if (System.getProperty("user.dir").endsWith("sql" +
-    File.separator + "hive")) {
-    new File(System.getProperty("user.dir") + File.separator + "tmp")
-  } else {
-    new File(System.getProperty("user.dir") + File.separator + "sql" +
-      File.separator + "hive" + File.separator + "tmp")
-  }
+  val testTempDir = File.createtempfile("", "spark.hive.tmp")
+  testTempDir.delete()
+  testTempDir.mkdir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTmpDir.getCanonicalPath)
