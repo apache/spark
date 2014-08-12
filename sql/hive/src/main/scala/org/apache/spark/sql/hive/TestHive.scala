@@ -70,7 +70,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     set("hive.metastore.warehouse.dir", warehousePath)
   }
 
-  val testTempDir = File.createTempFile("", "spark.hive.tmp")
+  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
   testTempDir.delete()
   testTempDir.mkdir()
 
