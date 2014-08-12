@@ -62,6 +62,8 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
+rm conf/spark-env.sh
+
 # Fail fast
 set -e
 set -o pipefail
@@ -89,18 +91,23 @@ echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
+# Go and change all pom's to have artifact ids ending _2.10.
+dev/change-version-to-2.10.sh
+
 # Build Spark; we always build with Hive because the PySpark SparkSQL tests need it.
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.
 BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver "
-echo -e "q\n" | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly | \
-  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+echo -e "q\n" | sbt/sbt "$BUILD_MVN_PROFILE_ARGS -Pscala-2.10" clean package \
+    assembly/assembly | \
+    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled:
 if [ -n "$_RUN_SQL_TESTS" ]; then
   SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
 fi
+
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.
@@ -118,3 +125,18 @@ echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
 dev/mima
+
+echo ""
+echo "========================================================================="
+echo "Running scala 2.11 tests"
+echo "========================================================================="
+echo ""
+# Go and change all pom's to have artifact ids ending _2.11.
+dev/change-version-to-2.11.sh
+
+# Enable correct scala version in the scripts.
+echo -e "SCALA_VERSION=2.11\n" >> conf/spark-env.sh
+
+echo -e "q\n" | sbt/sbt $BUILD_MVN_PROFILE_ARGS -Pscala-2.11 clean package \
+    assembly/assembly test | \
+    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"

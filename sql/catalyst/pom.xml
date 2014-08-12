@@ -44,11 +44,7 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-reflect</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.scalamacros</groupId>
-      <artifactId>quasiquotes_${scala.binary.version}</artifactId>
-      <version>${scala.macros.version}</version>
-    </dependency>
+
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -103,4 +99,27 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.scalamacros</groupId>
+          <artifactId>quasiquotes_${scala.binary.version}</artifactId>
+          <version>${scala.macros.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>scala-2.11</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <!-- Quasiquotes are merged into scala reflect from scala 2.11 onwards. -->
+    </profile>
+
+  </profiles>
 </project>
