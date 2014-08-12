@@ -28,13 +28,14 @@ import org.apache.spark.sql.Row
 import org.apache.spark.SparkConf
 
 object InMemoryRelation {
-  def apply(useCompression: Boolean, child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, child)()
+  def apply(useCompression: Boolean, batchSize: Int, child: SparkPlan): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, child)()
 }
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
+    batchSize: Int,
     child: SparkPlan)
     (private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null)
   extends LogicalPlan with MultiInstanceRelation {
@@ -43,22 +44,31 @@ private[sql] case class InMemoryRelation(
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
     val output = child.output
-    val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = output.map { attribute =>
-        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
-      }.toArray
+    val cached = child.execute().mapPartitions { baseIterator =>
+      new Iterator[Array[ByteBuffer]] {
+        def next() = {
+          val columnBuilders = output.map { attribute =>
+            ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
+          }.toArray
 
-      var row: Row = null
-      while (iterator.hasNext) {
-        row = iterator.next()
-        var i = 0
-        while (i < row.length) {
-          columnBuilders(i).appendFrom(row, i)
-          i += 1
+          var row: Row = null
+          var rowCount = 0
+
+          while (baseIterator.hasNext && rowCount < batchSize) {
+            row = baseIterator.next()
+            var i = 0
+            while (i < row.length) {
+              columnBuilders(i).appendFrom(row, i)
+              i += 1
+            }
+            rowCount += 1
+          }
+
+          columnBuilders.map(_.build())
         }
-      }
 
-      Iterator.single(columnBuilders.map(_.build()))
+        def hasNext = baseIterator.hasNext
+      }
     }.cache()
 
     cached.setName(child.toString)
@@ -74,6 +84,7 @@ private[sql] case class InMemoryRelation(
     new InMemoryRelation(
       output.map(_.newInstance),
       useCompression,
+      batchSize,
       child)(
       _cachedColumnBuffers).asInstanceOf[this.type]
   }
@@ -90,22 +101,31 @@ private[sql] case class InMemoryColumnarTableScan(
 
   override def execute() = {
     relation.cachedColumnBuffers.mapPartitions { iterator =>
-      val columnBuffers = iterator.next()
-      assert(!iterator.hasNext)
+      // Find the ordinals of the requested columns.  If none are requested, use the first.
+      val requestedColumns =
+        if (attributes.isEmpty) {
+          Seq(0)
+        } else {
+          attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
+        }
 
       new Iterator[Row] {
-        // Find the ordinals of the requested columns.  If none are requested, use the first.
-        val requestedColumns =
-          if (attributes.isEmpty) {
-            Seq(0)
-          } else {
-            attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
-          }
+        private[this] var columnBuffers: Array[ByteBuffer] = null
+        private[this] var columnAccessors: Seq[ColumnAccessor] = null
+        nextBatch()
 
-        val columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
-        val nextRow = new GenericMutableRow(columnAccessors.length)
+        private[this] val nextRow = new GenericMutableRow(columnAccessors.length)
+
+        def nextBatch() = {
+          columnBuffers = iterator.next()
+          columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
+        }
 
         override def next() = {
+          if (!columnAccessors.head.hasNext) {
+            nextBatch()
+          }
+
           var i = 0
           while (i < nextRow.length) {
             columnAccessors(i).extractTo(nextRow, i)
@@ -114,7 +134,7 @@ private[sql] case class InMemoryColumnarTableScan(
           nextRow
         }
 
-        override def hasNext = columnAccessors.head.hasNext
+        override def hasNext = columnAccessors.head.hasNext || iterator.hasNext
       }
     }
   }
