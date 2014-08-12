@@ -17,10 +17,9 @@
 
 package org.apache.spark.mllib.optimization
 
-import breeze.linalg.{axpy => brzAxpy}
-
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 
 /**
  * :: DeveloperApi ::
@@ -61,11 +60,10 @@ abstract class Gradient extends Serializable {
 @DeveloperApi
 class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val margin: Double = -1.0 * brzWeights.dot(brzData)
+    val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-    val gradient = brzData * gradientMultiplier
+    val gradient = data.copy
+    scal(gradientMultiplier, gradient)
     val loss =
       if (label > 0) {
         math.log1p(math.exp(margin)) // log1p is log(1+p) but more accurate for small p
@@ -73,7 +71,7 @@ class LogisticGradient extends Gradient {
         math.log1p(math.exp(margin)) - margin
       }
 
-    (Vectors.fromBreeze(gradient), loss)
+    (gradient, loss)
   }
 
   override def compute(
@@ -81,13 +79,9 @@ class LogisticGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val margin: Double = -1.0 * brzWeights.dot(brzData)
+    val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-
-    brzAxpy(gradientMultiplier, brzData, cumGradient.toBreeze)
-
+    axpy(gradientMultiplier, data, cumGradient)
     if (label > 0) {
       math.log1p(math.exp(margin))
     } else {
@@ -106,13 +100,11 @@ class LogisticGradient extends Gradient {
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val diff = brzWeights.dot(brzData) - label
+    val diff = dot(data, weights) - label
     val loss = diff * diff
-    val gradient = brzData * (2.0 * diff)
-
-    (Vectors.fromBreeze(gradient), loss)
+    val gradient = data.copy
+    scal(2.0 * diff, gradient)
+    (gradient, loss)
   }
 
   override def compute(
@@ -120,12 +112,8 @@ class LeastSquaresGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val diff = brzWeights.dot(brzData) - label
-
-    brzAxpy(2.0 * diff, brzData, cumGradient.toBreeze)
-
+    val diff = dot(data, weights) - label
+    axpy(2.0 * diff, data, cumGradient)
     diff * diff
   }
 }
@@ -139,18 +127,16 @@ class LeastSquaresGradient extends Gradient {
 @DeveloperApi
 class HingeGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val dotProduct = brzWeights.dot(brzData)
-
+    val dotProduct = dot(data, weights)
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
-
     if (1.0 > labelScaled * dotProduct) {
-      (Vectors.fromBreeze(brzData * (-labelScaled)), 1.0 - labelScaled * dotProduct)
+      val gradient = data.copy
+      scal(-labelScaled, gradient)
+      (gradient, 1.0 - labelScaled * dotProduct)
     } else {
-      (Vectors.dense(new Array[Double](weights.size)), 0.0)
+      (Vectors.sparse(weights.size, Array.empty, Array.empty), 0.0)
     }
   }
 
@@ -159,16 +145,12 @@ class HingeGradient extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    val brzData = data.toBreeze
-    val brzWeights = weights.toBreeze
-    val dotProduct = brzWeights.dot(brzData)
-
+    val dotProduct = dot(data, weights)
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
-
     if (1.0 > labelScaled * dotProduct) {
-      brzAxpy(-labelScaled, brzData, cumGradient.toBreeze)
+      axpy(-labelScaled, data, cumGradient)
       1.0 - labelScaled * dotProduct
     } else {
       0.0
