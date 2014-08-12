@@ -63,7 +63,9 @@ object BlockServer {
  *   One block id per line, e.g. to request 3 blocks: "block1\nblock2\nblock3\n"
  *
  * Protocol for sending blocks (server to client):
- *   For each block,
+ *   frame-length (4 bytes), block-id-length (4 bytes), block-id, block-data.
+ *   If frame-length is negative, then this is an error message rather than block-data. The real
+ *   length is the absolute value of the frame-length.
  */
 private[spark]
 class BlockServer(conf: SparkConf, pResolver: PathResolver) extends Logging {
