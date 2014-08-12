@@ -1004,7 +1004,7 @@ abstract class RDD[T: ClassTag](
       },
       (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
         h1.addAll(h2)
-        h2
+        h1
       }).cardinality()
   }
 
@@ -1231,6 +1231,11 @@ abstract class RDD[T: ClassTag](
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
+  }
+
+  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] */
+  protected[spark] def parent[U: ClassTag](j: Int) = {
+    dependencies(j).rdd.asInstanceOf[RDD[U]]
   }
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
