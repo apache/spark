@@ -381,6 +381,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val predicate5 = new GreaterThan(attribute1, attribute2)
     val badfilter = ParquetFilters.createFilter(predicate5)
     assert(badfilter.isDefined === false)
+
+    val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
+    val badfilter2 = ParquetFilters.createFilter(predicate6)
+    assert(badfilter2.isDefined === false)
   }
 
   test("test filter by predicate pushdown") {
