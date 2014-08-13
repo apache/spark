@@ -30,7 +30,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
 import org.apache.spark.ui.JettyUtils
 
 /**
@@ -47,21 +47,24 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
-  var totalExpectedExecutors = new AtomicInteger(0)
+  var totalRegisteredExecutors = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  // Submit tasks only after (registered executors / total expected executors) 
+  // Submit tasks only after (registered resources / total expected resources) 
   // is equal to at least this value, that is double between 0 and 1.
-  var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredExecutorsRatio", 0)
-  if (minRegisteredRatio > 1) minRegisteredRatio = 1
-  // Whatever minRegisteredExecutorsRatio is arrived, submit tasks after the time(milliseconds).
+  var minRegisteredRatio =
+    math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
+  // Submit tasks after maxRegisteredWaitingTime milliseconds
+  // if minRegisteredRatio has not yet been reached  
   val maxRegisteredWaitingTime =
-    conf.getInt("spark.scheduler.maxRegisteredExecutorsWaitingTime", 30000)
+    conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
-  var ready = if (minRegisteredRatio <= 0) true else false
 
-  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
+  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
+
+    override protected def log = CoarseGrainedSchedulerBackend.this.log
+
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
@@ -79,7 +82,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
-    def receive = {
+    def receiveWithLogging = {
       case RegisterExecutor(executorId, hostPort, cores) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorActor.contains(executorId)) {
@@ -94,12 +97,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          if (executorActor.size >= totalExpectedExecutors.get() * minRegisteredRatio && !ready) {
-            ready = true
-            logInfo("SchedulerBackend is ready for scheduling beginning, registered executors: " +
-              executorActor.size + ", total expected executors: " + totalExpectedExecutors.get() +
-              ", minRegisteredExecutorsRatio: " + minRegisteredRatio)
-          }
+          totalRegisteredExecutors.addAndGet(1)
           makeOffers()
         }
 
@@ -268,14 +266,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
   }
 
+  def sufficientResourcesRegistered(): Boolean = true
+
   override def isReady(): Boolean = {
-    if (ready) {
+    if (sufficientResourcesRegistered) {
+      logInfo("SchedulerBackend is ready for scheduling beginning after " +
+        s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
     if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
-      ready = true
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
-        "maxRegisteredExecutorsWaitingTime: " + maxRegisteredWaitingTime)
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTime(ms)")
       return true
     }
     false

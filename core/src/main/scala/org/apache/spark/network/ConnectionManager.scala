@@ -17,6 +17,7 @@
 
 package org.apache.spark.network
 
+import java.io.IOException
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
@@ -45,16 +46,26 @@ private[spark] class ConnectionManager(
     name: String = "Connection manager")
   extends Logging {
 
+  /**
+   * Used by sendMessageReliably to track messages being sent.
+   * @param message the message that was sent
+   * @param connectionManagerId the connection manager that sent this message
+   * @param completionHandler callback that's invoked when the send has completed or failed
+   */
   class MessageStatus(
       val message: Message,
       val connectionManagerId: ConnectionManagerId,
       completionHandler: MessageStatus => Unit) {
 
+    /** This is non-None if message has been ack'd */
     var ackMessage: Option[Message] = None
-    var attempted = false
-    var acked = false
 
-    def markDone() { completionHandler(this) }
+    def markDone(ackMessage: Option[Message]) {
+      this.synchronized {
+        this.ackMessage = ackMessage
+        completionHandler(this)
+      }
+    }
   }
 
   private val selector = SelectorProvider.provider.openSelector()
@@ -442,11 +453,7 @@ private[spark] class ConnectionManager(
             messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
               .foreach(status => {
                 logInfo("Notifying " + status)
-                status.synchronized {
-                  status.attempted = true
-                  status.acked = false
-                  status.markDone()
-                }
+                status.markDone(None)
               })
 
             messageStatuses.retain((i, status) => {
@@ -475,11 +482,7 @@ private[spark] class ConnectionManager(
             for (s <- messageStatuses.values
                  if s.connectionManagerId == sendingConnectionManagerId) {
               logInfo("Notifying " + s)
-              s.synchronized {
-                s.attempted = true
-                s.acked = false
-                s.markDone()
-              }
+              s.markDone(None)
             }
 
             messageStatuses.retain((i, status) => {
@@ -547,13 +550,13 @@ private[spark] class ConnectionManager(
         val securityMsgResp = SecurityMessage.fromResponse(replyToken,
           securityMsg.getConnectionId.toString)
         val message = securityMsgResp.toBufferMessage
-        if (message == null) throw new Exception("Error creating security message")
+        if (message == null) throw new IOException("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
       } catch  {
         case e: Exception => {
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
-          throw new Exception("Error evaluating sasl response: " + e)
+          throw new IOException("Error evaluating sasl response: ", e)
         }
       }
     }
@@ -661,34 +664,39 @@ private[spark] class ConnectionManager(
               }
             }
           }
-          sentMessageStatus.synchronized {
-            sentMessageStatus.ackMessage = Some(message)
-            sentMessageStatus.attempted = true
-            sentMessageStatus.acked = true
-            sentMessageStatus.markDone()
-          }
+          sentMessageStatus.markDone(Some(message))
         } else {
-          val ackMessage = if (onReceiveCallback != null) {
-            logDebug("Calling back")
-            onReceiveCallback(bufferMessage, connectionManagerId)
-          } else {
-            logDebug("Not calling back as callback is null")
-            None
-          }
-
-          if (ackMessage.isDefined) {
-            if (!ackMessage.get.isInstanceOf[BufferMessage]) {
-              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
-                + ackMessage.get.getClass)
-            } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
-              logDebug("Response to " + bufferMessage + " does not have ack id set")
-              ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
+          var ackMessage : Option[Message] = None
+          try {
+            ackMessage = if (onReceiveCallback != null) {
+              logDebug("Calling back")
+              onReceiveCallback(bufferMessage, connectionManagerId)
+            } else {
+              logDebug("Not calling back as callback is null")
+              None
             }
-          }
 
-          sendMessage(connectionManagerId, ackMessage.getOrElse {
-            Message.createBufferMessage(bufferMessage.id)
-          })
+            if (ackMessage.isDefined) {
+              if (!ackMessage.get.isInstanceOf[BufferMessage]) {
+                logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
+                  + ackMessage.get.getClass)
+              } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
+                logDebug("Response to " + bufferMessage + " does not have ack id set")
+                ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
+              }
+            }
+          } catch {
+            case e: Exception => {
+              logError(s"Exception was thrown while processing message", e)
+              val m = Message.createBufferMessage(bufferMessage.id)
+              m.hasError = true
+              ackMessage = Some(m)
+            }
+          } finally {
+            sendMessage(connectionManagerId, ackMessage.getOrElse {
+              Message.createBufferMessage(bufferMessage.id)
+            })
+          }
         }
       }
       case _ => throw new Exception("Unknown type message received")
@@ -800,11 +808,7 @@ private[spark] class ConnectionManager(
             case Some(msgStatus) => {
               messageStatuses -= message.id
               logInfo("Notifying " + msgStatus.connectionManagerId)
-              msgStatus.synchronized {
-                msgStatus.attempted = true
-                msgStatus.acked = false
-                msgStatus.markDone()
-              }
+              msgStatus.markDone(None)
             }
             case None => {
               logError("no messageStatus for failed message id: " + message.id)
@@ -823,21 +827,33 @@ private[spark] class ConnectionManager(
     selector.wakeup()
   }
 
+  /**
+   * Send a message and block until an acknowldgment is received or an error occurs.
+   * @param connectionManagerId the message's destination
+   * @param message the message being sent
+   * @return a Future that either returns the acknowledgment message or captures an exception.
+   */
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
-      : Future[Option[Message]] = {
-    val promise = Promise[Option[Message]]
-    val status = new MessageStatus(
-      message, connectionManagerId, s => promise.success(s.ackMessage))
+      : Future[Message] = {
+    val promise = Promise[Message]()
+    val status = new MessageStatus(message, connectionManagerId, s => {
+      s.ackMessage match {
+        case None =>  // Indicates a failure where we either never sent or never got ACK'd
+          promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
+        case Some(ackMessage) =>
+          if (ackMessage.hasError) {
+            promise.failure(
+              new IOException("sendMessageReliably failed with ACK that signalled a remote error"))
+          } else {
+            promise.success(ackMessage)
+          }
+      }
+    })
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
     sendMessage(connectionManagerId, message)
     promise.future
-  }
-
-  def sendMessageReliablySync(connectionManagerId: ConnectionManagerId,
-      message: Message): Option[Message] = {
-    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {
@@ -862,6 +878,7 @@ private[spark] class ConnectionManager(
 
 
 private[spark] object ConnectionManager {
+  import ExecutionContext.Implicits.global
 
   def main(args: Array[String]) {
     val conf = new SparkConf
@@ -896,7 +913,7 @@ private[spark] object ConnectionManager {
 
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-      manager.sendMessageReliablySync(manager.id, bufferMessage)
+      Await.result(manager.sendMessageReliably(manager.id, bufferMessage), Duration.Inf)
     })
     println("--------------------------")
     println()
@@ -917,8 +934,10 @@ private[spark] object ConnectionManager {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
     }).foreach(f => {
-      val g = Await.result(f, 1 second)
-      if (!g.isDefined) println("Failed")
+      f.onFailure {
+        case e => println("Failed due to " + e)
+      }
+      Await.ready(f, 1 second)
     })
     val finishTime = System.currentTimeMillis
 
@@ -952,8 +971,10 @@ private[spark] object ConnectionManager {
       val bufferMessage = Message.createBufferMessage(buffers(count - 1 - i).duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
     }).foreach(f => {
-      val g = Await.result(f, 1 second)
-      if (!g.isDefined) println("Failed")
+      f.onFailure {
+        case e => println("Failed due to " + e)
+      }
+      Await.ready(f, 1 second)
     })
     val finishTime = System.currentTimeMillis
 
@@ -982,8 +1003,10 @@ private[spark] object ConnectionManager {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
         }).foreach(f => {
-          val g = Await.result(f, 1 second)
-          if (!g.isDefined) println("Failed")
+          f.onFailure {
+            case e => println("Failed due to " + e)
+          }
+          Await.ready(f, 1 second)
         })
       val finishTime = System.currentTimeMillis
       Thread.sleep(1000)
