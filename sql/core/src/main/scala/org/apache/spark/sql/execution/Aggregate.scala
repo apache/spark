@@ -27,6 +27,16 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.collection.ExternalAppendOnlyMap
 
+/**
+ * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each
+ * group.
+ *
+ * partial if true then aggregation is done partially on local data without shuffling to
+ *                ensure all values where `groupingExpressions` are equal are present.
+ * groupingExpressions expressions that are evaluated to determine grouping.
+ * aggregateExpressions expressions that are computed for each group.
+ * child the input data source.
+ */
 trait Aggregate{
 
   self: SparkPlan =>
@@ -263,5 +273,4 @@ case class ExternalAggregate(
       }
     }
   }
-
 }
