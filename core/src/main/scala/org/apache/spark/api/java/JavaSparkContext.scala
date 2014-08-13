@@ -17,24 +17,29 @@
 
 package org.apache.spark.api.java
 
-import java.io.DataInputStream
 import java.util
 import java.util.{Map => JMap}
 
-import com.google.common.base.Optional
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapred.{InputFormat, JobConf}
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
-import org.apache.spark._
-import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{EmptyRDD, RDD}
+import java.io.DataInputStream
+
+import org.apache.hadoop.io.{BytesWritable, LongWritable}
+import org.apache.spark.input.FixedLengthBinaryInputFormat
 
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+
+import com.google.common.base.Optional
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.{InputFormat, JobConf}
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+
+import org.apache.spark._
+import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.rdd.{EmptyRDD, RDD}
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
