@@ -62,8 +62,6 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
-  var frameworkId: FrameworkID = null
-
   override def start() {
     synchronized {
       classLoader = Thread.currentThread.getContextClassLoader
@@ -162,7 +160,6 @@ private[spark] class MesosSchedulerBackend(
     } finally {
       restoreClassLoader(oldClassLoader)
     }
-    this.frameworkId = frameworkId
   }
 
   def waitForRegister() {

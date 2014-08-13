@@ -153,6 +153,6 @@ private[spark] class YarnClientSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
-  override def applicationId(): Option[String] = if (appId != null) Some(appId.toString()) else None
+  override def applicationId(): Option[String] = Option(appId).map(_.toString())
 
 }

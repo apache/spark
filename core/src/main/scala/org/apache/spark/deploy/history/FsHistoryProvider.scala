@@ -50,10 +50,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // The modification time of the newest log detected during the last scan. This is used
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
-  private var mostRecentLogModTime = -1L
+  private var lastModifiedTime = -1L
 
-  // List of applications, in order from newest to oldest.
-  @volatile private var appList: mutable.Map[String, FsApplicationHistoryInfo] = mutable.Map()
+  // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
+  // into the map in order, so the LinkedHashMap maintains the correct ordering.
+  @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
+    = new mutable.LinkedHashMap()
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -98,11 +100,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     logCheckingThread.start()
   }
 
-  override def getListing() = appList.values
+  override def getListing() = applications.values
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
-      appList.get(appId).map(info => {
+      applications.get(appId).map { info =>
         val (replayBus, appListener) = createReplayBus(fs.getFileStatus(
           new Path(logDir, info.logDir)))
         val ui = {
@@ -120,12 +122,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
         val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
         ui.getSecurityManager.setAcls(uiAclsEnabled)
-        // make sure to set admin acls before view acls so properly picked up
+        // make sure to set admin acls before view acls so they are properly picked up
         ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
         ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
-         appListener.viewAcls.getOrElse(""))
-         ui
-      })
+          appListener.viewAcls.getOrElse(""))
+        ui
+      }
     } catch {
       case e: FileNotFoundException => None
     }
@@ -148,79 +150,95 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
       // Load all new logs from the log directory. Only directories that have a modification time
       // later than the last known log directory will be loaded.
-      var newMostRecentModTime = mostRecentLogModTime
+      var newLastModifiedTime = lastModifiedTime
       val logInfos = logDirs
         .filter { dir =>
           if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
             val modTime = getModificationTime(dir)
-            newMostRecentModTime = math.max(newMostRecentModTime, modTime)
-            modTime > mostRecentLogModTime
+            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+            modTime > lastModifiedTime
           } else {
             false
           }
         }
-        .map { dir =>
+        .flatMap { dir =>
           try {
             val (replayBus, appListener) = createReplayBus(dir)
             replayBus.replay()
-            new FsApplicationHistoryInfo(
+            Some(new FsApplicationHistoryInfo(
               dir.getPath().getName(),
               appListener.appId.getOrElse(dir.getPath().getName()),
               appListener.appName.getOrElse(NOT_STARTED),
               appListener.startTime.getOrElse(-1L),
               appListener.endTime.getOrElse(-1L),
               getModificationTime(dir),
-              appListener.sparkUser.getOrElse(NOT_STARTED))
+              appListener.sparkUser.getOrElse(NOT_STARTED)))
           } catch {
             case e: Exception =>
               logInfo(s"Failed to load application log data from $dir.", e)
-              null
+              None
           }
         }
-        .sortBy { info => if (info != null) -info.endTime else -1 }
+        .sortBy { info => -info.endTime }
 
-      mostRecentLogModTime = newMostRecentModTime
+      lastModifiedTime = newLastModifiedTime
 
       if (!logInfos.isEmpty) {
-        var newAppList = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+        var newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
-        // Merge the new apps with the existing ones, discarding any duplicates. The new map
-        // is created in descending end time order.
-        val currentApps = appList.values.iterator
-        var current = if (currentApps.hasNext) currentApps.next else null
+        // A poor man's implementation of a peeking iterator, to help with the merge below.
+        def hasNext[T](it: Iterator[T], lookAhead: T): Boolean = {
+          lookAhead != null || it.hasNext
+        }
+
+        def next[T](it: Iterator[T], lookAhead: T): T = {
+          if (lookAhead != null) lookAhead else it.next
+        }
+
         def addOldInfo(oldInfo: FsApplicationHistoryInfo) = {
-          if (!newAppList.contains(oldInfo.id)) {
-            newAppList += (oldInfo.id -> oldInfo)
+          if (!newApps.contains(oldInfo.id)) {
+            newApps += (oldInfo.id -> oldInfo)
           }
         }
 
+        // Merge the new apps with the existing ones, discarding any duplicates.
+        val newIterator = logInfos.iterator
+        var newLookAhead: FsApplicationHistoryInfo = null
+        val oldIterator = applications.values.iterator
+        var oldLookAhead: FsApplicationHistoryInfo = null
 
-        logInfos.foreach { info =>
-          if (info != null) {
-            while (current != null && current.endTime > info.endTime) {
-              addOldInfo(current)
-              current = if (currentApps.hasNext) currentApps.next else null
-            }
-
-            newAppList += (info.id -> info)
+        while (hasNext(newIterator, newLookAhead) && hasNext(oldIterator, oldLookAhead)) {
+          newLookAhead = next(newIterator, newLookAhead)
+          oldLookAhead = next(oldIterator, oldLookAhead)
+          if (newLookAhead.endTime > oldLookAhead.endTime) {
+            newApps += (newLookAhead.id -> newLookAhead)
+            newLookAhead = null
+          } else {
+            addOldInfo(oldLookAhead)
+            oldLookAhead = null
           }
         }
 
-        if (current != null) {
-          addOldInfo(current)
-        }
-        currentApps.foreach { oldInfo =>
-          addOldInfo(oldInfo)
+        while (hasNext(newIterator, newLookAhead)) {
+          newLookAhead = next(newIterator, newLookAhead)
+          newApps += (newLookAhead.id -> newLookAhead)
+          newLookAhead = null
         }
 
-        appList = newAppList
+        while (hasNext(oldIterator, oldLookAhead)) {
+          oldLookAhead = next(oldIterator, oldLookAhead)
+          addOldInfo(oldLookAhead)
+          oldLookAhead = null
+        }
+
+        applications = newApps
       }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
   }
 
-  private def createReplayBus(logDir: FileStatus) = {
+  private def createReplayBus(logDir: FileStatus): (ReplayListenerBus, ApplicationEventListener) = {
     val path = logDir.getPath()
     val elogInfo = EventLoggingListener.parseLoggingInfo(path, fs)
     val replayBus = new ReplayListenerBus(elogInfo.logPaths, fs, elogInfo.compressionCodec)
@@ -251,11 +269,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 }
 
 private class FsApplicationHistoryInfo(
-  val logDir: String,
-  id: String,
-  name: String,
-  startTime: Long,
-  endTime: Long,
-  lastUpdated: Long,
-  sparkUser: String)
+    val logDir: String,
+    id: String,
+    name: String,
+    startTime: Long,
+    endTime: Long,
+    lastUpdated: Long,
+    sparkUser: String)
   extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser)

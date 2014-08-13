@@ -136,12 +136,9 @@ object YarnSparkHadoopUtil {
   }
 
   def getUIHistoryAddress(conf: SparkConf, appId: String): String = {
-    val historyServerAddress = conf.get("spark.yarn.historyServer.address", null)
-    if (historyServerAddress != null) {
-      s"${historyServerAddress}${HistoryServer.UI_PATH_PREFIX}/${appId}"
-    } else {
-      ""
-    }
+    conf.getOption("spark.yarn.historyServer.address")
+      .map { address => s"$address${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+      .getOrElse("")
   }
 
 }

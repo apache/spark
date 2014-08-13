@@ -79,8 +79,6 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   var nextMesosTaskId = 0
 
-  var frameworkId: FrameworkID = null
-
   def newMesosTaskId(): Int = {
     val id = nextMesosTaskId
     nextMesosTaskId += 1
@@ -161,7 +159,6 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     logInfo("Registered as framework ID " + frameworkId.getValue)
-    this.frameworkId = frameworkId
     registeredLock.synchronized {
       isRegistered = true
       registeredLock.notifyAll()

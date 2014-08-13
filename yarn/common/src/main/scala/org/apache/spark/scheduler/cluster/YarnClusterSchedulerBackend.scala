@@ -22,13 +22,13 @@ import org.apache.spark.deploy.yarn.ApplicationMasterArguments
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.IntParam
 
-private class YarnClusterSchedulerBackend(
+private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
 
   var totalExpectedExecutors = 0
-  
+
   if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
     minRegisteredRatio = 0.8
   }

@@ -718,7 +718,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private val applicationStartJsonString =
     """
-      {"Event":"SparkListenerApplicationStart","App Name":"The winner of all","AppID":null,
+      {"Event":"SparkListenerApplicationStart","App Name":"The winner of all","App ID":null,
       "Timestamp":42,"User":"Garfield"}
     """
 
