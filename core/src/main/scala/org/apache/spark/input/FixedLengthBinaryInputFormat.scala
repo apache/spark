@@ -23,9 +23,9 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 
 /**
- * Custom Input Format for reading and splitting flat binary files that contain records, each of which
- * are a fixed size in bytes. The fixed record size is specified through a parameter recordLength
- * in the Hadoop configuration.
+ * Custom Input Format for reading and splitting flat binary files that contain records,
+ * each of which are a fixed size in bytes. The fixed record size is specified through
+ * a parameter recordLength in the Hadoop configuration.
  */
 
 object FixedLengthBinaryInputFormat {

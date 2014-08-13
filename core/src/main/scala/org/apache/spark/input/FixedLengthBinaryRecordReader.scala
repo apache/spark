@@ -56,7 +56,9 @@ class FixedLengthBinaryRecordReader extends RecordReader[LongWritable, BytesWrit
   override def getProgress: Float = {
     splitStart match {
       case x if x == splitEnd => 0.0.toFloat
-      case _ => Math.min(((currentPosition - splitStart) / (splitEnd - splitStart)).toFloat, 1.0).toFloat
+      case _ => Math.min(
+        ((currentPosition - splitStart) / (splitEnd - splitStart)).toFloat, 1.0
+      ).toFloat
     }
   }
 
