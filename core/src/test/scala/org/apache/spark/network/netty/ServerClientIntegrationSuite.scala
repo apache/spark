@@ -24,7 +24,7 @@ import java.util.concurrent.{TimeUnit, Semaphore}
 
 import scala.collection.JavaConversions._
 
-import io.netty.buffer.Unpooled
+import io.netty.buffer.{ByteBufUtil, Unpooled}
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
@@ -48,6 +48,9 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   val bufferBlockId = "buffer_block"
   val fileBlockId = "file_block"
 
+  val fileContent = new Array[Byte](1024)
+  scala.util.Random.nextBytes(fileContent)
+
   override def beforeAll() = {
     buf = ByteBuffer.allocate(bufSize)
     for (i <- 1 to bufSize) {
@@ -55,8 +58,10 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     }
     buf.flip()
 
-    val url = Thread.currentThread.getContextClassLoader.getResource("netty-test-file.txt")
-    testFile = new File(url.toURI)
+    testFile = File.createTempFile("netty-test-file", "txt")
+    val fp = new RandomAccessFile(testFile, "rw")
+    fp.write(fileContent)
+    fp.close()
 
     server = new BlockServer(new SparkConf, new BlockDataProvider {
       override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
@@ -82,13 +87,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   lazy val byteBufferBlockReference = Unpooled.wrappedBuffer(buf)
 
   /** A ByteBuf for file_block */
-  lazy val fileBlockReference = {
-    val bytes = new Array[Byte](testFile.length.toInt)
-    val fp = new RandomAccessFile(testFile, "r")
-    fp.read(bytes)
-    fp.close()
-    Unpooled.wrappedBuffer(bytes, 10, testFile.length.toInt - 25)
-  }
+  lazy val fileBlockReference = Unpooled.wrappedBuffer(fileContent, 10, fileContent.length - 25)
 
   def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ReferenceCountedBuffer], Set[String]) =
   {

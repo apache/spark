@@ -29,7 +29,7 @@ class NettyConfig(conf: SparkConf) {
   private[netty] val serverPort = conf.getInt("spark.shuffle.io.port", 0)
 
   /** IO mode: nio, oio, epoll, or auto (try epoll first and then nio). */
-  private[netty] val ioMode = conf.get("spark.shuffle.io.mode", "auto").toLowerCase
+  private[netty] val ioMode = conf.get("spark.shuffle.io.mode", "nio").toLowerCase
 
   /** Connect timeout in secs. Default 60 secs. */
   private[netty] val connectTimeoutMs = conf.getInt("spark.shuffle.io.connectionTimeout", 60) * 1000

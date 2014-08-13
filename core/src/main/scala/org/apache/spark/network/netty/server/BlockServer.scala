@@ -143,9 +143,6 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
     _port = addr.getPort
     _hostName = addr.getHostName
-
-    println("binding port to " + _hostName + ":" + _port)
-    println("local address is " + channelFuture.channel.localAddress)
   }
 
   /** Shutdown the server. */
