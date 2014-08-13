@@ -238,7 +238,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           // If our vector's size has exceeded the threshold, request more memory
           val currentSize = vector.estimateSize()
           if (currentSize >= memoryThreshold) {
-            val amountToRequest = (currentSize * (memoryGrowthFactor - 1)).toLong
+            val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
             // Hold the accounting lock, in case another thread concurrently puts a block that
             // takes up the unrolling space we just ensured here
             accountingLock.synchronized {
@@ -254,7 +254,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
               }
             }
             // New threshold is currentSize * memoryGrowthFactor
-            memoryThreshold = currentSize + amountToRequest
+            memoryThreshold += amountToRequest
           }
         }
         elementsUnrolled += 1
