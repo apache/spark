@@ -61,3 +61,39 @@ object Variance extends Impurity {
   def instance = this
 
 }
+
+private[tree] class VarianceAggregator extends ImpurityAggregator(3) with Serializable {
+
+  def calculate(): Double = {
+    Variance.calculate(counts(0), counts(1), counts(2))
+  }
+
+  def copy: VarianceAggregator = {
+    val tmp = new VarianceAggregator()
+    tmp.counts = this.counts.clone()
+    tmp
+  }
+
+  def add(label: Double): Unit = {
+    counts(0) += label
+    counts(1) += label * label
+    counts(2) += 1
+  }
+
+  def count: Long = counts(2).toLong
+
+  def predict: Double = if (count == 0) {
+    0
+  } else {
+    counts(0) / counts(2)
+  }
+
+  override def toString: String = {
+    s"VarianceAggregator(sum = ${counts(0)}, sum2 = ${counts(1)}, cnt = ${counts(2)})"
+  }
+
+  def newAggregator: VarianceAggregator = {
+    new VarianceAggregator()
+  }
+
+}

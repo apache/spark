@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.LearningMetadata
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.model.Bin
 import org.apache.spark.rdd.RDD
@@ -34,39 +35,24 @@ private[tree] object TreePoint {
 
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
-      bins: Array[Array[Bin]]): RDD[TreePoint] = {
+      bins: Array[Array[Bin]],
+      metadata: LearningMetadata): RDD[TreePoint] = {
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, strategy.isMulticlassClassification, bins,
-        strategy.categoricalFeaturesInfo)
+      TreePoint.labeledPointToTreePoint(x, bins, metadata)
     }
   }
 
   def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
-      isMulticlassClassification: Boolean,
       bins: Array[Array[Bin]],
-      categoricalFeaturesInfo: Map[Int, Int]): TreePoint = {
+      metadata: LearningMetadata): TreePoint = {
 
     val numFeatures = labeledPoint.features.size
-    val numBins = bins(0).size
     val arr = new Array[Int](numFeatures)
-    var featureIndex = 0 // offset by 1 for label
+    var featureIndex = 0
     while (featureIndex < numFeatures) {
-      val featureInfo = categoricalFeaturesInfo.get(featureIndex)
-      val isFeatureContinuous = featureInfo.isEmpty
-      if (isFeatureContinuous) {
-        arr(featureIndex) = findBin(featureIndex, labeledPoint, isFeatureContinuous, false,
-          bins, categoricalFeaturesInfo)
-      } else {
-        val featureCategories = featureInfo.get
-        val isSpaceSufficientForAllCategoricalSplits
-          = numBins > math.pow(2, featureCategories.toInt - 1) - 1
-        val isUnorderedFeature =
-          isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits
-        arr(featureIndex) = findBin(featureIndex, labeledPoint, isFeatureContinuous,
-          isUnorderedFeature, bins, categoricalFeaturesInfo)
-      }
+      arr(featureIndex) = findBin(featureIndex, labeledPoint, metadata.isContinuous(featureIndex),
+        metadata.isUnordered(featureIndex), bins, metadata.featureArity)
       featureIndex += 1
     }
 
@@ -172,6 +158,7 @@ private[tree] object TreePoint {
           sequentialBinSearchForOrderedCategoricalFeature()
         }
       if (binIndex == -1) {
+        println(s"findBin: binIndex = -1.  isUnorderedFeature = $isUnorderedFeature, featureIndex = $featureIndex, labeledPoint = $labeledPoint")
         throw new UnknownError("no bin was found for categorical variable.")
       }
       binIndex

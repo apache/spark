@@ -70,3 +70,57 @@ object Gini extends Impurity {
   def instance = this
 
 }
+
+private[tree] class GiniAggregator(numClasses: Int)
+  extends ImpurityAggregator(numClasses) with Serializable {
+
+  def calculate(): Double = {
+    Gini.calculate(counts, counts.sum)
+  }
+
+  def copy: GiniAggregator = {
+    val tmp = new GiniAggregator(counts.size)
+    tmp.counts = this.counts.clone()
+    tmp
+  }
+
+  def add(label: Double): Unit = {
+    if (label >= counts.size) {
+      throw new IllegalArgumentException(s"GiniAggregator given label $label" +
+        s" but requires label < numClasses (= ${counts.size}).")
+    }
+    if (label.toInt >= counts.size) {
+      throw new RuntimeException(s"label = $label, counts = $counts")
+    }
+    counts(label.toInt) += 1
+  }
+
+  def count: Long = counts.sum.toLong
+
+  def predict: Double = if (count == 0) {
+    0
+  } else {
+    indexOfLargestArrayElement(counts)
+  }
+
+  override def prob(label: Double): Double = {
+    val lbl = label.toInt
+    require(lbl < counts.length,
+      s"GiniAggregator.prob given invalid label: $lbl (should be < ${counts.length}")
+    val cnt = count
+    if (cnt == 0) {
+      0
+    } else {
+      counts(lbl) / cnt
+    }
+  }
+
+  override def toString: String = {
+    s"GiniAggregator(counts = [${counts.mkString(", ")}])"
+  }
+
+  def newAggregator: GiniAggregator = {
+    new GiniAggregator(counts.size)
+  }
+
+}

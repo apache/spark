@@ -47,3 +47,52 @@ trait Impurity extends Serializable {
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
+
+
+private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializable {
+
+  var counts: Array[Double] = new Array[Double](statsSize)
+
+  def copy: ImpurityAggregator
+
+  def add(label: Double): Unit
+
+  def calculate(): Double
+
+  def merge(other: ImpurityAggregator): ImpurityAggregator = {
+    require(counts.size == other.counts.size,
+      s"Two ImpurityAggregator instances cannot be merged with different counts sizes." +
+      s"  Sizes are ${counts.size} and ${other.counts.size}.")
+    var i = 0
+    while (i < other.counts.size) {
+      counts(i) += other.counts(i)
+      i += 1
+    }
+    this
+  }
+
+  def count: Long
+
+  def newAggregator: ImpurityAggregator
+
+  def predict: Double
+
+  def prob(label: Double): Double = -1
+
+  protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
+    val result = array.foldLeft(-1, Double.MinValue, 0) {
+      case ((maxIndex, maxValue, currentIndex), currentValue) =>
+        if (currentValue > maxValue) {
+          (currentIndex, currentValue, currentIndex + 1)
+        } else {
+          (maxIndex, maxValue, currentIndex + 1)
+        }
+    }
+    if (result._1 < 0) {
+      throw new RuntimeException("ImpurityAggregator internal error:" +
+        " indexOfLargestArrayElement failed")
+    }
+    result._1
+  }
+
+}

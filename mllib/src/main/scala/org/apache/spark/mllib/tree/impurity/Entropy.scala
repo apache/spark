@@ -74,3 +74,54 @@ object Entropy extends Impurity {
   def instance = this
 
 }
+
+private[tree] class EntropyAggregator(numClasses: Int)
+  extends ImpurityAggregator(numClasses) with Serializable {
+
+  def calculate(): Double = {
+    Entropy.calculate(counts, counts.sum)
+  }
+
+  def copy: EntropyAggregator = {
+    val tmp = new EntropyAggregator(counts.size)
+    tmp.counts = this.counts.clone()
+    tmp
+  }
+
+  def add(label: Double): Unit = {
+    if (label >= counts.size) {
+      throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
+        s" but requires label < numClasses (= ${counts.size}).")
+    }
+    counts(label.toInt) += 1
+  }
+
+  def count: Long = counts.sum.toLong
+
+  def predict: Double = if (count == 0) {
+    0
+  } else {
+    indexOfLargestArrayElement(counts)
+  }
+
+  override def prob(label: Double): Double = {
+    val lbl = label.toInt
+    require(lbl < counts.length,
+      s"EntropyAggregator.prob given invalid label: $lbl (should be < ${counts.length}")
+    val cnt = count
+    if (cnt == 0) {
+      0
+    } else {
+      counts(lbl) / cnt
+    }
+  }
+
+  override def toString: String = {
+    s"EntropyAggregator(counts = [${counts.mkString(", ")}])"
+  }
+
+  def newAggregator: EntropyAggregator = {
+    new EntropyAggregator(counts.size)
+  }
+
+}
