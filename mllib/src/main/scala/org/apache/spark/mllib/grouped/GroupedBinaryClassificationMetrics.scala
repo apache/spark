@@ -102,7 +102,7 @@ class GroupedBinaryClassificationMetrics[K](scoreAndLabels: RDD[(K,(Double, Doub
 
   def matthewsByThreshold(): RDD[(K,(Double,Double))] = createCurve(MatthewsCorrelationCoefficient)
 
-  private lazy val (
+  lazy val (
     cumulativeCounts: RDD[(K,(Double, BinaryLabelCounter))],
     confusions: RDD[(K,(Double, BinaryConfusionMatrix))]) = {
     // Create a bin for each distinct score value, count positives and negatives within each bin,

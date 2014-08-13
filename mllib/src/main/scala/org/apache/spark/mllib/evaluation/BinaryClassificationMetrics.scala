@@ -95,7 +95,7 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends
 
   def matthewsByThreshold(): RDD[(Double,Double)] = createCurve(MatthewsCorrelationCoefficient)
 
-  private lazy val (
+  lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
