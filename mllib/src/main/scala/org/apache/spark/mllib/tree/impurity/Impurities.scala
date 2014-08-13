@@ -15,27 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty;
+package org.apache.spark.mllib.tree.impurity
 
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.Delimiters;
-import io.netty.handler.codec.string.StringDecoder;
+/**
+ * Factory for Impurity instances.
+ */
+private[mllib] object Impurities {
 
-class FileServerChannelInitializer extends ChannelInitializer<SocketChannel> {
-
-  private final PathResolver pResolver;
-
-  FileServerChannelInitializer(PathResolver pResolver) {
-    this.pResolver = pResolver;
+  def fromString(name: String): Impurity = name match {
+    case "gini" => Gini
+    case "entropy" => Entropy
+    case "variance" => Variance
+    case _ => throw new IllegalArgumentException(s"Did not recognize Impurity name: $name")
   }
 
-  @Override
-  public void initChannel(SocketChannel channel) {
-    channel.pipeline()
-      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter()))
-      .addLast("stringDecoder", new StringDecoder())
-      .addLast("handler", new FileServerHandler(pResolver));
-  }
 }

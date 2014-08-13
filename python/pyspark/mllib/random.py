@@ -24,7 +24,9 @@ from pyspark.rdd import RDD
 from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
 from pyspark.serializers import NoOpSerializer
 
+
 class RandomRDDGenerators:
+
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
@@ -53,7 +55,7 @@ class RandomRDDGenerators:
         True
         """
         jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
-        uniform =  RDD(jrdd, sc, NoOpSerializer())
+        uniform = RDD(jrdd, sc, NoOpSerializer())
         return uniform.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -77,7 +79,7 @@ class RandomRDDGenerators:
         True
         """
         jrdd = sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
-        normal =  RDD(jrdd, sc, NoOpSerializer())
+        normal = RDD(jrdd, sc, NoOpSerializer())
         return normal.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -98,7 +100,7 @@ class RandomRDDGenerators:
         True
         """
         jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
-        poisson =  RDD(jrdd, sc, NoOpSerializer())
+        poisson = RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double(bytearray(bytes)))
 
     @staticmethod
@@ -118,7 +120,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .uniformVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        uniform =  RDD(jrdd, sc, NoOpSerializer())
+        uniform = RDD(jrdd, sc, NoOpSerializer())
         return uniform.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
@@ -138,7 +140,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .normalVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        normal =  RDD(jrdd, sc, NoOpSerializer())
+        normal = RDD(jrdd, sc, NoOpSerializer())
         return normal.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
@@ -161,7 +163,7 @@ class RandomRDDGenerators:
         """
         jrdd = sc._jvm.PythonMLLibAPI() \
             .poissonVectorRDD(sc._jsc, mean, numRows, numCols, numPartitions, seed)
-        poisson =  RDD(jrdd, sc, NoOpSerializer())
+        poisson = RDD(jrdd, sc, NoOpSerializer())
         return poisson.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
 

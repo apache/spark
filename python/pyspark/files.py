@@ -19,6 +19,7 @@ import os
 
 
 class SparkFiles(object):
+
     """
     Resolves paths to files added through
     L{SparkContext.addFile()<pyspark.context.SparkContext.addFile>}.

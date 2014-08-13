@@ -53,7 +53,7 @@ private[spark] object BlockManagerMessages {
       sender: ActorRef)
     extends ToBlockManagerMaster
 
-  class UpdateBlockInfo(
+  case class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
       var blockId: BlockId,
       var storageLevel: StorageLevel,
@@ -81,24 +81,6 @@ private[spark] object BlockManagerMessages {
       memSize = in.readLong()
       diskSize = in.readLong()
       tachyonSize = in.readLong()
-    }
-  }
-
-  object UpdateBlockInfo {
-    def apply(
-        blockManagerId: BlockManagerId,
-        blockId: BlockId,
-        storageLevel: StorageLevel,
-        memSize: Long,
-        diskSize: Long,
-        tachyonSize: Long): UpdateBlockInfo = {
-      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize)
-    }
-
-    // For pattern-matching
-    def unapply(h: UpdateBlockInfo)
-      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
-      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
     }
   }
 
