@@ -97,9 +97,13 @@ private[spark] class BlockManager(
   }
 
   private val nettyBlockServer: BlockServer = {
-    val server = if (useNetty) new BlockServer(conf, this) else null
-    logInfo(s"Created NettyBlockServer binding to port: ${server.port}")
-    server
+    if (useNetty) {
+      val server = new BlockServer(conf, this)
+      logInfo(s"Created NettyBlockServer binding to port: ${server.port}")
+      server
+    } else {
+      null
+    }
   }
 
   private val nettyPort: Int = if (useNetty) nettyBlockServer.port else 0
