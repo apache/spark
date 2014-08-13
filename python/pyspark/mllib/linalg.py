@@ -161,12 +161,12 @@ class SparseVector(object):
                 j += 1
             return result
 
-    def toDense(self):
+    def toArray(self):
         """
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = numpy.zeros(self.size)
-        for i in range(self.indices.size):
+        for i in xrange(self.indices.size):
             arr[self.indices[i]] = self.values[i]
         return arr
 

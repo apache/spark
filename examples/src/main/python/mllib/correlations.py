@@ -16,7 +16,7 @@
 #
 
 """
-Statistical summarization using MLlib.
+Correlations using MLlib.
 """
 
 import sys
@@ -29,9 +29,9 @@ from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     if len(sys.argv) not in [1,2]:
-        print >> sys.stderr, "Usage: statistical_summary (<file>)"
+        print >> sys.stderr, "Usage: correlations (<file>)"
         exit(-1)
-    sc = SparkContext(appName="PythonStatisticalSummary")
+    sc = SparkContext(appName="PythonCorrelations")
     if len(sys.argv) == 2:
         filepath = sys.argv[1]
     else:

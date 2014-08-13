@@ -32,30 +32,33 @@ import org.apache.spark.SparkContext._
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
-object RandomAndSampledRDDs extends App {
+object RandomAndSampledRDDs {
 
   case class Params(input: String = "data/mllib/sample_binary_classification_data.txt")
 
-  val defaultParams = Params()
+  def main(args: Array[String]) {
+    val defaultParams = Params()
 
-  val parser = new OptionParser[Params]("RandomAndSampledRDDs") {
-    head("RandomAndSampledRDDs: an example app for randomly generated and sampled RDDs.")
-    opt[String]("input")
-      .text(s"Input path to labeled examples in LIBSVM format, default: ${defaultParams.input}")
-      .action((x, c) => c.copy(input = x))
-    note(
-      """
+    val parser = new OptionParser[Params]("RandomAndSampledRDDs") {
+      head("RandomAndSampledRDDs: an example app for randomly generated and sampled RDDs.")
+      opt[String]("input")
+        .text(s"Input path to labeled examples in LIBSVM format, default: ${defaultParams.input}")
+        .action((x, c) => c.copy(input = x))
+      note(
+        """
         |For example, the following command runs this app:
         |
         | bin/spark-submit --class org.apache.spark.examples.mllib.RandomAndSampledRDDs \
         |  examples/target/scala-*/spark-examples-*.jar
-      """.stripMargin)
-  }
+      """.
+          stripMargin)
+    }
 
-  parser.parse(args, defaultParams).map { params =>
-    run(params)
-  } getOrElse {
-    sys.exit(1)
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
+    } getOrElse {
+      sys.exit(1)
+    }
   }
 
   def run(params: Params) {

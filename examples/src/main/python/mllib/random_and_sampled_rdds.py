@@ -29,7 +29,7 @@ from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     if len(sys.argv) not in [1, 2]:
-        print >> sys.stderr, "Usage: logistic_regression <libsvm data file>"
+        print >> sys.stderr, "Usage: random_and_sampled_rdds <libsvm data file>"
         exit(-1)
     if len(sys.argv) == 2:
         datapath = sys.argv[1]
@@ -45,22 +45,23 @@ if __name__ == "__main__":
 
     # Example: RandomRDDGenerators
     normalRDD = RandomRDDGenerators.normalRDD(sc, numExamples)
-    print 'Generated RDD of %d examples sampled from a unit normal distribution' % normalRDD.count()
+    print 'Generated RDD of %d examples sampled from the standard normal distribution'\
+        % normalRDD.count()
     normalVectorRDD = RandomRDDGenerators.normalVectorRDD(sc, numRows = numExamples, numCols = 2)
     print 'Generated RDD of %d examples of length-2 vectors.' % normalVectorRDD.count()
 
-    print ''
+    print
 
     # Example: RDD.sample() and RDD.takeSample()
-    exactSampleSize = int(numExamples * fraction)
+    expectedSampleSize = int(numExamples * fraction)
     print 'Sampling RDD using fraction %g.  Expected sample size = %d.' \
-        % (fraction, exactSampleSize)
+        % (fraction, expectedSampleSize)
     sampledRDD = normalRDD.sample(withReplacement = True, fraction = fraction)
     print '  RDD.sample(): sample has %d examples' % sampledRDD.count()
-    sampledArray = normalRDD.takeSample(withReplacement = True, num = exactSampleSize)
+    sampledArray = normalRDD.takeSample(withReplacement = True, num = expectedSampleSize)
     print '  RDD.takeSample(): sample has %d examples' % len(sampledArray)
 
-    print ''
+    print
 
     # Example: RDD.sampleByKey()
     examples = MLUtils.loadLibSVMFile(sc, datapath)
@@ -74,8 +75,7 @@ if __name__ == "__main__":
     fractions = {}
     for k in keyCountsA.keys():
         fractions[k] = fraction
-    sampledByKeyRDD = \
-        keyedRDD.sampleByKey(withReplacement = True, fractions = fractions)#, exact = True)
+    sampledByKeyRDD = keyedRDD.sampleByKey(withReplacement = True, fractions = fractions)
     keyCountsB = sampledByKeyRDD.countByKey()
     sizeB = sum(keyCountsB.values())
     print '  Sampled %d examples using approximate stratified sampling (by label). ==> Sample' \
