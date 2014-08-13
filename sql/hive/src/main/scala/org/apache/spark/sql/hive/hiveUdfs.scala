@@ -348,8 +348,9 @@ private[hive] case class HiveUdafFunction(
     function.iterate(buffer, inputs)
   }
 
+  //hiveUdaf does not support external aggregate, for HiveUdafFunction need to spill to disk,
+  //and all the vals above need Serializable
   override def merge(input: AggregateFunction): Unit = {
-    //not support yet
-    //udaf need Serializable
+    throw new NotImplementedError(s"HiveUdaf does not support external aggregate")
   }
 }
