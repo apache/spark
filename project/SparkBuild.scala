@@ -289,6 +289,12 @@ object Assembly {
 
 }
 
+/**
+ * Settings for the spark-core artifact. We don't want to expose Guava as a compile-time dependency,
+ * but at the same time the Java API exposes a Guava type (Optional). So we package it with the
+ * spark-core jar using the assembly plugin, and use the assembly deliverable as the main artifact
+ * for that project, disabling the non-assembly jar.
+ */
 object CoreAssembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
@@ -304,8 +310,8 @@ object CoreAssembly {
       cp filter {!_.data.getName.startsWith("guava")}
     },
     mergeStrategy in assembly := {
-      case PathList("com", "google", "common", xs @ _*) =>
-        if (xs.size == 2 && xs(0) == "base" && xs(1).startsWith("Optional")) {
+      case PathList("com", "google", "common", "base", xs @ _*) =>
+        if (xs.size == 1 && xs(0).startsWith("Optional")) {
           MergeStrategy.first
         } else {
           MergeStrategy.discard

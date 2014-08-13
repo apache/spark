@@ -345,6 +345,7 @@
                 </includes>
               </artifactSet>
               <filters>
+                <!-- See comment in the guava dependency declaration above. -->
                 <filter>
                   <artifact>com.google.guava:guava</artifact>
                   <includes>
