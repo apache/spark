@@ -73,35 +73,39 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
             var curCol = 0
 
             while (curCol < sparkRow.length) {
-              dataTypes(curCol) match {
-                case StringType =>
-                  row.addString(sparkRow(curCol).asInstanceOf[String])
-                case IntegerType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getInt(curCol)))
-                case BooleanType =>
-                  row.addColumnValue(ColumnValue.booleanValue(sparkRow.getBoolean(curCol)))
-                case DoubleType =>
-                  row.addColumnValue(ColumnValue.doubleValue(sparkRow.getDouble(curCol)))
-                case FloatType =>
-                  row.addColumnValue(ColumnValue.floatValue(sparkRow.getFloat(curCol)))
-                case DecimalType =>
-                  val hiveDecimal = sparkRow.get(curCol).asInstanceOf[BigDecimal].bigDecimal
-                  row.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
-                case LongType =>
-                  row.addColumnValue(ColumnValue.longValue(sparkRow.getLong(curCol)))
-                case ByteType =>
-                  row.addColumnValue(ColumnValue.byteValue(sparkRow.getByte(curCol)))
-                case ShortType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getShort(curCol)))
-                case TimestampType =>
-                  row.addColumnValue(
-                    ColumnValue.timestampValue(sparkRow.get(curCol).asInstanceOf[Timestamp]))
-                case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-                  val hiveString = result
-                    .queryExecution
-                    .asInstanceOf[HiveContext#QueryExecution]
-                    .toHiveString((sparkRow.get(curCol), dataTypes(curCol)))
-                  row.addColumnValue(ColumnValue.stringValue(hiveString))
+              if (!sparkRow.isNullAt(curCol)) {
+                dataTypes(curCol) match {
+                  case StringType =>
+                    row.addString(sparkRow(curCol).asInstanceOf[String])
+                  case IntegerType =>
+                    row.addColumnValue(ColumnValue.intValue(sparkRow.getInt(curCol)))
+                  case BooleanType =>
+                    row.addColumnValue(ColumnValue.booleanValue(sparkRow.getBoolean(curCol)))
+                  case DoubleType =>
+                    row.addColumnValue(ColumnValue.doubleValue(sparkRow.getDouble(curCol)))
+                  case FloatType =>
+                    row.addColumnValue(ColumnValue.floatValue(sparkRow.getFloat(curCol)))
+                  case DecimalType =>
+                    val hiveDecimal = sparkRow.get(curCol).asInstanceOf[BigDecimal].bigDecimal
+                    row.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
+                  case LongType =>
+                    row.addColumnValue(ColumnValue.longValue(sparkRow.getLong(curCol)))
+                  case ByteType =>
+                    row.addColumnValue(ColumnValue.byteValue(sparkRow.getByte(curCol)))
+                  case ShortType =>
+                    row.addColumnValue(ColumnValue.intValue(sparkRow.getShort(curCol)))
+                  case TimestampType =>
+                    row.addColumnValue(
+                      ColumnValue.timestampValue(sparkRow.get(curCol).asInstanceOf[Timestamp]))
+                  case BinaryType | _: ArrayType | _: StructType | _: MapType =>
+                    val hiveString = result
+                      .queryExecution
+                      .asInstanceOf[HiveContext#QueryExecution]
+                      .toHiveString((sparkRow.get(curCol), dataTypes(curCol)))
+                    row.addColumnValue(ColumnValue.stringValue(hiveString))
+                }
+              } else {
+                row.addColumnValue(null)
               }
               curCol += 1
             }
