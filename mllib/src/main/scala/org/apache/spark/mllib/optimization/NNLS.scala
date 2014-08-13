@@ -33,7 +33,9 @@ private[mllib] object NNLS {
     val dir = new DoubleMatrix(n, 1)
     val lastDir = new DoubleMatrix(n, 1)
     val res = new DoubleMatrix(n, 1)
-
+    
+    var iterations = 0
+    
     def wipe() {
       scratch.fill(0.0)
       grad.fill(0.0)
@@ -67,7 +69,7 @@ private[mllib] object NNLS {
 
     val n = atb.rows
     val scratch = ws.scratch
-
+    
     // find the optimal unconstrained step
     def steplen(dir: DoubleMatrix, res: DoubleMatrix): Double = {
       val top = SimpleBlas.dot(dir, res)
@@ -136,9 +138,10 @@ private[mllib] object NNLS {
 
       // terminate?
       if (stop(step, ndir, nx)) {
+        ws.iterations += iterno
         return x.data.clone
       }
-
+      
       // don't run through the walls
       i = 0
       while (i < n) {
@@ -164,6 +167,7 @@ private[mllib] object NNLS {
       SimpleBlas.copy(dir, lastDir)
       lastNorm = ngrad
     }
+    ws.iterations += iterno
     x.data.clone
   }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
+import org.apache.spark.Logging
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -52,11 +53,13 @@ object MovieLensALS {
       kryo: Boolean = false,
       numIterations: Int = 20,
       lambda: Double = 1.0,
+      lambdaL1: Double = 1.0,
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false)
-
+      implicitPrefs: Boolean = false,
+      qpProblem: Int = 1)
+      
   def main(args: Array[String]) {
     val defaultParams = Params()
 
@@ -71,6 +74,9 @@ object MovieLensALS {
       opt[Double]("lambda")
         .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
         .action((x, c) => c.copy(lambda = x))
+      opt[Double]("lambdaL1")
+        .text(s"lambdaL1 (sparsity constant), default: ${defaultParams.lambdaL1}")
+        .action((x, c) => c.copy(lambdaL1 = x))
       opt[Unit]("kryo")
         .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
@@ -87,13 +93,16 @@ object MovieLensALS {
         .required()
         .text("input paths to a MovieLens dataset of ratings")
         .action((x, c) => c.copy(input = x))
+      opt[Int]("qpProblem")
+      	.text(s"qp problem, default : 1")
+      	.action((x,c) => c.copy(qpProblem = x))
       note(
         """
           |For example, the following command runs this app on a synthetic dataset:
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
+          |  --rank 5 --numIterations 20 --lambda 1.0 --lambdaL1 1.0 --kryo --qpProblem 2\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -165,20 +174,36 @@ object MovieLensALS {
     println(s"Training: $numTraining, test: $numTest.")
 
     ratings.unpersist(blocking = false)
-
-    val model = new ALS()
+    
+    val als = new ALS()
       .setRank(params.rank)
       .setIterations(params.numIterations)
       .setLambda(params.lambda)
+      .setLambdaL1(params.lambdaL1)
       .setImplicitPrefs(params.implicitPrefs)
       .setUserBlocks(params.numUserBlocks)
       .setProductBlocks(params.numProductBlocks)
-      .run(training)
-
+      
+      println(s"Qp option ${params.qpProblem}")
+    
+    params.qpProblem match {
+      case 1 => println("Unbounded Qp")
+      case 2 => {
+        println("Qp with positivity")
+        als.setNonnegative(true)
+      }
+      case 3 => println("Qp with bounds")
+      case 4 => println("Qp with equality")
+      case 5 => println("Qp with L1 regularization " + params.lambdaL1)
+    }
+    als.setQpProblem(params.qpProblem)
+    
+    val model = als.run(training)
+   
     val rmse = computeRmse(model, test, params.implicitPrefs)
-
+    
     println(s"Test RMSE = $rmse.")
-
+    
     sc.stop()
   }
 
