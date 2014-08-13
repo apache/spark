@@ -51,16 +51,16 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       vec.toArray.view.zipWithIndex.map { case (v, j) =>
         ((j, v), uid)
       }
-    }.persist(StorageLevel.MEMORY_AND_DISK) // used by sortByKey
+    }
     // global sort by (columnIndex, value)
-    val sorted = colBased.sortByKey().persist(StorageLevel.MEMORY_AND_DISK) // used by zipWithIndex
+    val sorted = colBased.sortByKey()
     // Assign global ranks (using average ranks for tied values)
     val globalRanks = sorted.zipWithIndex().mapPartitions { iter =>
       var preCol = -1
       var preVal = Double.NaN
       var startRank = -1.0
       var cachedIds = ArrayBuffer.empty[Long]
-      def flush(): Iterable[(Long, (Int, Double))] = {
+      def flush: () => Iterable[(Long, (Int, Double))] = () => {
         val averageRank = startRank + (cachedIds.size - 1) / 2.0
         val output = cachedIds.map { i =>
           (i, (preCol, averageRank))
@@ -69,7 +69,8 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
         output
       }
       iter.flatMap { case (((j, v), uid), rank) =>
-        if (j != preCol || v != preVal) {
+        // If we see a new value or cachedIds is too big, we flush ids with their average rank.
+        if (j != preCol || v != preVal || cachedIds.size >= 10000000) {
           val output = flush()
           preCol = j
           preVal = v
