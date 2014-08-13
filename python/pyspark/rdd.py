@@ -1956,7 +1956,7 @@ class RDD(object):
         return False
 
     def _to_jrdd(self):
-        """ Return an JavaRDD """
+        """ Return an JavaRDD of Object by unpickling"""
         if not self._is_pickled():
             self = self._reserialize(BatchedSerializer(PickleSerializer(), 1024))
         batched = isinstance(self._jrdd_deserializer, BatchedSerializer)

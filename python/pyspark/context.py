@@ -153,6 +153,7 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = self._initialize_context(self._conf._jconf)
+        self._conf._readonly = True
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -271,6 +272,8 @@ class SparkContext(object):
     def conf(self):
         """
         The L{SparkConf} object
+
+        Configuration can not be changed after initialization.
         """
         return self._conf
 
