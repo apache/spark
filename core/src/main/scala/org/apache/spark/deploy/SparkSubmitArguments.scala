@@ -219,12 +219,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    var inSparkOpts = true
     val EQ_SEPARATED_OPT="""(--[^=]+)=(.+)""".r
 
     // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
+    /**
+     * NOTE: If you add or remove spark-submit options,
+     * modify NOT ONLY this file but also utils.sh
+     */
     def parse(opts: Seq[String]): Unit = opts match {
       case ("--name") :: value :: tail =>
         name = value

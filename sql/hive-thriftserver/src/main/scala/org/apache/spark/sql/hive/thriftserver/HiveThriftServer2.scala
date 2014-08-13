@@ -60,7 +60,7 @@ private[hive] object HiveThriftServer2 extends Logging {
     Runtime.getRuntime.addShutdownHook(
       new Thread() {
         override def run() {
-          SparkSQLEnv.sparkContext.stop()
+          SparkSQLEnv.stop()
         }
       }
     )
