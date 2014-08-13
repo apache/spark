@@ -68,7 +68,8 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, sys.env, classPathEntries, libraryPathEntries, javaOpts)
+          driverArgs.driverOptions, sys.env, classPathEntries, libraryPathEntries, javaOpts,
+          conf.getBoolean("spark.files.userClassPathFirst", false))
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,

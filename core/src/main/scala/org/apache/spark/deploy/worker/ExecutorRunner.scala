@@ -112,18 +112,13 @@ private[spark] class ExecutorRunner(
     case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
+    case "{{APP_ID}}" => appId
     case other => other
   }
 
   def getCommandSeq(userJarClassPathEntries : Seq[String]) = {
-    val command = Command(
-      appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
-      appDesc.command.environment,
-      appDesc.command.classPathEntries ++ userJarClassPathEntries,
-      appDesc.command.libraryPathEntries,
-      appDesc.command.javaOpts)
-    CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
+    CommandUtils.buildCommandSeq(appDesc.command, memory, sparkHome.getAbsolutePath,
+      userJarClassPathEntries, substituteVariables)
   }
 
   /**
