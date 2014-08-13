@@ -20,17 +20,17 @@ import sys
 from pyspark import SparkContext
 
 """
-Read data file users.avro in local Spark dist:
+Read data file users.avro in local Spark distro:
 
 $ cd $SPARK_HOME
 $ ./bin/spark-submit --driver-class-path /path/to/example/jar ./examples/src/main/python/avro_inputformat.py \
-> ./examples/src/main/resources/users.avro
-{u'favorite_color': None, u'favorite_number': 256, u'name': u'Alyssa'}
-{u'favorite_color': u'red', u'favorite_number': 7, u'name': u'Ben'}
+> examples/src/main/resources/users.avro
+{u'favorite_color': None, u'name': u'Alyssa', u'favorite_numbers': [3, 9, 15, 20]}
+{u'favorite_color': u'red', u'name': u'Ben', u'favorite_numbers': []}
 
-To read name and favorite_color fields only, specify the following reader schema file:
+To read name and favorite_color fields only, specify the following reader schema:
 
-$ cat ./examples/src/main/resources/user.avsc
+$ cat examples/src/main/resources/user.avsc
 {"namespace": "example.avro",
  "type": "record",
  "name": "User",
@@ -41,7 +41,7 @@ $ cat ./examples/src/main/resources/user.avsc
 }
 
 $ ./bin/spark-submit --driver-class-path /path/to/example/jar ./examples/src/main/python/avro_inputformat.py \
-> ./examples/src/main/resources/users.avro ./examples/src/main/resources/user.avsc
+> examples/src/main/resources/users.avro examples/src/main/resources/user.avsc
 {u'favorite_color': None, u'name': u'Alyssa'}
 {u'favorite_color': u'red', u'name': u'Ben'}
 """

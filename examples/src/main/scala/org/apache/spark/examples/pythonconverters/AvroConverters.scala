@@ -33,13 +33,19 @@ import org.apache.spark.SparkException
 /**
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts
  * an Avro Record wrapped in an AvroKey (or AvroValue) to a Java Map. It tries
- * to work with all 3 Avro data models.
+ * to work with all 3 Avro data mappings (Generic, Specific and Reflect).
  */
 class AvroWrapperToJavaConverter extends Converter[Any, Any] {
-  override def convert(obj: Any): Any = obj.asInstanceOf[AvroWrapper[_]].datum() match {
-    case record: IndexedRecord => unpackRecord(record)
-    case other => throw new SparkException(
-      s"Unsupported top-level Avro data type ${other.getClass.getName}")
+  override def convert(obj: Any): Any = {
+    if (obj == null) {
+      return null
+    }
+    obj.asInstanceOf[AvroWrapper[_]].datum() match {
+      case null => null
+      case record: IndexedRecord => unpackRecord(record)
+      case other => throw new SparkException(
+        s"Unsupported top-level Avro data type ${other.getClass.getName}")
+    }
   }
 
   def unpackRecord(obj: Any): JMap[String, Any] = {
