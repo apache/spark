@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation.binary
 /**
  * Trait for a binary confusion matrix.
  */
-private[mllib] trait BinaryConfusionMatrix {
+trait BinaryConfusionMatrix {
   /** number of true positives */
   def numTruePositives: Long
 
@@ -67,4 +67,8 @@ private[mllib] case class BinaryConfusionMatrixImpl(
 
   /** number of negatives */
   override def numNegatives: Long = totalCount.numNegatives
+
+  override def toString() = "BinaryConfusionMatrix(tp=%d, fp=%d, tn=%d, fp=%s)"
+  .format(numTruePositives, numFalsePositives, numTrueNegatives, numFalseNegatives)
+
 }
