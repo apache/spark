@@ -314,8 +314,8 @@ def _hijack_namedtuple():
 
     _old_namedtuple = _copy_func(collections.namedtuple)
 
-    def namedtuple(name, fields, verbose=False, rename=False):
-        cls = _old_namedtuple(name, fields, verbose, rename)
+    def namedtuple(*args, **kwargs):
+        cls = _old_namedtuple(*args, **kwargs)
         return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
