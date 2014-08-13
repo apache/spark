@@ -75,21 +75,21 @@ private[tree] class VarianceAggregator extends ImpurityAggregator(3) with Serial
   }
 
   def add(label: Double): Unit = {
-    counts(0) += label
-    counts(1) += label * label
-    counts(2) += 1
+    counts(0) += 1
+    counts(1) += label
+    counts(2) += label * label
   }
 
-  def count: Long = counts(2).toLong
+  def count: Long = counts(0).toLong
 
   def predict: Double = if (count == 0) {
     0
   } else {
-    counts(0) / counts(2)
+    counts(1) / count
   }
 
   override def toString: String = {
-    s"VarianceAggregator(sum = ${counts(0)}, sum2 = ${counts(1)}, cnt = ${counts(2)})"
+    s"VarianceAggregator(cnt = ${counts(0)}, sum = ${counts(1)}, sum2 = ${counts(2)})"
   }
 
   def newAggregator: VarianceAggregator = {
