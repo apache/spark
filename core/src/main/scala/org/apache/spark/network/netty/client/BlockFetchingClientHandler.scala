@@ -44,19 +44,19 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
     val blockIdBytes = new Array[Byte](math.abs(blockIdLen))
     in.readBytes(blockIdBytes)
     val blockId = new String(blockIdBytes)
-    val blockLen = totalLen - math.abs(blockIdLen) - 4
+    val blockSize = totalLen - math.abs(blockIdLen) - 4
 
     def server = ctx.channel.remoteAddress.toString
 
     // blockIdLen is negative when it is an error message.
     if (blockIdLen < 0) {
-      val errorMessageBytes = new Array[Byte](blockLen)
+      val errorMessageBytes = new Array[Byte](blockSize)
       in.readBytes(errorMessageBytes)
       val errorMsg = new String(errorMessageBytes)
-      logTrace(s"Received block $blockId ($blockLen B) with error $errorMsg from $server")
+      logTrace(s"Received block $blockId ($blockSize B) with error $errorMsg from $server")
       blockFetchFailureCallback(blockId, errorMsg)
     } else {
-      logTrace(s"Received block $blockId ($blockLen B) from $server")
+      logTrace(s"Received block $blockId ($blockSize B) from $server")
       blockFetchSuccessCallback(blockId, new ReferenceCountedBuffer(in))
     }
   }

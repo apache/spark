@@ -33,6 +33,8 @@ import org.apache.spark.Logging
  * Client for fetching data blocks from [[org.apache.spark.network.netty.server.BlockServer]].
  * Use [[BlockFetchingClientFactory]] to instantiate this client.
  *
+ * The constructor blocks until a connection is successfully established.
+ *
  * See [[org.apache.spark.network.netty.server.BlockServer]] for client/server protocol.
  *
  * Concurrency: [[BlockFetchingClient]] is not thread safe and should not be shared.

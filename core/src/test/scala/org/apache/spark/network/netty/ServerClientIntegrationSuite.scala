@@ -20,7 +20,7 @@ package org.apache.spark.network.netty
 import java.io.{RandomAccessFile, File}
 import java.nio.ByteBuffer
 import java.util.{Collections, HashSet}
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{TimeUnit, Semaphore}
 
 import scala.collection.JavaConversions._
 
@@ -34,6 +34,9 @@ import org.apache.spark.network.netty.server.BlockServer
 import org.apache.spark.storage.{FileSegment, BlockDataProvider}
 
 
+/**
+ * Test suite that makes sure the server and the client implementations share the same protocol.
+ */
 class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
 
   val bufSize = 100000
@@ -108,7 +111,9 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
         sem.release()
       }
     )
-    sem.acquire(blockIds.size)
+    if (!sem.tryAcquire(blockIds.size, 30, TimeUnit.SECONDS)) {
+      fail("Timeout getting response from the server")
+    }
     client.close()
     (receivedBlockIds.toSet, receivedBuffers.toSet, errorBlockIds.toSet)
   }

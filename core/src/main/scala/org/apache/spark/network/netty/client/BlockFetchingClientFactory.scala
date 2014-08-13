@@ -83,6 +83,8 @@ class BlockFetchingClientFactory(val conf: NettyConfig) {
   /**
    * Create a new BlockFetchingClient connecting to the given remote host / port.
    *
+   * This blocks until a connection is successfully established.
+   *
    * Concurrency: This method is safe to call from multiple threads.
    */
   def createClient(remoteHost: String, remotePort: Int): BlockFetchingClient = {
