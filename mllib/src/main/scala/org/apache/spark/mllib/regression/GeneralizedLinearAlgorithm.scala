@@ -155,11 +155,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     }
 
     /**
-     * Scaling to minimize the condition number:
+     * Scaling columns to unit variance as a heuristic to reduce the condition number:
      *
      * During the optimization process, the convergence (rate) depends on the condition number of
-     * the training dataset. Scaling the variables often reduces this condition number, thus
-     * improving the convergence rate dramatically. Without reducing the condition number,
+     * the training dataset. Scaling the variables often reduces this condition number
+     * heuristically, thus improving the convergence rate. Without reducing the condition number,
      * some training datasets mixing the columns with different scales may not be able to converge.
      *
      * GLMNET and LIBSVM packages perform the scaling to reduce the condition number, and return

@@ -229,10 +229,15 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val modelB2 = lrB.run(testRDD2, initialWeights)
     val modelB3 = lrB.run(testRDD3, initialWeights)
 
-    // Test the weights
+    // For model trained with feature standardization, the weights should
+    // be the same in the scaled space. Note that the weights here are already
+    // in the original space, we transform back to scaled space to compare.
     assert(modelA1.weights(0) ~== modelA2.weights(0) * 1.0E3 absTol 0.01)
     assert(modelA1.weights(0) ~== modelA3.weights(0) * 1.0E6 absTol 0.01)
 
+    // Training data with different scales without feature standardization
+    // will not yield the same result in the scaled space due to poor
+    // convergence rate.
     assert(modelB1.weights(0) !~== modelB2.weights(0) * 1.0E3 absTol 0.1)
     assert(modelB1.weights(0) !~== modelB3.weights(0) * 1.0E6 absTol 0.1)
   }
