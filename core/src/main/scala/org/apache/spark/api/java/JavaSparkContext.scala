@@ -17,26 +17,24 @@
 
 package org.apache.spark.api.java
 
+import java.io.DataInputStream
 import java.util
 import java.util.{Map => JMap}
-
-import java.io.DataInputStream
-
-import scala.collection.JavaConversions
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-
-import org.apache.spark._
 import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
+import org.apache.spark._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, RDD}
+
+import scala.collection.JavaConversions
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+import scala.reflect.ClassTag
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -215,6 +213,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.wholeTextFiles(path, minPartitions))
 
   /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * @see `wholeTextFiles(path: String, minPartitions: Int)`.
+   */
+  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path))
+
+  /**
    * Read a directory of binary files from HDFS, a local file system (available on all nodes),
    * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
    * record and returned in a key-value pair, where the key is the path of each file,
@@ -279,14 +287,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   JavaPairRDD[String,Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
 
   /**
-   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
-   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * Load data from a flat binary file, assuming each record is a set of numbers
+   * with the specified numerical format (see ByteBuffer), and the number of
+   * bytes per record is constant (see FixedLengthBinaryInputFormat)
    *
-   * @see `wholeTextFiles(path: String, minPartitions: Int)`.
+   * @param path Directory to the input data files
+   * @return An RDD of data with values, JavaRDD[(Array[Byte])]
    */
-  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
-    new JavaPairRDD(sc.wholeTextFiles(path))
+  def fixedLengthBinaryFiles(path: String): JavaRDD[Array[Byte]] = {
+    new JavaRDD(sc.fixedLengthBinaryFiles(path))
+  }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
