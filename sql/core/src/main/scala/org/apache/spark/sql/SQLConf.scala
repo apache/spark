@@ -87,8 +87,7 @@ trait SQLConf {
    *
    * Defaults to false as this feature is currently experimental.
    */
-  private[spark] def codegenEnabled: Boolean =
-    if (getConf(CODEGEN_ENABLED, "false") == "true") true else false
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false") == "true"
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
