@@ -745,12 +745,11 @@ private[spark] class ExternalSorter[K, V, C](
       try {
         out = new FileOutputStream(outputFile)
         for (i <- 0 until numPartitions) {
-          val file = partitionWriters(i).fileSegment().file
-          in = new FileInputStream(file)
-          org.apache.spark.util.Utils.copyStream(in, out)
+          in = new FileInputStream(partitionWriters(i).fileSegment().file)
+          val size = org.apache.spark.util.Utils.copyStream(in, out, false)
           in.close()
           in = null
-          lengths(i) = file.length()
+          lengths(i) = size
           offsets(i + 1) = offsets(i) + lengths(i)
         }
       } finally {

@@ -284,17 +284,32 @@ private[spark] object Utils extends Logging {
   /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
                  out: OutputStream,
-                 closeStreams: Boolean = false)
+                 closeStreams: Boolean = false): Long =
   {
+    var count = 0L
     try {
-      val buf = new Array[Byte](8192)
-      var n = 0
-      while (n != -1) {
-        n = in.read(buf)
-        if (n != -1) {
-          out.write(buf, 0, n)
+      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]) {
+        // When both streams are File stream, use transferTo to improve copy performance.
+        val inChannel = in.asInstanceOf[FileInputStream].getChannel()
+        val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
+        val size = inChannel.size()
+
+        // In case transferTo method transferred less data than we have required.
+        while (count < size) {
+          count += inChannel.transferTo(count, size - count, outChannel)
+        }
+      } else {
+        val buf = new Array[Byte](8192)
+        var n = 0
+        while (n != -1) {
+          n = in.read(buf)
+          if (n != -1) {
+            out.write(buf, 0, n)
+            count += n
+          }
         }
       }
+      count
     } finally {
       if (closeStreams) {
         try {
