@@ -27,6 +27,7 @@ object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
+  val EXTERNAL_AGGREGATE = "spark.sql.aggregate.external"
   val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
@@ -73,6 +74,13 @@ trait SQLConf {
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt
+
+  /**
+   * When set to true, Spark SQL will use ExternalAggregation.
+   * Defaults to false will use OnHeapAggregation
+   */
+  private[spark] def externalAggregate: Boolean =
+    if (get(EXTERNAL_AGGREGATE, "false") == "true") true else false
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode

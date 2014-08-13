@@ -102,7 +102,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object HashAggregation extends Strategy {
+  case class HashAggregation(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
 
@@ -134,15 +134,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              groupingExpressions,
              partialComputation,
              child) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
+
+        val preAggregate = execution.OnHeapAggregate(
+          partial = true,
+          groupingExpressions,
+          partialComputation,
+          planLater(child))
+
+        if (context.externalAggregate) {
+          execution.ExternalAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            preAggregate) :: Nil
+        } else {
+          execution.OnHeapAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            preAggregate) :: Nil
+        }
 
       case _ => Nil
     }
@@ -246,7 +257,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   // Can we automate these 'pass through' operations?
-  object BasicOperators extends Strategy {
+  case class BasicOperators(context: SQLContext) extends Strategy {
     def numPartitions = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -265,7 +276,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+        if (context.externalAggregate) {
+          execution.ExternalAggregate(partial = false, group, agg, planLater(child)) :: Nil
+        } else {
+          execution.OnHeapAggregate(partial = false, group, agg, planLater(child)) :: Nil
+        }
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
