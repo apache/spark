@@ -15,21 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty.server
+package org.apache.spark.storage
 
-import org.apache.spark.SparkConf
-import org.apache.spark.network.netty.PathResolver
-import org.apache.spark.storage.{TestBlockId, FileSegment, BlockId}
+import java.nio.ByteBuffer
 
-/** A simple main function for testing the server. */
-object ServerTester {
-  def main(args: Array[String]): Unit = {
-    new BlockServer(new SparkConf, new PathResolver {
-      override def getBlockLocation(blockId: BlockId): FileSegment = {
-        val file = new java.io.File(blockId.asInstanceOf[TestBlockId].id)
-        new FileSegment(file, 0, file.length())
-      }
-    })
-    Thread.sleep(1000000)
-  }
+
+/**
+ * An interface for providing data for blocks.
+ *
+ * getBlockData returns either a FileSegment (for zero-copy send), or a ByteBuffer.
+ *
+ * Aside from unit tests, [[BlockManager]] is the main class that implements this.
+ */
+private[spark] trait BlockDataProvider {
+  def getBlockData(blockId: String): Either[FileSegment, ByteBuffer]
 }

@@ -18,14 +18,14 @@
 package org.apache.spark.network.netty.server
 
 import java.io.FileInputStream
-import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
+import io.netty.buffer.Unpooled
 import io.netty.channel._
 
 import org.apache.spark.Logging
-import org.apache.spark.network.netty.PathResolver
-import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.{FileSegment, BlockDataProvider}
 
 
 /**
@@ -35,15 +35,11 @@ import org.apache.spark.storage.BlockId
  * so channelRead0 is called once per line (i.e. per block id).
  */
 private[server]
-class BlockServerHandler(p: PathResolver)
+class BlockServerHandler(dataProvider: BlockDataProvider)
   extends SimpleChannelInboundHandler[String] with Logging {
 
   override def channelRead0(ctx: ChannelHandlerContext, blockId: String): Unit = {
-    // client in the form of hostname:port
-    val client = {
-      val remoteAddr = ctx.channel.remoteAddress.asInstanceOf[InetSocketAddress]
-      remoteAddr.getHostName + ":" + remoteAddr.getPort
-    }
+    def client = ctx.channel.remoteAddress.toString
 
     // A helper function to send error message back to the client.
     def respondWithError(error: String): Unit = {
@@ -60,48 +56,80 @@ class BlockServerHandler(p: PathResolver)
       )
     }
 
-    logTrace(s"Received request from $client to fetch block $blockId")
+    def writeFileSegment(segment: FileSegment): Unit = {
+      // Send error message back if the block is too large. Even though we are capable of sending
+      // large (2G+) blocks, the receiving end cannot handle it so let's fail fast.
+      // Once we fixed the receiving end to be able to process large blocks, this should be removed.
+      // Also make sure we update BlockHeaderEncoder to support length > 2G.
 
-    var fileChannel: FileChannel = null
-    var offset: Long = 0
-    var blockSize: Long = 0
+      // See [[BlockHeaderEncoder]] for the way length is encoded.
+      if (segment.length + blockId.length + 4 > Int.MaxValue) {
+        respondWithError(s"Block $blockId size ($segment.length) greater than 2G")
+        return
+      }
 
-    // First make sure we can find the block. If not, send error back to the user.
-    try {
-      val segment = p.getBlockLocation(BlockId(blockId))
-      fileChannel = new FileInputStream(segment.file).getChannel
-      offset = segment.offset
-      blockSize = segment.length
-    } catch {
-      case e: Exception =>
-        logError(s"Error opening block $blockId for request from $client", e)
-        blockSize = -1
-        respondWithError(e.getMessage)
+      var fileChannel: FileChannel = null
+      try {
+        fileChannel = new FileInputStream(segment.file).getChannel
+      } catch {
+        case e: Exception =>
+          logError(
+            s"Error opening channel for $blockId in ${segment.file} for request from $client", e)
+          respondWithError(e.getMessage)
+      }
+
+      // Found the block. Send it back.
+      if (fileChannel != null) {
+        // Write the header and block data. In the case of failures, the listener on the block data
+        // write should close the connection.
+        ctx.write(new BlockHeader(segment.length.toInt, blockId))
+
+        val region = new DefaultFileRegion(fileChannel, segment.offset, segment.length)
+        ctx.writeAndFlush(region).addListener(new ChannelFutureListener {
+          override def operationComplete(future: ChannelFuture) {
+            if (future.isSuccess) {
+              logTrace(s"Sent block $blockId (${segment.length} B) back to $client")
+            } else {
+              logError(s"Error sending block $blockId to $client; closing connection", future.cause)
+              ctx.close()
+            }
+          }
+        })
+      }
     }
 
-    // Send error message back if the block is too large. Even though we are capable of sending
-    // large (2G+) blocks, the receiving end cannot handle it so let's fail fast.
-    // Once we fixed the receiving end to be able to process large blocks, this should be removed.
-    // Also make sure we update BlockHeaderEncoder to support length > 2G.
-    if (blockSize > Int.MaxValue) {
-      respondWithError(s"Block $blockId size ($blockSize) greater than 2G")
-    }
-
-    // Found the block. Send it back.
-    if (fileChannel != null && blockSize >= 0) {
-      val listener = new ChannelFutureListener {
+    def writeByteBuffer(buf: ByteBuffer): Unit = {
+      ctx.write(new BlockHeader(buf.remaining, blockId))
+      ctx.writeAndFlush(Unpooled.wrappedBuffer(buf)).addListener(new ChannelFutureListener {
         override def operationComplete(future: ChannelFuture) {
           if (future.isSuccess) {
-            logTrace(s"Sent block $blockId ($blockSize B) back to $client")
+            logTrace(s"Sent block $blockId (${buf.remaining} B) back to $client")
           } else {
             logError(s"Error sending block $blockId to $client; closing connection", future.cause)
             ctx.close()
           }
         }
-      }
-      val region = new DefaultFileRegion(fileChannel, offset, blockSize)
-      ctx.writeAndFlush(new BlockHeader(blockSize.toInt, blockId)).addListener(listener)
-      ctx.writeAndFlush(region).addListener(listener)
+      })
     }
+
+    logTrace(s"Received request from $client to fetch block $blockId")
+
+    var blockData: Either[FileSegment, ByteBuffer] = null
+
+    // First make sure we can find the block. If not, send error back to the user.
+    try {
+      blockData = dataProvider.getBlockData(blockId)
+    } catch {
+      case e: Exception =>
+        logError(s"Error opening block $blockId for request from $client", e)
+        respondWithError(e.getMessage)
+        return
+    }
+
+    blockData match {
+      case Left(segment) => writeFileSegment(segment)
+      case Right(buf) => writeByteBuffer(buf)
+    }
+
   }  // end of channelRead0
 }

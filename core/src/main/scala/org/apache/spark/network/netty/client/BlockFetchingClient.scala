@@ -129,7 +129,5 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
     cf.channel().closeFuture().sync()
   }
 
-  def close(): Unit = {
-    // TODO: Should we ever close the client? Probably ...
-  }
+  def close(): Unit = cf.channel().close()
 }

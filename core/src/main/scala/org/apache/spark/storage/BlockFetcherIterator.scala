@@ -277,7 +277,7 @@ object BlockFetcherIterator {
 
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap // so we can look up the size of each blockID
-      val client = blockManager.diskBlockManager.nettyBlockClientFactory.createClient(
+      val client = blockManager.nettyBlockClientFactory.createClient(
         cmId.host, req.address.nettyPort)
       val blocks = req.blocks.map(_._1.toString)
 

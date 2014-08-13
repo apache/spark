@@ -21,26 +21,27 @@ import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
-import io.netty.channel.socket.SocketChannel
-import io.netty.channel.{ChannelInitializer, ChannelOption, ChannelFuture}
-import io.netty.channel.epoll.{EpollServerSocketChannel, EpollEventLoopGroup}
+import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption}
+import io.netty.channel.epoll.{EpollEventLoopGroup, EpollServerSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
+import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.handler.codec.LineBasedFrameDecoder
 import io.netty.handler.codec.string.StringDecoder
 import io.netty.util.CharsetUtil
 
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.network.netty.{PathResolver, NettyConfig}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.network.netty.NettyConfig
+import org.apache.spark.storage.BlockDataProvider
 import org.apache.spark.util.Utils
+
 
 // TODO: Remove dependency on BlockId. This layer should not be coupled with storage.
 
 // TODO: PathResolver is not general enough. It only works for on-disk blocks.
 
-// TODO: Allow user-configured port
 
 /**
  * Server for serving Spark data blocks.
@@ -58,15 +59,18 @@ import org.apache.spark.util.Utils
  *
  */
 private[spark]
-class BlockServer(conf: NettyConfig, pResolver: PathResolver) extends Logging {
+class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Logging {
 
-  def this(sparkConf: SparkConf, pResolver: PathResolver) = {
-    this(new NettyConfig(sparkConf), pResolver)
+  def this(sparkConf: SparkConf, dataProvider: BlockDataProvider) = {
+    this(new NettyConfig(sparkConf), dataProvider)
   }
 
   def port: Int = _port
 
-  private var _port: Int = 0
+  def hostName: String = _hostName
+
+  private var _port: Int = conf.serverPort
+  private var _hostName: String = ""
   private var bootstrap: ServerBootstrap = _
   private var channelFuture: ChannelFuture = _
 
@@ -134,7 +138,7 @@ class BlockServer(conf: NettyConfig, pResolver: PathResolver) extends Logging {
           .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
           .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
           .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
-          .addLast("handler", new BlockServerHandler(pResolver))
+          .addLast("handler", new BlockServerHandler(dataProvider))
       }
     })
 
@@ -143,6 +147,7 @@ class BlockServer(conf: NettyConfig, pResolver: PathResolver) extends Logging {
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
     _port = addr.getPort
+    _hostName = addr.getHostName
   }
 
   /** Shutdown the server. */

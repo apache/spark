@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.netty.client
 
-import java.net.InetSocketAddress
-
 import io.netty.buffer.ByteBuf
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
@@ -43,10 +41,7 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
     val blockId = new String(blockIdBytes)
     val blockLen = math.abs(totalLen) - blockIdLen - 4
 
-    def server = {
-      val remoteAddr = ctx.channel.remoteAddress.asInstanceOf[InetSocketAddress]
-      remoteAddr.getHostName + ":" + remoteAddr.getPort
-    }
+    def server = ctx.channel.remoteAddress.toString
 
     // totalLen is negative when it is an error message.
     if (totalLen < 0) {

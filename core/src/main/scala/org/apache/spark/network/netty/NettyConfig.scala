@@ -22,22 +22,26 @@ import org.apache.spark.SparkConf
 /**
  * A central location that tracks all the settings we exposed to users.
  */
+private[spark]
 class NettyConfig(conf: SparkConf) {
 
+  /** Port the server listens on. Default to a random port. */
+  private[netty] val serverPort = conf.getInt("spark.shuffle.io.port", 0)
+
   /** IO mode: nio, oio, epoll, or auto (try epoll first and then nio). */
-  val ioMode = conf.get("spark.shuffle.io.mode", "auto").toLowerCase
+  private[netty] val ioMode = conf.get("spark.shuffle.io.mode", "auto").toLowerCase
 
   /** Connect timeout in secs. Default 60 secs. */
-  val connectTimeoutMs = conf.getInt("spark.shuffle.io.connectionTimeout", 60) * 1000
+  private[netty] val connectTimeoutMs = conf.getInt("spark.shuffle.io.connectionTimeout", 60) * 1000
 
   /**
    * Percentage of the desired amount of time spent for I/O in the child event loops.
    * Only applicable in nio and epoll.
    */
-  val ioRatio = conf.getInt("spark.shuffle.io.netty.ioRatio", 80)
+  private[netty] val ioRatio = conf.getInt("spark.shuffle.io.netty.ioRatio", 80)
 
   /** Requested maximum length of the queue of incoming connections. */
-  val backLog: Option[Int] = conf.getOption("spark.shuffle.io.backLog").map(_.toInt)
+  private[netty] val backLog: Option[Int] = conf.getOption("spark.shuffle.io.backLog").map(_.toInt)
 
   /**
    * Receive buffer size (SO_RCVBUF).
@@ -46,8 +50,10 @@ class NettyConfig(conf: SparkConf) {
    * Assuming latency = 1ms, network_bandwidth = 10Gbps
    *  buffer size should be ~ 1.25MB
    */
-  val receiveBuf: Option[Int] = conf.getOption("spark.shuffle.io.sendBuffer").map(_.toInt)
+  private[netty] val receiveBuf: Option[Int] =
+    conf.getOption("spark.shuffle.io.sendBuffer").map(_.toInt)
 
   /** Send buffer size (SO_SNDBUF). */
-  val sendBuf: Option[Int] = conf.getOption("spark.shuffle.io.sendBuffer").map(_.toInt)
+  private[netty] val sendBuf: Option[Int] =
+    conf.getOption("spark.shuffle.io.sendBuffer").map(_.toInt)
 }
