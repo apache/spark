@@ -100,6 +100,8 @@ class GroupedBinaryClassificationMetrics[K](scoreAndLabels: RDD[(K,(Double, Doub
   /** Returns the (threshold, recall) curve. */
   def recallByThreshold(): RDD[(K,(Double, Double))] = createCurve(Recall)
 
+  def matthewsByThreshold(): RDD[(K,(Double,Double))] = createCurve(MatthewsCorrelationCoefficient)
+
   private lazy val (
     cumulativeCounts: RDD[(K,(Double, BinaryLabelCounter))],
     confusions: RDD[(K,(Double, BinaryConfusionMatrix))]) = {

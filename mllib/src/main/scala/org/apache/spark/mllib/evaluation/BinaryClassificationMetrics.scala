@@ -93,6 +93,8 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends
   /** Returns the (threshold, recall) curve. */
   def recallByThreshold(): RDD[(Double, Double)] = createCurve(Recall)
 
+  def matthewsByThreshold(): RDD[(Double,Double)] = createCurve(MatthewsCorrelationCoefficient)
+
   private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
