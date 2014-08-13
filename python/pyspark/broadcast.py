@@ -19,17 +19,12 @@
 >>> from pyspark.context import SparkContext
 >>> sc = SparkContext('local', 'test')
 >>> b = sc.broadcast([1, 2, 3, 4, 5])
->>> b.value
-[1, 2, 3, 4, 5]
-
->>> from pyspark.broadcast import _broadcastRegistry
->>> _broadcastRegistry[b.bid] = b
->>> from cPickle import dumps, loads
->>> loads(dumps(b)).value
-[1, 2, 3, 4, 5]
-
 >>> sc.parallelize([0, 0]).flatMap(lambda x: b.value).collect()
 [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+
+>>> b = sc.broadcast([1, 2, 3, 4, 5], keep=True)
+>>> b.value
+[1, 2, 3, 4, 5]
 
 >>> large_broadcast = sc.broadcast(list(range(10000)))
 """
@@ -66,3 +61,8 @@ class Broadcast(object):
     def __reduce__(self):
         self._pickle_registry.add(self)
         return (_from_id, (self.bid, ))
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
