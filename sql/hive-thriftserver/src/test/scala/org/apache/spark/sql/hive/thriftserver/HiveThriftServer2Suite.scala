@@ -113,18 +113,36 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     val stmt = createStatement()
     stmt.execute("DROP TABLE IF EXISTS test")
     stmt.execute("DROP TABLE IF EXISTS test_cached")
-    stmt.execute("CREATE TABLE test(key int, val string)")
+    stmt.execute("CREATE TABLE test(key INT, val STRING)")
     stmt.execute(s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test")
-    stmt.execute("CREATE TABLE test_cached as select * from test limit 4")
+    stmt.execute("CREATE TABLE test_cached AS SELECT * FROM test LIMIT 4")
     stmt.execute("CACHE TABLE test_cached")
 
-    var rs = stmt.executeQuery("select count(*) from test")
+    var rs = stmt.executeQuery("SELECT COUNT(*) FROM test")
     rs.next()
     assert(rs.getInt(1) === 5)
 
-    rs = stmt.executeQuery("select count(*) from test_cached")
+    rs = stmt.executeQuery("SELECT COUNT(*) FROM test_cached")
     rs.next()
     assert(rs.getInt(1) === 4)
+
+    stmt.close()
+  }
+
+  test("SPARK-3004 regression: result set containing NULL") {
+    Thread.sleep(5 * 1000)
+    val dataFilePath = getDataFile("data/files/small_kv_with_null.txt")
+    val stmt = createStatement()
+    stmt.execute("DROP TABLE IF EXISTS test_null")
+    stmt.execute("CREATE TABLE test_null(key INT, val STRING)")
+    stmt.execute(s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_null")
+
+    val rs = stmt.executeQuery("SELECT * FROM test_null WHERE key IS NULL")
+    var count = 0
+    while (rs.next()) {
+      count += 1
+    }
+    assert(count === 5)
 
     stmt.close()
   }

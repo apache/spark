@@ -73,35 +73,10 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
             var curCol = 0
 
             while (curCol < sparkRow.length) {
-              dataTypes(curCol) match {
-                case StringType =>
-                  row.addString(sparkRow(curCol).asInstanceOf[String])
-                case IntegerType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getInt(curCol)))
-                case BooleanType =>
-                  row.addColumnValue(ColumnValue.booleanValue(sparkRow.getBoolean(curCol)))
-                case DoubleType =>
-                  row.addColumnValue(ColumnValue.doubleValue(sparkRow.getDouble(curCol)))
-                case FloatType =>
-                  row.addColumnValue(ColumnValue.floatValue(sparkRow.getFloat(curCol)))
-                case DecimalType =>
-                  val hiveDecimal = sparkRow.get(curCol).asInstanceOf[BigDecimal].bigDecimal
-                  row.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
-                case LongType =>
-                  row.addColumnValue(ColumnValue.longValue(sparkRow.getLong(curCol)))
-                case ByteType =>
-                  row.addColumnValue(ColumnValue.byteValue(sparkRow.getByte(curCol)))
-                case ShortType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getShort(curCol)))
-                case TimestampType =>
-                  row.addColumnValue(
-                    ColumnValue.timestampValue(sparkRow.get(curCol).asInstanceOf[Timestamp]))
-                case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-                  val hiveString = result
-                    .queryExecution
-                    .asInstanceOf[HiveContext#QueryExecution]
-                    .toHiveString((sparkRow.get(curCol), dataTypes(curCol)))
-                  row.addColumnValue(ColumnValue.stringValue(hiveString))
+              if (sparkRow.isNullAt(curCol)) {
+                addNullColumnValue(sparkRow, row, curCol)
+              } else {
+                addNonNullColumnValue(sparkRow, row, curCol)
               }
               curCol += 1
             }
@@ -109,6 +84,66 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
             curRow += 1
           }
           new RowSet(rowSet, 0)
+        }
+      }
+
+      def addNonNullColumnValue(from: SparkRow, to: Row, ordinal: Int) {
+        dataTypes(ordinal) match {
+          case StringType =>
+            to.addString(from(ordinal).asInstanceOf[String])
+          case IntegerType =>
+            to.addColumnValue(ColumnValue.intValue(from.getInt(ordinal)))
+          case BooleanType =>
+            to.addColumnValue(ColumnValue.booleanValue(from.getBoolean(ordinal)))
+          case DoubleType =>
+            to.addColumnValue(ColumnValue.doubleValue(from.getDouble(ordinal)))
+          case FloatType =>
+            to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
+          case DecimalType =>
+            val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+            to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
+          case LongType =>
+            to.addColumnValue(ColumnValue.longValue(from.getLong(ordinal)))
+          case ByteType =>
+            to.addColumnValue(ColumnValue.byteValue(from.getByte(ordinal)))
+          case ShortType =>
+            to.addColumnValue(ColumnValue.intValue(from.getShort(ordinal)))
+          case TimestampType =>
+            to.addColumnValue(
+              ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
+          case BinaryType | _: ArrayType | _: StructType | _: MapType =>
+            val hiveString = result
+              .queryExecution
+              .asInstanceOf[HiveContext#QueryExecution]
+              .toHiveString((from.get(ordinal), dataTypes(ordinal)))
+            to.addColumnValue(ColumnValue.stringValue(hiveString))
+        }
+      }
+
+      def addNullColumnValue(from: SparkRow, to: Row, ordinal: Int) {
+        dataTypes(ordinal) match {
+          case StringType =>
+            to.addString(null)
+          case IntegerType =>
+            to.addColumnValue(ColumnValue.intValue(null))
+          case BooleanType =>
+            to.addColumnValue(ColumnValue.booleanValue(null))
+          case DoubleType =>
+            to.addColumnValue(ColumnValue.doubleValue(null))
+          case FloatType =>
+            to.addColumnValue(ColumnValue.floatValue(null))
+          case DecimalType =>
+            to.addColumnValue(ColumnValue.stringValue(null: HiveDecimal))
+          case LongType =>
+            to.addColumnValue(ColumnValue.longValue(null))
+          case ByteType =>
+            to.addColumnValue(ColumnValue.byteValue(null))
+          case ShortType =>
+            to.addColumnValue(ColumnValue.intValue(null))
+          case TimestampType =>
+            to.addColumnValue(ColumnValue.timestampValue(null))
+          case BinaryType | _: ArrayType | _: StructType | _: MapType =>
+            to.addColumnValue(ColumnValue.stringValue(null: String))
         }
       }
 
