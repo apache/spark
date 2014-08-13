@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer
+    PairDeserializer, CompressedSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
@@ -571,10 +571,10 @@ class SparkContext(object):
 
         :keep: Keep the `value` in driver or not.
         """
-        pickleSer = PickleSerializer()
+        ser = CompressedSerializer(PickleSerializer())
         # pass large object by py4j is very slow and need much memory
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        pickleSer.dump_stream([value], tempFile)
+        ser.dump_stream([value], tempFile)
         tempFile.close()
         jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
         os.unlink(tempFile.name)
