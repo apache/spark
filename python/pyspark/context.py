@@ -562,17 +562,24 @@ class SparkContext(object):
         rest = ListConverter().convert(rest, self._gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
-    def broadcast(self, value):
+    def broadcast(self, value, keep=False):
         """
         Broadcast a read-only variable to the cluster, returning a
         L{Broadcast<pyspark.broadcast.Broadcast>}
-        object for reading it in distributed functions. The variable will be
-        sent to each cluster only once.
+        object for reading it in distributed functions. The variable will
+        be sent to each cluster only once.
+
+        :keep: Keep the `value` in driver or not.
         """
         pickleSer = PickleSerializer()
-        pickled = pickleSer.dumps(value)
-        jbroadcast = self._jsc.broadcast(bytearray(pickled))
-        return Broadcast(jbroadcast.id(), value, jbroadcast, self._pickled_broadcast_vars)
+        # pass large object by py4j is very slow and need much memory
+        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
+        pickleSer.dump_stream([value], tempFile)
+        tempFile.close()
+        jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
+        os.unlink(tempFile.name)
+        return Broadcast(jbroadcast.id(), value if keep else None,
+                         jbroadcast, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """
