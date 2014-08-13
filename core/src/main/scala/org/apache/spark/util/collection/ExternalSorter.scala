@@ -744,18 +744,9 @@ private[spark] class ExternalSorter[K, V, C](
       var in: FileInputStream = null
       try {
         out = new FileOutputStream(outputFile)
-        val outChannel = out.getChannel()
         for (i <- 0 until numPartitions) {
           in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          val inChannel = in.getChannel()
-          var pos: Long = 0
-          val size = inChannel.size()
-
-          // In case transferTo method transferred less data than we have required.
-          while (pos < size) {
-            pos += inChannel.transferTo(pos, size - pos, outChannel)
-          }
-
+          val size = org.apache.spark.util.Utils.copyStream(in, out, false)
           in.close()
           in = null
           lengths(i) = size
