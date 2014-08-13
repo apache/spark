@@ -1,0 +1,13 @@
+CREATE  TABLE tmp_feng.tmp_showcrt(
+  key string, 
+  value int)
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  'file:/tmp/sparkHiveWarehouse1280221975983654134/tmp_feng.db/tmp_showcrt'
+TBLPROPERTIES (
+  'transient_lastDdlTime'='1407132107')

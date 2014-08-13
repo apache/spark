@@ -161,6 +161,7 @@ abstract class HiveComparisonTest
     "transient_lastDdlTime",
     "grantTime",
     "lastUpdateTime",
+    "last_modified_by",
     "last_modified_time",
     "Owner:",
     // The following are hive specific schema parameters which we do not need to match exactly.
