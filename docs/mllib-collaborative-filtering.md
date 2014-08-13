@@ -14,13 +14,13 @@ is commonly used for recommender systems.  These techniques aim to fill in the
 missing entries of a user-item association matrix.  MLlib currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
-In particular, we implement the [alternating least squares
+MLlib uses the [alternating least squares
 (ALS)](http://dl.acm.org/citation.cfm?id=1608614)
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
-* *rank* is the number of latent factors in our model.
+* *rank* is the number of latent factors in the model.
 * *iterations* is the number of iterations to run.
 * *lambda* specifies the regularization parameter in ALS.
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for
@@ -86,8 +86,8 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
 println("Mean Squared Error = " + MSE)
 {% endhighlight %}
 
-If the rating matrix is derived from other source of information (i.e., it is inferred from
-other signals), you can use the trainImplicit method to get better results.
+If the rating matrix is derived from another source of information (e.g., it is inferred from
+other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
@@ -174,10 +174,11 @@ public class CollaborativeFiltering {
 }
 {% endhighlight %}
 
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -219,5 +220,5 @@ model = ALS.trainImplicit(ratings, rank, numIterations, alpha = 0.01)
 
 ## Tutorial
 
-[AMP Camp](http://ampcamp.berkeley.edu/) provides a hands-on tutorial for
-[personalized movie recommendation with MLlib](http://ampcamp.berkeley.edu/big-data-mini-course/movie-recommendation-with-mllib.html).
+The [training exercises](https://databricks-training.s3.amazonaws.com/index.html) from the Spark Summit 2014 include a hands-on tutorial for
+[personalized movie recommendation with MLlib](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).

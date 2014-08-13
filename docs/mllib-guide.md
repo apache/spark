@@ -3,18 +3,19 @@ layout: global
 title: Machine Learning Library (MLlib)
 ---
 
-MLlib is a Spark implementation of some common machine learning algorithms and utilities,
+MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
 including classification, regression, clustering, collaborative
-filtering, dimensionality reduction, as well as underlying optimization primitives:
+filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
 
-* [Basics](mllib-basics.html)
-  * data types 
+* [Data types](mllib-basics.html)
+* [Basic statistics](mllib-stats.html)
+  * data generators  
+  * stratified sampling
   * summary statistics
-* Classification and regression
-  * [linear support vector machine (SVM)](mllib-linear-methods.html#linear-support-vector-machine-svm)
-  * [logistic regression](mllib-linear-methods.html#logistic-regression)
-  * [linear least squares, Lasso, and ridge regression](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
-  * [decision tree](mllib-decision-tree.html)
+  * hypothesis testing
+* [Classification and regression](mllib-classification-regression.html)
+  * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
+  * [decision trees](mllib-decision-tree.html)
   * [naive Bayes](mllib-naive-bayes.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
@@ -23,17 +24,18 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
-* [Optimization](mllib-optimization.html)
+* [Feature extraction and transformation](mllib-feature-extraction.html)
+* [Optimization (developer)](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
-MLlib is a new component under active development.
+MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
-and we will provide migration guide between releases.
+and the migration guide below will explain all changes between releases.
 
 # Dependencies
 
-MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on
+MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on
 [netlib-java](https://github.com/fommil/netlib-java), and
 [jblas](https://github.com/mikiobraun/jblas). 
 `netlib-java` and `jblas` depend on native Fortran routines.
@@ -56,7 +58,7 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
 breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
-take advantage of sparsity in both storage and computation.
+take advantage of sparsity in both storage and computation. Details are described below.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

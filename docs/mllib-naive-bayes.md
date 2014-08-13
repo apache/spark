@@ -4,23 +4,23 @@ title: Naive Bayes - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
 ---
 
-Naive Bayes is a simple multiclass classification algorithm with the assumption of independence
-between every pair of features. Naive Bayes can be trained very efficiently. Within a single pass to
-the training data, it computes the conditional probability distribution of each feature given label,
-and then it applies Bayes' theorem to compute the conditional probability distribution of label
-given an observation and use it for prediction. For more details, please visit the Wikipedia page
-[Naive Bayes classifier](http://en.wikipedia.org/wiki/Naive_Bayes_classifier).
+[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) is a simple
+multiclass classification algorithm with the assumption of independence between
+every pair of features. Naive Bayes can be trained very efficiently. Within a
+single pass to the training data, it computes the conditional probability
+distribution of each feature given label, and then it applies Bayes' theorem to
+compute the conditional probability distribution of label given an observation
+and use it for prediction.
 
-In MLlib, we implemented multinomial naive Bayes, which is typically used for document
-classification. Within that context, each observation is a document, each feature represents a term,
-whose value is the frequency of the term. For its formulation, please visit the Wikipedia page
-[Multinomial Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-or the section
-[Naive Bayes text classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
-from the book Introduction to Information
-Retrieval. [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+MLlib supports [multinomial naive
+Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
+which is typically used for [document
+classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Within that context, each observation is a document and each
+feature represents a term whose value is the frequency of the term. 
+[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
-vectors are usually sparse. Please supply sparse vectors as input to take advantage of
+vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
 sparsity. Since the training data is only used once, it is not necessary to cache it.
 
 ## Examples

@@ -38,7 +38,7 @@ a given dataset, the algorithm returns the best clustering result).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Following code snippets can be executed in `spark-shell`.
+The following code snippets can be executed in `spark-shell`.
 
 In the following example after loading and parsing data, we use the
 [`KMeans`](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
@@ -70,7 +70,7 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A standalone application example
-that is equivalent to the provided example in Scala is given bellow:
+that is equivalent to the provided example in Scala is given below:
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -113,14 +113,15 @@ public class KMeansExample {
 }
 {% endhighlight %}
 
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
-Following examples can be tested in the PySpark shell.
+The following examples can be tested in the PySpark shell.
 
 In the following example after loading and parsing data, we use the KMeans object to cluster the
 data into two clusters. The number of desired clusters is passed to the algorithm. We then compute

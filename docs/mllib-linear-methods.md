@@ -33,24 +33,24 @@ the task of finding a minimizer of a convex function `$f$` that depends on a var
 Formally, we can write this as the optimization problem `$\min_{\wv \in\R^d} \; f(\wv)$`, where
 the objective function is of the form
 `\begin{equation}
-    f(\wv) := 
-    \frac1n \sum_{i=1}^n L(\wv;\x_i,y_i) +
-    \lambda\, R(\wv_i)
+    f(\wv) := \lambda\, R(\wv) +
+    \frac1n \sum_{i=1}^n L(\wv;\x_i,y_i)
     \label{eq:regPrimal}
     \ .
 \end{equation}`
 Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
 `$y_i\in\R$` are their corresponding labels, which we want to predict. 
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
-Several MLlib's classification and regression algorithms fall into this category,
+Several of MLlib's classification and regression algorithms fall into this category,
 and are discussed here.
 
 The objective function `$f$` has two parts:
-the loss that measures the error of the model on the training data, 
-and the regularizer that measures the complexity of the model.
-The loss function `$L(\wv;.)$` must be a convex function in `$\wv$`.
-The fixed regularization parameter `$\lambda \ge 0$` (`regParam` in the code) defines the trade-off
-between the two goals of small loss and small model complexity.
+the regularizer that controls the complexity of the model,
+and the loss that measures the error of the model on the training data.
+The loss function `$L(\wv;.)$` is typically a convex function in `$\wv$`.  The
+fixed regularization parameter `$\lambda \ge 0$` (`regParam` in the code)
+defines the trade-off between the two goals of minimizing the loss (i.e.,
+training error) and minimizing model complexity (i.e., to avoid overfitting).
 
 ### Loss functions
 
@@ -80,10 +80,10 @@ methods MLlib supports:
 
 ### Regularizers
 
-The purpose of the [regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
-encourage simple models, by punishing the complexity of the model `$\wv$`, in order to e.g. avoid
-over-fitting.
-We support the following regularizers in MLlib:
+The purpose of the
+[regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
+encourage simple models and avoid overfitting.  We support the following
+regularizers in MLlib:
 
 <table class="table">
   <thead>
@@ -106,27 +106,28 @@ Here `$\mathrm{sign}(\wv)$` is the vector consisting of the signs (`$\pm1$`) of 
 of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
-However, L1 regularization can help promote sparsity in weights, leading to simpler models, which is
-also used for feature selection.  It is not recommended to train models without any regularization,
+However, L1 regularization can help promote sparsity in weights leading to smaller and more interpretable models, the latter of which can be useful for feature selection.
+It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
 ## Binary classification
 
-[Binary classification](http://en.wikipedia.org/wiki/Binary_classification) is to divide items into
-two categories: positive and negative.  MLlib supports two linear methods for binary classification:
-linear support vector machine (SVM) and logistic regression.  The training data set is represented
-by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the mathematical
-formulation, a training label $y$ is either $+1$ (positive) or $-1$ (negative), which is convenient
-for the formulation.  *However*, the negative label is represented by $0$ in MLlib instead of $-1$,
-to be consistent with multiclass labeling.
+[Binary classification](http://en.wikipedia.org/wiki/Binary_classification)
+aims to divide items into two categories: positive and negative.  MLlib
+supports two linear methods for binary classification: linear support vector
+machines (SVMs) and logistic regression. For both methods, MLlib supports
+L1 and L2 regularized variants. The training data set is represented by an RDD
+of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the
+mathematical formulation in this guide, a training label $y$ is denoted as
+either $+1$ (positive) or $-1$ (negative), which is convenient for the
+formulation.  *However*, the negative label is represented by $0$ in MLlib
+instead of $-1$, to be consistent with multiclass labeling.
 
-### Linear support vector machine (SVM)
+### Linear support vector machines (SVMs)
 
 The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
-has become a standard choice for large-scale classification tasks.
-The name "linear SVM" is actually ambiguous.
-By "linear SVM", we mean specifically the linear method with the loss function in formulation
-`$\eqref{eq:regPrimal}$` given by the hinge loss
+is a standard method for large-scale classification tasks. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss function in the formulation given by the hinge loss:
+
 `\[
 L(\wv;\x,y) := \max \{0, 1-y \wv^T \x \}.
 \]`
@@ -134,39 +135,44 @@ By default, linear SVMs are trained with an L2 regularization.
 We also support alternative L1 regularization. In this case,
 the problem becomes a [linear program](http://en.wikipedia.org/wiki/Linear_programming).
 
-Linear SVM algorithm outputs a SVM model, which makes predictions based on the value of $\wv^T \x$.
-By the default, if $\wv^T \x \geq 0$, the outcome is positive, or negative otherwise.
-However, quite often in practice, the default threshold $0$ is not a good choice.
-The threshold should be determined via model evaluation.
+The linear SVMs algorithm outputs an SVM model. Given a new data point,
+denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
+By the default, if $\wv^T \x \geq 0$ then the outcome is positive, and negative
+otherwise.
 
 ### Logistic regression
 
 [Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
-binary response.  It is a linear method with the loss function in formulation
-`$\eqref{eq:regPrimal}$` given by the logistic loss
+binary response. 
+It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
+function in the formulation given by the logistic loss:
 `\[
 L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
 \]`
 
-Logistic regression algorithm outputs a logistic regression model, which makes predictions by
+The logistic regression algorithm outputs a logistic regression model.  Given a
+new data point, denoted by $\x$, the model makes predictions by
 applying the logistic function
 `\[
 \mathrm{f}(z) = \frac{1}{1 + e^{-z}}
 \]`
 where $z = \wv^T \x$.
-By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or negative otherwise.
-For the same reason mentioned above, quite often in practice, this default threshold is not a good choice.
-The threshold should be determined via model evaluation.
+By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
+negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
+model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
+that $\x$ is positive).
 
 ### Evaluation metrics
 
-MLlib supports common evaluation metrics for binary classification (not available in Python).  This
+MLlib supports common evaluation metrics for binary classification (not available in PySpark). 
+This
 includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score),
 [receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic),
 precision-recall curve, and
 [area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
-Among the metrics, area under ROC is commonly used to compare models and precision/recall/F-measure
-can help determine the threshold to use.
+AUC is commonly used to compare the performance of various models while
+precision/recall/F-measure can help determine the appropriate threshold to use
+for prediction purposes. 
 
 ### Examples
 
@@ -233,8 +239,7 @@ svmAlg.optimizer.
 val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
-Similarly, you can use replace `SVMWithSGD` by
-[`LogisticRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[`LogisticRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD) can be used in a similar fashion as `SVMWithSGD`.
 
 </div>
 
@@ -318,10 +323,11 @@ svmAlg.optimizer()
 final SVMModel modelL1 = svmAlg.run(training.rdd());
 {% endhighlight %}
 
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -354,23 +360,21 @@ print("Training Error = " + str(trainErr))
 
 ## Linear least squares, Lasso, and ridge regression
 
-Linear least squares is a family of linear methods with the loss function in formulation
-`$\eqref{eq:regPrimal}$` given by the squared loss
 
+Linear least squares is the most common formulation for regression problems. 
+It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
+function in the formulation given by the squared loss:
 `\[
 L(\wv;\x,y) :=  \frac{1}{2} (\wv^T \x - y)^2.
 \]`
 
-Depending on the regularization type, we call the method
-[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or simply
-[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) if there
-is no regularization, [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) if L2
-regularization is used, and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) if L1
-regularization is used.  This average loss $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$ is also
+Various related regression methods are derived by using different types of regularization:
+[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or 
+[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses 
+ no regularization; [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) uses L2
+regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) uses L1
+regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
 known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
-
-Note that the squared loss is sensitive to outliers. 
-Regularization or a robust alternative (e.g., $\ell_1$ regression) is usually necessary in practice.
 
 ### Examples
 
@@ -379,7 +383,7 @@ Regularization or a robust alternative (e.g., $\ell_1$ regression) is usually ne
 <div data-lang="scala" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
-values. We compute the Mean Squared Error at the end to evaluate
+values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight scala %}
@@ -407,9 +411,8 @@ val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
-Similarly you can use
 [`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD).
+and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD) can be used in a similar fashion as `LinearRegressionWithSGD`.
 
 </div>
 
@@ -479,16 +482,17 @@ public class LinearRegression {
 }
 {% endhighlight %}
 
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
-values. We compute the Mean Squared Error at the end to evaluate
+values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight python %}
