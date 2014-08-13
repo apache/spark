@@ -38,11 +38,6 @@ import org.apache.spark.storage.BlockDataProvider
 import org.apache.spark.util.Utils
 
 
-// TODO: Remove dependency on BlockId. This layer should not be coupled with storage.
-
-// TODO: PathResolver is not general enough. It only works for on-disk blocks.
-
-
 /**
  * Server for serving Spark data blocks.
  * This should be used together with [[org.apache.spark.network.netty.client.BlockFetchingClient]].

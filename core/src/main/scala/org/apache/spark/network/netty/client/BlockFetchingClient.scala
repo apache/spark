@@ -90,9 +90,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
    *                                  error message.
    */
   def fetchBlocks(
-                   blockIds: Seq[String],
-                   blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit,
-                   blockFetchFailureCallback: (String, String) => Unit): Unit = {
+      blockIds: Seq[String],
+      blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit,
+      blockFetchFailureCallback: (String, String) => Unit): Unit = {
     // It's best to limit the number of "write" calls since it needs to traverse the whole pipeline.
     // It's also best to limit the number of "flush" calls since it requires system calls.
     // Let's concatenate the string and then call writeAndFlush once.

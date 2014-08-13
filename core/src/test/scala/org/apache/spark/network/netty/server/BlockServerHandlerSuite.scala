@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.ByteBuffer
 
 import io.netty.buffer.{Unpooled, ByteBuf}
-import io.netty.channel.DefaultFileRegion
+import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler, DefaultFileRegion}
 import io.netty.channel.embedded.EmbeddedChannel
 
 import org.scalatest.FunSuite
@@ -81,5 +81,21 @@ class BlockServerHandlerSuite extends FunSuite {
 
     assert(out2.count === testFile.length - 25)
     assert(out2.position === 15)
+  }
+
+  test("pipeline exception propagation") {
+    val blockServerHandler = new BlockServerHandler(new BlockDataProvider {
+      override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = ???
+    })
+    val exceptionHandler = new SimpleChannelInboundHandler[String]() {
+      override def channelRead0(ctx: ChannelHandlerContext, msg: String): Unit = {
+        throw new Exception("this is an error")
+      }
+    }
+
+    val channel = new EmbeddedChannel(exceptionHandler, blockServerHandler)
+    assert(channel.isOpen)
+    channel.writeInbound("a message to trigger the error")
+    assert(!channel.isOpen)
   }
 }

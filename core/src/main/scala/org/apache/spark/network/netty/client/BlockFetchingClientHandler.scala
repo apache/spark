@@ -33,6 +33,11 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
   var blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit = _
   var blockFetchFailureCallback: (String, String) => Unit = _
 
+  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+    logError(s"Exception in connection from ${ctx.channel.remoteAddress}", cause)
+    ctx.close()
+  }
+
   override def channelRead0(ctx: ChannelHandlerContext, in: ByteBuf) {
     val totalLen = in.readInt()
     val blockIdLen = in.readInt()

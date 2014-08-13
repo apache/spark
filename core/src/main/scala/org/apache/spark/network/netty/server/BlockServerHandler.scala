@@ -38,6 +38,11 @@ private[server]
 class BlockServerHandler(dataProvider: BlockDataProvider)
   extends SimpleChannelInboundHandler[String] with Logging {
 
+  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+    logError(s"Exception in connection from ${ctx.channel.remoteAddress}", cause)
+    ctx.close()
+  }
+
   override def channelRead0(ctx: ChannelHandlerContext, blockId: String): Unit = {
     def client = ctx.channel.remoteAddress.toString
 
