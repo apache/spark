@@ -315,8 +315,7 @@ private[spark] object PythonRDD extends Logging {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
-  def readBroadcastFromFile(sc: JavaSparkContext, filename: String):
-  Broadcast[Array[Byte]] = {
+  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
     val length = file.readInt()
     val obj = new Array[Byte](length)
