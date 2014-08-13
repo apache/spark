@@ -88,8 +88,7 @@ trait SQLConf {
    *
    * Defaults to false as this feature is currently experimental.
    */
-  private[spark] def codegenEnabled: Boolean =
-    if (getConf(CODEGEN_ENABLED, "false") == "true") true else false
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -113,7 +112,7 @@ trait SQLConf {
    * When set to true, we always treat byte arrays in Parquet files as strings.
    */
   private[spark] def isParquetBinaryAsString: Boolean =
-    if (getConf(PARQUET_BINARY_AS_STRING, "false") == "true") true else false
+    getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
