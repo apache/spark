@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
@@ -29,6 +30,18 @@ import org.apache.spark.rdd.RDD
  */
 @Experimental
 object Statistics {
+
+  /**
+   * :: Experimental ::
+   * Computes column-wise summary statistics for the input RDD[Vector].
+   *
+   * @param X an RDD[Vector] for which column-wise summary statistics are to be computed.
+   * @return [[MultivariateStatisticalSummary]] object containing column-wise summary statistics.
+   */
+  @Experimental
+  def colStats(X: RDD[Vector]): MultivariateStatisticalSummary = {
+    new RowMatrix(X).computeColumnSummaryStatistics()
+  }
 
   /**
    * :: Experimental ::

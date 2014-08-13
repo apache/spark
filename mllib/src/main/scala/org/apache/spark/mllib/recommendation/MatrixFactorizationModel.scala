@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.api.python.PythonMLLibAPI
+import org.apache.spark.mllib.api.python.SerDe
 
 /**
  * Model representing the result of matrix factorization.
@@ -117,9 +117,8 @@ class MatrixFactorizationModel private[mllib] (
    */
   @DeveloperApi
   def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    val pythonAPI = new PythonMLLibAPI()
-    val usersProducts = usersProductsJRDD.rdd.map(xBytes => pythonAPI.unpackTuple(xBytes))
-    predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
+    val usersProducts = usersProductsJRDD.rdd.map(xBytes => SerDe.unpackTuple(xBytes))
+    predict(usersProducts).map(rate => SerDe.serializeRating(rate))
   }
 
 }
