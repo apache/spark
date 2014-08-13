@@ -147,7 +147,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Preferred alternative to Class.forName(className) */
-  def classForName(clazz: String) = Class.forName(clazz, true, getContextOrSparkClassLoader)
+  def classForName(className: String) = Class.forName(className, true, getContextOrSparkClassLoader)
 
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
