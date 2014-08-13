@@ -481,6 +481,7 @@ class PythonMLLibAPI extends Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
  * MultivariateStatisticalSummary with Vector fields serialized.
  */
 @DeveloperApi
