@@ -54,7 +54,7 @@ import org.apache.spark.util.Utils
  *   frame-length (4 bytes), block-id-length (4 bytes), block-id, block-data.
  *
  *   frame-length should not include the length of itself.
- *   If frame-length is negative, then this is an error message rather than block-data. The real
+ *   If block-id-length is negative, then this is an error message rather than block-data. The real
  *   length is the absolute value of the frame-length.
  *
  */

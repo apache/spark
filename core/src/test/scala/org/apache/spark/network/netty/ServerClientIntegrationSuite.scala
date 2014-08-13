@@ -75,8 +75,10 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     clientFactory.stop()
   }
 
+  /** A ByteBuf for buffer_block */
   lazy val byteBufferBlockReference = Unpooled.wrappedBuffer(buf)
 
+  /** A ByteBuf for file_block */
   lazy val fileBlockReference = {
     val bytes = new Array[Byte](testFile.length.toInt)
     val fp = new RandomAccessFile(testFile, "r")
@@ -85,84 +87,68 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     Unpooled.wrappedBuffer(bytes, 10, testFile.length.toInt - 25)
   }
 
-  test("fetch a ByteBuffer block") {
-    val client = clientFactory.createClient(server.hostName, server.port)
-    val sem = new Semaphore(0)
-    var receivedBlockId: String = null
-    var receivedBuffer = null.asInstanceOf[ReferenceCountedBuffer]
-
-    client.fetchBlocks(
-      Seq(bufferBlockId),
-      (blockId, buf) => {
-        receivedBlockId = blockId
-        buf.retain()
-        receivedBuffer = buf
-        sem.release()
-      },
-      (blockId, errorMsg) => sem.release()
-    )
-
-    // This should block until the blocks are fetched
-    sem.acquire()
-
-    assert(receivedBlockId === bufferBlockId)
-    assert(receivedBuffer.underlying == byteBufferBlockReference)
-    receivedBuffer.release()
-    client.close()
-  }
-
-  test("fetch a FileSegment block via zero-copy send") {
-    val client = clientFactory.createClient(server.hostName, server.port)
-    val sem = new Semaphore(0)
-    var receivedBlockId: String = null
-    var receivedBuffer = null.asInstanceOf[ReferenceCountedBuffer]
-
-    client.fetchBlocks(
-      Seq(fileBlockId),
-      (blockId, buf) => {
-        receivedBlockId = blockId
-        buf.retain()
-        receivedBuffer = buf
-        sem.release()
-      },
-      (blockId, errorMsg) => sem.release()
-    )
-
-    // This should block until the blocks are fetched
-    sem.acquire()
-
-    assert(receivedBlockId === fileBlockId)
-    assert(receivedBuffer.underlying == fileBlockReference)
-    receivedBuffer.release()
-    client.close()
-  }
-
-  test("fetch both ByteBuffer block and FileSegment block") {
+  def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ReferenceCountedBuffer], Set[String]) =
+  {
     val client = clientFactory.createClient(server.hostName, server.port)
     val sem = new Semaphore(0)
     val receivedBlockIds = Collections.synchronizedSet(new HashSet[String])
+    val errorBlockIds = Collections.synchronizedSet(new HashSet[String])
     val receivedBuffers = Collections.synchronizedSet(new HashSet[ReferenceCountedBuffer])
 
     client.fetchBlocks(
-      Seq(bufferBlockId, fileBlockId),
+      blockIds,
       (blockId, buf) => {
         receivedBlockIds.add(blockId)
         buf.retain()
         receivedBuffers.add(buf)
         sem.release()
       },
-      (blockId, errorMsg) => sem.release()
+      (blockId, errorMsg) => {
+        errorBlockIds.add(blockId)
+        sem.release()
+      }
     )
-
-    sem.acquire(2)
-    assert(receivedBlockIds.contains(bufferBlockId))
-    assert(receivedBlockIds.contains(fileBlockId))
-
-    val byteBufferReference = byteBufferBlockReference
-    val fileReference = fileBlockReference
-
-    assert(receivedBuffers.map(_.underlying) === Set(byteBufferReference, fileReference))
-    receivedBuffers.foreach(_.release())
+    sem.acquire(blockIds.size)
     client.close()
+    (receivedBlockIds.toSet, receivedBuffers.toSet, errorBlockIds.toSet)
+  }
+
+  test("fetch a ByteBuffer block") {
+    val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId))
+    assert(blockIds === Set(bufferBlockId))
+    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference))
+    assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
+  }
+
+  test("fetch a FileSegment block via zero-copy send") {
+    val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(fileBlockId))
+    assert(blockIds === Set(fileBlockId))
+    assert(buffers.map(_.underlying) === Set(fileBlockReference))
+    assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
+  }
+
+  test("fetch a non-existent block") {
+    val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq("random-block"))
+    assert(blockIds.isEmpty)
+    assert(buffers.isEmpty)
+    assert(failBlockIds === Set("random-block"))
+  }
+
+  test("fetch both ByteBuffer block and FileSegment block") {
+    val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId, fileBlockId))
+    assert(blockIds === Set(bufferBlockId, fileBlockId))
+    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference, fileBlockReference))
+    assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
+  }
+
+  test("fetch both ByteBuffer block and a non-existent block") {
+    val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId, "random-block"))
+    assert(blockIds === Set(bufferBlockId))
+    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference))
+    assert(failBlockIds === Set("random-block"))
+    buffers.foreach(_.release())
   }
 }

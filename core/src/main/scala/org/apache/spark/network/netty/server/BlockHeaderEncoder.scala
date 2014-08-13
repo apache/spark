@@ -33,8 +33,8 @@ class BlockHeaderEncoder extends MessageToByteEncoder[BlockHeader] {
     msg.error match {
       case Some(errorMsg) =>
         val errorBytes = errorMsg.getBytes
-        out.writeInt(-(4 + blockId.length + errorBytes.size))
-        out.writeInt(blockId.length)
+        out.writeInt(4 + blockId.length + errorBytes.size)
+        out.writeInt(-blockId.length)
         out.writeBytes(blockId)
         out.writeBytes(errorBytes)
       case None =>

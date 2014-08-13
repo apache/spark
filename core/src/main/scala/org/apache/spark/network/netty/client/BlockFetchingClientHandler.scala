@@ -36,15 +36,15 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
   override def channelRead0(ctx: ChannelHandlerContext, in: ByteBuf) {
     val totalLen = in.readInt()
     val blockIdLen = in.readInt()
-    val blockIdBytes = new Array[Byte](blockIdLen)
+    val blockIdBytes = new Array[Byte](math.abs(blockIdLen))
     in.readBytes(blockIdBytes)
     val blockId = new String(blockIdBytes)
-    val blockLen = math.abs(totalLen) - blockIdLen - 4
+    val blockLen = totalLen - math.abs(blockIdLen) - 4
 
     def server = ctx.channel.remoteAddress.toString
 
-    // totalLen is negative when it is an error message.
-    if (totalLen < 0) {
+    // blockIdLen is negative when it is an error message.
+    if (blockIdLen < 0) {
       val errorMessageBytes = new Array[Byte](blockLen)
       in.readBytes(errorMessageBytes)
       val errorMsg = new String(errorMessageBytes)
