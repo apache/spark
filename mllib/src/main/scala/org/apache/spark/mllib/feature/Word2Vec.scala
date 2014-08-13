@@ -34,7 +34,7 @@ import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
-
+import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 /**
  *  Entry in vocabulary 
  */
@@ -292,6 +292,9 @@ class Word2Vec extends Serializable with Logging {
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
+        val syn0Modify = new Array[Int](vocabSize)
+        val syn1Modify = new Array[Int](vocabSize)
+
         val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
@@ -321,8 +324,10 @@ class Word2Vec extends Serializable with Logging {
                     // Hierarchical softmax
                     var d = 0
                     while (d < bcVocab.value(word).codeLen) {
+                      val ind = bcVocab.value(word).point(d)
                       val l2 = bcVocab.value(word).point(d) * vectorSize
                       // Propagate hidden -> output
+                      syn1Modify(ind) += 1
                       var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
@@ -334,6 +339,7 @@ class Word2Vec extends Serializable with Logging {
                       d += 1
                     }
                     blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    syn0Modify(lastWord) += 1
                   }
                 }
                 a += 1
@@ -342,21 +348,50 @@ class Word2Vec extends Serializable with Logging {
             }
             (syn0, syn1, lwc, wc)
         }
-        Iterator(model)
-      }
-      val (aggSyn0, aggSyn1, _, _) =
-        partial.treeReduce { case ((syn0_1, syn1_1, lwc_1, wc_1), (syn0_2, syn1_2, lwc_2, wc_2)) =>
-          val n = syn0_1.length
-          val weight1 = 1.0f * wc_1 / (wc_1 + wc_2)
-          val weight2 = 1.0f * wc_2 / (wc_1 + wc_2)
-          blas.sscal(n, weight1, syn0_1, 1)
-          blas.sscal(n, weight1, syn1_1, 1)
-          blas.saxpy(n, weight2, syn0_2, 1, syn0_1, 1)
-          blas.saxpy(n, weight2, syn1_2, 1, syn1_1, 1)
-          (syn0_1, syn1_1, lwc_1 + lwc_2, wc_1 + wc_2)
+        val syn0Local = model._1
+        val syn1Local = model._2
+        
+        val syn0Out = new PrimitiveKeyOpenHashMap[Int, Array[Float]]
+        // val syn1Out = new PrimitiveKeyOpenHashMap[Int, Array[Float]]
+        var index = 0
+        while(index < vocabSize) {
+          if (syn0Modify(index) != 0) syn0Out.update(index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize))
+          if (syn1Modify(index) != 0) syn0Out.update(index + vocabSize, syn1Local.slice(index * vectorSize, (index + 1) * vectorSize))
+          index += 1
         }
-      syn0Global = aggSyn0
-      syn1Global = aggSyn1
+        Iterator(syn0Out)
+      }
+      // partial.cache()
+
+      val synAgg = partial.flatMap(x => x).reduceByKey { 
+        case (v1,v2) => 
+          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)   
+          v1
+      }.collect().sortBy(_._1).flatMap(x => x._2)
+      
+      syn0Global = synAgg.slice(0, vocabSize * vectorSize)
+      syn1Global = synAgg.slice(vocabSize * vectorSize, synAgg.length)
+      //logInfo("syn0Global length = " + syn0Global.length)
+      // syn1Global = partial.flatMap(x => x._2).reduceByKey { 
+      //   case (v1,v2) => 
+      //     blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)   
+      //     v1
+      // }.collect().sortBy(_._1).flatMap(x => x._2)
+      // logInfo("syn1Global length = " + syn1Global.length)
+      // logInfo("vocab size = " +  vocabSize)
+      // val (aggSyn0, aggSyn1, _, _) =
+      //   partial.treeReduce { case ((syn0_1, syn1_1, lwc_1, wc_1), (syn0_2, syn1_2, lwc_2, wc_2)) =>
+      //     val n = syn0_1.length
+      //     val weight1 = 1.0f * wc_1 / (wc_1 + wc_2)
+      //     val weight2 = 1.0f * wc_2 / (wc_1 + wc_2)
+      //     blas.sscal(n, weight1, syn0_1, 1)
+      //     blas.sscal(n, weight1, syn1_1, 1)
+      //     blas.saxpy(n, weight2, syn0_2, 1, syn0_1, 1)
+      //     blas.saxpy(n, weight2, syn1_2, 1, syn1_1, 1)
+      //     (syn0_1, syn1_1, lwc_1 + lwc_2, wc_1 + wc_2)
+      //   }
+      //syn0Global = aggSyn0
+      //syn1Global = aggSyn1
     }
     newSentences.unpersist()
     
