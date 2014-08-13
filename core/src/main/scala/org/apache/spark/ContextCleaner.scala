@@ -64,12 +64,21 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
+  // Capacity of the reference buffer before we log an error message
+  private val referenceBufferCapacity = 10000
+  private var queueFullErrorMessageLogged = false
+
   /**
    * Whether the cleaning thread will block on cleanup tasks.
-   * This is set to true only for tests.
+   *
+   * Due to SPARK-3015, this is set to true by default. This is intended to be only a temporary
+   * workaround for the issue, which is ultimately caused by the way the BlockManager actors
+   * issue inter-dependent blocking Akka messages to each other at high frequencies. This happens,
+   * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
+   * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", false)
+    "spark.cleaner.referenceTracking.blocking", true)
 
   @volatile private var stopped = false
 
@@ -108,6 +117,9 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask) {
     referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
+    if (referenceBuffer.size > referenceBufferCapacity) {
+      logQueueFullErrorMessage()
+    }
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
@@ -119,6 +131,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
         reference.map(_.task).foreach { task =>
           logDebug("Got cleaning task " + task)
           referenceBuffer -= reference.get
+          logDebug("There are " + referenceBuffer.size + " more tasks in queue")
           task match {
             case CleanRDD(rddId) =>
               doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
@@ -171,12 +184,25 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
+  /**
+   * Log an error message to indicate that the queue has exceeded its capacity. Do this only once.
+   */
+  private def logQueueFullErrorMessage(): Unit = {
+    if (!queueFullErrorMessageLogged) {
+      queueFullErrorMessageLogged = true
+      logError(s"Reference queue size in ContextCleaner has exceeded $referenceBufferCapacity! " +
+        "This means the rate at which we clean up RDDs, shuffles, and/or broadcasts is too slow.")
+      if (!blockOnCleanupTasks) {
+        logError("Consider setting spark.cleaner.referenceTracking.blocking to false." +
+          "Note that there is a known issue (SPARK-3015) in disabling blocking, especially if " +
+          "the workload involves creating many RDDs in quick successions.")
+      }
+    }
+  }
+
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-
-  // Used for testing. These methods explicitly blocks until cleanup is completed
-  // to ensure that more reliable testing.
 }
 
 private object ContextCleaner {
