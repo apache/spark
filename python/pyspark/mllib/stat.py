@@ -91,7 +91,6 @@ class Statistics(object):
         cStats = sc._jvm.PythonMLLibAPI().colStats(Xser._jrdd)
         return MultivariateStatisticalSummary(sc, cStats)
 
-
     @staticmethod
     def corr(x, y=None, method=None):
         """

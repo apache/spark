@@ -255,45 +255,6 @@ class PythonMLLibAPI extends Serializable {
     ret
   }
 
-  /** Unpack a Rating object from an array of bytes */
-  private def unpackRating(ratingBytes: Array[Byte]): Rating = {
-    val bb = ByteBuffer.wrap(ratingBytes)
-    bb.order(ByteOrder.nativeOrder())
-    val user = bb.getInt()
-    val product = bb.getInt()
-    val rating = bb.getDouble()
-    new Rating(user, product, rating)
-  }
-
-  /** Unpack a tuple of Ints from an array of bytes */
-  private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
-    val bb = ByteBuffer.wrap(tupleBytes)
-    bb.order(ByteOrder.nativeOrder())
-    val v1 = bb.getInt()
-    val v2 = bb.getInt()
-    (v1, v2)
-  }
-
-  /**
-    * Serialize a Rating object into an array of bytes.
-    * It can be deserialized using RatingDeserializer().
-    *
-    * @param rate the Rating object to serialize
-    * @return
-    */
-  private[spark] def serializeRating(rate: Rating): Array[Byte] = {
-    val len = 3
-    val bytes = new Array[Byte](4 + 8 * len)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.putInt(len)
-    val db = bb.asDoubleBuffer()
-    db.put(rate.user.toDouble)
-    db.put(rate.product.toDouble)
-    db.put(rate.rating)
-    bytes
-  }
-
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
@@ -306,7 +267,7 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int): MatrixFactorizationModel = {
-    val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
+    val ratings = ratingsBytesJRDD.rdd.map(SerDe.unpackRating)
     ALS.train(ratings, rank, iterations, lambda, blocks)
   }
 
@@ -323,7 +284,7 @@ class PythonMLLibAPI extends Serializable {
       lambda: Double,
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
-    val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
+    val ratings = ratingsBytesJRDD.rdd.map(SerDe.unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 
@@ -405,7 +366,7 @@ class PythonMLLibAPI extends Serializable {
   def corr(X: JavaRDD[Array[Byte]], method: String): Array[Byte] = {
     val inputMatrix = X.rdd.map(SerDe.deserializeDoubleVector(_))
     val result = Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
-    SerDe.serializeDoubleMatrix(to2dArray(result))
+    SerDe.serializeDoubleMatrix(SerDe.to2dArray(result))
   }
 
   /**
@@ -420,12 +381,6 @@ class PythonMLLibAPI extends Serializable {
   // used by the corr methods to retrieve the name of the correlation method passed in via pyspark
   private def getCorrNameOrDefault(method: String) = {
     if (method == null) CorrelationNames.defaultCorrName else method
-  }
-
-  // Reformat a Matrix into Array[Array[Double]] for serialization
-  private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
-    val values = matrix.toArray
-    Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
   }
 
   // Used by the *RDD methods to get default seed if not passed in from pyspark
@@ -528,6 +483,7 @@ class PythonMLLibAPI extends Serializable {
 /**
  * MultivariateStatisticalSummary with Vector fields serialized.
  */
+@DeveloperApi
 class MultivariateStatisticalSummarySerialized(val summary: MultivariateStatisticalSummary)
   extends Serializable {
 
@@ -547,13 +503,13 @@ class MultivariateStatisticalSummarySerialized(val summary: MultivariateStatisti
 /**
  * SerDe utility functions for PythonMLLibAPI.
  */
-private object SerDe extends Serializable {
+private[spark] object SerDe extends Serializable {
   private val DENSE_VECTOR_MAGIC: Byte = 1
   private val SPARSE_VECTOR_MAGIC: Byte = 2
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
 
-  def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
+  private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
     val magic = bytes(offset)
     if (magic == DENSE_VECTOR_MAGIC) {
@@ -565,14 +521,14 @@ private object SerDe extends Serializable {
     }
   }
 
-  def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
+  private[python] def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
     require(bytes.length - offset == 8, "Wrong size byte array for Double")
     val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
     bb.order(ByteOrder.nativeOrder())
     bb.getDouble
   }
 
-  def deserializeDenseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
+  private[python] def deserializeDenseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     val packetLength = bytes.length - offset
     require(packetLength >= 5, "Byte array too short")
     val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
@@ -587,7 +543,7 @@ private object SerDe extends Serializable {
     Vectors.dense(ans)
   }
 
-  def deserializeSparseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
+  private[python] def deserializeSparseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     val packetLength = bytes.length - offset
     require(packetLength >= 9, "Byte array too short")
     val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
@@ -615,7 +571,7 @@ private object SerDe extends Serializable {
    * The corresponding deserializer, deserializeDouble, needs to be modified as well if the
    * serialization scheme changes.
    */
-  def serializeDouble(double: Double): Array[Byte] = {
+  private[python] def serializeDouble(double: Double): Array[Byte] = {
     val bytes = new Array[Byte](8)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
@@ -623,7 +579,7 @@ private object SerDe extends Serializable {
     bytes
   }
 
-  def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
+  private[python] def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
     val len = doubles.length
     val bytes = new Array[Byte](5 + 8 * len)
     val bb = ByteBuffer.wrap(bytes)
@@ -635,7 +591,7 @@ private object SerDe extends Serializable {
     bytes
   }
 
-  def serializeSparseVector(vector: SparseVector): Array[Byte] = {
+  private[python] def serializeSparseVector(vector: SparseVector): Array[Byte] = {
     val nonZeros = vector.indices.length
     val bytes = new Array[Byte](9 + 12 * nonZeros)
     val bb = ByteBuffer.wrap(bytes)
@@ -651,14 +607,14 @@ private object SerDe extends Serializable {
     bytes
   }
 
-  def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
+  private[python] def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
     case s: SparseVector =>
       serializeSparseVector(s)
     case _ =>
       serializeDenseVector(vector.toArray)
   }
 
-  def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
+  private[python] def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
     val packetLength = bytes.length
     if (packetLength < 9) {
       throw new IllegalArgumentException("Byte array too short.")
@@ -683,7 +639,7 @@ private object SerDe extends Serializable {
     ans
   }
 
-  def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
+  private[python] def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
     val rows = doubles.length
     var cols = 0
     if (rows > 0) {
@@ -702,7 +658,7 @@ private object SerDe extends Serializable {
     bytes
   }
 
-  def serializeLabeledPoint(p: LabeledPoint): Array[Byte] = {
+  private[python] def serializeLabeledPoint(p: LabeledPoint): Array[Byte] = {
     val fb = serializeDoubleVector(p.features)
     val bytes = new Array[Byte](1 + 8 + fb.length)
     val bb = ByteBuffer.wrap(bytes)
@@ -713,7 +669,7 @@ private object SerDe extends Serializable {
     bytes
   }
 
-  def deserializeLabeledPoint(bytes: Array[Byte]): LabeledPoint = {
+  private[python] def deserializeLabeledPoint(bytes: Array[Byte]): LabeledPoint = {
     require(bytes.length >= 9, "Byte array too short")
     val magic = bytes(0)
     if (magic != LABELED_POINT_MAGIC) {
@@ -723,5 +679,51 @@ private object SerDe extends Serializable {
     labelBytes.order(ByteOrder.nativeOrder())
     val label = labelBytes.asDoubleBuffer().get(0)
     LabeledPoint(label, deserializeDoubleVector(bytes, 9))
+  }
+
+  // Reformat a Matrix into Array[Array[Double]] for serialization
+  private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
+    val values = matrix.toArray
+    Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
+  }
+
+
+  /** Unpack a Rating object from an array of bytes */
+  private[python] def unpackRating(ratingBytes: Array[Byte]): Rating = {
+    val bb = ByteBuffer.wrap(ratingBytes)
+    bb.order(ByteOrder.nativeOrder())
+    val user = bb.getInt()
+    val product = bb.getInt()
+    val rating = bb.getDouble()
+    new Rating(user, product, rating)
+  }
+
+  /** Unpack a tuple of Ints from an array of bytes */
+  def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
+    val bb = ByteBuffer.wrap(tupleBytes)
+    bb.order(ByteOrder.nativeOrder())
+    val v1 = bb.getInt()
+    val v2 = bb.getInt()
+    (v1, v2)
+  }
+
+  /**
+   * Serialize a Rating object into an array of bytes.
+   * It can be deserialized using RatingDeserializer().
+   *
+   * @param rate the Rating object to serialize
+   * @return
+   */
+  def serializeRating(rate: Rating): Array[Byte] = {
+    val len = 3
+    val bytes = new Array[Byte](4 + 8 * len)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.putInt(len)
+    val db = bb.asDoubleBuffer()
+    db.put(rate.user.toDouble)
+    db.put(rate.product.toDouble)
+    db.put(rate.rating)
+    bytes
   }
 }
