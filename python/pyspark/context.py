@@ -578,8 +578,8 @@ class SparkContext(object):
         tempFile.close()
         jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
         os.unlink(tempFile.name)
-        return Broadcast(jbroadcast.id(), value if keep else None,
-                         jbroadcast, self._pickled_broadcast_vars)
+        return Broadcast(jbroadcast.id(), value, jbroadcast,
+                         self._pickled_broadcast_vars, keep)
 
     def accumulator(self, value, accum_param=None):
         """

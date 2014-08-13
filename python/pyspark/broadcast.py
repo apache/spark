@@ -47,20 +47,29 @@ class Broadcast(object):
     Access its value through C{.value}.
     """
 
-    def __init__(self, bid, value, java_broadcast=None, pickle_registry=None):
+    def __init__(self, bid, value, java_broadcast=None, pickle_registry=None, keep=True):
         """
         Should not be called directly by users -- use
         L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}
         instead.
         """
-        self.value = value
         self.bid = bid
+        if keep:
+            self.value = value
         self._jbroadcast = java_broadcast
         self._pickle_registry = pickle_registry
+        self.keep = keep
 
     def __reduce__(self):
         self._pickle_registry.add(self)
         return (_from_id, (self.bid, ))
+
+    def __getattr__(self, item):
+        if item == 'value' and not self.keep:
+            raise Exception("please create broadcast with keep=True to make"
+                            " it accessable in driver")
+
+        raise AttributeError(item)
 
 
 if __name__ == "__main__":
