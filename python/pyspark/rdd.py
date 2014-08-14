@@ -283,7 +283,8 @@ class RDD(object):
         >>> rdd.mapPartitions(f).collect()
         [3, 7]
         """
-        def func(s, iterator): return f(iterator)
+        def func(s, iterator): 
+            return f(iterator)
         return self.mapPartitionsWithIndex(func)
 
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):

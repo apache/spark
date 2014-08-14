@@ -165,7 +165,6 @@ class PythonTestInputStream(ssc_ : JavaStreamingContext, inputFiles: JArrayList[
         tempFile.getAbsolutePath
       }
     }
-    println("PythonTestInputStreaming numPartitons" + numPartitions )
     val rdd = PythonRDD.readRDDFromFile(JavaSparkContext.fromSparkContext(ssc_.sparkContext), selectedInputFile, numPartitions).rdd
     logInfo("Created RDD " + rdd.id + " with " + selectedInputFile)
     Some(rdd)

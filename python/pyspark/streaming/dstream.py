@@ -17,6 +17,7 @@
 
 from collections import defaultdict
 from itertools import chain, ifilter, imap
+import time
 import operator
 
 from pyspark.serializers import NoOpSerializer,\
@@ -288,6 +289,25 @@ class DStream(object):
             result.append(taken)
 
         self.foreachRDD(get_output)
+
+    def _test_switch_dserializer(self, serializer_que):
+        """
+        Deserializer is dynamically changed based on numSlice and the number of
+        input. This function choose deserializer. Currently this is just FIFO.
+        """
+        
+        jrdd_deserializer = self._jrdd_deserializer
+
+        def switch(rdd, jtime):
+            try:
+                print serializer_que
+                jrdd_deserializer = serializer_que.pop(0)
+                print jrdd_deserializer
+            except Exception as e:
+                print e
+
+        self.foreachRDD(switch)
+
 
 
 # TODO: implement groupByKey
