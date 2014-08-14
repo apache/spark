@@ -24,12 +24,12 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impl.{TimeTracker, TreePoint}
-import org.apache.spark.mllib.tree.impurity.{Impurities, Gini, Entropy, Impurity}
+import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -59,8 +59,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     timer.start("total")
 
-    timer.start("init")
     // Cache input RDD for speedup during multiple passes.
+    timer.start("init")
     val retaggedInput = input.retag(classOf[LabeledPoint])
     logDebug("algo = " + strategy.algo)
     timer.stop("init")
@@ -74,7 +74,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     logDebug("numBins = " + numBins)
 
     timer.start("init")
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, strategy, bins)
+    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, strategy, bins).cache()
     timer.stop("init")
 
     // depth of the decision tree
@@ -90,7 +90,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // dummy value for top node (updated during first split calculation)
     val nodes = new Array[Node](maxNumNodes)
     // num features
-    val numFeatures = retaggedInput.take(1)(0).features.size
+    val numFeatures = treeInput.take(1)(0).features.size
 
     // Calculate level for single group construction
 
@@ -117,10 +117,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
      * the sample is only used for the split calculation at the node if the sampled would have
      * still survived the filters of the parent nodes.
      */
-
-    var findBestSplitsTime: Long = 0
-    var extractNodeInfoTime: Long = 0
-    var extractInfoForLowerLevelsTime: Long = 0
 
     var level = 0
     var break = false
@@ -618,8 +614,6 @@ object DecisionTree extends Serializable with Logging {
       true
     }
 
-    // TODO: REMOVED findBin()
-
     /**
      * Finds bins for all nodes (and all features) at a given level.
      * For l nodes, k features the storage is as follows:
@@ -664,11 +658,9 @@ object DecisionTree extends Serializable with Logging {
       arr
     }
 
-    timer.start("findBinsForLevel")
-
     // Find feature bins for all nodes at a level.
+    timer.start("findBinsForLevel")
     val binMappedRDD = input.map(x => findBinsForLevel(x))
-
     timer.stop("findBinsForLevel")
 
     /**
@@ -1126,7 +1118,6 @@ object DecisionTree extends Serializable with Logging {
 
         val rightChildShift = numClasses * numBins * numFeatures
         var splitIndex = 0
-        var TMPDEBUG = 0.0
         while (splitIndex < numBins - 1) {
           var classIndex = 0
           while (classIndex < numClasses) {
@@ -1136,7 +1127,6 @@ object DecisionTree extends Serializable with Logging {
             val rightBinValue = binData(rightChildShift + shift + classIndex)
             leftNodeAgg(featureIndex)(splitIndex)(classIndex) = leftBinValue
             rightNodeAgg(featureIndex)(splitIndex)(classIndex) = rightBinValue
-            TMPDEBUG += leftBinValue + rightBinValue
             classIndex += 1
           }
           splitIndex += 1
@@ -1344,9 +1334,8 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    timer.start("chooseSplits")
-
     // Calculate best splits for all nodes at a given level
+    timer.start("chooseSplits")
     val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
     // Iterating over all nodes at this level
     var node = 0

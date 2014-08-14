@@ -45,9 +45,9 @@ class TimeTracker extends Serializable {
   }
 
   /**
-   * Stops a timer and returns the elapsed time in nanoseconds.
+   * Stops a timer and returns the elapsed time in seconds.
    */
-  def stop(timerLabel: String): Long = {
+  def stop(timerLabel: String): Double = {
     val tmpTime = System.nanoTime()
     if (!starts.contains(timerLabel)) {
       throw new RuntimeException(s"TimeTracker.stop(timerLabel) called on" +
@@ -60,16 +60,16 @@ class TimeTracker extends Serializable {
     } else {
       totals(timerLabel) = elapsed
     }
-    elapsed
+    elapsed / 1e9
   }
 
   /**
-   * Print all timing results.
+   * Print all timing results in seconds.
    */
   override def toString: String = {
     s"Timing\n" +
       totals.map { case (label, elapsed) =>
-          s"  $label: $elapsed"
+          s"  $label: ${elapsed / 1e9}"
         }.mkString("\n")
   }
 }

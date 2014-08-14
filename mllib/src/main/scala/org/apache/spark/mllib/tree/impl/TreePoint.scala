@@ -22,16 +22,36 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.model.Bin
 import org.apache.spark.rdd.RDD
 
+
 /**
- *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
- *          of size (numFeatures, numBins).
- * TODO: ADD DOC
+ * Internal representation of LabeledPoint for DecisionTree.
+ * This bins feature values based on a subsampled of data as follows:
+ *  (a) Continuous features are binned into ranges.
+ *  (b) Unordered categorical features are binned based on subsets of feature values.
+ *      "Unordered categorical features" are categorical features with low arity used in
+ *      multiclass classification.
+ *  (c) Ordered categorical features are binned based on feature values.
+ *      "Ordered categorical features" are categorical features with high arity,
+ *      or any categorical feature used in regression or binary classification.
+ *
+ * @param label  Label from LabeledPoint
+ * @param features  Binned feature values.
+ *                  Same length as LabeledPoint.features, but values are bin indices.
  */
 private[tree] class TreePoint(val label: Double, val features: Array[Int]) extends Serializable {
 }
 
+
 private[tree] object TreePoint {
 
+  /**
+   * Convert an input dataset into its TreePoint representation,
+   * binning feature values in preparation for DecisionTree training.
+   * @param input     Input dataset.
+   * @param strategy  DecisionTree training info, used for dataset metadata.
+   * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @return  TreePoint dataset representation
+   */
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
       strategy: Strategy,
@@ -42,7 +62,12 @@ private[tree] object TreePoint {
     }
   }
 
-  def labeledPointToTreePoint(
+  /**
+   * Convert one LabeledPoint into its TreePoint representation.
+   * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param categoricalFeaturesInfo  Map over categorical features: feature index --> feature arity
+   */
+  private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
       isMulticlassClassification: Boolean,
       bins: Array[Array[Bin]],
@@ -77,16 +102,11 @@ private[tree] object TreePoint {
   /**
    * Find bin for one (labeledPoint, feature).
    *
-   * @param featureIndex
-   * @param labeledPoint
-   * @param isFeatureContinuous
    * @param isUnorderedFeature  (only applies if feature is categorical)
-   * @param bins  Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
-   *              of size (numFeatures, numBins).
-   * @param categoricalFeaturesInfo
-   * @return
+   * @param bins   Bins for features, of size (numFeatures, numBins).
+   * @param categoricalFeaturesInfo  Map over categorical features: feature index --> feature arity
    */
-  def findBin(
+  private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       isFeatureContinuous: Boolean,
