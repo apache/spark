@@ -220,7 +220,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     */
 
     timer.reset()
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata).cache()
     timer.initTime += timer.elapsed()
 
     // depth of the decision tree
