@@ -181,7 +181,8 @@ private[tree] object TreePoint {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {
-        throw new UnknownError("no bin was found for continuous variable.")
+        throw new UnknownError("No bin was found for continuous feature." +
+          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex
     } else {
@@ -192,7 +193,8 @@ private[tree] object TreePoint {
           sequentialBinSearchForOrderedCategoricalFeature()
         }
       if (binIndex == -1) {
-        throw new UnknownError("no bin was found for categorical variable.")
+        throw new UnknownError("No bin was found for categorical feature." +
+          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex
     }
