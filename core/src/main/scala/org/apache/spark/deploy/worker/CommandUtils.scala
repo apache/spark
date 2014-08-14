@@ -58,7 +58,7 @@ object CommandUtils extends Logging {
 
     val libraryOpts =
       if (command.libraryPathEntries.size > 0) {
-        val joined = sys.env.get(Utils.libraryPath) ++ command.libraryPathEntries
+        val joined = getEnv(Utils.libraryPath, command) ++ command.libraryPathEntries
         Seq(s"-Djava.library.path=${joined.mkString(File.pathSeparator)}")
       } else {
         Seq()
