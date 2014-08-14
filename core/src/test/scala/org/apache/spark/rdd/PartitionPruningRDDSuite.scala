@@ -39,7 +39,7 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
       }
     }
     val prunedRDD = PartitionPruningRDD.create(rdd, {
-      x => if (x == 2) true else false
+      x => (x == 2)
     })
     assert(prunedRDD.partitions.length == 1)
     val p = prunedRDD.partitions(0)
@@ -63,11 +63,11 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
       }
     }
     val prunedRDD1 = PartitionPruningRDD.create(rdd, {
-      x => if (x == 0) true else false
+      x => (x == 0)
     })
 
     val prunedRDD2 = PartitionPruningRDD.create(rdd, {
-      x => if (x == 2) true else false
+      x => (x == 2)
     })
 
     val merged = prunedRDD1 ++ prunedRDD2
