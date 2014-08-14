@@ -66,7 +66,7 @@ extends DeserializationStream {
 private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
-  def serialize[T: ClassTag](t: T): ByteBuffer = {
+  override def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
@@ -74,24 +74,24 @@ private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoade
     ByteBuffer.wrap(bos.toByteArray)
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis)
-    in.readObject().asInstanceOf[T]
+    in.readObject()
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis, loader)
-    in.readObject().asInstanceOf[T]
+    in.readObject()
   }
 
-  def serializeStream(s: OutputStream): SerializationStream = {
+  override def serializeStream(s: OutputStream): SerializationStream = {
     new JavaSerializationStream(s, counterReset)
   }
 
-  def deserializeStream(s: InputStream): DeserializationStream = {
-    new JavaDeserializationStream(s, Utils.getContextOrSparkClassLoader)
+  override def deserializeStream(s: InputStream): DeserializationStream = {
+    new JavaDeserializationStream(s, defaultClassLoader)
   }
 
   def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {
