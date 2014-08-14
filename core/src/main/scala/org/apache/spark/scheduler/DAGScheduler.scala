@@ -39,8 +39,9 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
+import org.apache.spark.util.collection.{Utils => CollectionUtils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -120,6 +121,9 @@ class DAGScheduler(
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
 
   private[scheduler] var eventProcessActor: ActorRef = _
+
+  // Number of preferred locations to use for reducer tasks
+  private[scheduler] val NUM_REDUCER_PREF_LOCS = 5
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -1275,6 +1279,19 @@ class DAGScheduler(
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
+          }
+        }
+      case s: ShuffleDependency[_, _, _] =>
+        // Assign preferred locations for reducers by looking at map output location and sizes
+        val mapStatuses = mapOutputTracker.getStatusByReducer(s.shuffleId)
+        mapStatuses.map { status =>
+          // Get the map output locations for this reducer
+          if (status.contains(partition)) {
+            // Select first few locations as preferred locations for the reducer
+            val topLocs = CollectionUtils.takeOrdered(status(partition).iterator,
+              NUM_REDUCER_PREF_LOCS)(Ordering.by[(BlockManagerId, Long), Long](_._2).reverse).toSeq
+
+            return topLocs.map(_._1).map(loc => TaskLocation(loc.host, loc.executorId))
           }
         }
       case _ =>
