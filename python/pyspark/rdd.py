@@ -26,6 +26,7 @@ import warnings
 import heapq
 import array
 import bisect
+import math
 from collections import defaultdict, namedtuple
 from itertools import chain, ifilter, imap
 from random import Random
@@ -755,19 +756,6 @@ class RDD(object):
                 yield item
         os.unlink(tempFile.name)
 
-    def collectPartitions(self, partitions):
-        """
-        Return a list of list that contains all of the elements in a specific
-        partition of this RDD.
-
-        >>> rdd = sc.parallelize(range(8), 4)
-        >>> rdd.collectPartitions([1, 3])
-        [[2, 3], [6, 7]]
-        """
-
-        return [self.ctx.runJob(self, lambda it: it, [p], True)
-                for p in partitions]
-
     def reduce(self, f):
         """
         Reduces the elements of this RDD using the specified commutative and
@@ -846,6 +834,9 @@ class RDD(object):
         """
         Find the maximum item in this RDD.
 
+        @param comp: A function used to compare two elements, the builtin `cmp`
+                     will be used by default.
+
         >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
         >>> rdd.max()
         43.0
@@ -862,6 +853,9 @@ class RDD(object):
     def min(self, comp=None):
         """
         Find the minimum item in this RDD.
+
+        @param comp: A function used to compare two elements, the builtin `cmp`
+                     will be used by default.
 
         >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
         >>> rdd.min()
@@ -904,7 +898,7 @@ class RDD(object):
 
         return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
 
-    def histogram(self, buckets, even=False):
+    def histogram(self, buckets, evenBuckets=False):
         """
         Compute a histogram using the provided buckets. The buckets
         are all open to the right except for the last which is closed.
@@ -942,39 +936,54 @@ class RDD(object):
             if buckets < 1:
                 raise ValueError("buckets should not less than 1")
 
+            # filter out non-comparable elements
+            self = self.filter(lambda x: x is not None and not math.isnan(x))
+
             # faster than stats()
             def minmax(a, b):
                 return min(a[0], b[0]), max(a[1], b[1])
-            minv, maxv = self.map(lambda x: (x, x)).reduce(minmax)
+            try:
+                minv, maxv = self.map(lambda x: (x, x)).reduce(minmax)
+            except TypeError as e:
+                if e.message == "reduce() of empty sequence with no initial value":
+                    raise ValueError("can not generate buckets from empty RDD")
+                raise
 
             if minv == maxv or buckets == 1:
                 return [minv, maxv], [self.count()]
 
             inc = (maxv - minv) / buckets
+            if math.isinf(inc):
+                raise ValueError("Can not generate buckets with infinite value")
+
             # keep them as integer if possible
             if inc * buckets != maxv - minv:
                 inc = (maxv - minv) * 1.0 / buckets
 
             buckets = [i * inc + minv for i in range(buckets)]
-            buckets.append(maxv)  # fix accumuated error
-            even = True
+            buckets.append(maxv)  # fix accumulated error
+            evenBuckets = True
 
         else:
             if len(buckets) < 2:
                 raise ValueError("buckets should have more than one value")
+
+            if any(i is None or math.isnan(i) for i in buckets):
+                raise ValueError("can not have None or NaN in buckets")
+
             if sorted(buckets) != buckets:
                 raise ValueError("buckets should be sorted")
 
             minv = buckets[0]
             maxv = buckets[-1]
-            inc = buckets[1] - buckets[0] if even else None
+            inc = buckets[1] - buckets[0] if evenBuckets else None
 
         def histogram(iterator):
             counters = [0] * len(buckets)
             for i in iterator:
-                if i > maxv or i < minv:
+                if i is None or math.isnan(i) or i > maxv or i < minv:
                     continue
-                t = (int((i - minv) / inc) if even else bisect_right(buckets, i) - 1)
+                t = (int((i - minv) / inc) if evenBuckets else bisect_right(buckets, i) - 1)
                 counters[t] += 1
             # add last two together
             last = counters.pop()
@@ -1846,7 +1855,7 @@ class RDD(object):
         """
         starts = [0]
         if self.getNumPartitions() > 1:
-            nums = self.glom().map(lambda it: sum(1 for i in it)).collect()
+            nums = self.mapPartitions(lambda it: [sum(1 for i in it)]).collect()
             for i in range(len(nums) - 1):
                 starts.append(starts[-1] + nums[i])
 
@@ -1938,14 +1947,26 @@ class RDD(object):
         else:
             return self.getNumPartitions()
 
-    # TODO: `lookup` is disabled because we can't make direct comparisons based
-    # on the key; we need to compare the hash of the key to the hash of the
-    # keys in the pairs.  This could be an expensive operation, since those
-    # hashes aren't retained.
-    # def lookup(self, key):
-    #     """
-    #     Return the list of values in the RDD for key key.
-    #     """
+    def lookup(self, key):
+        """
+        Return the list of values in the RDD for key `key`. This operation
+        is done efficiently if the RDD has a known partitioner by only
+        searching the partition that the key maps to.
+
+        >>> l = range(1000)
+        >>> rdd = sc.parallelize(zip(l, l), 10)
+        >>> rdd.lookup(42)  # slow
+        [42]
+        >>> sorted = rdd.sortByKey()
+        >>> sorted.lookup(42)  # fast
+        [42]
+        """
+        values = self.filter(lambda (k, v): k == key).values()
+
+        if hasattr(self, "_partitionFunc"):
+            return self.ctx.runJob(self, lambda x: x, [self._partitionFunc(key)], False)
+
+        return values.collect()
 
     def _is_pickled(self):
         """ Return this RDD is serialized by Pickle or not. """
@@ -1957,7 +1978,11 @@ class RDD(object):
         return False
 
     def _to_jrdd(self):
-        """ Return an JavaRDD of Object by unpickling"""
+        """ Return an JavaRDD of Object by unpickling
+
+        It will convert each Python object into Java object by Pyrolite, whenever the
+        RDD is serialized in batch or not.
+        """
         if not self._is_pickled():
             self = self._reserialize(BatchedSerializer(PickleSerializer(), 1024))
         batched = isinstance(self._jrdd_deserializer, BatchedSerializer)
@@ -1972,6 +1997,9 @@ class RDD(object):
         "HyperLogLog in Practice: Algorithmic Engineering of a State
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+
+        This support all the types of objects, which is supported by
+        Pyrolite, nearly all builtin types.
 
         :param: relativeSD Relative accuracy. Smaller values create
                            counters that require more space.
