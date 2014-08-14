@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
  *          of size (numFeatures, numBins).
  * TODO: ADD DOC
  */
-private[tree] class TreePoint(val label: Double, val features: Array[Int]) {
+private[tree] class TreePoint(val label: Double, val features: Array[Int]) extends Serializable {
 }
 
 private[tree] object TreePoint {

@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.tree
 
-import java.util.Calendar
 
 import scala.collection.JavaConverters._
 
@@ -29,45 +28,12 @@ import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impl.TreePoint
+import org.apache.spark.mllib.tree.impl.{TimeTracker, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Impurities, Gini, Entropy, Impurity}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
-class TimeTracker {
-
-  var tmpTime: Long = Calendar.getInstance().getTimeInMillis
-
-  def reset(): Unit = {
-    tmpTime = Calendar.getInstance().getTimeInMillis
-  }
-
-  def elapsed(): Long = {
-    Calendar.getInstance().getTimeInMillis - tmpTime
-  }
-
-  var initTime: Long = 0 // Data retag and cache
-  var findSplitsBinsTime: Long = 0
-  var extractNodeInfoTime: Long = 0
-  var extractInfoForLowerLevelsTime: Long = 0
-  var findBestSplitsTime: Long = 0
-  var findBinsForLevelTime: Long = 0
-  var binAggregatesTime: Long = 0
-  var chooseSplitsTime: Long = 0
-
-  override def toString: String = {
-    s"DecisionTree timing\n" +
-      s"initTime: $initTime\n" +
-      s"findSplitsBinsTime: $findSplitsBinsTime\n" +
-      s"extractNodeInfoTime: $extractNodeInfoTime\n" +
-      s"extractInfoForLowerLevelsTime: $extractInfoForLowerLevelsTime\n" +
-      s"findBestSplitsTime: $findBestSplitsTime\n" +
-      s"findBinsForLevelTime: $findBinsForLevelTime\n" +
-      s"binAggregatesTime: $binAggregatesTime\n" +
-      s"chooseSplitsTime: $chooseSplitsTime\n"
-  }
-}
 
 /**
  * :: Experimental ::
@@ -90,26 +56,26 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
     val timer = new TimeTracker()
-    timer.reset()
 
+    timer.start("total")
+
+    timer.start("init")
     // Cache input RDD for speedup during multiple passes.
     val retaggedInput = input.retag(classOf[LabeledPoint])
     logDebug("algo = " + strategy.algo)
-
-    timer.initTime += timer.elapsed()
-    timer.reset()
+    timer.stop("init")
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
+    timer.start("findSplitsBins")
     val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, strategy)
     val numBins = bins(0).length
+    timer.stop("findSplitsBins")
     logDebug("numBins = " + numBins)
 
-    timer.findSplitsBinsTime += timer.elapsed()
-
-    timer.reset()
+    timer.start("init")
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, strategy, bins)
-    timer.initTime += timer.elapsed()
+    timer.stop("init")
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -166,21 +132,21 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
 
       // Find best split for all nodes at a level.
-      timer.reset()
+      timer.start("findBestSplits")
       val splitsStatsForLevel = DecisionTree.findBestSplits(treeInput, parentImpurities,
         strategy, level, filters, splits, bins, maxLevelForSingleGroup, timer)
-      timer.findBestSplitsTime += timer.elapsed()
+      timer.stop("findBestSplits")
 
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
-        timer.reset()
+        timer.start("extractNodeInfo")
         // Extract info for nodes at the current level.
         extractNodeInfo(nodeSplitStats, level, index, nodes)
-        timer.extractNodeInfoTime += timer.elapsed()
-        timer.reset()
+        timer.stop("extractNodeInfo")
+        timer.start("extractInfoForLowerLevels")
         // Extract info for nodes at the next lower level.
         extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
           filters)
-        timer.extractInfoForLowerLevelsTime += timer.elapsed()
+        timer.stop("extractInfoForLowerLevels")
         logDebug("final best split = " + nodeSplitStats._1)
       }
       require(math.pow(2, level) == splitsStatsForLevel.length)
@@ -194,8 +160,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       }
     }
 
-    println(timer)
-
     logDebug("#####################################")
     logDebug("Extracting tree model")
     logDebug("#####################################")
@@ -204,6 +168,10 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val topNode = nodes(0)
     // Build the full tree using the node info calculated in the level-wise best split calculations.
     topNode.build(nodes)
+
+    timer.stop("total")
+
+    //println(timer)  // Print internal timing info.
 
     new DecisionTreeModel(topNode, strategy.algo)
   }
@@ -252,7 +220,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         // noting the parents filters for the child nodes
         val childFilter = new Filter(nodeSplitStats._1, if (i == 0) -1 else 1)
         filters(nodeIndex) = childFilter :: filters((nodeIndex - 1) / 2)
-        //println(s"extractInfoForLowerLevels: Set filters(node:$nodeIndex): ${filters(nodeIndex).mkString(", ")}")
         for (filter <- filters(nodeIndex)) {
           logDebug("Filter = " + filter)
         }
@@ -491,7 +458,6 @@ object DecisionTree extends Serializable with Logging {
       maxLevelForSingleGroup: Int,
       timer: TimeTracker = new TimeTracker): Array[(Split, InformationGainStats)] = {
     // split into groups to avoid memory overflow during aggregation
-    //println(s"findBestSplits: level = $level")
     if (level > maxLevelForSingleGroup) {
       // When information for all nodes at a given level cannot be stored in memory,
       // the nodes are divided into multiple groups at each level with the number of groups
@@ -681,7 +647,6 @@ object DecisionTree extends Serializable with Logging {
         val parentFilters = findParentFilters(nodeIndex)
         // Find out whether the sample qualifies for the particular node.
         val sampleValid = isSampleValid(parentFilters, treePoint)
-        //println(s"==>findBinsForLevel: node:$nodeIndex, valid=$sampleValid, parentFilters:${parentFilters.mkString(",")}")
         val shift = 1 + numFeatures * nodeIndex
         if (!sampleValid) {
           // Mark one bin as -1 is sufficient.
@@ -699,12 +664,12 @@ object DecisionTree extends Serializable with Logging {
       arr
     }
 
-    timer.reset()
+    timer.start("findBinsForLevel")
 
     // Find feature bins for all nodes at a level.
     val binMappedRDD = input.map(x => findBinsForLevel(x))
 
-    timer.findBinsForLevelTime += timer.elapsed()
+    timer.stop("findBinsForLevel")
 
     /**
      * Increment aggregate in location for (node, feature, bin, label).
@@ -752,7 +717,6 @@ object DecisionTree extends Serializable with Logging {
         label: Double,
         agg: Array[Double],
         rightChildShift: Int): Unit = {
-      //println(s"-- updateBinForUnorderedFeature node:$nodeIndex, feature:$featureIndex, label:$label.")
       // Find the bin index for this feature.
       val arrIndex = 1 + numFeatures * nodeIndex + featureIndex
       val featureValue = arr(arrIndex).toInt
@@ -830,10 +794,6 @@ object DecisionTree extends Serializable with Logging {
         // Check whether the instance was valid for this nodeIndex.
         val validSignalIndex = 1 + numFeatures * nodeIndex
         val isSampleValidForNode = arr(validSignalIndex) != InvalidBinIndex
-        if (level == 1) {
-          val nodeFilterIndex = math.pow(2, level).toInt - 1 + nodeIndex + groupShift
-          //println(s"-multiclassWithCategoricalBinSeqOp: filter: ${filters(nodeFilterIndex)}")
-        }
         if (isSampleValidForNode) {
           // actual class label
           val label = arr(0)
@@ -954,38 +914,14 @@ object DecisionTree extends Serializable with Logging {
       combinedAggregate
     }
 
-    timer.reset()
 
     // Calculate bin aggregates.
+    timer.start("binAggregates")
     val binAggregates = {
       binMappedRDD.aggregate(Array.fill[Double](binAggregateLength)(0))(binSeqOp,binCombOp)
     }
+    timer.stop("binAggregates")
     logDebug("binAggregates.length = " + binAggregates.length)
-
-    timer.binAggregatesTime += timer.elapsed()
-    //2 * numClasses * numBins * numFeatures * numNodes for unordered features.
-    // (left/right, node, feature, bin, label)
-    /*
-    println(s"binAggregates:")
-    for (i <- Range(0,2)) {
-      for (n <- Range(0,numNodes)) {
-        for (f <- Range(0,numFeatures)) {
-          for (b <- Range(0,4)) {
-            for (c <- Range(0,numClasses)) {
-              val idx = i * numClasses * numBins * numFeatures * numNodes +
-                n * numClasses * numBins * numFeatures +
-                f * numBins * numFeatures +
-                b * numFeatures +
-                c
-              if (binAggregates(idx) != 0) {
-                println(s"\t ($i, c:$c, b:$b, f:$f, n:$n): ${binAggregates(idx)}")
-              }
-            }
-          }
-        }
-      }
-    }
-    */
 
     /**
      * Calculates the information gain for all splits based upon left/right split aggregates.
@@ -1027,7 +963,6 @@ object DecisionTree extends Serializable with Logging {
           val totalCount = leftTotalCount + rightTotalCount
           if (totalCount == 0) {
             // Return arbitrary prediction.
-            //println(s"BLAH: feature $featureIndex, split $splitIndex. totalCount == 0")
             return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
           }
 
@@ -1054,9 +989,6 @@ object DecisionTree extends Serializable with Logging {
           }
 
           val predict = indexOfLargestArrayElement(leftRightCounts)
-          if (predict == 0 && featureIndex == 0 && splitIndex == 0) {
-            //println(s"AGHGHGHHGHG: leftCounts: ${leftCounts.mkString(",")}, rightCounts: ${rightCounts.mkString(",")}")
-          }
           val prob = leftRightCounts(predict) / totalCount
 
           val leftImpurity = if (leftTotalCount == 0) {
@@ -1209,7 +1141,6 @@ object DecisionTree extends Serializable with Logging {
           }
           splitIndex += 1
         }
-        //println(s"found Agg: $TMPDEBUG")
       }
 
       def findAggForRegression(
@@ -1369,7 +1300,6 @@ object DecisionTree extends Serializable with Logging {
               bestGainStats = gainStats
               bestFeatureIndex = featureIndex
               bestSplitIndex = splitIndex
-              //println(s" feature $featureIndex UPGRADED split $splitIndex: ${splits(featureIndex)(splitIndex)}: gainstats: $gainStats")
             }
             splitIndex += 1
           }
@@ -1414,7 +1344,7 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    timer.reset()
+    timer.start("chooseSplits")
 
     // Calculate best splits for all nodes at a given level
     val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
@@ -1427,10 +1357,9 @@ object DecisionTree extends Serializable with Logging {
       val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
       logDebug("parent node impurity = " + parentNodeImpurity)
       bestSplits(node) = binsToBestSplit(binsForNode, parentNodeImpurity)
-      //println(s"bestSplits(node:$node): ${bestSplits(node)}")
       node += 1
     }
-    timer.chooseSplitsTime += timer.elapsed()
+    timer.stop("chooseSplits")
 
     bestSplits
   }

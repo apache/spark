@@ -689,7 +689,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   test("stump with categorical variables for multiclass classification, with just enough bins") {
-    println("START: stump with categorical variables for multiclass classification, with just enough bins")
     val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val input = sc.parallelize(arr)
@@ -701,22 +700,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val treeInput = TreePoint.convertToTreeRDD(input, strategy, bins)
     val bestSplits = DecisionTree.findBestSplits(treeInput, new Array(31), strategy, 0,
       Array[List[Filter]](), splits, bins, 10)
-    println(s"splits:")
-    for (feature <- Range(0,splits.size)) {
-      for (i <- Range(0,3)) {
-        println(s" f:$feature [$i]: ${splits(feature)(i)}")
-      }
-    }
-    println(s"bins:")
-    for (feature <- Range(0,bins.size)) {
-      for (i <- Range(0,4)) {
-        println(s" f:$feature [$i]: ${bins(feature)(i)}")
-      }
-    }
-    println(s"bestSplits:")
-    bestSplits.foreach { x =>
-      println(s"\t $x")
-    }
 
     assert(bestSplits.length === 1)
     val bestSplit = bestSplits(0)._1
@@ -729,11 +712,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(gain.rightImpurity === 0)
 
     val model = DecisionTree.train(input, strategy)
-    println(model)
     validateClassifier(model, arr, 1.0)
     assert(model.numNodes === 3)
     assert(model.depth === 1)
-    println("END: stump with categorical variables for multiclass classification, with just enough bins")
   }
 
   test("stump with continuous variables for multiclass classification") {
