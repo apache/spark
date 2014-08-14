@@ -32,14 +32,6 @@ private[spark] class ApplicationEventListener extends SparkListener {
   var viewAcls: Option[String] = None
   var adminAcls: Option[String] = None
 
-  def applicationStarted = startTime.isDefined
-
-  def applicationCompleted = endTime.isDefined
-
-  def applicationDuration: Long = {
-    if (applicationStarted && applicationCompleted) endTime.get - startTime.get else -1
-  }
-
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = Some(applicationStart.appName)
     appId = applicationStart.appId
