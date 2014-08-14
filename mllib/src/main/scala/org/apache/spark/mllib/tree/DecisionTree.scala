@@ -132,7 +132,7 @@ private[tree] object LearningMetadata {
     val unorderedFeatures = new mutable.HashSet[Int]()
     // numBins[featureIndex] = number of bins for feature
     val numBins = Array.fill[Int](numFeatures)(maxPossibleBins)
-    if (numClasses > 2) {
+    if (numClasses >= 2) {
       strategy.categoricalFeaturesInfo.foreach { case (f, k) =>
         val numUnorderedBins = DecisionTree.numUnorderedBins(k)
         if (numUnorderedBins < maxPossibleBins) {
@@ -204,7 +204,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     timer.findSplitsBinsTime += timer.elapsed()
 
-    /*
     println(s"splits:")
     for (f <- Range(0, splits.size)) {
       for (s <- Range(0, splits(f).size)) {
@@ -217,7 +216,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         println(s"  bins($f)($s): ${bins(f)(s)}")
       }
     }
-    */
 
     timer.reset()
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata).cache()
@@ -271,7 +269,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     var break = false
     while (level <= maxDepth && !break) {
 
-      //println(s"LEVEL $level")
+      println(s"LEVEL $level")
       logDebug("#####################################")
       logDebug("level = " + level)
       logDebug("#####################################")
@@ -286,11 +284,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
       val levelNodeIndexOffset = DecisionTree.maxNodesInLevel(level) - 1
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
-        /*
         println(s"splitsStatsForLevel: index=$index")
         println(s"\t split: ${nodeSplitStats._1}")
         println(s"\t gain stats: ${nodeSplitStats._2}")
-        */
         val nodeIndex = levelNodeIndexOffset + index
         val isLeftChild = level != 0 && nodeIndex % 2 == 1
         val parentNodeIndex = if (isLeftChild) { // -1 for root node
@@ -326,7 +322,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       }
       require(DecisionTree.maxNodesInLevel(level) == splitsStatsForLevel.length)
       // Check whether all the nodes at the current level at leaves.
-      //println(s"LOOP over levels: level=$level, splitStats...gains: ${splitsStatsForLevel.map(_._2.gain).mkString(",")}")
+      println(s"LOOP over levels: level=$level, splitStats...gains: ${splitsStatsForLevel.map(_._2.gain).mkString(",")}")
       val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
       logDebug("all leaf = " + allLeaf)
       if (allLeaf) {
@@ -798,7 +794,7 @@ object DecisionTree extends Serializable with Logging {
      * @param treePoint   Data point being aggregated.
      * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
      */
-    def multiclassWithCategoricalBinSeqOp(
+    def someUnorderedBinSeqOp(
         agg: Array[Array[Array[ImpurityAggregator]]],
         treePoint: TreePoint,
         nodeIndex: Int): Unit = {
@@ -885,10 +881,10 @@ object DecisionTree extends Serializable with Logging {
         treePoint: TreePoint): Array[Array[Array[ImpurityAggregator]]] = {
       val nodeIndex = treePointToNodeIndex(treePoint)
       if (nodeIndex >= 0) { // Otherwise, example does not reach this level.
-        if (isMulticlassWithCategoricalFeatures) {
-          multiclassWithCategoricalBinSeqOp(agg, treePoint, nodeIndex)
-        } else {
+        if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg, treePoint, nodeIndex)
+        } else {
+          someUnorderedBinSeqOp(agg, treePoint, nodeIndex)
         }
       }
       agg
@@ -926,7 +922,6 @@ object DecisionTree extends Serializable with Logging {
       input.aggregate(initAgg)(binSeqOp, binCombOp)
     }
 
-    /*
     println("binAggregates:")
     for (n <- Range(0, binAggregates.size)) {
       for (f <- Range(0, binAggregates(n).size)) {
@@ -935,7 +930,6 @@ object DecisionTree extends Serializable with Logging {
         }
       }
     }
-    */
 
     timer.binAggregatesTime += timer.elapsed()
 
@@ -1006,11 +1000,10 @@ object DecisionTree extends Serializable with Logging {
 
     val leftImpurity = leftNodeAgg.calculate() // Note: 0 if count = 0
     val rightImpurity = rightNodeAgg.calculate()
-    /*
+
     println(s"calculateGainForSplit")
     println(s"\t leftImpurity = $leftImpurity, leftNodeAgg: $leftNodeAgg")
     println(s"\t rightImpurity = $rightImpurity, rightNodeAgg: $rightNodeAgg")
-    */
 
     val leftWeight = leftCount / totalCount.toDouble
     val rightWeight = rightCount / totalCount.toDouble
@@ -1265,20 +1258,16 @@ object DecisionTree extends Serializable with Logging {
       case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
     }
 
-    val binMultiplier = if (metadata.isMulticlassWithCategoricalFeatures) {
-      2
-    } else {
-      1
-    }
     val agg = Array.fill[Array[ImpurityAggregator]](numNodes, metadata.numFeatures)(
       new Array[ImpurityAggregator](0))
     var nodeIndex = 0
     while (nodeIndex < numNodes) {
       var featureIndex = 0
       while (featureIndex < metadata.numFeatures) {
-        var binIndex = 0
+        val binMultiplier = if (metadata.isUnordered(featureIndex)) 2 else 1
         val effNumBins = metadata.numBins(featureIndex) * binMultiplier
         agg(nodeIndex)(featureIndex) = new Array[ImpurityAggregator](effNumBins)
+        var binIndex = 0
         while (binIndex < effNumBins) {
           agg(nodeIndex)(featureIndex)(binIndex) = impurityAggregator.newAggregator
           binIndex += 1
