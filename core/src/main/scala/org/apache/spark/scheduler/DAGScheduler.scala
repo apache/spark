@@ -789,6 +789,7 @@ class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
+    val namedAccumulablesBinary = createNamedAccumulablesBinary()
 
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
@@ -848,7 +849,7 @@ class DAGScheduler(
       partitionsToCompute.map { id =>
         val locs = getPreferredLocs(stage.rdd, id)
         val part = stage.rdd.partitions(id)
-        new ShuffleMapTask(stage.id, taskBinary, part, locs)
+        new ShuffleMapTask(stage.id, taskBinary, part, locs, namedAccumulablesBinary)
       }
     } else {
       val job = stage.resultOfJob.get
@@ -856,7 +857,7 @@ class DAGScheduler(
         val p: Int = job.partitions(id)
         val part = stage.rdd.partitions(p)
         val locs = getPreferredLocs(stage.rdd, p)
-        new ResultTask(stage.id, taskBinary, part, locs, id)
+        new ResultTask(stage.id, taskBinary, part, locs, id, namedAccumulablesBinary)
       }
     }
 
@@ -895,6 +896,12 @@ class DAGScheduler(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
       runningStages -= stage
     }
+  }
+
+  private def createNamedAccumulablesBinary(): Broadcast[Array[Byte]] = {
+    val namedAccumulablesList = Accumulators.originals.values.filter(_.name.isDefined).toList
+    val serializer = env.closureSerializer.newInstance()
+    sc.broadcast(serializer.serialize(namedAccumulablesList).array())
   }
 
   /**

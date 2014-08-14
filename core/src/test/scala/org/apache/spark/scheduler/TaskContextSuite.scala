@@ -43,7 +43,8 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val task = new ResultTask[String, String](
-      0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
+      0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0,
+      sc.broadcast(Array()))
     intercept[RuntimeException] {
       task.run(0)
     }

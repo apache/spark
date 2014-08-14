@@ -26,6 +26,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.util.Utils
 
 
@@ -42,7 +43,8 @@ import org.apache.spark.util.Utils
  * @param stageId id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int,
+  val accumulablesBinary: Broadcast[Array[Byte]]) extends Serializable {
 
   final def run(attemptId: Long): T = {
     context = new TaskContext(stageId, partitionId, attemptId, runningLocally = false)

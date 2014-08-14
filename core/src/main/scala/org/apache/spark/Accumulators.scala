@@ -243,12 +243,18 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+object AccumulableRegistry {
+  def get(name: String): Option[Accumulable[_, _]] = {
+    Accumulators.getLocalAccumulable(name)
+  }
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
+  val localAccums = Map[Thread, LocalAccumulables]()
   var lastId: Long = 0
 
   def newId: Long = synchronized {
@@ -260,8 +266,9 @@ private object Accumulators {
     if (original) {
       originals(a.id) = a
     } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+      val accums = localAccums.getOrElseUpdate(Thread.currentThread, LocalAccumulables())
+      accums.byId(a.id) = a
+      a.name.foreach(accums.byName(_) = a)
     }
   }
 
@@ -275,10 +282,15 @@ private object Accumulators {
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
+    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, LocalAccumulables()).byId) {
       ret(id) = accum.localValue
     }
     return ret
+  }
+
+  def getLocalAccumulable(name: String): Option[Accumulable[_, _]] = {
+    val accums = localAccums.getOrElseUpdate(Thread.currentThread, LocalAccumulables())
+    accums.byName.get(name)
   }
 
   // Add values to the original accumulators with some given IDs
@@ -293,3 +305,6 @@ private object Accumulators {
   def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
   def stringifyValue(value: Any) = "%s".format(value)
 }
+
+private case class LocalAccumulables(byId: Map[Long, Accumulable[_, _]] = Map(),
+                                     byName: Map[String, Accumulable[_, _]] = Map())

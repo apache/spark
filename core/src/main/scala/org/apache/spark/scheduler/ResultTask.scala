@@ -44,8 +44,9 @@ private[spark] class ResultTask[T, U](
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient locs: Seq[TaskLocation],
-    val outputId: Int)
-  extends Task[U](stageId, partition.index) with Serializable {
+    val outputId: Int,
+    accumulablesBinary: Broadcast[Array[Byte]])
+  extends Task[U](stageId, partition.index, accumulablesBinary) with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
