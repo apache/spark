@@ -77,9 +77,10 @@ private[spark] class FixedLengthBinaryInputFormat
     // but still contains a complete set of records, with the first record
     // starting at the first byte in the split and the last record ending with the last byte
 
-    defaultSize match {
-      case x if x < recordLength => recordLength.toLong
-      case _ => (Math.floor(defaultSize / recordLength) * recordLength).toLong
+    if (defaultSize < recordLength) {
+      recordLength.toLong
+    } else {
+      (Math.floor(defaultSize / recordLength) * recordLength).toLong
     }
   }
 
@@ -87,8 +88,8 @@ private[spark] class FixedLengthBinaryInputFormat
    * Create a FixedLengthBinaryRecordReader
    */
   override def createRecordReader(split: InputSplit, context: TaskAttemptContext):
-    RecordReader[LongWritable, BytesWritable] = {
-      new FixedLengthBinaryRecordReader
+      RecordReader[LongWritable, BytesWritable] = {
+    new FixedLengthBinaryRecordReader
   }
 
   var recordLength = -1
