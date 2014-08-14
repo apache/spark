@@ -55,7 +55,10 @@ private[hive] abstract class HiveFunctionRegistry
 
       HiveSimpleUdf(
         functionClassName,
-        children.zip(expectedDataTypes).map { case (e, t) => Cast(e, t) }
+        children.zip(expectedDataTypes).map {
+          case (e, NullType) => e
+          case (e, t) => Cast(e, t)
+        }
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(functionClassName, children)
@@ -115,22 +118,26 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
     }
 
-    val constructor = matchingConstructor.getOrElse(
-      sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
-
-    (a: Any) => {
-      logDebug(
-        s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
-      // We must make sure that primitives get boxed java style.
-      if (a == null) {
-        null
-      } else {
-        constructor.newInstance(a match {
-          case i: Int => i: java.lang.Integer
-          case bd: BigDecimal => new HiveDecimal(bd.underlying())
-          case other: AnyRef => other
-        }).asInstanceOf[AnyRef]
-      }
+    matchingConstructor match {
+      case Some(constructor) =>
+        (a: Any) => {
+          logDebug(
+            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} $constructor.")
+          // We must make sure that primitives get boxed java style.
+          if (a == null) {
+            null
+          } else {
+            constructor.newInstance(a match {
+              case i: Int => i: java.lang.Integer
+              case bd: BigDecimal => new HiveDecimal(bd.underlying())
+              case other: AnyRef => other
+            }).asInstanceOf[AnyRef]
+          }
+        }
+      case None =>
+        (a: Any) => a match {
+          case wrapper => wrap(wrapper)
+        }
     }
   }
 
