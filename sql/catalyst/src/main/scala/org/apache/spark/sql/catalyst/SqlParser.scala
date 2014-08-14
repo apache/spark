@@ -81,6 +81,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val DISTINCT = Keyword("DISTINCT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
+  protected val LAST = Keyword("LAST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
@@ -309,6 +310,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
     } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
+    LAST ~> "(" ~> expression <~ ")" ^^ { case exp => Last(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
     MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
