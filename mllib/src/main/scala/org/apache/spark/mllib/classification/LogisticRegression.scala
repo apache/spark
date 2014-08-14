@@ -62,7 +62,7 @@ class LogisticRegressionModel (
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    val score = 1.0/ (1.0 + math.exp(-margin))
+    val score = 1.0 / (1.0 + math.exp(-margin))
     threshold match {
       case Some(t) => if (score < t) 0.0 else 1.0
       case None => score
@@ -203,6 +203,8 @@ class LogisticRegressionWithLBFGS private (
    * Construct a LogisticRegression object with default parameters
    */
   def this() = this(1E-4, 100, 0.0)
+
+  this.setFeatureScaling(true)
 
   private val gradient = new LogisticGradient()
   private val updater = new SimpleUpdater()
