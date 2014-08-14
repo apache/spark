@@ -419,7 +419,8 @@ object DecisionTree extends Serializable with Logging {
    * Returns an array of optimal splits for all nodes at a given level. Splits the task into
    * multiple groups if the level-wise training task could lead to memory overflow.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param inputWithFeatures2bin Training data with feature2bin map:
+   *                              RDD of [[(LabeledPoint, Array[Int])]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
    *                 parameters for constructing the DecisionTree
@@ -467,7 +468,8 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Returns an array of optimal splits for a group of nodes at a given level
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param inputWithFeatures2bin Training data with feature2bin map:
+   *                              RDD of [[(LabeledPoint, Array[Int])]]
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
    *                 parameters for constructing the DecisionTree
@@ -591,24 +593,21 @@ object DecisionTree extends Serializable with Logging {
       true
     }
 
-
-
-
-
     /**
      * Finds bins for all nodes (and all features) at a given level.
      * For l nodes, k features the storage is as follows:
-     * label, b_11, b_12, .. , b_1k, b_21, b_22, .. , b_2k, b_l1, b_l2, .. , b_lk,
-     * where b_ij is an integer between 0 and numBins - 1 for regressions and binary
+     * label, v_1, v_2, .. , v_l, b_1, b_2, .. , b_k,
+     * where v_i is either InvalidBinIndex or ValidBinIndex
+     * and b_j is an integer between 0 and numBins - 1 for regressions and binary
      * classification and the categorical feature value in  multiclass classification.
-     * Invalid sample is denoted by noting bin for feature 1 as -1.
+     *
      *
      * For unordered features, the "bin index" returned is actually the feature value (category).
      *
      * @return  Array of size 1 + numFeatures + numNodes, where
      *          arr(0) = label for labeledPoint, and
-     *          arr(1:numNodes): is point valid for node
-     *          arr(numNodes+1:1+numNodes+numFeatures): feature2bin
+     *          arr(1:numNodes): v_i, is point valid for node?
+     *          arr(numNodes+1:1+numNodes+numFeatures): b_j, feature2bin map
      */
     def findBinsForLevel(pointWithFeature2bin: (LabeledPoint, Array[Int])): Array[Double] = {
       // Calculate bin index and label per feature per node.
@@ -650,7 +649,7 @@ object DecisionTree extends Serializable with Logging {
      * Increment aggregate in location for (node, feature, bin, label).
      *
      * @param arr  Bin mapping from findBinsForLevel.  arr(0) stores the class label.
-     *             Array of size 1 + (numFeatures * numNodes).
+     *             Array of size 1 + numFeatures + numNodes.
      * @param agg  Array storing aggregate calculation, of size:
      *             numClasses * numBins * numFeatures * numNodes.
      *             Indexed by (node, feature, bin, label) where label is the least significant bit.
@@ -678,8 +677,9 @@ object DecisionTree extends Serializable with Logging {
      * where [bins] ranges over all bins.
      * Updates left or right side of aggregate depending on split.
      *
-     * @param arr  arr(0) = label.
-     *             arr(1 + featureIndex + nodeIndex * numFeatures) = feature value (category)
+     * @param arr   arr(0) = label for labeledPoint, and
+     *              arr(1:numNodes): v_i, is point valid for node?
+     *              arr(numNodes+1:1+numNodes+numFeatures): b_j, feature2bin map
      * @param agg  Indexed by (left/right, node, feature, bin, label)
      *             where label is the least significant bit.
      *             The left/right specifier is a 0/1 index indicating left/right child info.
@@ -719,7 +719,7 @@ object DecisionTree extends Serializable with Logging {
      * Helper for binSeqOp.
      *
      * @param arr  Bin mapping from findBinsForLevel. arr(0) stores the class label.
-     *             Array of size 1 + (numFeatures * numNodes).
+     *             Array of size 1 + numFeatures + numNodes.
      * @param agg  Array storing aggregate calculation, of size:
      *             numClasses * numBins * numFeatures * numNodes.
      *             Indexed by (node, feature, bin, label) where label is the least significant bit.
@@ -751,9 +751,9 @@ object DecisionTree extends Serializable with Logging {
      * @param arr  Bin mapping from findBinsForLevel. arr(0) stores the class label.
      *             Array of size 1 + (numFeatures * numNodes).
      *             For ordered features,
-     *               arr(1 + featureIndex + nodeIndex * numFeatures) = bin index.
+     *               arr(1 + featureIndex + numNodes) = bin index.
      *             For unordered features,
-     *               arr(1 + featureIndex + nodeIndex * numFeatures) = feature value (category).
+     *               arr(1 + featureIndex + numNodes) = feature value (category).
      * @param agg  Array storing aggregate calculation.
      *             For ordered features, this is of size:
      *               numClasses * numBins * numFeatures * numNodes.
@@ -803,7 +803,7 @@ object DecisionTree extends Serializable with Logging {
      * @param agg Array storing aggregate calculation, updated by this function.
      *            Size: 3 * numBins * numFeatures * numNodes
      * @param arr Bin mapping from findBinsForLevel.
-     *             Array of size 1 + (numFeatures * numNodes).
+     *             Array of size 1 + numFeatures + numNodes.
      * @return agg
      */
     def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]): Unit = {
@@ -1558,6 +1558,16 @@ object DecisionTree extends Serializable with Logging {
     }
   }
 
+  /**
+   * Get feature to bin map for a labeledPoint
+   * for each feature, find bins to put this labeledPoint
+   * @param numFeatures: total number of features
+   * @param numBins: number of bins
+   * @param bins: bins find by findSplitsBins
+   * @param strategy: Strategy of this decision tree
+   * @param labeledPoint: the labeledPoint to find bins
+   * @return
+   */
   def findFeature2Bin(numFeatures: Int, numBins: Int, bins: Array[Array[Bin]], strategy: Strategy)
                      (labeledPoint: LabeledPoint): (LabeledPoint, Array[Int]) = {
     val feature2bin = new Array[Int](numFeatures)
