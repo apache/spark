@@ -19,4 +19,4 @@ rem
 
 set SPARK_HOME=%~dp0..
 
-cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd --class org.apache.spark.repl.Main spark-shell %*
+cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd --class org.apache.spark.repl.Main %* spark-shell
