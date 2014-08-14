@@ -115,7 +115,7 @@ class ALS private (
   private var nonnegative = false
 
   /** storage level for user/product in/out links */
-  private var intermediateDataStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+  private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
@@ -199,8 +199,8 @@ class ALS private (
    * set `spark.rdd.compress` to `true` to reduce the space requirement, at the cost of speed.
    */
   @DeveloperApi
-  def setIntermediateDataStorageLevel(storageLevel: StorageLevel): this.type = {
-    this.intermediateDataStorageLevel = storageLevel
+  def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    this.intermediateRDDStorageLevel = storageLevel
     this
   }
 
@@ -456,8 +456,8 @@ class ALS private (
     }, preservesPartitioning = true)
     val inLinks = links.mapValues(_._1)
     val outLinks = links.mapValues(_._2)
-    inLinks.persist(intermediateDataStorageLevel)
-    outLinks.persist(intermediateDataStorageLevel)
+    inLinks.persist(intermediateRDDStorageLevel)
+    outLinks.persist(intermediateRDDStorageLevel)
     (inLinks, outLinks)
   }
 
