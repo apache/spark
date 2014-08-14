@@ -67,9 +67,8 @@ class TimeTracker extends Serializable {
    * Print all timing results in seconds.
    */
   override def toString: String = {
-    s"Timing\n" +
-      totals.map { case (label, elapsed) =>
-          s"  $label: ${elapsed / 1e9}"
-        }.mkString("\n")
+    totals.map { case (label, elapsed) =>
+        s"  $label: ${elapsed / 1e9}"
+      }.mkString("\n")
   }
 }

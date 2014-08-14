@@ -167,7 +167,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     timer.stop("total")
 
-    //println(timer)  // Print internal timing info.
+    logDebug("Internal timing for DecisionTree:")
+    logDebug(s"$timer")
 
     new DecisionTreeModel(topNode, strategy.algo)
   }
