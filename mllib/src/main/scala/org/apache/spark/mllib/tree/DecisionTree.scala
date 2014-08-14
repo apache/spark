@@ -160,10 +160,10 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * Extract the decision tree node information for the given tree level and node index
    */
   private def extractNodeInfo(
-                               nodeSplitStats: (Split, InformationGainStats),
-                               level: Int,
-                               index: Int,
-                               nodes: Array[Node]): Unit = {
+      nodeSplitStats: (Split, InformationGainStats),
+      level: Int,
+      index: Int,
+      nodes: Array[Node]): Unit = {
     val split = nodeSplitStats._1
     val stats = nodeSplitStats._2
     val nodeIndex = math.pow(2, level).toInt - 1 + index
@@ -177,12 +177,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    *  Extract the decision tree node information for the children of the node
    */
   private def extractInfoForLowerLevels(
-                                         level: Int,
-                                         index: Int,
-                                         maxDepth: Int,
-                                         nodeSplitStats: (Split, InformationGainStats),
-                                         parentImpurities: Array[Double],
-                                         filters: Array[List[Filter]]): Unit = {
+      level: Int,
+      index: Int,
+      maxDepth: Int,
+      nodeSplitStats: (Split, InformationGainStats),
+      parentImpurities: Array[Double],
+      filters: Array[List[Filter]]): Unit = {
     // 0 corresponds to the left child node and 1 corresponds to the right child node.
     var i = 0
     while (i <= 1) {
@@ -207,9 +207,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       i += 1
     }
   }
-
-
-
 }
 
 object DecisionTree extends Serializable with Logging {
@@ -252,10 +249,10 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth)
     new DecisionTree(strategy).train(input)
   }
@@ -279,11 +276,11 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int,
-             numClassesForClassification: Int): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClassesForClassification: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
     new DecisionTree(strategy).train(input)
   }
@@ -312,14 +309,14 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int,
-             numClassesForClassification: Int,
-             maxBins: Int,
-             quantileCalculationStrategy: QuantileStrategy,
-             categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClassesForClassification: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: QuantileStrategy,
+      categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
     new DecisionTree(strategy).train(input)
@@ -344,12 +341,12 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
    */
   def trainClassifier(
-                       input: RDD[LabeledPoint],
-                       numClassesForClassification: Int,
-                       categoricalFeaturesInfo: Map[Int, Int],
-                       impurity: String,
-                       maxDepth: Int,
-                       maxBins: Int): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: Map[Int, Int],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
     train(input, Classification, impurityType, maxDepth, numClassesForClassification, maxBins, Sort,
       categoricalFeaturesInfo)
@@ -359,12 +356,12 @@ object DecisionTree extends Serializable with Logging {
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    */
   def trainClassifier(
-                       input: JavaRDD[LabeledPoint],
-                       numClassesForClassification: Int,
-                       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-                       impurity: String,
-                       maxDepth: Int,
-                       maxBins: Int): DecisionTreeModel = {
+      input: JavaRDD[LabeledPoint],
+      numClassesForClassification: Int,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
     trainClassifier(input.rdd, numClassesForClassification,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
@@ -388,11 +385,11 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
    */
   def trainRegressor(
-                      input: RDD[LabeledPoint],
-                      categoricalFeaturesInfo: Map[Int, Int],
-                      impurity: String,
-                      maxDepth: Int,
-                      maxBins: Int): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      categoricalFeaturesInfo: Map[Int, Int],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
     train(input, Regression, impurityType, maxDepth, 0, maxBins, Sort, categoricalFeaturesInfo)
   }
@@ -401,11 +398,11 @@ object DecisionTree extends Serializable with Logging {
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    */
   def trainRegressor(
-                      input: JavaRDD[LabeledPoint],
-                      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-                      impurity: String,
-                      maxDepth: Int,
-                      maxBins: Int): DecisionTreeModel = {
+      input: JavaRDD[LabeledPoint],
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int): DecisionTreeModel = {
     trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
@@ -432,14 +429,14 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   protected[tree] def findBestSplits(
-    inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
-    parentImpurities: Array[Double],
-    strategy: Strategy,
-    level: Int,
-    filters: Array[List[Filter]],
-    splits: Array[Array[Split]],
-    bins: Array[Array[Bin]],
-    maxLevelForSingleGroup: Int): Array[(Split, InformationGainStats)] = {
+      inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
+      parentImpurities: Array[Double],
+      strategy: Strategy,
+      level: Int,
+      filters: Array[List[Filter]],
+      splits: Array[Array[Split]],
+      bins: Array[Array[Bin]],
+      maxLevelForSingleGroup: Int): Array[(Split, InformationGainStats)] = {
     // split into groups to avoid memory overflow during aggregation
     if (level > maxLevelForSingleGroup) {
       // When information for all nodes at a given level cannot be stored in memory,
@@ -482,15 +479,15 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   private def findBestSplitsPerGroup(
-    inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
-    parentImpurities: Array[Double],
-    strategy: Strategy,
-    level: Int,
-    filters: Array[List[Filter]],
-    splits: Array[Array[Split]],
-    bins: Array[Array[Bin]],
-    numGroups: Int = 1,
-    groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
+      inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
+      parentImpurities: Array[Double],
+      strategy: Strategy,
+      level: Int,
+      filters: Array[List[Filter]],
+      splits: Array[Array[Split]],
+      bins: Array[Array[Bin]],
+      numGroups: Int = 1,
+      groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -538,7 +535,7 @@ object DecisionTree extends Serializable with Logging {
     logDebug("isMulticlassClassification = " + isMulticlassClassification)
 
     val isMulticlassClassificationWithCategoricalFeatures
-    = strategy.isMulticlassWithCategoricalFeatures
+      = strategy.isMulticlassWithCategoricalFeatures
     logDebug("isMultiClassWithCategoricalFeatures = " +
       isMulticlassClassificationWithCategoricalFeatures)
 
@@ -666,9 +663,9 @@ object DecisionTree extends Serializable with Logging {
       // Update the left or right count for one bin.
       val aggIndex =
         numClasses * numBins * numFeatures * nodeIndex +
-          numClasses * numBins * featureIndex +
-          numClasses * arr(arrIndex).toInt +
-          label.toInt
+        numClasses * numBins * featureIndex +
+        numClasses * arr(arrIndex).toInt +
+        label.toInt
       agg(aggIndex) += 1
     }
 
@@ -686,12 +683,12 @@ object DecisionTree extends Serializable with Logging {
      * @param rightChildShift Offset for right side of agg.
      */
     def updateBinForUnorderedFeature(
-                                      nodeIndex: Int,
-                                      featureIndex: Int,
-                                      arr: Array[Double],
-                                      label: Double,
-                                      agg: Array[Double],
-                                      rightChildShift: Int): Unit = {
+        nodeIndex: Int,
+        featureIndex: Int,
+        arr: Array[Double],
+        label: Double,
+        agg: Array[Double],
+        rightChildShift: Int): Unit = {
       // Find the bin index for this feature.
       val arrIndex = 1 + numNodes + featureIndex
       val featureValue = arr(arrIndex).toInt
@@ -780,7 +777,7 @@ object DecisionTree extends Serializable with Logging {
             } else {
               val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
               val isSpaceSufficientForAllCategoricalSplits
-              = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
               if (isSpaceSufficientForAllCategoricalSplits) {
                 updateBinForUnorderedFeature(nodeIndex, featureIndex, arr, label, agg,
                   rightChildShift)
@@ -869,7 +866,7 @@ object DecisionTree extends Serializable with Logging {
 
     // Calculate bin aggregate length for classification or regression.
     val binAggregateLength = numNodes * getElementsPerNode(numFeatures, numBins, numClasses,
-      isMulticlassClassificationWithCategoricalFeatures, strategy.algo)
+        isMulticlassClassificationWithCategoricalFeatures, strategy.algo)
     logDebug("binAggregateLength = " + binAggregateLength)
 
     /**
@@ -904,11 +901,11 @@ object DecisionTree extends Serializable with Logging {
      * @return information gain and statistics for all splits
      */
     def calculateGainForSplit(
-                               leftNodeAgg: Array[Array[Array[Double]]],
-                               featureIndex: Int,
-                               splitIndex: Int,
-                               rightNodeAgg: Array[Array[Array[Double]]],
-                               topImpurity: Double): InformationGainStats = {
+        leftNodeAgg: Array[Array[Array[Double]]],
+        featureIndex: Int,
+        splitIndex: Int,
+        rightNodeAgg: Array[Array[Array[Double]]],
+        topImpurity: Double): InformationGainStats = {
       strategy.algo match {
         case Classification =>
           val leftCounts: Array[Double] = leftNodeAgg(featureIndex)(splitIndex)
@@ -1037,13 +1034,13 @@ object DecisionTree extends Serializable with Logging {
      *
      */
     def extractLeftRightNodeAggregates(
-      binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
+        binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
 
 
       def findAggForOrderedFeatureClassification(
-                                                  leftNodeAgg: Array[Array[Array[Double]]],
-                                                  rightNodeAgg: Array[Array[Array[Double]]],
-                                                  featureIndex: Int) {
+          leftNodeAgg: Array[Array[Array[Double]]],
+          rightNodeAgg: Array[Array[Array[Double]]],
+          featureIndex: Int) {
 
         // shift for this featureIndex
         val shift = numClasses * featureIndex * numBins
@@ -1083,9 +1080,9 @@ object DecisionTree extends Serializable with Logging {
        * @param leftNodeAgg   leftNodeAgg(featureIndex)(splitIndex)(classIndex) = aggregate value
        */
       def findAggForUnorderedFeatureClassification(
-                                                    leftNodeAgg: Array[Array[Array[Double]]],
-                                                    rightNodeAgg: Array[Array[Array[Double]]],
-                                                    featureIndex: Int) {
+          leftNodeAgg: Array[Array[Array[Double]]],
+          rightNodeAgg: Array[Array[Array[Double]]],
+          featureIndex: Int) {
 
         val rightChildShift = numClasses * numBins * numFeatures
         var splitIndex = 0
@@ -1105,9 +1102,9 @@ object DecisionTree extends Serializable with Logging {
       }
 
       def findAggForRegression(
-                                leftNodeAgg: Array[Array[Array[Double]]],
-                                rightNodeAgg: Array[Array[Array[Double]]],
-                                featureIndex: Int) {
+          leftNodeAgg: Array[Array[Array[Double]]],
+          rightNodeAgg: Array[Array[Array[Double]]],
+          featureIndex: Int) {
 
         // shift for this featureIndex
         val shift = 3 * featureIndex * numBins
@@ -1158,7 +1155,7 @@ object DecisionTree extends Serializable with Logging {
               } else {
                 val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
                 val isSpaceSufficientForAllCategoricalSplits
-                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+                  = numBins > math.pow(2, featureCategories.toInt - 1) - 1
                 if (isSpaceSufficientForAllCategoricalSplits) {
                   findAggForUnorderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
                 } else {
@@ -1211,8 +1208,8 @@ object DecisionTree extends Serializable with Logging {
      * @return tuple of split and information gain
      */
     def binsToBestSplit(
-         binData: Array[Double],
-         nodeImpurity: Double): (Split, InformationGainStats) = {
+        binData: Array[Double],
+        nodeImpurity: Double): (Split, InformationGainStats) = {
 
       logDebug("node impurity = " + nodeImpurity)
 
@@ -1237,9 +1234,9 @@ object DecisionTree extends Serializable with Logging {
             if (isFeatureContinuous) {
               numBins - 1
             } else { // Categorical feature
-            val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
+              val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
               val isSpaceSufficientForAllCategoricalSplits
-              = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
               if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
                 math.pow(2.0, featureCategories - 1).toInt - 1
               } else { // Binary classification
@@ -1278,9 +1275,9 @@ object DecisionTree extends Serializable with Logging {
             val rightChildShift = numClasses * numBins * numFeatures * numNodes
             val binsForNode = {
               val leftChildData
-              = binAggregates.slice(shift, shift + numClasses * numBins * numFeatures)
+                = binAggregates.slice(shift, shift + numClasses * numBins * numFeatures)
               val rightChildData
-              = binAggregates.slice(rightChildShift + shift,
+                = binAggregates.slice(rightChildShift + shift,
                 rightChildShift + shift + numClasses * numBins * numFeatures)
               leftChildData ++ rightChildData
             }
@@ -1435,9 +1432,9 @@ object DecisionTree extends Serializable with Logging {
               splits(featureIndex)(index) = split
             }
           } else { // Categorical feature
-          val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
+            val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
             val isSpaceSufficientForAllCategoricalSplits
-            = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+              = numBins > math.pow(2, featureCategories.toInt - 1) - 1
 
             // Use different bin/split calculation strategy for categorical features in multiclass
             // classification that satisfy the space constraint.
@@ -1448,7 +1445,7 @@ object DecisionTree extends Serializable with Logging {
               var index = 0
               while (index < math.pow(2.0, featureCategories - 1).toInt - 1) {
                 val categories: List[Double]
-                = extractMultiClassCategories(index + 1, featureCategories)
+                  = extractMultiClassCategories(index + 1, featureCategories)
                 splits(featureIndex)(index)
                   = new Split(featureIndex, Double.MinValue, Categorical, categories)
                 bins(featureIndex)(index) = {
@@ -1469,31 +1466,31 @@ object DecisionTree extends Serializable with Logging {
                 index += 1
               }
             } else { // ordered feature
-            /* For a given categorical feature, use a subsample of the data
-             * to choose how to arrange possible splits.
-             * This examines each category and computes a centroid.
-             * These centroids are later used to sort the possible splits.
-             * centroidForCategories is a mapping: category (for the given feature) --> centroid
-             */
-            val centroidForCategories = {
-              if (isMulticlassClassification) {
-                // For categorical variables in multiclass classification,
-                // each bin is a category. The bins are sorted and they
-                // are ordered by calculating the impurity of their corresponding labels.
-                sampledInput.map(lp => (lp.features(featureIndex), lp.label))
-                  .groupBy(_._1)
-                  .mapValues(x => x.groupBy(_._2).mapValues(x => x.size.toDouble))
-                  .map(x => (x._1, x._2.values.toArray))
-                  .map(x => (x._1, strategy.impurity.calculate(x._2, x._2.sum)))
-              } else { // regression or binary classification
-                // For categorical variables in regression and binary classification,
-                // each bin is a category. The bins are sorted and they
-                // are ordered by calculating the centroid of their corresponding labels.
-                sampledInput.map(lp => (lp.features(featureIndex), lp.label))
-                  .groupBy(_._1)
-                  .mapValues(x => x.map(_._2).sum / x.map(_._1).length)
+              /* For a given categorical feature, use a subsample of the data
+               * to choose how to arrange possible splits.
+               * This examines each category and computes a centroid.
+               * These centroids are later used to sort the possible splits.
+               * centroidForCategories is a mapping: category (for the given feature) --> centroid
+               */
+              val centroidForCategories = {
+                if (isMulticlassClassification) {
+                  // For categorical variables in multiclass classification,
+                  // each bin is a category. The bins are sorted and they
+                  // are ordered by calculating the impurity of their corresponding labels.
+                  sampledInput.map(lp => (lp.features(featureIndex), lp.label))
+                    .groupBy(_._1)
+                    .mapValues(x => x.groupBy(_._2).mapValues(x => x.size.toDouble))
+                    .map(x => (x._1, x._2.values.toArray))
+                    .map(x => (x._1, strategy.impurity.calculate(x._2, x._2.sum)))
+                } else { // regression or binary classification
+                  // For categorical variables in regression and binary classification,
+                  // each bin is a category. The bins are sorted and they
+                  // are ordered by calculating the centroid of their corresponding labels.
+                  sampledInput.map(lp => (lp.features(featureIndex), lp.label))
+                    .groupBy(_._1)
+                    .mapValues(x => x.map(_._2).sum / x.map(_._1).length)
+                }
               }
-            }
 
               logDebug("centroid for categories = " + centroidForCategories.mkString(","))
 
