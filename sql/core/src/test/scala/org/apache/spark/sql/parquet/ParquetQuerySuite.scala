@@ -153,7 +153,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val resultWithBinary = parquetFile(path).collect
     range.foreach {
       i =>
-        assert(resultWithBinary(i).getInt(0) == i)
+        assert(resultWithBinary(i).getInt(0) === i)
         assert(resultWithBinary(i)(1) === s"val_$i".getBytes)
     }
 
@@ -172,7 +172,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val resultWithString = schemaRDD.collect
     range.foreach {
       i =>
-        assert(resultWithString(i).getInt(0) == i)
+        assert(resultWithString(i).getInt(0) === i)
         assert(resultWithString(i)(1) === s"val_$i")
     }
 
