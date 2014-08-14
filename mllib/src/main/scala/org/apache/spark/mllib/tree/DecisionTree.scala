@@ -84,7 +84,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val numFeatures = retaggedInput.take(1)(0).features.size
 
     // compute features to bins array
-    val inputWithFeatures2bin = retaggedInput.map(findFeature2Bin(numFeatures, numBins, bins, strategy)).cache()
+    val inputWithFeatures2bin = retaggedInput.map(DecisionTree.findFeature2Bin(numFeatures, numBins, bins, strategy)).cache()
 
     // Calculate level for single group construction
 
@@ -208,27 +208,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   }
 
 
-  def findFeature2Bin(numFeatures: Int, numBins: Int, bins: Array[Array[Bin]], strategy: Strategy)
-                     (labeledPoint: LabeledPoint): (LabeledPoint, Array[Int]) = {
-    val feature2bin = new Array[Int](numFeatures)
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      val featureInfo = strategy.categoricalFeaturesInfo.get(featureIndex)
-      val isFeatureContinuous = featureInfo.isEmpty
-      if (isFeatureContinuous) {
-        feature2bin(featureIndex) = DecisionTree.findBin(strategy, bins, featureIndex, labeledPoint, isFeatureContinuous, false)
-      } else {
-        val featureCategories = featureInfo.get
-        val isSpaceSufficientForAllCategoricalSplits
-        = numBins > math.pow(2, featureCategories.toInt - 1) - 1
-        feature2bin(featureIndex)
-          = DecisionTree.findBin(strategy, bins, featureIndex, labeledPoint, isFeatureContinuous,
-          isSpaceSufficientForAllCategoricalSplits)
-      }
-      featureIndex += 1
-    }
-    (labeledPoint, feature2bin)
-  }
+
 }
 
 object DecisionTree extends Serializable with Logging {
@@ -1573,6 +1553,28 @@ object DecisionTree extends Serializable with Logging {
       case ApproxHist =>
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
     }
+  }
+
+  def findFeature2Bin(numFeatures: Int, numBins: Int, bins: Array[Array[Bin]], strategy: Strategy)
+                     (labeledPoint: LabeledPoint): (LabeledPoint, Array[Int]) = {
+    val feature2bin = new Array[Int](numFeatures)
+    var featureIndex = 0
+    while (featureIndex < numFeatures) {
+      val featureInfo = strategy.categoricalFeaturesInfo.get(featureIndex)
+      val isFeatureContinuous = featureInfo.isEmpty
+      if (isFeatureContinuous) {
+        feature2bin(featureIndex) = findBin(strategy, bins, featureIndex, labeledPoint, isFeatureContinuous, false)
+      } else {
+        val featureCategories = featureInfo.get
+        val isSpaceSufficientForAllCategoricalSplits
+        = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+        feature2bin(featureIndex)
+          = findBin(strategy, bins, featureIndex, labeledPoint, isFeatureContinuous,
+          isSpaceSufficientForAllCategoricalSplits)
+      }
+      featureIndex += 1
+    }
+    (labeledPoint, feature2bin)
   }
 
 
