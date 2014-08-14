@@ -80,9 +80,10 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       }
     }
     // if both unavailable, fall back to deducing the schema from the given Parquet schema
+    // TODO: Why it can be null?
     if (schema == null)  {
       log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(parquetSchema)
+      schema = ParquetTypesConverter.convertToAttributes(parquetSchema, false)
     }
     log.debug(s"list of attributes that will be read: $schema")
     new RowRecordMaterializer(parquetSchema, schema)
