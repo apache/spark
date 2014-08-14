@@ -186,50 +186,26 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       if (!logInfos.isEmpty) {
         var newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
-        // A poor man's implementation of a peeking iterator, to help with the merge below.
-        def hasNext[T](it: Iterator[T], lookAhead: T): Boolean = {
-          lookAhead != null || it.hasNext
-        }
-
-        def next[T](it: Iterator[T], lookAhead: T): T = {
-          if (lookAhead != null) lookAhead else it.next
-        }
-
-        def addOldInfo(oldInfo: FsApplicationHistoryInfo) = {
-          if (!newApps.contains(oldInfo.id)) {
-            newApps += (oldInfo.id -> oldInfo)
+        def addToList(info: FsApplicationHistoryInfo) = {
+          if (!newApps.contains(info.id)) {
+            newApps += (info.id -> info)
           }
         }
 
         // Merge the new apps with the existing ones, discarding any duplicates.
-        val newIterator = logInfos.iterator
-        var newLookAhead: FsApplicationHistoryInfo = null
-        val oldIterator = applications.values.iterator
-        var oldLookAhead: FsApplicationHistoryInfo = null
+        val newIterator = logInfos.iterator.buffered
+        val oldIterator = applications.values.iterator.buffered
 
-        while (hasNext(newIterator, newLookAhead) && hasNext(oldIterator, oldLookAhead)) {
-          newLookAhead = next(newIterator, newLookAhead)
-          oldLookAhead = next(oldIterator, oldLookAhead)
-          if (newLookAhead.endTime > oldLookAhead.endTime) {
-            newApps += (newLookAhead.id -> newLookAhead)
-            newLookAhead = null
+        while (newIterator.hasNext && oldIterator.hasNext) {
+          if (newIterator.head.endTime > oldIterator.head.endTime) {
+            addToList(newIterator.next)
           } else {
-            addOldInfo(oldLookAhead)
-            oldLookAhead = null
+            addToList(oldIterator.next)
           }
         }
 
-        while (hasNext(newIterator, newLookAhead)) {
-          newLookAhead = next(newIterator, newLookAhead)
-          newApps += (newLookAhead.id -> newLookAhead)
-          newLookAhead = null
-        }
-
-        while (hasNext(oldIterator, oldLookAhead)) {
-          oldLookAhead = next(oldIterator, oldLookAhead)
-          addOldInfo(oldLookAhead)
-          oldLookAhead = null
-        }
+        newIterator.foreach(addToList)
+        oldIterator.foreach(addToList)
 
         applications = newApps
       }
