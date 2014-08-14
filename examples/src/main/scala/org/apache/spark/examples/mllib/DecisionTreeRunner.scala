@@ -158,8 +158,7 @@ object DecisionTreeRunner {
 
     println("opt3")
     // Split into training, test.
-    val splitsTMP = examples.randomSplit(Array(0.9, 0.1), seed = 1234)
-    val splits = splitsTMP(1).randomSplit(Array(1.0 - params.fracTest, params.fracTest), seed = 12345)
+    val splits = examples.randomSplit(Array(1.0 - params.fracTest, params.fracTest), seed = 12345)
     val training = splits(0).cache()
     val test = splits(1).cache()
     val numTraining = training.count()
