@@ -46,7 +46,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
    * correlation between column i and j.
    */
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
-    // ((columnIndex, value), rowId)
+    // ((columnIndex, value), rowUid)
     val colBased = X.zipWithUniqueId().flatMap { case (vec, uid) =>
       vec.toArray.view.zipWithIndex.map { case (v, j) =>
         ((j, v), uid)
@@ -54,36 +54,34 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     }
     // global sort by (columnIndex, value)
     val sorted = colBased.sortByKey()
-    // Assign global ranks (using average ranks for tied values)
+    // assign global ranks (using average ranks for tied values)
     val globalRanks = sorted.zipWithIndex().mapPartitions { iter =>
       var preCol = -1
       var preVal = Double.NaN
       var startRank = -1.0
-      var cachedIds = ArrayBuffer.empty[Long]
-      def flush: () => Iterable[(Long, (Int, Double))] = () => {
-        val averageRank = startRank + (cachedIds.size - 1) / 2.0
-        val output = cachedIds.map { i =>
-          (i, (preCol, averageRank))
+      var cachedUids = ArrayBuffer.empty[Long]
+      val flush: () => Iterable[(Long, (Int, Double))] = () => {
+        val averageRank = startRank + (cachedUids.size - 1) / 2.0
+        val output = cachedUids.map { uid =>
+          (uid, (preCol, averageRank))
         }
-        cachedIds.clear()
+        cachedUids.clear()
         output
       }
       iter.flatMap { case (((j, v), uid), rank) =>
-        // If we see a new value or cachedIds is too big, we flush ids with their average rank.
-        if (j != preCol || v != preVal || cachedIds.size >= 10000000) {
+        // If we see a new value or cachedUids is too big, we flush ids with their average rank.
+        if (j != preCol || v != preVal || cachedUids.size >= 10000000) {
           val output = flush()
           preCol = j
           preVal = v
           startRank = rank
-          cachedIds += uid
+          cachedUids += uid
           output
         } else {
-          cachedIds += uid
+          cachedUids += uid
           Iterator.empty
         }
-      } ++ {
-        flush()
-      }
+      } ++ flush()
     }
     // Replace values in the input matrix by their ranks compared with values in the same column.
     // Note that shifting all ranks in a column by a constant value doesn't affect result.
@@ -91,12 +89,6 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       // sort by column index and then convert values to a vector
       Vectors.dense(iter.toSeq.sortBy(_._1).map(_._2).toArray)
     }
-    val corrMatrix = PearsonCorrelation.computeCorrelationMatrix(groupedRanks)
-
-    colBased.unpersist(blocking = false)
-    sorted.unpersist(blocking = false)
-
-    corrMatrix
+    PearsonCorrelation.computeCorrelationMatrix(groupedRanks)
   }
 }
-
