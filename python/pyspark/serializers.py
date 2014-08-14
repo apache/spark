@@ -409,18 +409,25 @@ class UTF8Deserializer(Serializer):
     Deserializes streams written by String.getBytes.
     """
 
+    def __init__(self, use_unicode=False):
+        self.use_unicode = use_unicode
+
     def loads(self, stream):
         length = read_int(stream)
-        return stream.read(length).decode('utf8')
+        return stream.read(length)
 
     def load_stream(self, stream):
-        while True:
-            try:
-                yield self.loads(stream)
-            except struct.error:
-                return
-            except EOFError:
-                return
+        try:
+            if self.use_unicode:
+                while True:
+                    yield self.loads(stream).decode("utf-8")
+            else:
+                while True:
+                    yield self.loads(stream)
+        except struct.error:
+            return
+        except EOFError:
+            return
 
 
 def read_long(stream):

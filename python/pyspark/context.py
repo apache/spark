@@ -314,7 +314,7 @@ class SparkContext(object):
         return RDD(self._jsc.objectFile(name, minPartitions), self,
                    BatchedSerializer(PickleSerializer()))
 
-    def textFile(self, name, minPartitions=None):
+    def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
@@ -329,9 +329,9 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
-                   UTF8Deserializer())
+                   UTF8Deserializer(use_unicode))
 
-    def wholeTextFiles(self, path, minPartitions=None):
+    def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
@@ -369,7 +369,7 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
-                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
+                   PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)))
 
     def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()
