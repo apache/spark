@@ -46,6 +46,11 @@ private[spark] class ApplicationInfo(
 
   init()
 
+  private def readObject(in: java.io.ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    init()
+  }
+
   private def init() {
     state = ApplicationState.WAITING
     executors = new mutable.HashMap[Int, ExecutorInfo]
