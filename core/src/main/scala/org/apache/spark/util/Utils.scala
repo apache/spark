@@ -493,7 +493,10 @@ private[spark] object Utils extends Logging {
       if (address.isLoopbackAddress) {
         // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
         // a better address using the local network interfaces
-        for (ni <- NetworkInterface.getNetworkInterfaces) {
+        // getNetworkInterfaces returns ifs in reverse order compared to ifconfig output order
+        // on unix-like system. On windows, it returns in index order.
+        // It's more proper to pick ip address following the ifconfig output order
+        for (ni <- NetworkInterface.getNetworkInterfaces.toList.reverse) {
           for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
                !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
             // We've found an address that looks reasonable!
