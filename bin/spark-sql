@@ -65,30 +65,30 @@ while (($#)); do
   case $1 in
     -d | --define | --database | -f | -h | --hiveconf | --hivevar | -i | -p)
       ensure_arg_number $# 2
-      CLI_ARGS+=($1); shift
-      CLI_ARGS+=($1); shift
+      CLI_ARGS+=("$1"); shift
+      CLI_ARGS+=("$1"); shift
       ;;
 
     -e)
       ensure_arg_number $# 2
-      CLI_ARGS+=($1); shift
-      CLI_ARGS+=(\"$1\"); shift
+      CLI_ARGS+=("$1"); shift
+      CLI_ARGS+=("$1"); shift
       ;;
 
     -s | --silent)
-      CLI_ARGS+=($1); shift
+      CLI_ARGS+=("$1"); shift
       ;;
 
     -v | --verbose)
       # Both SparkSubmit and SparkSQLCLIDriver recognizes -v | --verbose
-      CLI_ARGS+=($1)
-      SUBMISSION_ARGS+=($1); shift
+      CLI_ARGS+=("$1")
+      SUBMISSION_ARGS+=("$1"); shift
       ;;
 
     *)
-      SUBMISSION_ARGS+=($1); shift
+      SUBMISSION_ARGS+=("$1"); shift
       ;;
   esac
 done
 
-eval exec "$FWDIR"/bin/spark-submit --class $CLASS ${SUBMISSION_ARGS[*]} spark-internal ${CLI_ARGS[*]}
+exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${CLI_ARGS[@]}"
