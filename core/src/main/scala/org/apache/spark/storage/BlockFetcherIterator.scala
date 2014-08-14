@@ -277,6 +277,8 @@ object BlockFetcherIterator {
 
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap // so we can look up the size of each blockID
+
+      // This could throw a TimeoutException. In that case we will just retry the task.
       val client = blockManager.nettyBlockClientFactory.createClient(
         cmId.host, req.address.nettyPort)
       val blocks = req.blocks.map(_._1.toString)
@@ -304,8 +306,10 @@ object BlockFetcherIterator {
             }
           }))
 
-          readMetrics.remoteBytesRead += blockSize
-          readMetrics.remoteBlocksFetched += 1
+          readMetrics.synchronized {
+            readMetrics.remoteBytesRead += blockSize
+            readMetrics.remoteBlocksFetched += 1
+          }
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         },
         (blockId: String, errorMsg: String) => {

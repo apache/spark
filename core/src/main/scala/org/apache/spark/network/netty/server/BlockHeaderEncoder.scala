@@ -29,19 +29,19 @@ class BlockHeaderEncoder extends MessageToByteEncoder[BlockHeader] {
   override def encode(ctx: ChannelHandlerContext, msg: BlockHeader, out: ByteBuf): Unit = {
     // message = message length (4 bytes) + block id length (4 bytes) + block id + block data
     // message length = block id length (4 bytes) + size of block id + size of block data
-    val blockId = msg.blockId.getBytes
+    val blockIdBytes = msg.blockId.getBytes
     msg.error match {
       case Some(errorMsg) =>
         val errorBytes = errorMsg.getBytes
-        out.writeInt(4 + blockId.length + errorBytes.size)
-        out.writeInt(-blockId.length)
-        out.writeBytes(blockId)
-        out.writeBytes(errorBytes)
+        out.writeInt(4 + blockIdBytes.length + errorBytes.size)
+        out.writeInt(-blockIdBytes.length)  // use negative block id length to represent errors
+        out.writeBytes(blockIdBytes)  // next is blockId itself
+        out.writeBytes(errorBytes)  // error message
       case None =>
-        val blockId = msg.blockId.getBytes
-        out.writeInt(4 + blockId.length + msg.blockSize)
-        out.writeInt(blockId.length)
-        out.writeBytes(blockId)
+        out.writeInt(4 + blockIdBytes.length + msg.blockSize)
+        out.writeInt(blockIdBytes.length)  // First 4 bytes is blockId length
+        out.writeBytes(blockIdBytes)  // next is blockId itself
+        // msg of size blockSize will be written by ServerHandler
     }
   }
 }
