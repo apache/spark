@@ -134,3 +134,78 @@ class PythonTransformedDStream(
 }
 */
 
+<<<<<<< HEAD
+=======
+/**
+ * This is a input stream just for the unitest. This is equivalent to a checkpointable,
+ * replayable, reliable message queue like Kafka. It requires a sequence as input, and
+ * returns the i_th element at the i_th batch under manual clock.
+ */
+class PythonTestInputStream(ssc_ : JavaStreamingContext, inputFiles: JArrayList[String], numPartitions: Int)
+  extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)){
+
+  def start() {}
+
+  def stop() {}
+
+  def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    logInfo("Computing RDD for time " + validTime)
+    inputFiles.foreach(logInfo(_))
+    // make a temporary file
+    // make empty RDD
+    val prefix = "spark"
+    val suffix = ".tmp"
+    val tempFile = File.createTempFile(prefix, suffix)
+    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
+    logInfo("Index: " + index)
+
+    val selectedInputFile: String = {
+      if (inputFiles.isEmpty){
+        tempFile.getAbsolutePath
+      }else if (index < inputFiles.size()) {
+        inputFiles.get(index)
+      } else {
+        tempFile.getAbsolutePath
+      }
+    }
+    val rdd = PythonRDD.readRDDFromFile(JavaSparkContext.fromSparkContext(ssc_.sparkContext), selectedInputFile, numPartitions).rdd
+    logInfo("Created RDD " + rdd.id + " with " + selectedInputFile)
+    Some(rdd)
+  }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
+/**
+ * This is a input stream just for the unitest. This is equivalent to a checkpointable,
+ * replayable, reliable message queue like Kafka. It requires a sequence as input, and
+ * returns the i_th element at the i_th batch under manual clock.
+ * This implementation is close to QueStream
+ */
+
+class PythonTestInputStream2(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
+  extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
+
+  def start() {}
+
+  def stop() {}
+
+  def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    val emptyRDD = ssc.sparkContext.emptyRDD[Array[Byte]]
+    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
+    val selectedRDD = {
+      if (inputRDDs.isEmpty) {
+        emptyRDD
+      } else if (index < inputRDDs.size()) {
+        inputRDDs.get(index).rdd
+      } else {
+        emptyRDD
+      }
+    }
+
+    Some(selectedRDD)
+  }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+>>>>>>> broke something

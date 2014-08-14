@@ -118,6 +118,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         test_input = [[], [1], range(1, 3), range(1, 4), range(1, 5)]
 
         def test_func(dstream):
+            print "count"
+            dstream.count().pyprint()
             return dstream.count()
         expected_output = map(lambda x: [len(x)], test_input)
         output = self._run_stream(test_input, test_func, expected_output)
