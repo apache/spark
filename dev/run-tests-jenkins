@@ -32,7 +32,7 @@ function post_message {
   echo "Attempting to post to Github:"
   echo "$data"
 
-  curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data "$data" -H \
+  curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data "\"$data\"" -H \
     "Content-Type: application/json" \
     $COMMENTS_URL | head -n 8
 }
@@ -69,7 +69,8 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
     | grep \+ \
     | sed "s/\+ *//" \
     | tr "\n" "~" \
-    | sed "s/~/<br>/g")
+    | sed "s/~/<br>/g" \
+    | sed "s/\\\"/\\\\\\\"/g")
   if [ "$new_public_classes" == "" ]; then
     result_message="$result_message- This patch adds no public classes<br>"
   else
@@ -77,9 +78,13 @@ if [ "$sha1" != "$ghprbActualCommit" ]; then
     result_message="$result_message$new_public_classes"
   fi
 fi
-result_message="${result_message}<br>For more information see test ouptut:"
+result_message="${result_message}<br>For more information see test output:"
 result_message="${result_message}<br>${BUILD_URL}consoleFull"
 
 post_message "$result_message"
+
+# TODO: For testing only, remove me before merging this PR.
+# case class You(age: Int = 40, money: Long = -100, catchPhrase: String = "hey bro")
+# case class Me(age: Int = 25, money: Long = 1000000, catchPhrase: String)
 
 exit $test_result
