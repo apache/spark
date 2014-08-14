@@ -224,6 +224,60 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(output.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
   }
 
+  test("byte stream input") {
+    sc = new SparkContext("local", "test")
+    val outputDir = new File(tempDir, "output").getAbsolutePath
+    val outFile = new File(outputDir, "part-00000.bin")
+    val outFileName = outFile.toPath().toString()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    channel.write(bbuf)
+    channel.close()
+    file.close()
+
+    val inRdd = sc.binaryFiles(outFileName)
+    val (infile: String, indata: Array[Byte]) = inRdd.first
+
+    // Try reading the output back as an object file
+    assert(infile === outFileName)
+    assert(indata === testOutput)
+  }
+
+  test("fixed length byte stream input") {
+    // a fixed length of 6 bytes
+
+    sc = new SparkContext("local", "test")
+
+    val outputDir = new File(tempDir, "output").getAbsolutePath
+    val outFile = new File(outputDir, "part-00000.bin")
+    val outFileName = outFile.toPath().toString()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val testOutputCopies = 10
+    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    for(i <- 1 to testOutputCopies) channel.write(bbuf)
+    channel.close()
+    file.close()
+    sc.hadoopConfiguration.setInt("recordLength",testOutput.length)
+
+    val inRdd = sc.binaryRecords(outFileName)
+    // make sure there are enough elements
+    assert(inRdd.count== testOutputCopies)
+
+    // now just compare the first one
+    val indata: Array[Byte] = inRdd.first
+    assert(indata === testOutput)
+  }
+
   test("file caching") {
     sc = new SparkContext("local", "test")
     val out = new FileWriter(tempDir + "/input")

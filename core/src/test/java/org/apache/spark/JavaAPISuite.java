@@ -836,6 +836,28 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(pairs, readRDD.collect());
   }
 
+    @Test
+    public void binaryFiles() throws Exception {
+        // Reusing the wholeText files example
+        byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+        byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
+
+        String tempDirName = tempDir.getAbsolutePath();
+        File file1 = new File(tempDirName + "/part-00000");
+        Files.write(content1, file1);
+        File file2 = new File(tempDirName + "/part-00001");
+        Files.write(content2, file2);
+
+        JavaPairRDD<String, byte[]> readRDD = sc.binaryFiles(tempDirName,3);
+        List<Tuple2<String, byte[]>> result = readRDD.collect();
+        for (Tuple2<String, byte[]> res : result) {
+            if (res._1()==file1.toString())
+                Assert.assertArrayEquals(content1,res._2());
+            else
+               Assert.assertArrayEquals(content2,res._2());
+        }
+    }
+
   @SuppressWarnings("unchecked")
   @Test
   public void writeWithNewAPIHadoopFile() {

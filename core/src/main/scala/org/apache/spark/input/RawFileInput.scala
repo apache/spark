@@ -73,8 +73,18 @@ abstract class StreamBasedRecordReader[T](
 
   private val key = path.toString
   private var value: T = null.asInstanceOf[T]
+  // the file to be read when nextkeyvalue is called
+  private lazy val fileIn: FSDataInputStream = fs.open(path)
+
   override def initialize(split: InputSplit, context: TaskAttemptContext) = {}
-  override def close() = {}
+  override def close() = {
+    // make sure the file is closed
+    try {
+      fileIn.close()
+    } catch {
+      case ioe: java.io.IOException => // do nothing
+    }
+  }
 
   override def getProgress = if (processed) 1.0f else 0.0f
 
@@ -82,9 +92,10 @@ abstract class StreamBasedRecordReader[T](
 
   override def getCurrentValue = value
 
+
   override def nextKeyValue = {
     if (!processed) {
-      val fileIn: FSDataInputStream = fs.open(path)
+
       value = parseStream(fileIn)
       processed = true
       true
@@ -104,7 +115,7 @@ abstract class StreamBasedRecordReader[T](
 /**
  * Reads the record in directly as a stream for other objects to manipulate and handle
  */
-class StreamRecordReader(
+private[spark] class StreamRecordReader(
                         split: CombineFileSplit,
                         context: TaskAttemptContext,
                         index: Integer)
@@ -117,7 +128,7 @@ class StreamRecordReader(
  * A class for extracting the information from the file using the
  * BinaryRecordReader (as Byte array)
  */
-class StreamInputFormat extends StreamFileInputFormat[DataInputStream] {
+private[spark] class StreamInputFormat extends StreamFileInputFormat[DataInputStream] {
   override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
   {
     new CombineFileRecordReader[String,DataInputStream](
@@ -146,7 +157,7 @@ abstract class BinaryRecordReader[T](
 }
 
 
-class ByteRecordReader(
+private[spark] class ByteRecordReader(
                           split: CombineFileSplit,
                           context: TaskAttemptContext,
                           index: Integer)
@@ -158,7 +169,7 @@ class ByteRecordReader(
 /**
  * A class for reading the file using the BinaryRecordReader (as Byte array)
  */
-class ByteInputFormat extends StreamFileInputFormat[Array[Byte]] {
+private[spark] class ByteInputFormat extends StreamFileInputFormat[Array[Byte]] {
   override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
   {
     new CombineFileRecordReader[String,Array[Byte]](

@@ -23,10 +23,10 @@ package org.apache.spark.rdd
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
-import org.apache.spark.{Partition, SparkContext}
+import org.apache.spark.{InterruptibleIterator, TaskContext, Partition, SparkContext}
 import org.apache.spark.input.StreamFileInputFormat
 
-private[spark] class RawFileRDD[T](
+private[spark] class BinaryFileRDD[T](
                                        sc : SparkContext,
                                        inputFormatClass: Class[_ <: StreamFileInputFormat[T]],
                                        keyClass: Class[String],
@@ -34,6 +34,7 @@ private[spark] class RawFileRDD[T](
                                        @transient conf: Configuration,
                                        minPartitions: Int)
   extends NewHadoopRDD[String, T](sc, inputFormatClass, keyClass, valueClass, conf) {
+
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance

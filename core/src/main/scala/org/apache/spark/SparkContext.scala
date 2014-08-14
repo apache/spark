@@ -523,7 +523,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
-    new RawFileRDD(
+    new BinaryFileRDD(
       this,
       classOf[ByteInputFormat],
       classOf[String],
@@ -548,7 +548,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
-    new RawFileRDD(
+    new BinaryFileRDD(
       this,
       classOf[StreamInputFormat],
       classOf[String],
@@ -565,9 +565,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param path Directory to the input data files
    * @return An RDD of data with values, RDD[(Array[Byte])]
    */
-  def fixedLengthBinaryFiles(path: String): RDD[Array[Byte]] = {
-    val lines = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path)
-    val data = lines.map{ case (k, v) => v.getBytes}
+  def binaryRecords(path: String): RDD[Array[Byte]] = {
+    val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path)
+    val data = br.map{ case (k, v) => v.getBytes}
     data
   }
 

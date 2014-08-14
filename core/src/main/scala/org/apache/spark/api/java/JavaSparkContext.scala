@@ -289,7 +289,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
-  JavaPairRDD[String,Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
+    JavaPairRDD[String, Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
 
   /**
    * Load data from a flat binary file, assuming each record is a set of numbers
@@ -299,8 +299,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param path Directory to the input data files
    * @return An RDD of data with values, JavaRDD[(Array[Byte])]
    */
-  def fixedLengthBinaryFiles(path: String): JavaRDD[Array[Byte]] = {
-    new JavaRDD(sc.fixedLengthBinaryFiles(path))
+  def binaryRecords(path: String): JavaRDD[Array[Byte]] = {
+    new JavaRDD(sc.binaryRecords(path))
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.

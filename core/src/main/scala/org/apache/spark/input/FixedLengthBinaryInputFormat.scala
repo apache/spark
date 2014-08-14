@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAt
  * a parameter recordLength in the Hadoop configuration.
  */
 
-object FixedLengthBinaryInputFormat {
+private[spark] object FixedLengthBinaryInputFormat {
 
   /**
    * This function retrieves the recordLength by checking the configuration parameter
@@ -42,7 +42,7 @@ object FixedLengthBinaryInputFormat {
 
 }
 
-class FixedLengthBinaryInputFormat extends FileInputFormat[LongWritable, BytesWritable] {
+private[spark] class FixedLengthBinaryInputFormat extends FileInputFormat[LongWritable, BytesWritable] {
 
 
   /**
