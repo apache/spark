@@ -111,6 +111,9 @@ object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
   @volatile private var lastSetSparkEnv : SparkEnv = _
 
+  private[spark] val driverActorSystemName = "sparkDriver"
+  private[spark] val executorActorSystemName = "sparkExecutor"
+
   def set(e: SparkEnv) {
     lastSetSparkEnv = e
     env.set(e)
@@ -146,7 +149,7 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-    val actorSystemName = if (isDriver) "sparkDriver" else "sparkExecutor"
+    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       actorSystemName, hostname, port, conf, securityManager)
 
