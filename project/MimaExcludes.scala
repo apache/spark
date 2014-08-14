@@ -62,6 +62,17 @@ object MimaExcludes {
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
+            // Serializer interface change. See SPARK-3045.
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.DeserializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.Serializer"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializerInstance")
+          )++
+          Seq(
             // Renamed putValues -> putArray + putIterator
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.putValues"),
