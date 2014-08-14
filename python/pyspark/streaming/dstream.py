@@ -246,6 +246,8 @@ class DStream(object):
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
+            print rdd.glom().collect()
+            print "-------------------------------------------"
             print "-------------------------------------------"
             for record in taken[:10]:
                 print record
@@ -299,6 +301,20 @@ class DStream(object):
             result.append(taken)
 
         self.foreachRDD(get_output)
+
+
+# TODO: implement groupByKey
+# TODO: impelment union
+# TODO: implement cache
+# TODO: implement persist
+# TODO: implement repertitions
+# TODO: implement saveAsTextFile
+# TODO: implement cogroup
+# TODO: implement join
+# TODO: implement countByValue
+# TODO: implement leftOuterJoin
+# TODO: implemtnt rightOuterJoin
+
 
 
 class PipelinedDStream(DStream):
