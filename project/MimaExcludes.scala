@@ -95,6 +95,13 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.Values") ++
           MimaBuild.excludeSparkClass("storage.Entry") ++
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
+          // Class was missing "@DeveloperApi" annotation in 1.0.
+          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
+          // Class is "private[spark]" but for some reason not being ignored?
+          Seq(
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend")
+          ) ++
           Seq(
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
@@ -110,7 +117,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
-          ) ++ 
+          ) ++
           Seq ( // package-private classes removed in MLlib
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.regression.GeneralizedLinearAlgorithm.org$apache$spark$mllib$regression$GeneralizedLinearAlgorithm$$prependOne")
