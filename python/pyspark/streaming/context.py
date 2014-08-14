@@ -154,7 +154,7 @@ class StreamingContext(object):
 
             # Make sure we distribute data evenly if it's smaller than self.batchSize
             if "__len__" not in dir(test_input):
-                c = list(test_input)    # Make it a list so we can compute its length
+                test_input = list(test_input)    # Make it a list so we can compute its length
             batchSize = min(len(test_input) // numSlices, self._sc._batchSize)
             if batchSize > 1:
                 serializer = BatchedSerializer(self._sc._unbatched_serializer,
@@ -162,6 +162,7 @@ class StreamingContext(object):
             else:
                 serializer = self._sc._unbatched_serializer
             serializer.dump_stream(test_input, tempFile)
+            tempFile.close()
             tempFiles.append(tempFile.name)
 
         jtempFiles = ListConverter().convert(tempFiles, SparkContext._gateway._gateway_client)
@@ -169,3 +170,20 @@ class StreamingContext(object):
                                                         jtempFiles,
                                                         numSlices).asJavaDStream()
         return DStream(jinput_stream, self, PickleSerializer())
+
+    
+    def _testInputStream2(self, test_inputs, numSlices=None):
+        """
+        This is inpired by QueStream implementation. Give list of RDD and generate DStream
+        which contain the RDD.
+        """
+        test_rdds = list()
+        for test_input in test_inputs:
+            test_rdd = self._sc.parallelize(test_input, numSlices)
+            print test_rdd.glom().collect()
+            test_rdds.append(test_rdd._jrdd)
+
+        jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
+        jinput_stream = self._jvm.PythonTestInputStream2(self._jssc, jtest_rdds).asJavaDStream()
+
+        return DStream(jinput_stream, self, BatchedSerializer(PickleSerializer()))

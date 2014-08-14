@@ -71,8 +71,9 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     """
     def setUp(self):
         PySparkStreamingTestCase.setUp(self)
-        StreamOutput.result = list()
         self.timeout = 10  # seconds
+        self.numInputPartitions = 2
+        self.result = list()
 
     def tearDown(self):
         PySparkStreamingTestCase.tearDown(self)
@@ -137,6 +138,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         test_input = [["a", "a", "b"], ["", ""], []]
 
         def test_func(dstream):
+            print "reduceByKey"
+            dstream.map(lambda x: (x, 1)).pyprint()
             return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add)
         expected_output = [[("a", 2), ("b", 1)], [("", 2)], []]
         output = self._run_stream(test_input, test_func, expected_output)
@@ -168,9 +171,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         numSlices = 2
 
         def test_func(dstream):
-            dstream.pyprint()
             return dstream.glom()
-        expected_output = [[[1,2], [3,4]],[[5,6], [7,8]],[[9,10], [11,12]]]
+        expected_output = [[[1,2], [3,4]], [[5,6], [7,8]], [[9,10], [11,12]]]
         output = self._run_stream(test_input, test_func, expected_output, numSlices)
         self.assertEqual(expected_output, output)
 
@@ -180,20 +182,21 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         numSlices = 2
 
         def test_func(dstream):
-            dstream.pyprint()
-            return dstream.mapPartitions(lambda x: reduce(operator.add, x))
-        expected_output = [[3, 7],[11, 15],[19, 23]]
+            def f(iterator): yield sum(iterator)
+            return dstream.mapPartitions(f)
+        expected_output = [[3, 7], [11, 15], [19, 23]]
         output = self._run_stream(test_input, test_func, expected_output, numSlices)
         self.assertEqual(expected_output, output)
 
     def _run_stream(self, test_input, test_func, expected_output, numSlices=None):
         """Start stream and return the output"""
         # Generate input stream with user-defined input
-        test_input_stream = self.ssc._testInputStream(test_input, numSlices)
+        numSlices = numSlices or self.numInputPartitions
+        test_input_stream = self.ssc._testInputStream2(test_input, numSlices)
         # Apply test function to stream
         test_stream = test_func(test_input_stream)
         # Add job to get output from stream
-        test_stream._test_output(StreamOutput.result)
+        test_stream._test_output(self.result)
         self.ssc.start()
 
         start_time = time.time()
@@ -205,9 +208,9 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
                 break
             self.ssc.awaitTermination(50)
             # check if the output is the same length of expexted output
-            if len(expected_output) == len(StreamOutput.result):
+            if len(expected_output) == len(self.result):
                 break
-        return StreamOutput.result
+        return self.result
 
 if __name__ == "__main__":
     unittest.main()

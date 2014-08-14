@@ -165,10 +165,43 @@ class PythonTestInputStream(ssc_ : JavaStreamingContext, inputFiles: JArrayList[
         tempFile.getAbsolutePath
       }
     }
-
+    println("PythonTestInputStreaming numPartitons" + numPartitions )
     val rdd = PythonRDD.readRDDFromFile(JavaSparkContext.fromSparkContext(ssc_.sparkContext), selectedInputFile, numPartitions).rdd
     logInfo("Created RDD " + rdd.id + " with " + selectedInputFile)
     Some(rdd)
+  }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
+/**
+ * This is a input stream just for the unitest. This is equivalent to a checkpointable,
+ * replayable, reliable message queue like Kafka. It requires a sequence as input, and
+ * returns the i_th element at the i_th batch under manual clock.
+ * This implementation is close to QueStream
+ */
+
+class PythonTestInputStream2(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
+  extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
+
+  def start() {}
+
+  def stop() {}
+
+  def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    val emptyRDD = ssc.sparkContext.emptyRDD[Array[Byte]]
+    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
+    val selectedRDD = {
+      if (inputRDDs.isEmpty) {
+        emptyRDD
+      } else if (index < inputRDDs.size()) {
+        inputRDDs.get(index).rdd
+      } else {
+        emptyRDD
+      }
+    }
+
+    Some(selectedRDD)
   }
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
