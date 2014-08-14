@@ -208,7 +208,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     assert(10 + control.sum === result)
   }
   
-  test("kryo with nonexistant custom registrator should fail") {
+  test("kryo with nonexistent custom registrator should fail") {
     import org.apache.spark.{SparkConf, SparkException}
 
     val conf = new SparkConf(false)
