@@ -1174,14 +1174,16 @@ class DAGScheduler(
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
-          try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-            taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-            stage.info.stageFailed(failureReason)
-            listenerBus.post(SparkListenerStageCompleted(stage.info))
-          } catch {
-            case e: UnsupportedOperationException =>
-              logInfo(s"Could not cancel tasks for stage $stageId", e)
-            ableToCancelStages = false
+          if (runningStages.contains(stage) || failedStages.contains(stage)) {
+            try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
+              taskScheduler.cancelTasks(stageId, shouldInterruptThread)
+              stage.info.stageFailed(failureReason)
+              listenerBus.post(SparkListenerStageCompleted(stage.info))
+            } catch {
+              case e: UnsupportedOperationException =>
+                logInfo(s"Could not cancel tasks for stage $stageId", e)
+              ableToCancelStages = false
+            }
           }
         }
       }
