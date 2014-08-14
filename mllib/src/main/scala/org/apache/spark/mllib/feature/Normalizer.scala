@@ -19,11 +19,11 @@ package org.apache.spark.mllib.feature
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Normalizes samples individually to unit L^p^ norm
  *
  * For any 1 <= p < Double.PositiveInfinity, normalizes samples using
@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  *
  * @param p Normalization in L^p^ space, p = 2 by default.
  */
-@DeveloperApi
+@Experimental
 class Normalizer(p: Double) extends VectorTransformer {
 
   def this() = this(2)

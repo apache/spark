@@ -25,6 +25,7 @@ import java.io.{BufferedReader, InputStreamReader}
 import java.net.ServerSocket
 import java.sql.{Connection, DriverManager, Statement}
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.Logging
@@ -63,16 +64,18 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     // Forking a new process to start the Hive Thrift server. The reason to do this is it is
     // hard to clean up Hive resources entirely, so we just start a new process and kill
     // that process for cleanup.
-    val defaultArgs = Seq(
-      "../../sbin/start-thriftserver.sh",
-      "--master local",
-      "--hiveconf",
-      "hive.root.logger=INFO,console",
-      "--hiveconf",
-      s"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$METASTORE_PATH;create=true",
-      "--hiveconf",
-      s"hive.metastore.warehouse.dir=$WAREHOUSE_PATH")
-    val pb = new ProcessBuilder(defaultArgs ++ args)
+    val jdbcUrl = s"jdbc:derby:;databaseName=$METASTORE_PATH;create=true"
+    val command =
+      s"""../../sbin/start-thriftserver.sh
+         |  --master local
+         |  --hiveconf hive.root.logger=INFO,console
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}="$jdbcUrl"
+         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$METASTORE_PATH
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$HOST
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$PORT
+       """.stripMargin.split("\\s+")
+
+    val pb = new ProcessBuilder(command ++ args: _*)
     val environment = pb.environment()
     environment.put("HIVE_SERVER2_THRIFT_PORT", PORT.toString)
     environment.put("HIVE_SERVER2_THRIFT_BIND_HOST", HOST)
@@ -110,18 +113,36 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     val stmt = createStatement()
     stmt.execute("DROP TABLE IF EXISTS test")
     stmt.execute("DROP TABLE IF EXISTS test_cached")
-    stmt.execute("CREATE TABLE test(key int, val string)")
+    stmt.execute("CREATE TABLE test(key INT, val STRING)")
     stmt.execute(s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test")
-    stmt.execute("CREATE TABLE test_cached as select * from test limit 4")
+    stmt.execute("CREATE TABLE test_cached AS SELECT * FROM test LIMIT 4")
     stmt.execute("CACHE TABLE test_cached")
 
-    var rs = stmt.executeQuery("select count(*) from test")
+    var rs = stmt.executeQuery("SELECT COUNT(*) FROM test")
     rs.next()
     assert(rs.getInt(1) === 5)
 
-    rs = stmt.executeQuery("select count(*) from test_cached")
+    rs = stmt.executeQuery("SELECT COUNT(*) FROM test_cached")
     rs.next()
     assert(rs.getInt(1) === 4)
+
+    stmt.close()
+  }
+
+  test("SPARK-3004 regression: result set containing NULL") {
+    Thread.sleep(5 * 1000)
+    val dataFilePath = getDataFile("data/files/small_kv_with_null.txt")
+    val stmt = createStatement()
+    stmt.execute("DROP TABLE IF EXISTS test_null")
+    stmt.execute("CREATE TABLE test_null(key INT, val STRING)")
+    stmt.execute(s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_null")
+
+    val rs = stmt.executeQuery("SELECT * FROM test_null WHERE key IS NULL")
+    var count = 0
+    while (rs.next()) {
+      count += 1
+    }
+    assert(count === 5)
 
     stmt.close()
   }

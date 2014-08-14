@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.feature
 
+import java.lang.{Iterable => JavaIterable}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,6 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
@@ -115,7 +119,6 @@ class Word2Vec extends Serializable with Logging {
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
   private val MAX_SENTENCE_LENGTH = 1000
-  private val layer1Size = vectorSize
 
   /** context words from [-window, window] */
   private val window = 5
@@ -127,7 +130,6 @@ class Word2Vec extends Serializable with Logging {
   private var vocabSize = 0
   private var vocab: Array[VocabWord] = null
   private var vocabHash = mutable.HashMap.empty[String, Int]
-  private var alpha = startingAlpha
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
@@ -239,7 +241,7 @@ class Word2Vec extends Serializable with Logging {
       a += 1
     }
   }
-  
+
   /**
    * Computes the vector representation of each word in vocabulary.
    * @param dataset an RDD of words
@@ -283,9 +285,10 @@ class Word2Vec extends Serializable with Logging {
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
     var syn0Global =
-      Array.fill[Float](vocabSize * layer1Size)((initRandom.nextFloat() - 0.5f) / layer1Size)
-    var syn1Global = new Array[Float](vocabSize * layer1Size)
+      Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
+    var syn1Global = new Array[Float](vocabSize * vectorSize)
 
+    var alpha = startingAlpha
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
@@ -313,24 +316,24 @@ class Word2Vec extends Serializable with Logging {
                   val c = pos - window + a
                   if (c >= 0 && c < sentence.size) {
                     val lastWord = sentence(c)
-                    val l1 = lastWord * layer1Size
-                    val neu1e = new Array[Float](layer1Size)
+                    val l1 = lastWord * vectorSize
+                    val neu1e = new Array[Float](vectorSize)
                     // Hierarchical softmax
                     var d = 0
                     while (d < bcVocab.value(word).codeLen) {
-                      val l2 = bcVocab.value(word).point(d) * layer1Size
+                      val l2 = bcVocab.value(word).point(d) * vectorSize
                       // Propagate hidden -> output
-                      var f = blas.sdot(layer1Size, syn0, l1, 1, syn1, l2, 1)
+                      var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
                         f = expTable.value(ind)
                         val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
-                        blas.saxpy(layer1Size, g, syn1, l2, 1, neu1e, 0, 1)
-                        blas.saxpy(layer1Size, g, syn0, l1, 1, syn1, l2, 1)
+                        blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                        blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
                       }
                       d += 1
                     }
-                    blas.saxpy(layer1Size, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
                   }
                 }
                 a += 1
@@ -361,19 +364,30 @@ class Word2Vec extends Serializable with Logging {
     var i = 0
     while (i < vocabSize) {
       val word = bcVocab.value(i).word
-      val vector = new Array[Float](layer1Size)
-      Array.copy(syn0Global, i * layer1Size, vector, 0, layer1Size)
+      val vector = new Array[Float](vectorSize)
+      Array.copy(syn0Global, i * vectorSize, vector, 0, vectorSize)
       word2VecMap += word -> vector
       i += 1
     }
 
     new Word2VecModel(word2VecMap.toMap)
   }
+
+  /**
+   * Computes the vector representation of each word in vocabulary (Java version).
+   * @param dataset a JavaRDD of words
+   * @return a Word2VecModel
+   */
+  def fit[S <: JavaIterable[String]](dataset: JavaRDD[S]): Word2VecModel = {
+    fit(dataset.rdd.map(_.asScala))
+  }
 }
 
 /**
-* Word2Vec model
+ * :: Experimental ::
+ * Word2Vec model
  */
+@Experimental
 class Word2VecModel private[mllib] (
     private val model: Map[String, Array[Float]]) extends Serializable {
 

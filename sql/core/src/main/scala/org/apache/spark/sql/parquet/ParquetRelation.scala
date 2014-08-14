@@ -63,9 +63,12 @@ private[sql] case class ParquetRelation(
   /** Attributes */
   override val output =
     partitioningAttributes ++
-    ParquetTypesConverter.readSchemaFromFile(new Path(path.split(",").head), conf)
+    ParquetTypesConverter.readSchemaFromFile(
+      new Path(path.split(",").head),
+      conf,
+      sqlContext.isParquetBinaryAsString)
 
-  override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
