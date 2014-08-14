@@ -141,7 +141,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   }
 
   before {
-    sc = new SparkContext("local", "DAGSchedulerSuite")
+    // Enable local execution for this test
+    val conf = new SparkConf().set("spark.localExecution.enabled", "true")
+    sc = new SparkContext("local", "DAGSchedulerSuite", conf)
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
     failure = null
