@@ -321,8 +321,8 @@ class Word2Vec extends Serializable with Logging {
                     // Hierarchical softmax
                     var d = 0
                     while (d < bcVocab.value(word).codeLen) {
-                      val ind = bcVocab.value(word).point(d)
-                      val l2 = ind * vectorSize
+                      val inner = bcVocab.value(word).point(d)
+                      val l2 = inner * vectorSize
                       // Propagate hidden -> output
                       var f = blas.sdot(vectorSize, syn, l1, 1, syn, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
@@ -331,7 +331,7 @@ class Word2Vec extends Serializable with Logging {
                         val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
                         blas.saxpy(vectorSize, g, syn, l2, 1, neu1e, 0, 1)
                         blas.saxpy(vectorSize, g, syn, l1, 1, syn, l2, 1)
-                        synModify(ind) += 1
+                        synModify(inner) += 1
                       }
                       d += 1
                     }
