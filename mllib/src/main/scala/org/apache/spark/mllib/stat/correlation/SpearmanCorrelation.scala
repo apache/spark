@@ -23,7 +23,6 @@ import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Compute Spearman's correlation for two RDDs of the type RDD[Double] or the correlation matrix
