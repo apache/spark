@@ -17,6 +17,7 @@
 
 from collections import defaultdict
 from itertools import chain, ifilter, imap
+import time
 import operator
 
 from pyspark.serializers import NoOpSerializer,\
@@ -426,20 +427,6 @@ class DStream(object):
 # TODO: implement join
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
-
-
-# TODO: implement groupByKey
-# TODO: impelment union
-# TODO: implement cache
-# TODO: implement persist
-# TODO: implement repertitions
-# TODO: implement saveAsTextFile
-# TODO: implement cogroup
-# TODO: implement join
-# TODO: implement countByValue
-# TODO: implement leftOuterJoin
-# TODO: implemtnt rightOuterJoin
-
 
 
 class PipelinedDStream(DStream):
