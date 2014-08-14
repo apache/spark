@@ -204,22 +204,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /**
-   * Log an error message to indicate that the queue has exceeded its capacity. Do this only once.
-   */
-  private def logQueueFullErrorMessage(): Unit = {
-    if (!queueFullErrorMessageLogged) {
-      queueFullErrorMessageLogged = true
-      logError(s"Reference queue size in ContextCleaner has exceeded $queueCapacity! " +
-        "This means the rate at which we clean up RDDs, shuffles, and/or broadcasts is too slow.")
-      if (blockOnCleanupTasks) {
-        logError("Consider setting spark.cleaner.referenceTracking.blocking to false." +
-          "Note that there is a known issue (SPARK-3015) in disabling blocking, especially if " +
-          "the workload involves creating many RDDs in quick successions.")
-      }
-    }
-  }
-
-  /**
    * Log the length of the reference queue through reflection.
    * This is an expensive operation and should be called sparingly.
    */
@@ -235,6 +219,22 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     } catch {
       case e: Exception =>
         logDebug("Failed to access reference queue's length through reflection: " + e)
+    }
+  }
+
+  /**
+   * Log an error message to indicate that the queue has exceeded its capacity. Do this only once.
+   */
+  private def logQueueFullErrorMessage(): Unit = {
+    if (!queueFullErrorMessageLogged) {
+      queueFullErrorMessageLogged = true
+      logError(s"Reference queue size in ContextCleaner has exceeded $queueCapacity! " +
+        "This means the rate at which we clean up RDDs, shuffles, and/or broadcasts is too slow.")
+      if (blockOnCleanupTasks) {
+        logError("Consider setting spark.cleaner.referenceTracking.blocking to false." +
+          "Note that there is a known issue (SPARK-3015) in disabling blocking, especially if " +
+          "the workload involves creating many RDDs in quick successions.")
+      }
     }
   }
 
