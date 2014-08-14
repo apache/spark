@@ -26,7 +26,7 @@ private[spark] class FileHeader (
   val fileLen: Int,
   val blockId: BlockId) extends Logging {
 
-  lazy val buffer = {
+  lazy val buffer: ByteBuf = {
     val buf = Unpooled.buffer()
     buf.capacity(FileHeader.HEADER_SIZE)
     buf.writeInt(fileLen)
@@ -62,11 +62,10 @@ private[spark] object FileHeader {
     new FileHeader(length, blockId)
   }
 
-  def main (args:Array[String]) {
+  def main(args:Array[String]) {
     val header = new FileHeader(25, TestBlockId("my_block"))
     val buf = header.buffer
     val newHeader = FileHeader.create(buf)
     System.out.println("id=" + newHeader.blockId + ",size=" + newHeader.fileLen)
   }
 }
-
