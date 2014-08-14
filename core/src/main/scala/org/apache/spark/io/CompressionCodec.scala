@@ -46,17 +46,24 @@ trait CompressionCodec {
 
 
 private[spark] object CompressionCodec {
+
+  private val shortCompressionCodecNames = Map(
+    "lz4" -> classOf[LZ4CompressionCodec].getName,
+    "lzf" -> classOf[LZFCompressionCodec].getName,
+    "snappy" -> classOf[SnappyCompressionCodec].getName)
+
   def createCodec(conf: SparkConf): CompressionCodec = {
     createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val ctor = Class.forName(codecName, true, Utils.getContextOrSparkClassLoader)
+    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
       .getConstructor(classOf[SparkConf])
     ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
 
-  val DEFAULT_COMPRESSION_CODEC = classOf[SnappyCompressionCodec].getName
+  val DEFAULT_COMPRESSION_CODEC = "snappy"
 }
 
 

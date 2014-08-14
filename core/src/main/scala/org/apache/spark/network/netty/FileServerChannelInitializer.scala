@@ -15,12 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty;
+package org.apache.spark.network.netty
 
-import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.FileSegment;
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.socket.SocketChannel
+import io.netty.handler.codec.{DelimiterBasedFrameDecoder, Delimiters}
+import io.netty.handler.codec.string.StringDecoder
 
-public interface PathResolver {
-  /** Get the file segment in which the given block resides. */
-  FileSegment getBlockLocation(BlockId blockId);
+class FileServerChannelInitializer(pResolver: PathResolver)
+  extends ChannelInitializer[SocketChannel] {
+
+  override def initChannel(channel: SocketChannel): Unit = {
+    channel.pipeline
+      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter : _*))
+      .addLast("stringDecoder", new StringDecoder)
+      .addLast("handler", new FileServerHandler(pResolver))
+  }
 }

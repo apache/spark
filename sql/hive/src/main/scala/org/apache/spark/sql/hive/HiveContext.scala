@@ -39,7 +39,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{OverrideFunctionRegistry, Analyzer, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators}
+import org.apache.spark.sql.catalyst.analysis.{OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -119,10 +120,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * in the Hive metastore.
    */
   def analyze(tableName: String) {
-    val relation = catalog.lookupRelation(None, tableName) match {
-      case LowerCaseSchema(r) => r
-      case o => o
-    }
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
 
     relation match {
       case relation: MetastoreRelation => {
