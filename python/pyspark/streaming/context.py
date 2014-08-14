@@ -169,8 +169,7 @@ class StreamingContext(object):
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc,
                                                         jtempFiles,
                                                         numSlices).asJavaDStream()
-        return DStream(jinput_stream, self, PickleSerializer())
-
+        return DStream(jinput_stream, self, BatchedSerializer(PickleSerializer()))
     
     def _testInputStream2(self, test_inputs, numSlices=None):
         """
@@ -178,12 +177,15 @@ class StreamingContext(object):
         which contain the RDD.
         """
         test_rdds = list()
+        test_rdd_deserializers = list()
         for test_input in test_inputs:
             test_rdd = self._sc.parallelize(test_input, numSlices)
-            print test_rdd.glom().collect()
             test_rdds.append(test_rdd._jrdd)
+            test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
 
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream2(self._jssc, jtest_rdds).asJavaDStream()
 
-        return DStream(jinput_stream, self, BatchedSerializer(PickleSerializer()))
+        dstream = DStream(jinput_stream, self, test_rdd_deserializers[0])
+        dstream._test_switch_dserializer(test_rdd_deserializers)
+        return dstream
