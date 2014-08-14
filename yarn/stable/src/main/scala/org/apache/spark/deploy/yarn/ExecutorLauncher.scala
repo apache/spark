@@ -193,7 +193,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
+    val driverUrl = "akka.tcp://sparkDriver@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")

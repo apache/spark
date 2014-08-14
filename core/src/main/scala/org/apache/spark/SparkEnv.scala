@@ -146,7 +146,7 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-    val actorSystemName = if (isDriver) "driverActor" else "executorActor"
+    val actorSystemName = if (isDriver) "sparkDriver" else "sparkExecutor"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       actorSystemName, hostname, port, conf, securityManager)
 

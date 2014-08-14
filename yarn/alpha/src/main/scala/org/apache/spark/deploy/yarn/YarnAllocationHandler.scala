@@ -245,7 +245,7 @@ private[yarn] class YarnAllocationHandler(
           // Deallocate + allocate can result in reusing id's wrongly - so use a different counter
           // (executorIdCounter)
           val executorId = executorIdCounter.incrementAndGet().toString
-          val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
+          val driverUrl = "akka.tcp://sparkDriver@%s:%s/user/%s".format(
             sparkConf.get("spark.driver.host"), sparkConf.get("spark.driver.port"),
             CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
