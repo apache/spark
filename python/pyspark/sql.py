@@ -1267,7 +1267,9 @@ class SQLContext:
             for x in iterator:
                 if not isinstance(x, basestring):
                     x = unicode(x)
-                yield x.encode("utf-8")
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
         keyed = rdd.mapPartitions(func)
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
