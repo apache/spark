@@ -215,7 +215,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     conf.set("spark.kryo.registrator", "this.class.does.not.exist")
     
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
-    assert(thrown.getMessage.contains("Failed to run spark.kryo.registrator"))
+    assert(thrown.getMessage.contains("Failed to invoke this.class.does.not.exist"))
   }
 }
 
