@@ -565,9 +565,7 @@ case class LastFunction(expr: Expression, base: AggregateExpression) extends Agg
   var result: Any = null
 
   override def update(input: Row): Unit = {
-    if (result == null) {
-      result = input
-    }
+    result = input
   }
 
   override def eval(input: Row): Any = if (result != null) expr.eval(result.asInstanceOf[Row]) else null
