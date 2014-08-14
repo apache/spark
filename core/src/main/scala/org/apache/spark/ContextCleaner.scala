@@ -231,7 +231,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       logError(s"Reference queue size in ContextCleaner has exceeded $queueCapacity! " +
         "This means the rate at which we clean up RDDs, shuffles, and/or broadcasts is too slow.")
       if (blockOnCleanupTasks) {
-        logError("Consider setting spark.cleaner.referenceTracking.blocking to false." +
+        logError("Consider setting spark.cleaner.referenceTracking.blocking to false. " +
           "Note that there is a known issue (SPARK-3015) in disabling blocking, especially if " +
           "the workload involves creating many RDDs in quick successions.")
       }
