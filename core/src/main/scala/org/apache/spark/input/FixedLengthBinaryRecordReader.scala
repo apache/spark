@@ -37,7 +37,8 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit
  * VALUE = the record itself (BytesWritable)
  *
  */
-private[spark] class FixedLengthBinaryRecordReader extends RecordReader[LongWritable, BytesWritable] {
+private[spark] class FixedLengthBinaryRecordReader
+  extends RecordReader[LongWritable, BytesWritable] {
 
   override def close() {
     if (fileInputStream != null) {
