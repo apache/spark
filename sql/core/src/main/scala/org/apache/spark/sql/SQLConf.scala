@@ -32,6 +32,9 @@ private[spark] object SQLConf {
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
 
+  // This is only used for the thriftserver
+  val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
