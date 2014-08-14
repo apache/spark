@@ -19,6 +19,7 @@ package org.apache.spark.ui.jobs
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
+import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.HashMap
 
@@ -38,6 +39,7 @@ private[jobs] object UIData {
   class StageUIData {
     var numActiveTasks: Int = _
     var numCompleteTasks: Int = _
+    var completedIndices = new OpenHashSet[Int]()
     var numFailedTasks: Int = _
 
     var executorRunTime: Long = _
