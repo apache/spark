@@ -381,11 +381,14 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val predicate5 = new GreaterThan(attribute1, attribute2)
     val badfilter = ParquetFilters.createFilter(predicate5)
     assert(badfilter.isDefined === false)
+
+    val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
+    val badfilter2 = ParquetFilters.createFilter(predicate6)
+    assert(badfilter2.isDefined === false)
   }
 
   test("test filter by predicate pushdown") {
     for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
-      println(s"testing field $myval")
       val query1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
       assert(
         query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],

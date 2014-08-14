@@ -562,7 +562,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-    <td>spark.hadoop.validateOutputSpecs</td>
+    <td><code>spark.hadoop.validateOutputSpecs</code></td>
     <td>true</td>
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
@@ -570,7 +570,7 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 <tr>
-    <td>spark.executor.heartbeatInterval</td>
+    <td><code>spark.executor.heartbeatInterval</code></td>
     <td>10000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
@@ -844,6 +844,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum amount of time to wait for resources to register before scheduling begins
     (in milliseconds).  
+  </td>
+</tr>
+<tr>
+  <td><code>spark.localExecution.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
+    tasks to the cluster. This can make certain jobs execute very quickly, but may require
+    shipping a whole partition of data to the driver.
   </td>
 </tr>
 </table>
