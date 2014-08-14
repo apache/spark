@@ -147,7 +147,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
         reference.map(_.task).foreach { task =>
           logDebug("Got cleaning task " + task)
           referenceBuffer -= reference.get
-          logDebug("There are " + referenceBuffer.size + " more tasks in queue")
           task match {
             case CleanRDD(rddId) =>
               doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
