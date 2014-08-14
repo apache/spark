@@ -92,6 +92,11 @@ echo "========================================================================="
 if [ -n "$_RUN_SQL_TESTS" ]; then
   SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
 fi
+
+echo -e "\n\nULIMIT!\n\n"
+ulimit -a
+echo "----- DONE -----"
+
 # echo "q" is needed because sbt on encountering a build file with failure 
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.

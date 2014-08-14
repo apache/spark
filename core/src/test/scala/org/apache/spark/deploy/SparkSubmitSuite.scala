@@ -282,6 +282,8 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   test("launch simple application with spark-submit") {
+    System.err.println("PRINT TEST TEST TEST")
+    System.out.println("PRINT TAST TAST TAST")
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),

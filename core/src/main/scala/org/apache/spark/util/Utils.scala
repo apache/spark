@@ -779,27 +779,31 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
-                          extraEnvironment: Map[String, String] = Map.empty): String = {
-    val builder = new ProcessBuilder(command: _*)
-        .directory(workingDir)
+  def executeAndGetOutput(
+      command: Seq[String],
+      workingDir: File = new File("."),
+      extraEnvironment: Map[String, String] = Map.empty): String = {
+    val builder = new ProcessBuilder(command: _*).directory(workingDir)
     val environment = builder.environment()
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
     }
     val process = builder.start()
+    val stderr = new StringBuffer
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
-          System.err.println(line)
+          stderr.append(line + "\n")
+          System.err.println("-- " + line)
+          System.out.println(">> " + line) // TESTING. REMOVE ME BEFORE MERGE!!
         }
       }
     }.start()
-    val output = new StringBuffer
+    val stdout = new StringBuffer
     val stdoutThread = new Thread("read stdout for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getInputStream).getLines) {
-          output.append(line)
+          stdout.append(line + "\n")
         }
       }
     }
@@ -807,9 +811,9 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      throw new SparkException("Process " + command + " exited with code " + exitCode)
+      throw new SparkException(s"Process $command exited with code $exitCode:\n\n$stderr")
     }
-    output.toString
+    stdout.toString.stripSuffix("\n")
   }
 
   /**
