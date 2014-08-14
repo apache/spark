@@ -23,10 +23,10 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
-  val metricRegistry = new MetricRegistry
-  val sourceName = "%s.StreamingMetrics".format(ssc.sparkContext.appName)
+  override val metricRegistry = new MetricRegistry
+  override val sourceName = "%s.StreamingMetrics".format(ssc.sparkContext.appName)
 
-  val streamingListener = ssc.uiTab.listener
+  private val streamingListener = ssc.uiTab.listener
 
   private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
       defaultValue: T) {
