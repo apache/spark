@@ -652,11 +652,11 @@ object DecisionTree extends Serializable with Logging {
      *             Indexed by (node, feature, bin, label) where label is the least significant bit.
      */
     def updateBinForOrderedFeature(
-                                    arr: Array[Double],
-                                    agg: Array[Double],
-                                    nodeIndex: Int,
-                                    label: Double,
-                                    featureIndex: Int): Unit = {
+        arr: Array[Double],
+        agg: Array[Double],
+        nodeIndex: Int,
+        label: Double,
+        featureIndex: Int): Unit = {
       // Find the bin index for this feature.
       val arrShift = 1 + numNodes
       val arrIndex = arrShift + featureIndex
@@ -695,8 +695,8 @@ object DecisionTree extends Serializable with Logging {
       // Update the left or right count for one bin.
       val aggShift =
         numClasses * numBins * numFeatures * nodeIndex +
-          numClasses * numBins * featureIndex +
-          label.toInt
+        numClasses * numBins * featureIndex +
+        label.toInt
       // Find all matching bins and increment their values
       val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
       val numCategoricalBins = math.pow(2.0, featureCategories - 1).toInt - 1
@@ -1064,7 +1064,7 @@ object DecisionTree extends Serializable with Logging {
           while (innerClassIndex < numClasses) {
             leftNodeAgg(featureIndex)(splitIndex)(innerClassIndex)
               = binData(shift + numClasses * splitIndex + innerClassIndex) +
-              leftNodeAgg(featureIndex)(splitIndex - 1)(innerClassIndex)
+                leftNodeAgg(featureIndex)(splitIndex - 1)(innerClassIndex)
             rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(innerClassIndex) =
               binData(shift + (numClasses * (numBins - 1 - splitIndex) + innerClassIndex)) +
                 rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(innerClassIndex)
