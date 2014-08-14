@@ -60,4 +60,7 @@ trait YarnRMClient {
   /** Returns the RM's proxy host and port. */
   def getProxyHostAndPort(conf: YarnConfiguration): String
 
+  /** Returns the maximum number of attempts to register the AM. */
+  def getMaxRegAttempts(conf: YarnConfiguration): Int
+
 }

@@ -109,11 +109,9 @@ private[yarn] class YarnAllocationHandler(
   private val executorCores = args.executorCores
   private val (preferredHostToCount, preferredRackToCount) = generateNodeToWeight(conf, map)
 
-  def getNumPendingAllocate: Int = numPendingAllocate.intValue
+  override def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
-  def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
-
-  def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
+  override def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
     container.getResource.getMemory >= (executorMemory + memoryOverhead)
@@ -125,7 +123,9 @@ private[yarn] class YarnAllocationHandler(
     amClient.releaseAssignedContainer(containerId)
   }
 
-  def allocateResources() {
+  override def allocateResources() = {
+    addResourceRequests(maxExecutors - numPendingAllocate.get())
+
     // We have already set the container request. Poll the ResourceManager for a response.
     // This doubles as a heartbeat if there are no pending container requests.
     val progressIndicator = 0.1f
@@ -436,7 +436,7 @@ private[yarn] class YarnAllocationHandler(
     retval
   }
 
-  def addResourceRequests(numExecutors: Int) {
+  private def addResourceRequests(numExecutors: Int) {
     val containerRequests: List[ContainerRequest] =
       if (numExecutors <= 0 || preferredHostToCount.isEmpty) {
         logDebug("numExecutors: " + numExecutors + ", host preferences: " +

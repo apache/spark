@@ -22,10 +22,8 @@ package org.apache.spark.deploy.yarn
  */
 trait YarnAllocator {
 
-  def addResourceRequests(numExecutors: Int): Unit
   def allocateResources(): Unit
   def getNumExecutorsFailed: Int
   def getNumExecutorsRunning: Int
-  def getNumPendingAllocate: Int
 
 }

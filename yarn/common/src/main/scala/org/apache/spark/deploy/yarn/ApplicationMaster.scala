@@ -148,8 +148,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       if (success) {
         true
       } else {
-        val maxAppAttempts: Int = yarnConf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-          YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
+        val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
         attemptId.getAttemptId() >= maxAppAttempts
       }
 
@@ -225,7 +224,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       override def run() {
         while (!finished) {
           checkNumExecutorsFailed()
-          allocateMissingExecutor()
           logDebug("Sending progress")
           allocator.allocateResources()
           Try(Thread.sleep(interval))
@@ -319,31 +317,17 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def allocateExecutors() {
     try {
       logInfo("Requesting" + args.numExecutors + " executors.")
-      // Wait until all containers have launched
-      allocator.addResourceRequests(args.numExecutors)
       allocator.allocateResources()
-      // Exits the loop if the user thread exits.
 
       var iters = 0
       while (allocator.getNumExecutorsRunning < args.numExecutors && !finished) {
         checkNumExecutorsFailed()
-        allocateMissingExecutor()
         allocator.allocateResources()
         Thread.sleep(ALLOCATE_HEARTBEAT_INTERVAL)
         iters += 1
       }
     }
     logInfo("All executors have launched.")
-  }
-
-  private def allocateMissingExecutor() {
-    val missingExecutorCount = args.numExecutors - allocator.getNumExecutorsRunning -
-      allocator.getNumPendingAllocate
-    if (missingExecutorCount > 0) {
-      logInfo("Allocating %d containers to make up for (potentially) lost containers".
-        format(missingExecutorCount))
-      allocator.addResourceRequests(missingExecutorCount)
-    }
   }
 
   private def checkNumExecutorsFailed() {
