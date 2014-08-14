@@ -84,7 +84,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val numFeatures = retaggedInput.take(1)(0).features.size
 
     // compute features to bins array
-    val inputWithFeatures2bin = retaggedInput.map(DecisionTree.findFeature2Bin(numFeatures, numBins, bins, strategy)).cache()
+    val inputWithFeatures2bin = retaggedInput.map(
+      DecisionTree.findFeature2Bin(numFeatures, numBins, bins, strategy)).cache()
 
     // Calculate level for single group construction
 
@@ -430,14 +431,14 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   protected[tree] def findBestSplits(
-                                      inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
-                                      parentImpurities: Array[Double],
-                                      strategy: Strategy,
-                                      level: Int,
-                                      filters: Array[List[Filter]],
-                                      splits: Array[Array[Split]],
-                                      bins: Array[Array[Bin]],
-                                      maxLevelForSingleGroup: Int): Array[(Split, InformationGainStats)] = {
+    inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
+    parentImpurities: Array[Double],
+    strategy: Strategy,
+    level: Int,
+    filters: Array[List[Filter]],
+    splits: Array[Array[Split]],
+    bins: Array[Array[Bin]],
+    maxLevelForSingleGroup: Int): Array[(Split, InformationGainStats)] = {
     // split into groups to avoid memory overflow during aggregation
     if (level > maxLevelForSingleGroup) {
       // When information for all nodes at a given level cannot be stored in memory,
@@ -450,14 +451,16 @@ object DecisionTree extends Serializable with Logging {
       // Iterate over each group of nodes at a level.
       var groupIndex = 0
       while (groupIndex < numGroups) {
-        val bestSplitsForGroup = findBestSplitsPerGroup(inputWithFeatures2bin, parentImpurities, strategy, level,
+        val bestSplitsForGroup = findBestSplitsPerGroup(
+          inputWithFeatures2bin,parentImpurities, strategy, level,
           filters, splits, bins, numGroups, groupIndex)
         bestSplits = Array.concat(bestSplits, bestSplitsForGroup)
         groupIndex += 1
       }
       bestSplits
     } else {
-      findBestSplitsPerGroup(inputWithFeatures2bin, parentImpurities, strategy, level, filters, splits, bins)
+      findBestSplitsPerGroup(inputWithFeatures2bin, parentImpurities,
+        strategy, level, filters, splits, bins)
     }
   }
 
@@ -477,15 +480,15 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   private def findBestSplitsPerGroup(
-                                      inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
-                                      parentImpurities: Array[Double],
-                                      strategy: Strategy,
-                                      level: Int,
-                                      filters: Array[List[Filter]],
-                                      splits: Array[Array[Split]],
-                                      bins: Array[Array[Bin]],
-                                      numGroups: Int = 1,
-                                      groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
+    inputWithFeatures2bin: RDD[(LabeledPoint, Array[Int])],
+    parentImpurities: Array[Double],
+    strategy: Strategy,
+    level: Int,
+    filters: Array[List[Filter]],
+    splits: Array[Array[Split]],
+    bins: Array[Array[Bin]],
+    numGroups: Int = 1,
+    groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -1034,7 +1037,7 @@ object DecisionTree extends Serializable with Logging {
      *
      */
     def extractLeftRightNodeAggregates(
-                                        binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
+      binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
 
 
       def findAggForOrderedFeatureClassification(
@@ -1187,9 +1190,9 @@ object DecisionTree extends Serializable with Logging {
      * Calculates information gain for all nodes splits.
      */
     def calculateGainsForAllNodeSplits(
-                                        leftNodeAgg: Array[Array[Array[Double]]],
-                                        rightNodeAgg: Array[Array[Array[Double]]],
-                                        nodeImpurity: Double): Array[Array[InformationGainStats]] = {
+        leftNodeAgg: Array[Array[Array[Double]]],
+        rightNodeAgg: Array[Array[Array[Double]]],
+        nodeImpurity: Double): Array[Array[InformationGainStats]] = {
       val gains = Array.ofDim[InformationGainStats](numFeatures, numBins - 1)
 
       for (featureIndex <- 0 until numFeatures) {
@@ -1208,8 +1211,8 @@ object DecisionTree extends Serializable with Logging {
      * @return tuple of split and information gain
      */
     def binsToBestSplit(
-                         binData: Array[Double],
-                         nodeImpurity: Double): (Split, InformationGainStats) = {
+         binData: Array[Double],
+         nodeImpurity: Double): (Split, InformationGainStats) = {
 
       logDebug("node impurity = " + nodeImpurity)
 
@@ -1316,11 +1319,11 @@ object DecisionTree extends Serializable with Logging {
    * @param numBins  Number of bins = 1 + number of possible splits.
    */
   private def getElementsPerNode(
-                                  numFeatures: Int,
-                                  numBins: Int,
-                                  numClasses: Int,
-                                  isMulticlassClassificationWithCategoricalFeatures: Boolean,
-                                  algo: Algo): Int = {
+      numFeatures: Int,
+      numBins: Int,
+      numClasses: Int,
+      isMulticlassClassificationWithCategoricalFeatures: Boolean,
+      algo: Algo): Int = {
     algo match {
       case Classification =>
         if (isMulticlassClassificationWithCategoricalFeatures) {
@@ -1363,8 +1366,8 @@ object DecisionTree extends Serializable with Logging {
    *          of size (numFeatures, numBins).
    */
   protected[tree] def findSplitsBins(
-                                      input: RDD[LabeledPoint],
-                                      strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
+      input: RDD[LabeledPoint],
+      strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     val count = input.count()
 
@@ -1563,7 +1566,8 @@ object DecisionTree extends Serializable with Logging {
       val featureInfo = strategy.categoricalFeaturesInfo.get(featureIndex)
       val isFeatureContinuous = featureInfo.isEmpty
       if (isFeatureContinuous) {
-        feature2bin(featureIndex) = findBin(strategy, bins, featureIndex, labeledPoint, isFeatureContinuous, false)
+        feature2bin(featureIndex) = findBin(strategy, bins,
+          featureIndex, labeledPoint, isFeatureContinuous, false)
       } else {
         val featureCategories = featureInfo.get
         val isSpaceSufficientForAllCategoricalSplits
