@@ -29,6 +29,10 @@ import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
 import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
 
+import org.apache.spark.SparkContext.rddToAsyncRDDActions
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
  * Maps each key to a partition ID, from 0 to `numPartitions - 1`.
@@ -261,12 +265,19 @@ private[spark] object RangePartitioner {
       sampleSizePerPartition: Int): (Long, Array[(Int, Int, Array[K])]) = {
     val shift = rdd.id
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
-    val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
+    // use collectAsync here to run this job as a future, which is cancellable
+    val sketchFuture = rdd.mapPartitionsWithIndex { (idx, iter) =>
       val seed = byteswap32(idx ^ (shift << 16))
       val (sample, n) = SamplingUtils.reservoirSampleAndCount(
         iter, sampleSizePerPartition, seed)
       Iterator((idx, n, sample))
-    }.collect()
+    }.collectAsync()
+    // We do need the future's value to continue any further
+    val sketched = Await.ready(sketchFuture, Duration.Inf).value.get match {
+      case scala.util.Success(v) => v.toArray
+      case scala.util.Failure(e) =>
+        throw new SparkException("Range Partitioner sampling job failed: " + e)
+    }
     val numItems = sketched.map(_._2.toLong).sum
     (numItems, sketched)
   }

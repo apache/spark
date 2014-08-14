@@ -58,9 +58,14 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = {
-    val results = new Array[Array[T]](self.partitions.size)
-    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.size),
-      (index, data) => results(index) = data, results.flatten.toSeq)
+    val f = new ComplexFutureAction[Seq[T]]
+    f.run {
+      val results = new Array[Array[T]](self.partitions.size)
+      f.runJob[T, Array[T], Unit](self, _.toArray, Range(0, self.partitions.size),
+                                  (index, data) => results(index) = data, Unit)
+      results.flatten.toSeq
+    }
+    f
   }
 
   /**
