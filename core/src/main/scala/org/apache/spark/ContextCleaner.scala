@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
+import java.lang.reflect.Field
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
@@ -64,9 +65,26 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
-  // Capacity of the reference buffer before we log an error message
-  private val referenceBufferCapacity = 10000
+  /**
+   * Keep track of the reference queue length and log an error if this exceeds a certain capacity.
+   * Unfortunately, Java's ReferenceQueue exposes neither the queue length nor the enqueue method,
+   * so we have to do this through reflection. This is expensive, however, so we should access
+   * this field only once in a while.
+   */
+  private val queueCapacity = 10000
   private var queueFullErrorMessageLogged = false
+  private val queueLengthAccessor: Option[Field] = {
+    try {
+      val f = classOf[ReferenceQueue[AnyRef]].getDeclaredField("queueLength")
+      f.setAccessible(true)
+      Some(f)
+    } catch {
+      case e: Exception =>
+        logDebug("Failed to expose java.lang.ref.ReferenceQueue's queueLength field: " + e)
+        None
+    }
+  }
+  private val logQueueLengthInterval = 1000
 
   /**
    * Whether the cleaning thread will block on cleanup tasks.
@@ -117,13 +135,11 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask) {
     referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
-    if (referenceBuffer.size > referenceBufferCapacity) {
-      logQueueFullErrorMessage()
-    }
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
   private def keepCleaning(): Unit = Utils.logUncaughtExceptions {
+    var iteration = 0
     while (!stopped) {
       try {
         val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
@@ -140,10 +156,14 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
             case CleanBroadcast(broadcastId) =>
               doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
           }
+          if (iteration % logQueueLengthInterval == 0) {
+            logQueueLength()
+          }
         }
       } catch {
         case e: Exception => logError("Error in cleaning thread", e)
       }
+      iteration += 1
     }
   }
 
@@ -190,13 +210,32 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def logQueueFullErrorMessage(): Unit = {
     if (!queueFullErrorMessageLogged) {
       queueFullErrorMessageLogged = true
-      logError(s"Reference queue size in ContextCleaner has exceeded $referenceBufferCapacity! " +
+      logError(s"Reference queue size in ContextCleaner has exceeded $queueCapacity! " +
         "This means the rate at which we clean up RDDs, shuffles, and/or broadcasts is too slow.")
-      if (!blockOnCleanupTasks) {
+      if (blockOnCleanupTasks) {
         logError("Consider setting spark.cleaner.referenceTracking.blocking to false." +
           "Note that there is a known issue (SPARK-3015) in disabling blocking, especially if " +
           "the workload involves creating many RDDs in quick successions.")
       }
+    }
+  }
+
+  /**
+   * Log the length of the reference queue through reflection.
+   * This is an expensive operation and should be called sparingly.
+   */
+  private def logQueueLength(): Unit = {
+    try {
+      queueLengthAccessor.foreach { field =>
+        val length = field.getLong(referenceQueue)
+        logDebug("Reference queue size is " + length)
+        if (length > queueCapacity) {
+          logQueueFullErrorMessage()
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logDebug("Failed to access reference queue's length through reflection: " + e)
     }
   }
 
