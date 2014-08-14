@@ -17,6 +17,11 @@
 
 package org.apache.spark.deploy.yarn
 
+object AllocationType extends Enumeration {
+  type AllocationType = Value
+  val HOST, RACK, ANY = Value
+}
+
 /**
  * Interface that defines a Yarn allocator.
  */

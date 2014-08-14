@@ -68,7 +68,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val sparkContextRef = new AtomicReference[SparkContext](null)
   private val userResult = new AtomicBoolean(false)
 
-  final def run() {
+  final def run() = {
     // Setup the directories so things go to YARN approved directories rather
     // than user specified and /tmp.
     System.setProperty("spark.local.dir", getLocalDirs())
@@ -314,7 +314,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
   }
 
-  private def allocateExecutors() {
+  private def allocateExecutors() = {
     try {
       logInfo("Requesting" + args.numExecutors + " executors.")
       allocator.allocateResources()
@@ -330,14 +330,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     logInfo("All executors have launched.")
   }
 
-  private def checkNumExecutorsFailed() {
+  private def checkNumExecutorsFailed() = {
     if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
       finish(FinalApplicationStatus.FAILED, "Max number of executor failures reached.")
     }
   }
 
   // add the yarn amIpFilter that Yarn requires for properly securing the UI
-  private def addAmIpFilter() {
+  private def addAmIpFilter() = {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     System.setProperty("spark.ui.filters", amFilter)
     val proxy = client.getProxyHostAndPort(yarnConf)
@@ -346,8 +346,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
 
     val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-    System.setProperty(
-      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
+    System.setProperty("spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params",
+      params)
   }
 
   private def startUserClass(): Thread = {
@@ -383,7 +383,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     var driver: ActorSelection = _
 
-    override def preStart() {
+    override def preStart() = {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorSelection(driverUrl)
       // Send a hello message to establish the connection, after which
@@ -409,7 +409,7 @@ object ApplicationMaster extends Logging {
 
   private var master: ApplicationMaster = _
 
-  def main(argStrings: Array[String]) {
+  def main(argStrings: Array[String]) = {
     SignalLogger.register(log)
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>

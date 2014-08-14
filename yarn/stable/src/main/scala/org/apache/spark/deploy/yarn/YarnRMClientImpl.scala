@@ -17,16 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.IOException
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicReference
-
-import scala.collection.JavaConversions._
 import scala.collection.{Map, Set}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
@@ -36,10 +28,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
