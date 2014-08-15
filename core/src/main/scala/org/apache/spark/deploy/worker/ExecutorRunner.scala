@@ -22,8 +22,9 @@ import java.io._
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+import org.apache.spark.util.Utils
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{SecurityManager, SparkEnv, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.util.logging.FileAppender
@@ -111,18 +112,13 @@ private[spark] class ExecutorRunner(
     case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
+    case "{{APP_ID}}" => appId
     case other => other
   }
 
-  def getCommandSeq = {
-    val command = Command(
-      appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
-      appDesc.command.environment,
-      appDesc.command.classPathEntries,
-      appDesc.command.libraryPathEntries,
-      appDesc.command.javaOpts)
-    CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
+  def getCommandSeq(userJarClassPathEntries : Seq[String]) = {
+    CommandUtils.buildCommandSeq(appDesc.command, memory, sparkHome.getAbsolutePath,
+      userJarClassPathEntries, substituteVariables)
   }
 
   /**
@@ -136,8 +132,20 @@ private[spark] class ExecutorRunner(
         throw new IOException("Failed to create directory " + executorDir)
       }
 
+      // Download user jars
+      val securityManager = new SecurityManager(conf)
+      val userJars = appDesc.userJars
+      for (name <- userJars) {
+        logInfo("Fetching " + name)
+        Utils.fetchFile(name, executorDir, conf, securityManager)
+      }
+      // Compute additional classpath entries for user jars
+      val userJarClassPathEntries = userJars.map { name =>
+        new File(executorDir, name.split("/").last).toString
+      }
+
       // Launch the process
-      val command = getCommandSeq
+      val command = getCommandSeq(userJarClassPathEntries)
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
       val env = builder.environment()

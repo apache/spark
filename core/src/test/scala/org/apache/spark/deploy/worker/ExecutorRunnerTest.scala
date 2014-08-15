@@ -29,11 +29,11 @@ class ExecutorRunnerTest extends FunSuite {
     def f(s:String) = new File(s)
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,
-      Command("foo", Seq(), Map(), Seq(), Seq(), Seq()), "appUiUrl")
+      Command("foo", Seq(), Map(), Seq(), Seq(), Seq(), false), "appUiUrl", Seq())
     val appId = "12345-worker321-9876"
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome),
       f("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
 
-    assert(er.getCommandSeq.last === appId)
+    assert(er.getCommandSeq(Seq()).last === appId)
   }
 }

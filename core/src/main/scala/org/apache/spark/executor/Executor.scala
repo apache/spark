@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark._
 import org.apache.spark.scheduler._
@@ -42,9 +42,9 @@ private[spark] class Executor(
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
-  // Each map holds the master's timestamp for the version of that file or JAR we got.
+  // The current files map holds the master's timestamp for the version of that file we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
-  private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentJars: HashSet[String] = new HashSet[String]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -293,7 +293,7 @@ private[spark] class Executor(
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = currentJars.keySet.map { uri =>
+    val urls = currentJars.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
     val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
@@ -334,7 +334,7 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashSet[String]) {
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
@@ -342,17 +342,21 @@ private[spark] class Executor(
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
         currentFiles(name) = timestamp
       }
-      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
-        currentJars(name) = timestamp
-        // Add it to our class loader
+      for (name <- newJars if !currentJars.contains(name)) {
         val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-        if (!urlClassLoader.getURLs.contains(url)) {
-          logInfo("Adding " + url + " to class loader")
-          urlClassLoader.addURL(url)
+        val destinationFile = new File(SparkFiles.getRootDirectory, localName)
+        // Check to see if we already have the file (e.g. if the Worker downloaded it for us)
+        if (!destinationFile.exists()) {
+          logInfo("Fetching " + name)
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+          // Add it to our class loader
+          val url = destinationFile.toURI.toURL
+          if (!urlClassLoader.getURLs.contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
+          }
         }
+        currentJars += name
       }
     }
   }

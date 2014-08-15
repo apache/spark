@@ -17,13 +17,15 @@
 
 package org.apache.spark.serializer
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{TestUtils, SharedSparkContext}
 import org.apache.spark.serializer.KryoTest._
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
@@ -249,6 +251,43 @@ class KryoSerializerResizableOutputSuite extends FunSuite {
   }
 }
 
+class KryoSerializerDistributedSuite extends FunSuite {
+  import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+  import org.apache.spark.SparkContext._
+
+  test("kryo objects are serialised consistently in different processes") {
+    val conf = new SparkConf(false)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryo.registrator", classOf[AppJarRegistrator].getName)
+    conf.set("spark.task.maxFailures", "1")
+
+    val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))
+    conf.setJars(List(jar.getPath))
+
+    val original = Thread.currentThread.getContextClassLoader
+    val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    Thread.currentThread().setContextClassLoader(loader)
+    try {
+      val sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+
+      val cachedRDD = sc.parallelize((0 until 10).map((_, new ClassWithNoArgConstructor)), 3).cache()
+
+      // Randomly mix the keys so that the join below will require a shuffle with each partition
+      // sending data to multiple other partitions.
+      val shuffledRDD = cachedRDD.map { case (i, o) => (i * i * i - 10 * i * i, o)}
+
+      // Join the two RDDs, and force evaluation
+      assert(shuffledRDD.join(cachedRDD).collect.size == 1)
+
+      LocalSparkContext.stop(sc)
+    }
+    finally {
+      Thread.currentThread.setContextClassLoader(original)
+    }
+
+  }
+}
+
 object KryoTest {
   case class CaseClass(i: Int, s: String) {}
 
@@ -274,5 +313,16 @@ object KryoTest {
       k.register(classOf[ClassWithoutNoArgConstructor])
       k.register(classOf[java.util.HashMap[_, _]])
     }
+  }
+
+  class AppJarRegistrator extends KryoRegistrator {
+    override def registerClasses(k: Kryo) {
+      val classLoader = Thread.currentThread.getContextClassLoader
+      k.register(Class.forName(AppJarRegistrator.customClassName, true, classLoader))
+    }
+  }
+
+  object AppJarRegistrator {
+    val customClassName = "KryoSerializerDistributedSuiteCustomClass"
   }
 }

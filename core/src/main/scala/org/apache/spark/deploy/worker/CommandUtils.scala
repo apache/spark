@@ -29,13 +29,15 @@ import org.apache.spark.util.Utils
  */
 private[spark]
 object CommandUtils extends Logging {
-  def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
+  def buildCommandSeq(command: Command, memory: Int, sparkHome: String,
+      userJarClassPathEntries: Seq[String] = Seq(),
+      substituteVariables: String => String = s => s): Seq[String] = {
     val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++ Seq(command.mainClass) ++
-      command.arguments
+    Seq(runner) ++ buildJavaOpts(command, memory, sparkHome, userJarClassPathEntries) ++
+      Seq(command.mainClass) ++ command.arguments.map(substituteVariables)
   }
 
   private def getEnv(key: String, command: Command): Option[String] =
@@ -45,7 +47,8 @@ object CommandUtils extends Logging {
    * Attention: this must always be aligned with the environment variables in the run scripts and
    * the way the JAVA_OPTS are assembled there.
    */
-  def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
+  def buildJavaOpts(command: Command, memory: Int, sparkHome: String,
+      userJarClassPathEntries: Seq[String]): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
 
     // Exists for backwards compatibility with older Spark versions
@@ -71,7 +74,11 @@ object CommandUtils extends Logging {
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment = command.environment)
-    val userClassPath = command.classPathEntries ++ Seq(classPath)
+    val userClassPath = if (command.userClassPathFirst) {
+      userJarClassPathEntries ++ command.classPathEntries ++ Seq(classPath)
+    } else {
+      Seq(classPath) ++ command.classPathEntries ++ userJarClassPathEntries
+    }
 
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
       permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts

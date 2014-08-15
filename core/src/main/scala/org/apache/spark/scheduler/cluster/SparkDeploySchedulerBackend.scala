@@ -45,7 +45,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}",
+      "{{APP_ID}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
@@ -60,9 +61,10 @@ private[spark] class SparkDeploySchedulerBackend(
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
+      args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts,
+      conf.getBoolean("spark.files.userClassPathFirst", false))
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
+      sc.ui.appUIAddress, sc.addedJars.toSeq, sc.eventLogger.map(_.logDir))
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
