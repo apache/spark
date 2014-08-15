@@ -187,5 +187,8 @@ class StreamingContext(object):
         jinput_stream = self._jvm.PythonTestInputStream2(self._jssc, jtest_rdds).asJavaDStream()
 
         dstream = DStream(jinput_stream, self, test_rdd_deserializers[0])
-        dstream._test_switch_dserializer(test_rdd_deserializers)
         return dstream
+
+    def _testInputStream3(self):
+        jinput_stream = self._jvm.PythonTestInputStream3(self._jssc).asJavaDStream()
+        return DStream(jinput_stream, self, UTF8Deserializer())

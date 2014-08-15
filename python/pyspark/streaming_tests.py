@@ -37,13 +37,6 @@ from pyspark.streaming.duration import *
 SPARK_HOME = os.environ["SPARK_HOME"]
 
 
-class StreamOutput:
-    """
-    a class to store the output from stream
-    """
-    result = list()
-
-
 class PySparkStreamingTestCase(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
@@ -115,7 +108,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_count(self):
         """Basic operation test for DStream.count"""
-        test_input = [[], [1], range(1, 3), range(1, 4), range(1, 5)]
+        #test_input = [[], [1], range(1, 3), range(1, 4), range(1, 5)]
+        test_input = [range(1, 5), range(1,10), range(1,20)]
 
         def test_func(dstream):
             print "count"
@@ -137,33 +131,39 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_reduceByKey(self):
         """Basic operation test for DStream.reduceByKey"""
-        test_input = [["a", "a", "b"], ["", ""], []]
+        #test_input = [["a", "a", "b"], ["", ""], []]
+        test_input = [["a", "a", "b", "b"], ["", "", "", ""], []]
 
         def test_func(dstream):
             print "reduceByKey"
             dstream.map(lambda x: (x, 1)).pyprint()
             return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add)
-        expected_output = [[("a", 2), ("b", 1)], [("", 2)], []]
+        #expected_output = [[("a", 2), ("b", 1)], [("", 2)], []]
+        expected_output = [[("a", 2), ("b", 2)], [("", 4)], []]
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
     def test_mapValues(self):
         """Basic operation test for DStream.mapValues"""
-        test_input = [["a", "a", "b"], ["", ""], []]
+        #test_input = [["a", "a", "b"], ["", ""], []]
+        test_input = [["a", "a", "b", "b"], ["", "", "", ""], []]
 
         def test_func(dstream):
             return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add).mapValues(lambda x: x + 10)
-        expected_output = [[("a", 12), ("b", 11)], [("", 12)], []]
+        #expected_output = [[("a", 12), ("b", 11)], [("", 12)], []]
+        expected_output = [[("a", 12), ("b", 12)], [("", 14)], []]
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
     def test_flatMapValues(self):
         """Basic operation test for DStream.flatMapValues"""
-        test_input = [["a", "a", "b"], ["", ""], []]
+        #test_input = [["a", "a", "b"], ["", ""], []]
+        test_input = [["a", "a", "b", "b"], ["", "", "",""], []]
 
         def test_func(dstream):
             return dstream.map(lambda x: (x, 1)).reduceByKey(operator.add).flatMapValues(lambda x: (x, x + 10))
-        expected_output = [[("a", 2), ("a", 12), ("b", 1), ("b", 11)], [("", 2), ("", 12)], []]
+        #expected_output = [[("a", 2), ("a", 12), ("b", 1), ("b", 11)], [("", 2), ("", 12)], []]
+        expected_output = [[("a", 2), ("a", 12), ("b", 2), ("b", 12)], [("", 4), ("", 14)], []]
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
