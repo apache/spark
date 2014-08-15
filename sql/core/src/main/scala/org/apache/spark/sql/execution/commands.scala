@@ -116,7 +116,7 @@ case class ExplainCommand(
   override protected[sql] lazy val sideEffectResult: Seq[String] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = context.executePlan(logicalPlan)
-    val outputString = if (extended) queryExecution.toString else queryExecution.toSimpleString
+    val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
 
     outputString.split("\n")
   } catch { case cause: TreeNodeException[_] =>

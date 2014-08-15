@@ -39,7 +39,7 @@ class HiveExplainSuite extends QueryTest {
 
   test("explain extended command") {
     check(" explain   select * from src where key=123 ", true,
-          "== Physical Plan ==", "== RDD ==")
+          "== Physical Plan ==")
     check(" explain   select * from src where key=123 ", false,
           "== Parsed Logical Plan ==",
           "== Analyzed Logical Plan ==", 
