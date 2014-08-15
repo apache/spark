@@ -31,7 +31,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -39,7 +39,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -55,8 +55,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
     math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
-  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs",
-    60000)
+  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
   var timeoutCheckingTask: Cancellable = null
 
@@ -67,9 +66,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     super.preStart()
   }
 
-  def receive = {
+  override def receiveWithLogging = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
-      logInfo("received a register")
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
 
@@ -118,7 +116,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       sender ! true
 
     case StopBlockManagerMaster =>
-      logInfo("Stopping BlockManagerMaster")
       sender ! true
       if (timeoutCheckingTask != null) {
         timeoutCheckingTask.cancel()

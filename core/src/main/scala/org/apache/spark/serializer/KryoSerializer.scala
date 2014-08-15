@@ -79,15 +79,16 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
-    try {
-      for (regCls <- registrator) {
-        logDebug("Running user registrator: " + regCls)
+    for (regCls <- registrator) {
+      logDebug("Running user registrator: " + regCls)
+      try {
         val reg = Class.forName(regCls, true, classLoader).newInstance()
           .asInstanceOf[KryoRegistrator]
         reg.registerClasses(kryo)
+      } catch {
+        case e: Exception => 
+          throw new SparkException(s"Failed to invoke $regCls", e)
       }
-    } catch {
-      case e: Exception => logError("Failed to run spark.kryo.registrator", e)
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let

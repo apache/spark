@@ -690,8 +690,7 @@ private[spark] class TaskSetManager(
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure)
     }
     // recalculate valid locality levels and waits when executor is lost
-    myLocalityLevels = computeValidLocalityLevels()
-    localityWaits = myLocalityLevels.map(getLocalityWait)
+    recomputeLocality()
   }
 
   /**
@@ -775,9 +774,15 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  def executorAdded() {
+  def recomputeLocality() {
+    val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
+    currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
+  }
+
+  def executorAdded() {
+    recomputeLocality()
   }
 }
 

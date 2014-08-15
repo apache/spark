@@ -31,14 +31,15 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
     cores: Int,
-    sparkProperties: Seq[(String, String)]) extends Actor with ExecutorBackend with Logging {
+    sparkProperties: Seq[(String, String)])
+  extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
@@ -52,7 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
-  override def receive = {
+  override def receiveWithLogging = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
