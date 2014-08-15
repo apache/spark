@@ -70,10 +70,11 @@ private[spark] class ConnectionManager(
   }
 
   private val selector = SelectorProvider.provider.openSelector()
+  private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
   // default to 30 second timeout waiting for authentication
   private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
-  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 30)
+  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -662,15 +663,11 @@ private[spark] class ConnectionManager(
                 status.markDone(Some(message))
               }
               case None => {
-                /**
-                 * If isAckTimeout == true, Future returned from sendMessageReliably should fail
-                 * and finally, FetchFailedException is thrown so in this case, we don't need
-                 * to throw Exception here
-                 */
-                if (!isAckTimeout) {
-                  throw new Exception("Could not find reference for received ack message " +
-                    message.id)
+                if (isAckTimeout) {
+                  logWarning(s"Ack message ${message.id} maybe received after timeout")
                 }
+                throw new Exception("Could not find reference for received ack message " +
+                  message.id)
               }
             }
           }
@@ -846,11 +843,23 @@ private[spark] class ConnectionManager(
       : Future[Message] = {
     val promise = Promise[Message]()
 
-    val ackTimeoutMonitor =  new Timer(s"Ack Timeout Monitor-" +
-      "${connectionManagerId}-MessageId(${message.id})", true)
+    val timeoutTask = new TimerTask {
+      override def run(): Unit = {
+        messageStatuses.synchronized {
+          isAckTimeout = true
+          messageStatuses.remove(message.id).foreach ( s => {
+            s.synchronized {
+              promise.failure(
+                new IOException(s"sendMessageReliably failed because ack " +
+                  "was not received within ${ackTimeout} sec"))
+            }
+          })
+        }
+      }
+    }
 
     val status = new MessageStatus(message, connectionManagerId, s => {
-      ackTimeoutMonitor.cancel()
+      timeoutTask.cancel()
       s.ackMessage match {
         case None => // Indicates a failure where we either never sent or never got ACK'd
           promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
@@ -865,21 +874,6 @@ private[spark] class ConnectionManager(
     })
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
-    }
-
-    val timeoutTask = new TimerTask {
-      override def run(): Unit = {
-        messageStatuses.synchronized {
-          isAckTimeout = true
-          messageStatuses.remove(message.id).foreach ( s => {
-            s.synchronized {
-              promise.failure(
-                new IOException(s"sendMessageReliably failed because ack " +
-                  "was not received within ${ackTimeout} sec"))
-            }
-          })
-        }
-      }
     }
 
     ackTimeoutMonitor.schedule(timeoutTask, ackTimeout * 1000)
