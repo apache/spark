@@ -77,28 +77,28 @@
       <!--
            This plugin forces the generation of jar containing catalyst test classes,
            so that the tests classes of external modules can use them. The two execution profiles
-           are necessary - first one for 'mvn package', second one for 'mvn compile'. Ideally,
+           are necessary - first one for 'mvn package', second one for 'mvn test-compile'. Ideally,
            'mvn compile' should not compile test classes and therefore should not need this.
            However, an open Maven bug (http://jira.codehaus.org/browse/MNG-3559)
            causes the compilation to fail if catalyst test-jar is not generated. Hence, the
-           second execution profile for 'mvn compile'.
+           second execution profile for 'mvn test-compile'.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
-            <execution>
-                <goals>
-                    <goal>test-jar</goal>
-                </goals>
-            </execution>
-            <execution>
-                <id>test-jar-on-compile</id>
-                <phase>compile</phase>
-                <goals>
-                    <goal>test-jar</goal>
-                </goals>
-            </execution>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>test-jar-on-test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
         </executions>
       </plugin>
     </plugins>
