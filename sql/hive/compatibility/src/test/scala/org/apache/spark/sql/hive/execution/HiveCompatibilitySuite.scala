@@ -45,7 +45,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     
     // Add Locale setting
     originalLocale = Locale.getDefault
-		Locale.setDefault(Locale.US)
+    Locale.setDefault(Locale.US)
   }
 
   override def afterAll() {
