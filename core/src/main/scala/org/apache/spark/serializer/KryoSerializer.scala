@@ -61,7 +61,9 @@ class KryoSerializer(conf: SparkConf)
     val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
     kryo.setRegistrationRequired(registrationRequired)
-    val classLoader = Thread.currentThread.getContextClassLoader
+
+    val oldClassLoader = Thread.currentThread.getContextClassLoader
+    val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
     // Do this before we invoke the user registrator so the user registrator can override this.
@@ -84,10 +86,15 @@ class KryoSerializer(conf: SparkConf)
       try {
         val reg = Class.forName(regCls, true, classLoader).newInstance()
           .asInstanceOf[KryoRegistrator]
+
+        // Use the default classloader when calling the user registrator.
+        Thread.currentThread.setContextClassLoader(classLoader)
         reg.registerClasses(kryo)
       } catch {
         case e: Exception => 
           throw new SparkException(s"Failed to invoke $regCls", e)
+      } finally {
+        Thread.currentThread.setContextClassLoader(oldClassLoader)
       }
     }
 
