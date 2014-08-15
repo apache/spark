@@ -62,6 +62,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   // Fields used in client mode.
   private var actorSystem: ActorSystem = null
+  private var actor: ActorRef = _
 
   // Fields used in cluster mode.
   private var userThread: Thread = _
@@ -91,6 +92,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val securityMgr = new SecurityManager(sparkConf)
 
     val (uiAddress, uiHistoryAddress) = if (isDriver) {
+      addAmIpFilter()
+
       // Start the user's JAR
       userThread = startUserClass()
 
@@ -104,6 +107,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
         conf = sparkConf, securityManager = securityMgr)._1
       waitForSparkMaster()
+      addAmIpFilter()
       (sparkConf.get("spark.driver.appUIAddress", ""), "")
     }
 
@@ -116,8 +120,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         uiHistoryAddress)
       registered = true
     }
-
-    addAmIpFilter()
 
     if (registered) {
       // Launch thread that will heartbeat to the RM so it won't think the app has died.
@@ -310,8 +312,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
-
-    actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
+    actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
   }
 
   private def allocateExecutors() = {
@@ -339,15 +340,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   // add the yarn amIpFilter that Yarn requires for properly securing the UI
   private def addAmIpFilter() = {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
-    System.setProperty("spark.ui.filters", amFilter)
     val proxy = client.getProxyHostAndPort(yarnConf)
-    val parts : Array[String] = proxy.split(":")
-    val uriBase = "http://" + proxy +
-      System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-
+    val parts = proxy.split(":")
+    val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+    val uriBase = "http://" + proxy + proxyBase
     val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-    System.setProperty("spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params",
-      params)
+
+    if (isDriver) {
+      System.setProperty("spark.ui.filters", amFilter)
+      System.setProperty(s"spark.$amFilter.params", params)
+    } else {
+      actor ! AddWebUIFilter(amFilter, params, proxyBase)
+    }
   }
 
   private def startUserClass(): Thread = {
