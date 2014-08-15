@@ -90,8 +90,9 @@ class KryoSerializer(conf: SparkConf)
         // Use the default classloader when calling the user registrator.
         Thread.currentThread.setContextClassLoader(classLoader)
         reg.registerClasses(kryo)
+        Thread.currentThread.setContextClassLoader(oldClassLoader)
       } catch {
-        case e: Exception => 
+        case e: Exception =>
           throw new SparkException(s"Failed to invoke $regCls", e)
       } finally {
         Thread.currentThread.setContextClassLoader(oldClassLoader)
