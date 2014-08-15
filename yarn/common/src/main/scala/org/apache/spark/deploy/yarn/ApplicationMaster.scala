@@ -69,7 +69,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val sparkContextRef = new AtomicReference[SparkContext](null)
   private val userResult = new AtomicBoolean(false)
 
-  final def run() = {
+  final def run(): Unit = {
     // Setup the directories so things go to YARN approved directories rather
     // than user specified and /tmp.
     System.setProperty("spark.local.dir", getLocalDirs())
@@ -83,8 +83,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       System.setProperty("spark.master", "yarn-cluster")
     }
 
-    val attemptId = client.getAttemptId()
-    logInfo("ApplicationAttemptId: " + attemptId)
+    logInfo("ApplicationAttemptId: " + client.getAttemptId())
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
@@ -102,6 +101,16 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       waitForSparkContextInitialized()
 
       val sc = sparkContextRef.get()
+
+      // If there is no SparkContext at this point, just fail the app.
+      if (sc == null) {
+        finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
+        if (isLastAttempt()) {
+          cleanupStagingDir()
+        }
+        return
+      }
+
       (sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
     } else {
       actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
@@ -146,14 +155,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     finish(if (success) FinalApplicationStatus.SUCCEEDED else FinalApplicationStatus.FAILED)
 
-    val shouldCleanup =
-      if (success) {
-        true
-      } else {
-        val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
-        attemptId.getAttemptId() >= maxAppAttempts
-      }
-
+    val shouldCleanup = success || isLastAttempt()
     if (shouldCleanup) {
       cleanupStagingDir()
     }
@@ -195,6 +197,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       })
     }
+  }
+
+  private def isLastAttempt() = {
+    val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
+    client.getAttemptId().getAttemptId() >= maxAppAttempts
   }
 
   /** Get the Yarn approved local directories. */
@@ -316,16 +323,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   private def allocateExecutors() = {
+    logInfo("Requesting" + args.numExecutors + " executors.")
     try {
-      logInfo("Requesting" + args.numExecutors + " executors.")
-      allocator.allocateResources()
-
-      var iters = 0
       while (allocator.getNumExecutorsRunning < args.numExecutors && !finished) {
         checkNumExecutorsFailed()
         allocator.allocateResources()
         Thread.sleep(ALLOCATE_HEARTBEAT_INTERVAL)
-        iters += 1
       }
     }
     logInfo("All executors have launched.")
