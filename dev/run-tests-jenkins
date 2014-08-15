@@ -33,7 +33,9 @@ COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
 # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
 SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
-TESTS_TIMEOUT="1m" # experimental
+# NOTE: Jenkins will kill the whole build after 120 minutes.
+#       Tests are a large part of that, but not all of it.
+TESTS_TIMEOUT="100m"
 
 function post_message () {
   local message=$1
