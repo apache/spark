@@ -90,71 +90,67 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // doAs in order for the credentials to be passed on to the executor containers.
     val securityMgr = new SecurityManager(sparkConf)
 
-    val (uiAddress, uiHistoryAddress) = if (isDriver) {
-      addAmIpFilter()
+    val (sc, uiAddress, uiHistoryAddress) =
+      if (isDriver) {
+        addAmIpFilter()
+        userThread = startUserClass()
 
-      // Start the user's JAR
-      userThread = startUserClass()
+        // This a bit hacky, but we need to wait until the spark.driver.port property has
+        // been set by the Thread executing the user class.
+        waitForSparkContextInitialized()
 
-      // This a bit hacky, but we need to wait until the spark.driver.port property has
-      // been set by the Thread executing the user class.
-      waitForSparkContextInitialized()
+        val sc = sparkContextRef.get()
 
-      val sc = sparkContextRef.get()
+        // If there is no SparkContext at this point, just fail the app.
+        if (sc == null) {
 
-      // If there is no SparkContext at this point, just fail the app.
-      if (sc == null) {
-        finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
-        if (isLastAttempt()) {
-          cleanupStagingDir()
+          finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
+          if (isLastAttempt()) {
+            cleanupStagingDir()
+          }
+          return
         }
-        return
+
+        (sc, sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
+      } else {
+        actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+          conf = sparkConf, securityManager = securityMgr)._1
+        waitForSparkMaster()
+        addAmIpFilter()
+        (null, sparkConf.get("spark.driver.appUIAddress", ""), "")
       }
 
-      (sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
-    } else {
-      actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-        conf = sparkConf, securityManager = securityMgr)._1
-      waitForSparkMaster()
-      addAmIpFilter()
-      (sparkConf.get("spark.driver.appUIAddress", ""), "")
-    }
-
-    Utils.logUncaughtExceptions {
-      val sc = sparkContextRef.get()
-      allocator = client.register(yarnConf,
-        if (sc != null) sc.getConf else sparkConf,
-        if (sc != null) sc.preferredNodeLocationData else Map(),
-        uiAddress,
-        uiHistoryAddress)
-      registered = true
-    }
-
-    if (registered) {
-      // Launch thread that will heartbeat to the RM so it won't think the app has died.
-      reporterThread = launchReporterThread()
-
-      // Allocate all containers
-      allocateExecutors()
-    }
-
     val success =
-      if (isDriver) {
-        try {
-          userThread.join()
-          userResult.get()
-        } finally {
-          // In cluster mode, ask the reporter thread to stop since the user app is finished.
-          reporterThread.interrupt()
+      try {
+        allocator = client.register(yarnConf,
+          if (sc != null) sc.getConf else sparkConf,
+          if (sc != null) sc.preferredNodeLocationData else Map(),
+          uiAddress,
+          uiHistoryAddress)
+
+        reporterThread = launchReporterThread()
+        allocateExecutors()
+
+        if (isDriver) {
+          try {
+            userThread.join()
+            userResult.get()
+          } finally {
+            // In cluster mode, ask the reporter thread to stop since the user app is finished.
+            reporterThread.interrupt()
+          }
+        } else {
+          // In client mode the actor will stop the reporter thread.
+          reporterThread.join()
+          true
         }
-      } else {
-        // In client mode the actor will stop the reporter thread.
-        reporterThread.join()
-        true
+      } catch {
+        case e: Exception =>
+          logError("Exception while running AM main loop.", e)
+          false
       }
 
     finish(if (success) FinalApplicationStatus.SUCCEEDED else FinalApplicationStatus.FAILED)
-
     val shouldCleanup = success || isLastAttempt()
     if (shouldCleanup) {
       cleanupStagingDir()
@@ -270,7 +266,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  // Note: this need to happen before allocateExecutors.
+  // Note: this needs to happen before allocateExecutors.
   private def waitForSparkContextInitialized() {
     logInfo("Waiting for spark context initialization")
     try {
