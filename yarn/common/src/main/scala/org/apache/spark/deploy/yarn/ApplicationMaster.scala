@@ -413,17 +413,29 @@ object ApplicationMaster extends Logging {
 
   private var master: ApplicationMaster = _
 
-  def main(argStrings: Array[String]) = {
+  def main(args: Array[String]) = {
     SignalLogger.register(log)
-    val args = new ApplicationMasterArguments(argStrings)
+    val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(args, new YarnRMClientImpl(args))
+      master = new ApplicationMaster(amArgs, new YarnRMClientImpl(amArgs))
       master.run()
     }
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext) = {
     master.sparkContextInitialized(sc)
+  }
+
+}
+
+/**
+ * This object does not provide any special functionality. It exists so that it's easy to tell
+ * apart the client-mode AM from the cluster-mode AM when using tools such as ps or jps.
+ */
+object ExecutorLauncher {
+
+  def main(args: Array[String]) = {
+    ApplicationMaster.main(args)
   }
 
 }

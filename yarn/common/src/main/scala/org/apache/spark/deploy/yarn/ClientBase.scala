@@ -312,6 +312,8 @@ trait ClientBase extends Logging {
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
 
+    val isLaunchingDriver = args.userClass != null
+
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
     // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
     // SparkContext will not let that set spark* system properties, which is expected behavior for
@@ -320,7 +322,7 @@ trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    if (args.userClass != null) {
+    if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
           s"""
@@ -380,7 +382,7 @@ trait ClientBase extends Logging {
       javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
-    if (args.userClass != null) {
+    if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
@@ -393,6 +395,12 @@ trait ClientBase extends Logging {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
+      }
+    val amClass =
+      if (isLaunchingDriver) {
+        classOf[ApplicationMaster].getName()
+      } else {
+        classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
       }
     val amArgs =
       Seq(classOf[ApplicationMaster].getName()) ++ userClass ++
