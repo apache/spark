@@ -35,18 +35,15 @@ import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
  * limitations under the License.
  */
 class SparkSinkSuite extends TestSuiteBase {
-  val batchCount = 5
-  val eventsPerBatch = 100
-  val totalEventsPerChannel = batchCount * eventsPerBatch
+  val eventsPerBatch = 1000
   val channelCapacity = 5000
-  val maxAttempts = 5
 
   test("Success test") {
     val (channel, sink) = initializeChannelAndSink(None)
     channel.start()
     sink.start()
 
-    putEvents(channel, 1000)
+    putEvents(channel, eventsPerBatch)
 
     val port = sink.getPort
     val address = new InetSocketAddress("0.0.0.0", port)
@@ -65,7 +62,7 @@ class SparkSinkSuite extends TestSuiteBase {
     val (channel, sink) = initializeChannelAndSink(None)
     channel.start()
     sink.start()
-    putEvents(channel, 1000)
+    putEvents(channel, eventsPerBatch)
 
     val port = sink.getPort
     val address = new InetSocketAddress("0.0.0.0", port)
@@ -85,7 +82,7 @@ class SparkSinkSuite extends TestSuiteBase {
       .CONF_TRANSACTION_TIMEOUT -> 1.toString)))
     channel.start()
     sink.start()
-    putEvents(channel, 1000)
+    putEvents(channel, eventsPerBatch)
     val port = sink.getPort
     val address = new InetSocketAddress("0.0.0.0", port)
 
@@ -112,7 +109,7 @@ class SparkSinkSuite extends TestSuiteBase {
     val (channel, sink) = initializeChannelAndSink(None)
     channel.start()
     sink.start()
-    (1 to 5).map(_ =>putEvents(channel, 1000))
+    (1 to 5).map(_ => putEvents(channel, eventsPerBatch))
     val port = sink.getPort
     val address = new InetSocketAddress("0.0.0.0", port)
 
