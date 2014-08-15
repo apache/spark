@@ -90,60 +90,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // doAs in order for the credentials to be passed on to the executor containers.
     val securityMgr = new SecurityManager(sparkConf)
 
-    val (sc, uiAddress, uiHistoryAddress) =
-      if (isDriver) {
-        addAmIpFilter()
-        userThread = startUserClass()
-
-        // This a bit hacky, but we need to wait until the spark.driver.port property has
-        // been set by the Thread executing the user class.
-        waitForSparkContextInitialized()
-
-        val sc = sparkContextRef.get()
-
-        // If there is no SparkContext at this point, just fail the app.
-        if (sc == null) {
-
-          finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
-          if (isLastAttempt()) {
-            cleanupStagingDir()
-          }
-          return
-        }
-
-        (sc, sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
-      } else {
-        actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-          conf = sparkConf, securityManager = securityMgr)._1
-        waitForSparkDriver()
-        addAmIpFilter()
-        (null, sparkConf.get("spark.driver.appUIAddress", ""), "")
-      }
-
     val success =
       try {
-        allocator = client.register(yarnConf,
-          if (sc != null) sc.getConf else sparkConf,
-          if (sc != null) sc.preferredNodeLocationData else Map(),
-          uiAddress,
-          uiHistoryAddress)
-
-        reporterThread = launchReporterThread()
-        allocateExecutors()
-
-        if (isDriver) {
-          try {
-            userThread.join()
-            userResult.get()
-          } finally {
-            // In cluster mode, ask the reporter thread to stop since the user app is finished.
-            reporterThread.interrupt()
-          }
-        } else {
-          // In client mode the actor will stop the reporter thread.
-          reporterThread.join()
-          true
-        }
+        if (isDriver) runDriver() else runExecutorLauncher(securityMgr)
       } catch {
         case e: Exception =>
           logError("Exception while running AM main loop.", e)
@@ -193,6 +142,55 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       })
     }
+  }
+
+  private def registerAM(uiAddress: String, uiHistoryAddress: String) = {
+    val sc = sparkContextRef.get()
+    allocator = client.register(yarnConf,
+      if (sc != null) sc.getConf else sparkConf,
+      if (sc != null) sc.preferredNodeLocationData else Map(),
+      uiAddress,
+      uiHistoryAddress)
+
+    reporterThread = launchReporterThread()
+  }
+
+  private def runDriver(): Boolean = {
+    addAmIpFilter()
+    userThread = startUserClass()
+
+    // This a bit hacky, but we need to wait until the spark.driver.port property has
+    // been set by the Thread executing the user class.
+    waitForSparkContextInitialized()
+
+    val sc = sparkContextRef.get()
+
+    // If there is no SparkContext at this point, just fail the app.
+    if (sc == null) {
+      finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
+      false
+    } else {
+      registerAM(sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
+      try {
+        userThread.join()
+        userResult.get()
+      } finally {
+        // In cluster mode, ask the reporter thread to stop since the user app is finished.
+        reporterThread.interrupt()
+      }
+    }
+  }
+
+  private def runExecutorLauncher(securityMgr: SecurityManager): Boolean = {
+    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+      conf = sparkConf, securityManager = securityMgr)._1
+    waitForSparkDriver()
+    addAmIpFilter()
+    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), "")
+
+    // In client mode the actor will stop the reporter thread.
+    reporterThread.join()
+    true
   }
 
   private def isLastAttempt() = {
@@ -297,7 +295,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     var driverUp = false
     val hostport = args.userArgs(0)
     val (driverHost, driverPort) = Utils.parseHostPort(hostport)
-    while(!driverUp) {
+    while (!driverUp) {
       try {
         val socket = new Socket(driverHost, driverPort)
         socket.close()
@@ -307,7 +305,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         case e: Exception =>
           logError("Failed to connect to driver at %s:%s, retrying ...".
             format(driverHost, driverPort))
-        Thread.sleep(100)
+          Thread.sleep(100)
       }
     }
     sparkConf.set("spark.driver.host", driverHost)
