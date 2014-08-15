@@ -635,8 +635,8 @@ object DecisionTree extends Serializable with Logging {
         0
       } else {
         val globalNodeIndex = predictNodeIndex(nodes(0), treePoint.binnedFeatures)
-        // Get index for this level.
-        globalNodeIndex - levelOffset
+        // Get index for this (level, group).
+        globalNodeIndex - levelOffset - groupShift
       }
     }
 
@@ -660,12 +660,6 @@ object DecisionTree extends Serializable with Logging {
         numClasses * numBins * featureIndex +
         numClasses * treePoint.binnedFeatures(featureIndex) +
         treePoint.label.toInt
-      if (aggIndex >= agg.size) {
-        println(s"nodeIndex = $nodeIndex, featureIndex = $featureIndex," +
-          s" treePoint.binnedFeatures(featureIndex) = ${treePoint.binnedFeatures(featureIndex)}," +
-          s" label = ${treePoint.label.toInt}, agg.size = ${agg.size}")
-        println(s"numClasses = $numClasses, numFeatures = $numFeatures, numBins = $numBins")
-      }
       agg(aggIndex) += 1
     }
 
@@ -808,7 +802,10 @@ object DecisionTree extends Serializable with Logging {
      */
     def binSeqOp(agg: Array[Double], treePoint: TreePoint): Array[Double] = {
       val nodeIndex = treePointToNodeIndex(treePoint)
-      if (nodeIndex >= 0) { // Otherwise, example does not reach this level.
+      // If the example does not reach this level, then nodeIndex < 0.
+      // If the example reaches this level but is handled in a different group,
+      //  then either nodeIndex < 0 (previous group) or nodeIndex >= numNodes (later group).
+      if (nodeIndex >= 0 && nodeIndex < numNodes) {
         strategy.algo match {
           case Classification =>
             if (isMulticlassClassificationWithCategoricalFeatures) {
@@ -825,7 +822,6 @@ object DecisionTree extends Serializable with Logging {
     // Calculate bin aggregate length for classification or regression.
     val binAggregateLength = numNodes * getElementsPerNode(numFeatures, numBins, numClasses,
         isMulticlassClassificationWithCategoricalFeatures, strategy.algo)
-    println("binAggregateLength = " + binAggregateLength)
     logDebug("binAggregateLength = " + binAggregateLength)
 
     /**

@@ -585,9 +585,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.predict === 1)
   }
 
-  // TODO: Decide about testing 2nd level
   test("second level node building with/without groups") {
-    println("START second level node building with/without groups")
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -605,10 +603,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
     val nodes: Array[Node] = new Array[Node](7)
     nodes(0) = modelOneNode.topNode
+    nodes(0).leftNode = None
+    nodes(0).rightNode = None
 
-/*    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()), -1)
-    val rightFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()) ,1)
-    val filters = Array[List[Filter]](List(), List(leftFilter), List(rightFilter))*/
     val parentImpurities = Array(0.5, 0.5, 0.5)
 
     // Single group second level tree construction.
