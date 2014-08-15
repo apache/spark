@@ -221,7 +221,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
-  ui.bind()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
@@ -333,6 +332,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   postEnvironmentUpdate()
   postApplicationStart()
+
+  // Starting Spark UI service
+  ui.bind()
 
   private[spark] var checkpointDir: Option[String] = None
 
