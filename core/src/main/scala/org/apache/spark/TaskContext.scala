@@ -21,10 +21,18 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.util.TaskCompletionListener
+
 
 /**
  * :: DeveloperApi ::
  * Contextual information about a task which can be read or mutated during execution.
+ *
+ * @param stageId stage id
+ * @param partitionId index of the partition
+ * @param attemptId the number of attempts to execute this task
+ * @param runningLocally whether the task is running locally in the driver JVM
+ * @param taskMetrics performance metrics of the task
  */
 @DeveloperApi
 class TaskContext(
@@ -39,13 +47,45 @@ class TaskContext(
   def splitId = partitionId
 
   // List of callback functions to execute when the task completes.
-  @transient private val onCompleteCallbacks = new ArrayBuffer[() => Unit]
+  @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
 
   // Whether the corresponding task has been killed.
-  @volatile var interrupted: Boolean = false
+  @volatile private var interrupted: Boolean = false
 
-  // Whether the task has completed, before the onCompleteCallbacks are executed.
-  @volatile var completed: Boolean = false
+  // Whether the task has completed.
+  @volatile private var completed: Boolean = false
+
+  /** Checks whether the task has completed. */
+  def isCompleted: Boolean = completed
+
+  /** Checks whether the task has been killed. */
+  def isInterrupted: Boolean = interrupted
+
+  // TODO: Also track whether the task has completed successfully or with exception.
+
+  /**
+   * Add a (Java friendly) listener to be executed on task completion.
+   * This will be called in all situation - success, failure, or cancellation.
+   *
+   * An example use is for HadoopRDD to register a callback to close the input stream.
+   */
+  def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+    onCompleteCallbacks += listener
+    this
+  }
+
+  /**
+   * Add a listener in the form of a Scala closure to be executed on task completion.
+   * This will be called in all situation - success, failure, or cancellation.
+   *
+   * An example use is for HadoopRDD to register a callback to close the input stream.
+   */
+  def addTaskCompletionListener(f: TaskContext => Unit): this.type = {
+    onCompleteCallbacks += new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    }
+    this
+  }
 
   /**
    * Add a callback function to be executed on task completion. An example use
@@ -53,13 +93,22 @@ class TaskContext(
    * Will be called in any situation - success, failure, or cancellation.
    * @param f Callback function.
    */
+  @deprecated("use addTaskCompletionListener", "1.1.0")
   def addOnCompleteCallback(f: () => Unit) {
-    onCompleteCallbacks += f
+    onCompleteCallbacks += new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f()
+    }
   }
 
-  def executeOnCompleteCallbacks() {
+  /** Marks the task as completed and triggers the listeners. */
+  private[spark] def markTaskCompleted(): Unit = {
     completed = true
     // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach { _() }
+    onCompleteCallbacks.reverse.foreach { _.onTaskCompletion(this) }
+  }
+
+  /** Marks the task for interruption, i.e. cancellation. */
+  private[spark] def markInterrupted(): Unit = {
+    interrupted = true
   }
 }

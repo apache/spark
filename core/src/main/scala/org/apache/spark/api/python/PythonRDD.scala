@@ -68,7 +68,7 @@ private[spark] class PythonRDD(
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
-    context.addOnCompleteCallback { () =>
+    context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
 
       // Cleanup the worker socket. This will also cause the Python worker to exit.
@@ -137,7 +137,7 @@ private[spark] class PythonRDD(
           }
         } catch {
 
-          case e: Exception if context.interrupted =>
+          case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
             throw new TaskKilledException
 
@@ -176,7 +176,7 @@ private[spark] class PythonRDD(
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
     def shutdownOnTaskCompletion() {
-      assert(context.completed)
+      assert(context.isCompleted)
       this.interrupt()
     }
 
@@ -209,7 +209,7 @@ private[spark] class PythonRDD(
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
         dataOut.flush()
       } catch {
-        case e: Exception if context.completed || context.interrupted =>
+        case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
 
         case e: Exception =>
@@ -235,10 +235,10 @@ private[spark] class PythonRDD(
     override def run() {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
-      while (!context.interrupted && !context.completed) {
+      while (!context.isInterrupted && !context.isCompleted) {
         Thread.sleep(2000)
       }
-      if (!context.completed) {
+      if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
           env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
