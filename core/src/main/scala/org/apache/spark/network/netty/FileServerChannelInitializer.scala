@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.network.netty
 
-/**
- * Filter specifying a split and type of comparison to be applied on features
- * @param split split specifying the feature index, type and threshold
- * @param comparison integer specifying <,=,>
- */
-private[tree] case class Filter(split: Split, comparison: Int) {
-  // Comparison -1,0,1 signifies <.=,>
-  override def toString = " split = " + split + "comparison = " + comparison
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.socket.SocketChannel
+import io.netty.handler.codec.{DelimiterBasedFrameDecoder, Delimiters}
+import io.netty.handler.codec.string.StringDecoder
+
+class FileServerChannelInitializer(pResolver: PathResolver)
+  extends ChannelInitializer[SocketChannel] {
+
+  override def initChannel(channel: SocketChannel): Unit = {
+    channel.pipeline
+      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter : _*))
+      .addLast("stringDecoder", new StringDecoder)
+      .addLast("handler", new FileServerHandler(pResolver))
+  }
 }

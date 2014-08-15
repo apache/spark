@@ -15,27 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty;
+package org.apache.spark.network.netty
 
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.Delimiters;
-import io.netty.handler.codec.string.StringDecoder;
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.socket.SocketChannel
+import io.netty.handler.codec.string.StringEncoder
 
-class FileServerChannelInitializer extends ChannelInitializer<SocketChannel> {
 
-  private final PathResolver pResolver;
+class FileClientChannelInitializer(handler: FileClientHandler)
+  extends ChannelInitializer[SocketChannel] {
 
-  FileServerChannelInitializer(PathResolver pResolver) {
-    this.pResolver = pResolver;
-  }
-
-  @Override
-  public void initChannel(SocketChannel channel) {
-    channel.pipeline()
-      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter()))
-      .addLast("stringDecoder", new StringDecoder())
-      .addLast("handler", new FileServerHandler(pResolver));
+  def initChannel(channel: SocketChannel) {
+    channel.pipeline.addLast("encoder", new StringEncoder).addLast("handler", handler)
   }
 }
