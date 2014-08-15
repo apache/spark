@@ -73,8 +73,17 @@ object CommandUtils extends Logging {
       extraEnvironment = command.environment)
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
+    val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
+    val jvmversion = Utils.executeAndGetOutput(Seq(runner + " -version "),
+      extraEnvironment = command.environment)
+    val version = jvmversion.substring(jvmversion.indexOf("\"") + 1, jvmversion.indexOf("_"))
+    if (version.compareTo("1.8.0") < 0) {
+      Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+        permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
+    } else {
+      Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+        libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
+    }
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
