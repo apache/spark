@@ -495,8 +495,10 @@ private[spark] object Utils extends Logging {
         // a better address using the local network interfaces
         // getNetworkInterfaces returns ifs in reverse order compared to ifconfig output order
         // on unix-like system. On windows, it returns in index order.
-        // It's more proper to pick ip address following the ifconfig output order
-        for (ni <- NetworkInterface.getNetworkInterfaces.toList.reverse) {
+        // It's more proper to pick ip address following system output order.
+        val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.toList
+        val reOrderedNetworkIFs = if (isWindows) activeNetworkIFs else activeNetworkIFs.reverse
+        for (ni <- reOrderedNetworkIFs) {
           for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
                !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
             // We've found an address that looks reasonable!
