@@ -17,12 +17,13 @@
 
 from collections import defaultdict
 from itertools import chain, ifilter, imap
-import time
 import operator
 
 from pyspark.serializers import NoOpSerializer,\
     BatchedSerializer, CloudPickleSerializer, pack_long
 from pyspark.rdd import _JavaStackTrace
+from pyspark.storagelevel import StorageLevel
+from pyspark.resultiterable import ResultIterable
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -35,6 +36,8 @@ class DStream(object):
         self._ssc = ssc
         self.ctx = ssc._sc
         self._jrdd_deserializer = jrdd_deserializer
+        self.is_cached = False
+        self.is_checkpointed = False
 
     def context(self):
         """
@@ -247,8 +250,6 @@ class DStream(object):
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
-            print rdd.glom().collect()
-            print "-------------------------------------------"
             print "-------------------------------------------"
             for record in taken[:10]:
                 print record
@@ -303,32 +304,65 @@ class DStream(object):
 
         self.foreachRDD(get_output)
 
-    def _test_switch_dserializer(self, serializer_que):
+    def cache(self):
         """
-        Deserializer is dynamically changed based on numSlice and the number of
-        input. This function choose deserializer. Currently this is just FIFO.
+        Persist this DStream with the default storage level (C{MEMORY_ONLY_SER}).
         """
-        
-        jrdd_deserializer = self._jrdd_deserializer
+        self.is_cached = True
+        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        return self
 
-        def switch(rdd, jtime):
-            try:
-                print serializer_que
-                jrdd_deserializer = serializer_que.pop(0)
-                print jrdd_deserializer
-            except Exception as e:
-                print e
+    def persist(self, storageLevel):
+        """
+        Set this DStream's storage level to persist its values across operations
+        after the first time it is computed. This can only be used to assign
+        a new storage level if the DStream does not have a storage level set yet.
+        """
+        self.is_cached = True
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jdstream.persist(javaStorageLevel)
+        return self
 
-        self.foreachRDD(switch)
+    def checkpoint(self, interval):
+        """
+        Mark this DStream for checkpointing. It will be saved to a file inside the
+        checkpoint directory set with L{SparkContext.setCheckpointDir()}
 
+        I am not sure this part in DStream
+        and
+        all references to its parent RDDs will be removed. This function must
+        be called before any job has been executed on this RDD. It is strongly
+        recommended that this RDD is persisted in memory, otherwise saving it
+        on a file will require recomputation.
+
+        interval must be pysprak.streaming.duration
+        """
+        self.is_checkpointed = True
+        self._jdstream.checkpoint(interval)
+        return self
+
+    def groupByKey(self, numPartitions=None):
+        def createCombiner(x):
+            return [x]
+
+        def mergeValue(xs, x):
+            xs.append(x)
+            return xs
+
+        def mergeCombiners(a, b):
+            a.extend(b)
+            return a
+
+        return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
+                                 numPartitions).mapValues(lambda x: ResultIterable(x))
 
 
 # TODO: implement groupByKey
-# TODO: impelment union
-# TODO: implement cache
-# TODO: implement persist
-# TODO: implement repertitions
 # TODO: implement saveAsTextFile
+
+# Following operation has dependency to transform
+# TODO: impelment union
+# TODO: implement repertitions
 # TODO: implement cogroup
 # TODO: implement join
 # TODO: implement countByValue
@@ -355,6 +389,7 @@ class PipelinedDStream(DStream):
             self._prev_jdstream = prev._prev_jdstream  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
+        self.is_checkpointed = False
         self._ssc = prev._ssc
         self.ctx = prev.ctx
         self.prev = prev
@@ -391,4 +426,4 @@ class PipelinedDStream(DStream):
         return self._jdstream_val
 
     def _is_pipelinable(self):
-        return not self.is_cached
+        return not (self.is_cached or self.is_checkpointed)
