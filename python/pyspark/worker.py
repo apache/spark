@@ -23,7 +23,6 @@ import sys
 import time
 import socket
 import traceback
-import itertools
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
 from pyspark.accumulators import _accumulatorRegistry
@@ -75,16 +74,6 @@ def main(infile, outfile):
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
-        print "deserializer in worker: %s" % str(deserializer)
-        iterator, walk = itertools.tee(iterator)
-        if isinstance(walk, int):
-            print "this is int"
-            print walk
-        else:
-            try:
-                print list(walk)
-            except:
-                print list(walk)
         serializer.dump_stream(func(split_index, iterator), outfile)
     except Exception as e:
         # Write the error to stderr in addition to trying to pass it back to
