@@ -129,7 +129,7 @@ class NewHadoopRDD[K, V](
       context.taskMetrics.inputMetrics = Some(inputMetrics)
 
       // Register an on-task-completion callback to close the input stream.
-      context.addOnCompleteCallback(() => close())
+      context.addTaskCompletionListener(context => close())
       var havePair = false
       var finished = false
 
