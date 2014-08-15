@@ -30,6 +30,7 @@ import sys
 import tempfile
 import time
 import zipfile
+import random
 
 if sys.version_info[:2] <= (2, 6):
     import unittest2 as unittest
@@ -40,7 +41,7 @@ else:
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
-from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 
 _have_scipy = False
 _have_numpy = False
@@ -115,6 +116,28 @@ class TestMerger(unittest.TestCase):
         self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
                          self.N * 10)
         m._cleanup()
+
+
+class TestSorter(unittest.TestCase):
+    def test_in_memory_sort(self):
+        l = range(1024)
+        random.shuffle(l)
+        sorter = ExternalSorter(1024)
+        self.assertEquals(sorted(l), sorter.sorted(l))
+        self.assertEquals(sorted(l, reverse=True), sorter.sorted(l, reverse=True))
+        self.assertEquals(sorted(l, key=lambda x: -x), sorter.sorted(l, key=lambda x: -x))
+        self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
+                          sorter.sorted(l, key=lambda x: -x, reverse=True))
+
+    def test_external_sort(self):
+        l = range(100)
+        random.shuffle(l)
+        sorter = ExternalSorter(1)
+        self.assertEquals(sorted(l), list(sorter.sorted(l)))
+        self.assertEquals(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
+        self.assertEquals(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
+        self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
+                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
 
 class SerializationTestCase(unittest.TestCase):

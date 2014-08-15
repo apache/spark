@@ -44,7 +44,7 @@ from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
-    get_used_memory
+    get_used_memory, ExternalSorter
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -587,14 +587,19 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
+        spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower() == 'true')
+        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
+        serializer = self._jrdd_deserializer
+
+        def sortPartition(iterator):
+            if spill:
+                sorted = ExternalSorter(memory * 0.9, serializer).sorted
+            return sorted(iterator, key=lambda (k, v): keyfunc(k), reverse=(not ascending))
+
         if numPartitions == 1:
             if self.getNumPartitions() > 1:
                 self = self.coalesce(1)
-
-            def sort(iterator):
-                return sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
-
-            return self.mapPartitions(sort)
+            return self.mapPartitions(sortPartition)
 
         # first compute the boundary of each part via sampling: we want to partition
         # the key-space into bins such that the bins have roughly the same
@@ -617,10 +622,8 @@ class RDD(object):
             else:
                 return numPartitions - 1 - p
 
-        def mapFunc(iterator):
-            return sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
-
-        return self.partitionBy(numPartitions, rangePartitionFunc).mapPartitions(mapFunc, True)
+        return (self.partitionBy(numPartitions, rangePartitionFunc)
+                .mapPartitions(sortPartition, True))
 
     def sortBy(self, keyfunc, ascending=True, numPartitions=None):
         """
