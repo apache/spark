@@ -93,7 +93,7 @@ private[spark] object JettyUtils extends Logging {
   def createServletHandler(
       path: String,
       servlet: HttpServlet,
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String): ServletContextHandler = {
     val prefixedPath = attachPrefix(basePath, path)
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
