@@ -27,22 +27,30 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 /**
  * :: Experimental ::
  * Stores all the configuration options for tree construction
- * @param algo classification or regression
- * @param impurity criterion used for information gain calculation
+ * @param algo  Learning goal.  Supported:
+ *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
+ *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+ * @param impurity Criterion used for information gain calculation.
+ *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+ *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+ *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
- * @param numClassesForClassification number of classes for classification. Default value is 2
- *                                    leads to binary classification
- * @param maxBins maximum number of bins used for splitting features
- * @param quantileCalculationStrategy algorithm for calculating quantiles
+ * @param numClassesForClassification Number of classes for classification.
+ *                                    (Ignored for regression.)
+ *                                    Default value is 2 (binary classification).
+ * @param maxBins Maximum number of bins used for discretizing continuous features and
+ *                for choosing how to split on features at each node.
+ *                More bins give higher granularity.
+ * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
  *                                number of discrete values they take. For example, an entry (n ->
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
- * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
+ * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      128 MB.
- *
  */
 @Experimental
 class Strategy (
@@ -64,20 +72,7 @@ class Strategy (
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
   /**
-   * Java-friendly constructor.
-   *
-   * @param algo classification or regression
-   * @param impurity criterion used for information gain calculation
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value is 2
-   *                                    leads to binary classification
-   * @param maxBins maximum number of bins used for splitting features
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example, an entry
-   *                                (n -> k) implies the feature n is categorical with k categories
-   *                                0, 1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
    */
   def this(
       algo: Algo,
@@ -90,6 +85,10 @@ class Strategy (
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
+  /**
+   * Check validity of parameters.
+   * Throws exception if invalid.
+   */
   private[tree] def assertValid(): Unit = {
     algo match {
       case Classification =>
