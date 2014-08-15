@@ -634,7 +634,7 @@ class DAGScheduler(
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)
       } finally {
-        taskContext.executeOnCompleteCallbacks()
+        taskContext.markTaskCompleted()
       }
     } catch {
       case e: Exception =>

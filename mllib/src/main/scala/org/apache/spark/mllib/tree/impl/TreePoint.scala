@@ -35,12 +35,12 @@ import org.apache.spark.rdd.RDD
  *      or any categorical feature used in regression or binary classification.
  *
  * @param label  Label from LabeledPoint
- * @param features  Binned feature values.
- *                  Same length as LabeledPoint.features, but values are bin indices.
+ * @param binnedFeatures  Binned feature values.
+ *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[tree] class TreePoint(val label: Double, val features: Array[Int]) extends Serializable {
+private[tree] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
+  extends Serializable {
 }
-
 
 private[tree] object TreePoint {
 
@@ -76,7 +76,7 @@ private[tree] object TreePoint {
     val numFeatures = labeledPoint.features.size
     val numBins = bins(0).size
     val arr = new Array[Int](numFeatures)
-    var featureIndex = 0 // offset by 1 for label
+    var featureIndex = 0
     while (featureIndex < numFeatures) {
       val featureInfo = categoricalFeaturesInfo.get(featureIndex)
       val isFeatureContinuous = featureInfo.isEmpty
@@ -97,7 +97,6 @@ private[tree] object TreePoint {
 
     new TreePoint(labeledPoint.label, arr)
   }
-
 
   /**
    * Find bin for one (labeledPoint, feature).
@@ -129,11 +128,9 @@ private[tree] object TreePoint {
         val highThreshold = bin.highSplit.threshold
         if ((lowThreshold < feature) && (highThreshold >= feature)) {
           return mid
-        }
-        else if (lowThreshold >= feature) {
+        } else if (lowThreshold >= feature) {
           right = mid - 1
-        }
-        else {
+        } else {
           left = mid + 1
         }
       }
@@ -181,7 +178,8 @@ private[tree] object TreePoint {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {
-        throw new UnknownError("No bin was found for continuous feature." +
+        throw new RuntimeException("No bin was found for continuous feature." +
+          " This error can occur when given invalid data values (such as NaN)." +
           s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex
@@ -193,7 +191,8 @@ private[tree] object TreePoint {
           sequentialBinSearchForOrderedCategoricalFeature()
         }
       if (binIndex == -1) {
-        throw new UnknownError("No bin was found for categorical feature." +
+        throw new RuntimeException("No bin was found for categorical feature." +
+          " This error can occur when given invalid data values (such as NaN)." +
           s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex

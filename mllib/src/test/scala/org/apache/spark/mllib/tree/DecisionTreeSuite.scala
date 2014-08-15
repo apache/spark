@@ -17,17 +17,16 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.mllib.tree.impl.TreePoint
-
 import scala.collection.JavaConverters._
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
-import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.impl.TreePoint
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -43,10 +42,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       prediction != expected.label
     }
     val accuracy = (input.length - numOffPredictions).toDouble / input.length
-    if (accuracy < requiredAccuracy) {
-      println(s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
-    }
-    assert(accuracy >= requiredAccuracy)
+    assert(accuracy >= requiredAccuracy,
+      s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
   }
 
   def validateRegressor(
@@ -59,7 +56,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       err * err
     }.sum
     val mse = squaredError / input.length
-    assert(mse <= requiredMSE)
+    assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
   }
 
   test("split and bin calculation") {
@@ -589,8 +586,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   // TODO: Decide about testing 2nd level
-  /*
   test("second level node building with/without groups") {
+    println("START second level node building with/without groups")
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -603,14 +600,20 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()), -1)
+    // Train a 1-node model
+    val strategyOneNode = new Strategy(Classification, Entropy, 1, 2, 100)
+    val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
+    val nodes: Array[Node] = new Array[Node](7)
+    nodes(0) = modelOneNode.topNode
+
+/*    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()), -1)
     val rightFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()) ,1)
-    val filters = Array[List[Filter]](List(), List(leftFilter), List(rightFilter))
+    val filters = Array[List[Filter]](List(), List(leftFilter), List(rightFilter))*/
     val parentImpurities = Array(0.5, 0.5, 0.5)
 
     // Single group second level tree construction.
     val treeInput = TreePoint.convertToTreeRDD(rdd, strategy, bins)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, parentImpurities, strategy, 1, filters,
+    val bestSplits = DecisionTree.findBestSplits(treeInput, parentImpurities, strategy, 1, nodes,
       splits, bins, 10, unorderedFeatures)
     assert(bestSplits.length === 2)
     assert(bestSplits(0)._2.gain > 0)
@@ -619,7 +622,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     // maxLevelForSingleGroup parameter is set to 0 to force splitting into groups for second
     // level tree construction.
     val bestSplitsWithGroups = DecisionTree.findBestSplits(treeInput, parentImpurities, strategy, 1,
-      filters, splits, bins, 0)
+      nodes, splits, bins, 0, unorderedFeatures)
     assert(bestSplitsWithGroups.length === 2)
     assert(bestSplitsWithGroups(0)._2.gain > 0)
     assert(bestSplitsWithGroups(1)._2.gain > 0)
@@ -635,7 +638,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(bestSplits(i)._2.predict === bestSplitsWithGroups(i)._2.predict)
     }
   }
-  */
 
   test("stump with categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
