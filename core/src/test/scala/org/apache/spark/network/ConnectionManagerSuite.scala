@@ -260,7 +260,7 @@ class ConnectionManagerSuite extends FunSuite {
 
   }
 
-  test("sendMessageRelyably timeout") {
+  test("sendMessageReliably timeout") {
     val clientConf = new SparkConf
     clientConf.set("spark.authenticate", "false")
     val ackTimeout = 30
