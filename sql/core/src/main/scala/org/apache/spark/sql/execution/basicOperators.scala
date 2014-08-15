@@ -206,7 +206,8 @@ case class Sort(
 object ExistingRdd {
   def convertToCatalyst(a: Any): Any = a match {
     case o: Option[_] => o.orNull
-    case s: Seq[Any] => s.map(convertToCatalyst)
+    case s: Seq[_] => s.map(convertToCatalyst)
+    case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
   }
