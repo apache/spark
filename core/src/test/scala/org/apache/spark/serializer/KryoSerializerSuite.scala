@@ -218,25 +218,6 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
     assert(thrown.getMessage.contains("Failed to invoke this.class.does.not.exist"))
   }
-
-  test("default class loader can be set by a different thread") {
-    val ser = new KryoSerializer(new SparkConf)
-
-    // First serialize the object
-    val serInstance = ser.newInstance()
-    val bytes = serInstance.serialize(new ClassLoaderTestingObject)
-
-    // Deserialize the object to make sure normal deserialization works
-    serInstance.deserialize[ClassLoaderTestingObject](bytes)
-
-    // Set a special, broken ClassLoader and make sure we get an exception on deserialization
-    ser.setDefaultClassLoader(new ClassLoader() {
-      override def loadClass(name: String) = throw new UnsupportedOperationException
-    })
-    intercept[UnsupportedOperationException] {
-      ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
-    }
-  }
 }
 
 
