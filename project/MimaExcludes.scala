@@ -117,6 +117,11 @@ object MimaExcludes {
           ) ++
           Seq( // new Vector methods in MLlib (binary compatible assuming users do not implement Vector)
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.copy")
+          ) ++
+          Seq( // synthetic methods generated in LabeledPoint
+            ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.regression.LabeledPoint$"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.regression.LabeledPoint.apply"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LabeledPoint.toString")
           )
         case v if v.startsWith("1.0") =>
           Seq(
