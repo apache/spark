@@ -62,10 +62,8 @@ private[spark] class ConnectionManager(
     var ackMessage: Option[Message] = None
 
     def markDone(ackMessage: Option[Message]) {
-      this.synchronized {
-        this.ackMessage = ackMessage
-        completionHandler(this)
-      }
+      this.ackMessage = ackMessage
+      completionHandler(this)
     }
   }
 
@@ -848,11 +846,9 @@ private[spark] class ConnectionManager(
         messageStatuses.synchronized {
           isAckTimeout = true
           messageStatuses.remove(message.id).foreach ( s => {
-            s.synchronized {
-              promise.failure(
-                new IOException(s"sendMessageReliably failed because ack " +
-                  "was not received within ${ackTimeout} sec"))
-            }
+            promise.failure(
+              new IOException(s"sendMessageReliably failed because ack " +
+                "was not received within ${ackTimeout} sec"))
           })
         }
       }
