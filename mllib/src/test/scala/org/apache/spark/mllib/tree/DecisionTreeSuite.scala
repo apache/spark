@@ -17,17 +17,16 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.mllib.tree.impl.TreePoint
-
 import scala.collection.JavaConverters._
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Filter, Split}
-import org.apache.spark.mllib.tree.configuration.{FeatureType, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.{FeatureType, Strategy}
+import org.apache.spark.mllib.tree.impl.TreePoint
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Filter, Split}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -43,10 +42,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       prediction != expected.label
     }
     val accuracy = (input.length - numOffPredictions).toDouble / input.length
-    if (accuracy < requiredAccuracy) {
-      println(s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
-    }
-    assert(accuracy >= requiredAccuracy)
+    assert(accuracy >= requiredAccuracy,
+      s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
   }
 
   def validateRegressor(
@@ -59,7 +56,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       err * err
     }.sum
     val mse = squaredError / input.length
-    assert(mse <= requiredMSE)
+    assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
   }
 
   test("split and bin calculation") {

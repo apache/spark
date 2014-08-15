@@ -25,8 +25,7 @@ import org.apache.spark.annotation.Experimental
  * Time tracker implementation which holds labeled timers.
  */
 @Experimental
-private[tree]
-class TimeTracker extends Serializable {
+private[tree] class TimeTracker extends Serializable {
 
   private val starts: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()
 
@@ -36,24 +35,24 @@ class TimeTracker extends Serializable {
    * Starts a new timer, or re-starts a stopped timer.
    */
   def start(timerLabel: String): Unit = {
-    val tmpTime = System.nanoTime()
+    val currentTime = System.nanoTime()
     if (starts.contains(timerLabel)) {
       throw new RuntimeException(s"TimeTracker.start(timerLabel) called again on" +
         s" timerLabel = $timerLabel before that timer was stopped.")
     }
-    starts(timerLabel) = tmpTime
+    starts(timerLabel) = currentTime
   }
 
   /**
    * Stops a timer and returns the elapsed time in seconds.
    */
   def stop(timerLabel: String): Double = {
-    val tmpTime = System.nanoTime()
+    val currentTime = System.nanoTime()
     if (!starts.contains(timerLabel)) {
       throw new RuntimeException(s"TimeTracker.stop(timerLabel) called on" +
         s" timerLabel = $timerLabel, but that timer was not started.")
     }
-    val elapsed = tmpTime - starts(timerLabel)
+    val elapsed = currentTime - starts(timerLabel)
     starts.remove(timerLabel)
     if (totals.contains(timerLabel)) {
       totals(timerLabel) += elapsed
