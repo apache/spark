@@ -121,6 +121,9 @@ class DAGScheduler(
 
   private[scheduler] var eventProcessActor: ActorRef = _
 
+  /** If enabled, we may run certain actions like take() and first() locally. */
+  private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
+
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
     // not null before any job is submitted
@@ -631,7 +634,7 @@ class DAGScheduler(
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)
       } finally {
-        taskContext.executeOnCompleteCallbacks()
+        taskContext.markTaskCompleted()
       }
     } catch {
       case e: Exception =>
@@ -732,7 +735,9 @@ class DAGScheduler(
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
-      if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
+      val shouldRunLocally =
+        localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
+      if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
         listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
         runLocally(job)

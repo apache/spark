@@ -31,6 +31,7 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
+  val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -87,8 +88,7 @@ trait SQLConf {
    *
    * Defaults to false as this feature is currently experimental.
    */
-  private[spark] def codegenEnabled: Boolean =
-    if (getConf(CODEGEN_ENABLED, "false") == "true") true else false
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -107,6 +107,12 @@ trait SQLConf {
    */
   private[spark] def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
+
+  /**
+   * When set to true, we always treat byte arrays in Parquet files as strings.
+   */
+  private[spark] def isParquetBinaryAsString: Boolean =
+    getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
