@@ -373,6 +373,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     ParquetRelation.enableLogForwarding()
 
+    // NOTE: Explicitly list "_temporary" because hadoop 0.23 removed the variable TEMP_DIR_NAME
+    // from FileOutputCommitter. Check MAPREDUCE-5229 for the detail.
     val children = fs.listStatus(path).filterNot { status =>
       val name = status.getPath.getName
       name(0) == '.' || name == FileOutputCommitter.SUCCEEDED_FILE_NAME || name == "_temporary"
