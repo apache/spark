@@ -62,6 +62,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private val listeners = new ArrayBuffer[CleanerListener]
     with SynchronizedBuffer[CleanerListener]
 
+  private var isTriggerGC = false
+
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
   /**
@@ -114,20 +116,29 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def keepCleaning(): Unit = Utils.logUncaughtExceptions {
     while (!stopped) {
       try {
-        val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
-          .map(_.asInstanceOf[CleanupTaskWeakReference])
-        reference.map(_.task).foreach { task =>
-          logDebug("Got cleaning task " + task)
-          referenceBuffer -= reference.get
-          task match {
-            case CleanRDD(rddId) =>
-              doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
-            case CleanShuffle(shuffleId) =>
-              doCleanupShuffle(shuffleId, blocking = blockOnCleanupTasks)
-            case CleanBroadcast(broadcastId) =>
-              doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
+        var reference = Option(referenceQueue.poll()).
+          map(_.asInstanceOf[CleanupTaskWeakReference])
+        while (reference.isDefined) {
+          reference.map(_.task).foreach { task =>
+            logDebug("Got cleaning task " + task)
+            referenceBuffer -= reference.get
+            task match {
+              case CleanRDD(rddId) =>
+                doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
+              case CleanShuffle(shuffleId) =>
+                doCleanupShuffle(shuffleId, blocking = blockOnCleanupTasks)
+              case CleanBroadcast(broadcastId) =>
+                doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
+            }
           }
+          reference = Option(referenceQueue.poll()).
+            map(_.asInstanceOf[CleanupTaskWeakReference])
         }
+        if (isTriggerGC) {
+          ContextCleaner.runGC()
+          isTriggerGC = false
+        }
+        Thread.sleep(ContextCleaner.REF_QUEUE_POLL_TIMEOUT)
       } catch {
         case e: Exception => logError("Error in cleaning thread", e)
       }
@@ -171,6 +182,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
+  private[spark] def triggerAsyncGC() {
+    isTriggerGC = true
+  }
+
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
@@ -179,8 +194,24 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   // to ensure that more reliable testing.
 }
 
-private object ContextCleaner {
+private[spark] object ContextCleaner extends Logging {
   private val REF_QUEUE_POLL_TIMEOUT = 100
+
+  /** Run garbage collection and make sure it actually has run */
+  private def runGC() {
+    val weakRef = new WeakReference(new Object())
+    val startTime = System.currentTimeMillis
+    System.gc()
+    System.runFinalization()
+    while (weakRef.get != null) {
+      System.gc()
+      System.runFinalization()
+      Thread.sleep(200)
+      if (System.currentTimeMillis - startTime > 10000) {
+        logError("Automatically garbage collection error!")
+      }
+    }
+  }
 }
 
 /**
