@@ -18,6 +18,9 @@
 """
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
+Other option is separate this test case with other tests.
+This makes sense becuase streaming tests takes long time due to waiting time
+for stoping callback server.
 
 This file will merged to tests.py. But for now, this file is separated due
 to focusing to streaming test case
@@ -45,7 +48,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         self.ssc._sc.stop()
         # Why does it long time to terminaete StremaingContext and SparkContext?
         # Should we change the sleep time if this depends on machine spec?
-        time.sleep(8)
+        time.sleep(10)
 
     @classmethod
     def tearDownClass(cls):
@@ -302,7 +305,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         """Start stream and return the output"""
         # Generate input stream with user-defined input
         numSlices = numSlices or self.numInputPartitions
-        test_input_stream = self.ssc._testInputStream2(test_input, numSlices)
+        test_input_stream = self.ssc._testInputStream(test_input, numSlices)
         # Apply test function to stream
         test_stream = test_func(test_input_stream)
         # Add job to get output from stream
