@@ -32,10 +32,6 @@ class TestJavaSerializerImpl extends Serializer {
 
   @Override
   public SerializerInstance newInstance() {
-    Option<ClassLoader> clOption = defaultClassLoader();
-    if (clOption.isDefined()) {
-      ClassLoader defaultCl = clOption.get();
-    }
     return null;
   }
 
