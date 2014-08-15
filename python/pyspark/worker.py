@@ -86,16 +86,6 @@ def main(infile, outfile):
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
-        print "deserializer in worker: %s" % str(deserializer)
-        iterator, walk = itertools.tee(iterator)
-        if isinstance(walk, int):
-            print "this is int"
-            print walk
-        else:
-            try:
-                print list(walk)
-            except:
-                print list(walk)
         serializer.dump_stream(func(split_index, iterator), outfile)
     except Exception:
         try:
