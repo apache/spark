@@ -562,7 +562,7 @@ class SparkContext(object):
         rest = ListConverter().convert(rest, self._gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
-    def broadcast(self, value, keep=False):
+    def broadcast(self, value):
         """
         Broadcast a read-only variable to the cluster, returning a
         L{Broadcast<pyspark.broadcast.Broadcast>}
@@ -577,9 +577,8 @@ class SparkContext(object):
         ser.dump_stream([value], tempFile)
         tempFile.close()
         jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
-        os.unlink(tempFile.name)
-        return Broadcast(jbroadcast.id(), value, jbroadcast,
-                         self._pickled_broadcast_vars, keep)
+        return Broadcast(jbroadcast.id(), None, jbroadcast,
+                         self._pickled_broadcast_vars, tempFile.name)
 
     def accumulator(self, value, accum_param=None):
         """
