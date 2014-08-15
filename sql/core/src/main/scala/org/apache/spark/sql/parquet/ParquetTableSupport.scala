@@ -173,7 +173,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
-        case t @ ArrayType(_, false) => writeArray(
+        case t @ ArrayType(_, _) => writeArray(
           t,
           value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
         case t @ MapType(_, _, _) => writeMap(
@@ -228,21 +228,35 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
   }
 
-  // TODO: support null values, see
-  // https://issues.apache.org/jira/browse/SPARK-1649
   private[parquet] def writeArray(
       schema: ArrayType,
       array: CatalystConverter.ArrayScalaType[_]): Unit = {
     val elementType = schema.elementType
     writer.startGroup()
     if (array.size > 0) {
-      writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
-      var i = 0
-      while(i < array.size) {
-        writeValue(elementType, array(i))
-        i = i + 1
+      if (schema.containsNull) {
+        writer.startField(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME, 0)
+        var i = 0
+        while (i < array.size) {
+          writer.startGroup()
+          if (array(i) != null) {
+            writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+            writeValue(elementType, array(i))
+            writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+          }
+          writer.endGroup()
+          i = i + 1
+        }
+        writer.endField(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME, 0)
+      } else {
+        writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
+        var i = 0
+        while (i < array.size) {
+          writeValue(elementType, array(i))
+          i = i + 1
+        }
+        writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
       }
-      writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
     }
     writer.endGroup()
   }

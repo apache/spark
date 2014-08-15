@@ -78,6 +78,7 @@ case class AllDataTypesWithNonPrimitiveType(
     booleanField: Boolean,
     binaryField: Array[Byte],
     array: Seq[Int],
+    arrayContainsNull: Seq[Option[Int]],
     map: Map[Int, Long],
     mapValueContainsNull: Map[Int, Option[Long]],
     data: Data)
@@ -195,6 +196,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
         (0 to x).map(_.toByte).toArray,
         (0 until x),
+        (0 until x).map(Option(_).filter(_ % 3 == 0)),
         (0 until x).map(i => i -> i.toLong).toMap,
         (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
         Data((0 until x), Nested(x, s"$x"))))
@@ -212,9 +214,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getBoolean(7) === (i % 2 == 0))
         assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
         assert(result(i)(9) === (0 until i))
-        assert(result(i)(10) === (0 until i).map(i => i -> i.toLong).toMap)
-        assert(result(i)(11) === (0 until i).map(i => i -> i.toLong).toMap + (i -> null))
-        assert(result(i)(12) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
+        assert(result(i)(10) === (0 until i).map(i => if (i % 3 == 0) i else null))
+        assert(result(i)(11) === (0 until i).map(i => i -> i.toLong).toMap)
+        assert(result(i)(12) === (0 until i).map(i => i -> i.toLong).toMap + (i -> null))
+        assert(result(i)(13) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
     }
   }
 
