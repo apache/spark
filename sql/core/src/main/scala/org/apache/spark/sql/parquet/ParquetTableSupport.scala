@@ -247,26 +247,24 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.endGroup()
   }
 
-  // TODO: support null values, see
-  // https://issues.apache.org/jira/browse/SPARK-1649
   private[parquet] def writeMap(
       schema: MapType,
       map: CatalystConverter.MapScalaType[_, _]): Unit = {
     writer.startGroup()
     if (map.size > 0) {
       writer.startField(CatalystConverter.MAP_SCHEMA_NAME, 0)
-      writer.startGroup()
-      writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
-      for(key <- map.keys) {
+      for ((key, value) <- map) {
+        writer.startGroup()
+        writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
         writeValue(schema.keyType, key)
+        writer.endField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
+        if (value != null) {
+          writer.startField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
+          writeValue(schema.valueType, value)
+          writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
+        }
+        writer.endGroup()
       }
-      writer.endField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
-      writer.startField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
-      for(value <- map.values) {
-        writeValue(schema.valueType, value)
-      }
-      writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
-      writer.endGroup()
       writer.endField(CatalystConverter.MAP_SCHEMA_NAME, 0)
     }
     writer.endGroup()
