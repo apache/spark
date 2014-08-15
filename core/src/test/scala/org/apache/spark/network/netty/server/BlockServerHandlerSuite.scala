@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.netty.server
 
-import java.io.File
+import java.io.{RandomAccessFile, File}
 import java.nio.ByteBuffer
 
 import io.netty.buffer.{Unpooled, ByteBuf}
@@ -60,8 +60,14 @@ class BlockServerHandlerSuite extends FunSuite {
 
   test("FileSegment block via zero-copy") {
     val expectedBlockId = "test_file_block"
-    val url = Thread.currentThread.getContextClassLoader.getResource("netty-test-file.txt")
-    val testFile = new File(url.toURI)
+
+    // Create random file data
+    val fileContent = new Array[Byte](1024)
+    scala.util.Random.nextBytes(fileContent)
+    val testFile = File.createTempFile("netty-test-file", "txt")
+    val fp = new RandomAccessFile(testFile, "rw")
+    fp.write(fileContent)
+    fp.close()
 
     val channel = new EmbeddedChannel(new BlockServerHandler(new BlockDataProvider {
       override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
