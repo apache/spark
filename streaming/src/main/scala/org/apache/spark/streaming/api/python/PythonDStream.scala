@@ -208,4 +208,21 @@ class PythonTestInputStream2(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
->>>>>>> broke something
+
+
+class PythonTestInputStream3(ssc_ : JavaStreamingContext)
+  extends InputDStream[Any](JavaStreamingContext.toStreamingContext(ssc_)) {
+
+  def start() {}
+
+  def stop() {}
+
+  def compute(validTime: Time): Option[RDD[Any]] = {
+    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
+    val selectedInput = ArrayBuffer(1, 2, 3).toSeq
+    val rdd :RDD[Any] = ssc.sc.makeRDD(selectedInput, 2)
+    Some(rdd)
+  }
+
+  val asJavaDStream = JavaDStream.fromDStream(this)
+}>>>>>>> broke something
