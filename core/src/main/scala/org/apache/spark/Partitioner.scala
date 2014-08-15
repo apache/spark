@@ -275,8 +275,7 @@ private[spark] object RangePartitioner {
     // We do need the future's value to continue any further
     val sketched = Await.ready(sketchFuture, Duration.Inf).value.get match {
       case scala.util.Success(v) => v.toArray
-      case scala.util.Failure(e) =>
-        throw new SparkException("Range Partitioner sampling job failed: " + e)
+      case scala.util.Failure(e) => throw e
     }
     val numItems = sketched.map(_._2.toLong).sum
     (numItems, sketched)

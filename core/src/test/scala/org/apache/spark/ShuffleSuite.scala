@@ -240,11 +240,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     }
 
     assert(thrown.getClass === classOf[SparkException])
-    // SPARK-1021 candidate fix, which wraps data driven RangePartitioner
-    // sampling job in a FutureAction, is masking the original exception with
-    // NullPointerException.  Haven't been able to figure out why yet, so
-    // I'm tentatively disabling this check as a stopgap:
-    //assert(thrown.getMessage.toLowerCase.contains("serializable"))
+    assert(thrown.getMessage.toLowerCase.contains("serializable"))
   }
 }
 
