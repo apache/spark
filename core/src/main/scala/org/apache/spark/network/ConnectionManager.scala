@@ -22,6 +22,7 @@ import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import java.net._
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicInteger
 
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
@@ -61,17 +62,17 @@ private[spark] class ConnectionManager(
     var ackMessage: Option[Message] = None
 
     def markDone(ackMessage: Option[Message]) {
-      this.synchronized {
-        this.ackMessage = ackMessage
-        completionHandler(this)
-      }
+      this.ackMessage = ackMessage
+      completionHandler(this)
     }
   }
 
   private val selector = SelectorProvider.provider.openSelector()
+  private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
   // default to 30 second timeout waiting for authentication
   private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
+  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -652,19 +653,27 @@ private[spark] class ConnectionManager(
           }
         }
         if (bufferMessage.hasAckId()) {
-          val sentMessageStatus = messageStatuses.synchronized {
+          messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
               case Some(status) => {
                 messageStatuses -= bufferMessage.ackId
-                status
+                status.markDone(Some(message))
               }
               case None => {
-                throw new Exception("Could not find reference for received ack message " +
-                  message.id)
+                /**
+                 * We can fall down on this code because of following 2 cases
+                 *
+                 * (1) Invalid ack sent due to buggy code.
+                 *
+                 * (2) Late-arriving ack for a SendMessageStatus
+                 *     To avoid unwilling late-arriving ack
+                 *     caused by long pause like GC, you can set
+                 *     larger value than default to spark.core.connection.ack.wait.timeout
+                 */
+                logWarning(s"Could not find reference for received ack Message ${message.id}")
               }
             }
           }
-          sentMessageStatus.markDone(Some(message))
         } else {
           var ackMessage : Option[Message] = None
           try {
@@ -836,9 +845,23 @@ private[spark] class ConnectionManager(
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
       : Future[Message] = {
     val promise = Promise[Message]()
+
+    val timeoutTask = new TimerTask {
+      override def run(): Unit = {
+        messageStatuses.synchronized {
+          messageStatuses.remove(message.id).foreach ( s => {
+            promise.failure(
+              new IOException(s"sendMessageReliably failed because ack " +
+                "was not received within ${ackTimeout} sec"))
+          })
+        }
+      }
+    }
+
     val status = new MessageStatus(message, connectionManagerId, s => {
+      timeoutTask.cancel()
       s.ackMessage match {
-        case None =>  // Indicates a failure where we either never sent or never got ACK'd
+        case None => // Indicates a failure where we either never sent or never got ACK'd
           promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
         case Some(ackMessage) =>
           if (ackMessage.hasError) {
@@ -852,6 +875,8 @@ private[spark] class ConnectionManager(
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
+
+    ackTimeoutMonitor.schedule(timeoutTask, ackTimeout * 1000)
     sendMessage(connectionManagerId, message)
     promise.future
   }

@@ -885,6 +885,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.core.connection.ack.wait.timeout</code></td>
+  <td>60</td>
+  <td>
+    Number of seconds for the connection to wait for ack to occur before timing
+    out and giving up. To avoid unwilling timeout caused by long pause like GC,
+    you can set larger value.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
