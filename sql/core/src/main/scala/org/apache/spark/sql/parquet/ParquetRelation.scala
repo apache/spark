@@ -60,7 +60,11 @@ private[sql] case class ParquetRelation(
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
+  override val output =
+    ParquetTypesConverter.readSchemaFromFile(
+      new Path(path),
+      conf,
+      sqlContext.isParquetBinaryAsString)
 
   override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
