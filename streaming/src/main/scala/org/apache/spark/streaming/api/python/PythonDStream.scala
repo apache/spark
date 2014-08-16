@@ -210,7 +210,7 @@ class PythonTransformedDStream(
  * This is a input stream just for the unitest. This is equivalent to a checkpointable,
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
  * returns the i_th element at the i_th batch under manual clock.
- * This implementation is close to QueStream
+ * This implementation is inspired by QueStream
  */
 
 class PythonTestInputStream(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
