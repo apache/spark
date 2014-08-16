@@ -26,13 +26,15 @@ import jline.{ConsoleReader, History}
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
@@ -116,13 +118,17 @@ private[hive] object SparkSQLCLIDriver {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    Runtime.getRuntime.addShutdownHook(
+    /**
+     * This should be executed before shutdown hook of
+     * FileSystem to avoid race condition of FileSystem operation
+     */
+    ShutdownHookManager.get.addShutdownHook(
       new Thread() {
         override def run() {
           SparkSQLEnv.stop()
         }
       }
-    )
+    , FileSystem.SHUTDOWN_HOOK_PRIORITY - 1)
 
     // "-h" option has been passed, so connect to Hive thrift server.
     if (sessionState.getHost != null) {
@@ -278,7 +284,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hconf)
 
       if (proc != null) {
-        if (proc.isInstanceOf[Driver]) {
+        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()

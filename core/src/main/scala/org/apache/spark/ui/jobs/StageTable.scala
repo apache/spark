@@ -168,7 +168,7 @@ private[ui] class StageTableBase(
     <td valign="middle">{submissionTime}</td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
-      {makeProgressBar(stageData.numActiveTasks, stageData.numCompleteTasks,
+      {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
         stageData.numFailedTasks, s.numTasks)}
     </td>
     <td sorttable_customekey={inputRead.toString}>{inputReadWithUnit}</td>

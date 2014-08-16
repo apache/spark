@@ -111,9 +111,15 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
           ) ++ 
-          Seq ( // package-private classes removed in MLlib
+          Seq( // package-private classes removed in MLlib
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.regression.GeneralizedLinearAlgorithm.org$apache$spark$mllib$regression$GeneralizedLinearAlgorithm$$prependOne")
+          ) ++
+          Seq( // new Vector methods in MLlib (binary compatible assuming users do not implement Vector)
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.copy")
+          ) ++
+          Seq ( // Scala 2.11 compatibility fix
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.<init>$default$2")
           )
         case v if v.startsWith("1.0") =>
           Seq(

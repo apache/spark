@@ -201,8 +201,9 @@ object ParquetFilters {
         (leftFilter, rightFilter) match {
           case (None, Some(filter)) => Some(filter)
           case (Some(filter), None) => Some(filter)
-          case (_, _) =>
-            Some(new AndFilter(leftFilter.get, rightFilter.get))
+          case (Some(leftF), Some(rightF)) =>
+            Some(new AndFilter(leftF, rightF))
+          case _ => None
         }
       }
       case p @ EqualTo(left: Literal, right: NamedExpression) if !right.nullable =>

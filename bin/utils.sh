@@ -24,7 +24,7 @@
 # http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader).
 # This accepts the name of the config as an argument, and expects the path of the property
 # file to be found in PROPERTIES_FILE. The value is returned through JAVA_PROPERTY_VALUE.
-parse_java_property() {
+function parse_java_property() {
   JAVA_PROPERTY_VALUE=""  # return value
   config_buffer=""        # buffer for collecting parts of a config value
   multi_line=0            # whether this config is spanning multiple lines
@@ -58,7 +58,7 @@ parse_java_property() {
 
 # Properly split java options, dealing with whitespace, double quotes and backslashes.
 # This accepts a string and returns the resulting list through SPLIT_JAVA_OPTS.
-split_java_options() {
+function split_java_options() {
   SPLIT_JAVA_OPTS=()  # return value
   option_buffer=""    # buffer for collecting parts of an option
   opened_quotes=0     # whether we are expecting a closing double quotes
@@ -93,7 +93,7 @@ split_java_options() {
 
 # Put double quotes around each of the given java options that is a system property.
 # This accepts a list and returns the quoted list through QUOTED_JAVA_OPTS
-quote_java_property() {
+function quote_java_property() {
   QUOTED_JAVA_OPTS=()
   for opt in "$@"; do
     is_system_property=$(echo "$opt" | grep -e "^-D")
@@ -106,3 +106,43 @@ quote_java_property() {
   export QUOTED_JAVA_OPTS
 }
 
+# Gather all all spark-submit options into SUBMISSION_OPTS
+function gatherSparkSubmitOpts() {
+
+  if [ -z "$SUBMIT_USAGE_FUNCTION" ]; then
+    echo "Function for printing usage of $0 is not set." 1>&2
+    echo "Please set usage function to shell variable 'SUBMIT_USAGE_FUNCTION' in $0" 1>&2
+    exit 1
+  fi
+
+  # NOTE: If you add or remove spark-sumbmit options,
+  # modify NOT ONLY this script but also SparkSubmitArgument.scala
+  SUBMISSION_OPTS=()
+  APPLICATION_OPTS=()
+  while (($#)); do
+    case "$1" in
+      --master | --deploy-mode | --class | --name | --jars | --py-files | --files | \
+      --conf | --properties-file | --driver-memory | --driver-java-options | \
+      --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
+      --total-executor-cores | --executor-cores | --queue | --num-executors | --archives)
+        if [[ $# -lt 2 ]]; then
+          "$SUBMIT_USAGE_FUNCTION"
+          exit 1;
+        fi
+        SUBMISSION_OPTS+=("$1"); shift
+        SUBMISSION_OPTS+=("$1"); shift
+        ;;
+
+      --verbose | -v | --supervise)
+        SUBMISSION_OPTS+=("$1"); shift
+        ;;
+
+      *)
+        APPLICATION_OPTS+=("$1"); shift
+        ;;
+    esac
+  done
+
+  export SUBMISSION_OPTS
+  export APPLICATION_OPTS
+}

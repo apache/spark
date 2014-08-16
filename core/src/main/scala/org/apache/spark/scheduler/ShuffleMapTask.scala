@@ -74,7 +74,7 @@ private[spark] class ShuffleMapTask(
         }
         throw e
     } finally {
-      context.executeOnCompleteCallbacks()
+      context.markTaskCompleted()
     }
   }
 
