@@ -58,36 +58,10 @@ function parse_java_property() {
 
 # Properly split java options, dealing with whitespace, double quotes and backslashes.
 # This accepts a string and returns the resulting list through SPLIT_JAVA_OPTS.
+# For security reasons, this is isolated in its own function.
 function split_java_options() {
-  SPLIT_JAVA_OPTS=()  # return value
-  option_buffer=""    # buffer for collecting parts of an option
-  opened_quotes=0     # whether we are expecting a closing double quotes
-  for word in $1; do
-    num_quotes=$(echo "$word" | sed "s/\\\\\"//g" | grep -o "\"" | grep -c .)
-    if [[ $((num_quotes % 2)) == 1 ]]; then
-      # Flip the bit
-      opened_quotes=$(((opened_quotes + 1) % 2))
-    fi
-    if [[ $opened_quotes == 0 ]]; then
-      # Remove all non-escaped quotes around the value
-      SPLIT_JAVA_OPTS+=("$(
-        echo "$option_buffer $word" | \
-        sed "s/^[[:space:]]*//" | \
-        sed "s/\([^\\]\)\"/\1/g" | \
-        sed "s/\\\\\([\\\"]\)/\1/g"
-      )")
-      option_buffer=""
-    else
-      # We are expecting a closing double quote, so keep buffering
-      option_buffer="$option_buffer $word"
-    fi
-  done
-  # Something is wrong if we ended with open double quotes
-  if [[ $opened_quotes == 1 ]]; then
-    echo -e "Java options parse error! Expecting closing double quotes:" 1>&2
-    echo -e "  ${SPLIT_JAVA_OPTS[@]}" 1>&2
-    exit 1
-  fi
+  eval set -- "$1"
+  SPLIT_JAVA_OPTS=("$@")
   export SPLIT_JAVA_OPTS
 }
 
