@@ -613,7 +613,7 @@ class SparkContext(object):
         >>> def func(iterator):
         ...    with open(SparkFiles.get("test.txt")) as testFile:
         ...        fileVal = int(testFile.readline())
-        ...        return [x * 100 for x in iterator]
+        ...        return [x * fileVal for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """
