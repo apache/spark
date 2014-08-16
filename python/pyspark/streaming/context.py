@@ -17,7 +17,6 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
-from tempfile import NamedTemporaryFile
 
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.context import SparkContext
@@ -79,6 +78,7 @@ class StreamingContext(object):
         """Kill py4j callback server properly using signal lib"""
 
         def clean_up_handler(*args):
+            SparkContext._gateway._shutdown_callback_server()
             SparkContext._gateway.shutdown()
             sys.exit(0)
 
@@ -128,6 +128,7 @@ class StreamingContext(object):
             self._jssc.stop(stopSparkContext, stopGraceFully)
         finally:
             # Stop Callback server
+            SparkContext._gateway._shutdown_callback_server()
             SparkContext._gateway.shutdown()
 
     def _testInputStream(self, test_inputs, numSlices=None):
