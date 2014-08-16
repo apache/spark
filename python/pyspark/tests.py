@@ -323,6 +323,13 @@ class TestRDDFunctions(PySparkTestCase):
         theDoes = self.sc.parallelize([jon, jane])
         self.assertEquals([jon, jane], theDoes.collect())
 
+    def test_large_broadcast(self):
+        N = 100000
+        data = [[float(i) for i in range(300)] for i in range(N)]
+        bdata = self.sc.broadcast(data)  # 270MB
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        self.assertEquals(N, m)
+
 
 class TestIO(PySparkTestCase):
 

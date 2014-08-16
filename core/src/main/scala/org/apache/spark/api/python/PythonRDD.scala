@@ -315,6 +315,14 @@ private[spark] object PythonRDD extends Logging {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
+  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
+    val file = new DataInputStream(new FileInputStream(filename))
+    val length = file.readInt()
+    val obj = new Array[Byte](length)
+    file.readFully(obj)
+    sc.broadcast(obj)
+  }
+
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
     // The right way to implement this would be to use TypeTags to get the full
     // type of T.  Since I don't want to introduce breaking changes throughout the
