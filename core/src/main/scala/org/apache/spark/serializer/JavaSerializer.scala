@@ -63,7 +63,8 @@ extends DeserializationStream {
   def close() { objIn.close() }
 }
 
-private[spark] class JavaSerializerInstance(counterReset: Int)
+
+private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
@@ -111,7 +112,10 @@ private[spark] class JavaSerializerInstance(counterReset: Int)
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
 
-  override def newInstance(): SerializerInstance = new JavaSerializerInstance(counterReset)
+  override def newInstance(): SerializerInstance = {
+    val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
+    new JavaSerializerInstance(counterReset, classLoader)
+  }
 
   override def writeExternal(out: ObjectOutput) {
     out.writeInt(counterReset)
