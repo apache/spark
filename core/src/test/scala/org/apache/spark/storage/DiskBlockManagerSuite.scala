@@ -19,6 +19,8 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
+import org.apache.spark.shuffle.hash.HashShuffleManager
+
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -42,7 +44,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   // so we coerce consolidation if not already enabled.
   testConf.set("spark.shuffle.consolidateFiles", "true")
 
-  val shuffleBlockManager = new ShuffleBlockManager(null) {
+  private val shuffleManager = new HashShuffleManager(testConf.clone)
+
+  val shuffleBlockManager = new ShuffleBlockManager(null, shuffleManager) {
     override def conf = testConf.clone
     var idToSegmentMap = mutable.Map[ShuffleBlockId, FileSegment]()
     override def getBlockLocation(id: ShuffleBlockId) = idToSegmentMap(id)
@@ -148,7 +152,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, confCopy, new LiveListenerBus))),
       confCopy)
     val store = new BlockManager("<driver>", actorSystem, master , serializer, confCopy,
-      securityManager, null)
+      securityManager, null, shuffleManager)
 
     try {
 

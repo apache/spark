@@ -33,6 +33,7 @@ import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
 
 private[spark] sealed trait BlockValues
@@ -57,11 +58,12 @@ private[spark] class BlockManager(
     maxMemory: Long,
     val conf: SparkConf,
     securityManager: SecurityManager,
-    mapOutputTracker: MapOutputTracker)
+    mapOutputTracker: MapOutputTracker,
+    shuffleManager: ShuffleManager)
   extends Logging {
 
   private val port = conf.getInt("spark.blockManager.port", 0)
-  val shuffleBlockManager = new ShuffleBlockManager(this)
+  val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
   val connectionManager =
@@ -142,9 +144,10 @@ private[spark] class BlockManager(
       serializer: Serializer,
       conf: SparkConf,
       securityManager: SecurityManager,
-      mapOutputTracker: MapOutputTracker) = {
+      mapOutputTracker: MapOutputTracker,
+      shuffleManager: ShuffleManager) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, securityManager, mapOutputTracker)
+      conf, securityManager, mapOutputTracker, shuffleManager)
   }
 
   /**

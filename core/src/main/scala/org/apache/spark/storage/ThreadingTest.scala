@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.util.concurrent.ArrayBlockingQueue
 
 import akka.actor._
+import org.apache.spark.shuffle.hash.HashShuffleManager
 import util.Random
 
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
@@ -101,7 +102,7 @@ private[spark] object ThreadingTest {
       conf)
     val blockManager = new BlockManager(
       "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024, conf,
-      new SecurityManager(conf), new MapOutputTrackerMaster(conf))
+      new SecurityManager(conf), new MapOutputTrackerMaster(conf), new HashShuffleManager(conf))
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
     producers.foreach(_.start)
