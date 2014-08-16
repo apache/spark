@@ -212,8 +212,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       maxDepth: Int,
       nodeSplitStats: (Split, InformationGainStats),
       parentImpurities: Array[Double]): Unit = {
-    if (level >= maxDepth)
+    if (level >= maxDepth) {
       return
+    }
     // 0 corresponds to the left child node and 1 corresponds to the right child node.
     var i = 0
     while (i <= 1) {
