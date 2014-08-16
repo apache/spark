@@ -66,10 +66,15 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /**
    * Whether the cleaning thread will block on cleanup tasks.
-   * This is set to true only for tests.
+   *
+   * Due to SPARK-3015, this is set to true by default. This is intended to be only a temporary
+   * workaround for the issue, which is ultimately caused by the way the BlockManager actors
+   * issue inter-dependent blocking Akka messages to each other at high frequencies. This happens,
+   * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
+   * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", false)
+    "spark.cleaner.referenceTracking.blocking", true)
 
   @volatile private var stopped = false
 
@@ -174,9 +179,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-
-  // Used for testing. These methods explicitly blocks until cleanup is completed
-  // to ensure that more reliable testing.
 }
 
 private object ContextCleaner {
