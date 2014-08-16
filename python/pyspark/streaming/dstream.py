@@ -24,6 +24,8 @@ from pyspark.serializers import NoOpSerializer,\
 from pyspark.rdd import _JavaStackTrace
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
+from pyspark.streaming.utils import rddToFileName
+
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -343,19 +345,44 @@ class DStream(object):
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
                                  numPartitions).mapValues(lambda x: ResultIterable(x))
 
+    def countByValue(self):
+        def countPartition(iterator):
+            counts = defaultdict(int)
+            for obj in iterator:
+                counts[obj] += 1
+            yield counts
 
-# TODO: implement groupByKey
-# TODO: implement saveAsTextFile
+        def mergeMaps(m1, m2):
+            for (k, v) in m2.iteritems():
+                m1[k] += v
+            return m1
+
+        return self.mapPartitions(countPartition).reduce(mergeMaps).flatMap(lambda x: x.items())
+
+    def saveAsTextFiles(self, prefix, suffix=None):
+
+        def saveAsTextFile(rdd, time):
+            path = rddToFileName(prefix, suffix, time)
+            rdd.saveAsTextFile(path)
+
+        return self.foreachRDD(saveAsTextFile)
+
+    def saveAsPickledFiles(self, prefix, suffix=None):
+
+        def saveAsTextFile(rdd, time):
+            path = rddToFileName(prefix, suffix, time)
+            rdd.saveAsPickleFile(path)
+
+        return self.foreachRDD(saveAsTextFile)
+
 
 # Following operation has dependency to transform
 # TODO: impelment union
 # TODO: implement repertitions
 # TODO: implement cogroup
 # TODO: implement join
-# TODO: implement countByValue
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
-
 
 
 class PipelinedDStream(DStream):

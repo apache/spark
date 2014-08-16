@@ -53,3 +53,9 @@ def msDurationToString(ms):
         return "%.1f m" % (float(ms) / minute)
     else:
         return "%.2f h" % (float(ms) / hour)
+
+def rddToFileName(prefix, suffix, time):
+    if suffix is not None:
+        return prefix + "-" + str(time) + "." + suffix
+    else:
+        return prefix + "-" + str(time)
