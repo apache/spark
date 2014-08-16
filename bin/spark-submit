@@ -60,22 +60,27 @@ unset EXECUTOR_EXTRA_JAVA_OPTIONS
 #
 if [[ -f "$PROPERTIES_FILE" ]]; then
   echo "Using properties file $PROPERTIES_FILE." 1>&2
-  # This exports the value of the given key into JAVA_PROPERTY_VALUE
-  parse_java_property "spark.driver.memory"
-  DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
-  parse_java_property "spark.driver.extraLibraryPath"
-  DRIVER_EXTRA_LIBRARY_PATH="$JAVA_PROPERTY_VALUE"
-  parse_java_property "spark.driver.extraClassPath"
-  DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
-  parse_java_property "spark.driver.extraJavaOptions"
-  DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
-  parse_java_property "spark.executor.extraJavaOptions"
-  EXECUTOR_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
-  if [[ -n "DRIVER_EXTRA_JAVA_OPTS" ]]; then
-    export DRIVER_EXTRA_JAVA_OPTS
-  fi
-  if [[ -n "EXECUTOR_EXTRA_JAVA_OPTS" ]]; then
-    export EXECUTOR_EXTRA_JAVA_OPTS
+  # Parse the properties file here only if these special configs exist
+  should_parse=$(grep -e "spark.driver.extra*\|spark.*.extraJavaOptions" "$PROPERTIES_FILE")
+  if [[ -n "$should_parse" ]]; then
+    # This exports the value of the given key into JAVA_PROPERTY_VALUE
+    parse_java_property "spark.driver.memory"
+    DRIVER_MEMORY_CONF="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraLibraryPath"
+    DRIVER_EXTRA_LIBRARY_PATH="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraClassPath"
+    DRIVER_EXTRA_CLASSPATH="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.driver.extraJavaOptions"
+    DRIVER_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
+    parse_java_property "spark.executor.extraJavaOptions"
+    EXECUTOR_EXTRA_JAVA_OPTS="$JAVA_PROPERTY_VALUE"
+    # Export these for SparkSubmitArguments.scala to consume
+    if [[ -n "DRIVER_EXTRA_JAVA_OPTS" ]]; then
+      export DRIVER_EXTRA_JAVA_OPTS
+    fi
+    if [[ -n "EXECUTOR_EXTRA_JAVA_OPTS" ]]; then
+      export EXECUTOR_EXTRA_JAVA_OPTS
+    fi
   fi
 elif [[ "$PROPERTIES_FILE" != "$DEFAULT_PROPERTIES_FILE" ]]; then
   echo "Warning: properties file $PROPERTIES_FILE does not exist." 1>&2
