@@ -115,9 +115,49 @@ class UISuite extends FunSuite {
     assert(boundPort1 != boundPort2)
   }
 
+  test("jetty with https selects different port under contention") {
+    val startPort = 4040
+    val server = new Server(startPort)
+
+    Try { server.start() } match {
+      case Success(s) =>
+      case Failure(e) =>
+      // Either case server port is busy hence setup for test complete
+    }
+    val sparkConf = new SparkConf()
+      .set("spark.http.policy", "https")
+      .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+    val serverInfo1 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf)
+    val serverInfo2 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf)
+    // Allow some wiggle room in case ports on the machine are under contention
+    val boundPort1 = serverInfo1.boundPort
+    val boundPort2 = serverInfo2.boundPort
+    assert(boundPort1 != startPort)
+    assert(boundPort2 != startPort)
+    assert(boundPort1 != boundPort2)
+  }
+
   test("jetty binds to port 0 correctly") {
     val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
+    val server = serverInfo.server
+    val boundPort = serverInfo.boundPort
+    assert(server.getState === "STARTED")
+    assert(boundPort != 0)
+    Try { new ServerSocket(boundPort) } match {
+      case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
+      case Failure(e) =>
+    }
+  }
+
+  test("jetty with https binds to port 0 correctly") {
+    val sparkConf = new SparkConf()
+      .set("spark.http.policy", "https")
+      .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+    val serverInfo = JettyUtils.startJettyServer(
+      "0.0.0.0", 0, Seq[ServletContextHandler](), sparkConf)
     val server = serverInfo.server
     val boundPort = serverInfo.boundPort
     assert(server.getState === "STARTED")

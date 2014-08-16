@@ -230,13 +230,13 @@ private[spark] object JettyUtils extends Logging {
 
     val context = connector.getSslContextFactory
     val needAuth = conf.getBoolean("spark.client.https.need-auth", false)
+
     context.setNeedClientAuth(needAuth)
-    context.setKeyManagerPassword(conf.get("spark.ssl.server.keystore.keypassword"))
-    if (conf.contains("spark.ssl.server.keystore.location")) {
-      context.setKeyStorePath(conf.get("spark.ssl.server.keystore.location"))
-      context.setKeyStorePassword(conf.get("spark.ssl.server.keystore.password"))
-      context.setKeyStoreType(conf.get("spark.ssl.server.keystore.type", "jks"))
-    }
+    context.setKeyManagerPassword(conf.get("spark.ssl.server.keystore.keypassword", "123456"))
+    context.setKeyStorePath(conf.get("spark.ssl.server.keystore.location"))
+    context.setKeyStorePassword(conf.get("spark.ssl.server.keystore.password", "123456"))
+    context.setKeyStoreType(conf.get("spark.ssl.server.keystore.type", "jks"))
+
     if (needAuth && conf.contains("spark.ssl.server.truststore.location")) {
       context.setTrustStore(conf.get("spark.ssl.server.truststore.location"))
       context.setTrustStorePassword(conf.get("spark.ssl.server.truststore.password"))
