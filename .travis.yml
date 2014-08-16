@@ -18,6 +18,8 @@
    - "2.10.3"
  jdk:
    - oraclejdk7
+ git:
+  depth: 1
  env:
   matrix:
    - TEST="scalastyle assembly/assembly"
