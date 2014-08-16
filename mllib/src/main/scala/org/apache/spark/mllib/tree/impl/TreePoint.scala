@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.model.Bin
 import org.apache.spark.rdd.RDD
 

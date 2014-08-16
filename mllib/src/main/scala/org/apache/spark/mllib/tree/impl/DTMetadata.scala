@@ -73,7 +73,7 @@ private[tree] object DTMetadata {
     val unorderedFeatures = new mutable.HashSet[Int]()
     if (numClasses > 2) {
       strategy.categoricalFeaturesInfo.foreach { case (f, k) =>
-        val numUnorderedBins = math.pow(2, k - 1) - 1
+        val numUnorderedBins = (1 << k - 1) - 1
         if (numUnorderedBins < maxBins) {
           unorderedFeatures.add(f)
         } else {
