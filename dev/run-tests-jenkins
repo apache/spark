@@ -26,26 +26,16 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd "$FWDIR"
 
-function get_jq () {
-  # Get jq so we can parse some JSON, man.
-  # Essential if we want to do anything with the GitHub API responses.
-  local JQ_EXECUTABLE_URL="http://stedolan.github.io/jq/download/linux64/jq"
-
-  echo "Fetching jq from ${JQ_EXECUTABLE_URL}"
-  
-  curl --silent --output "$FWDIR/dev/jq" "$JQ_EXECUTABLE_URL"
-  local curl_status=$?
-
-  if [ $curl_status -ne 0 ]; then
-      echo "Failed to get jq." >&2
-      return $curl_status
-  fi
-
-  chmod u+x "$FWDIR/dev/jq"
-}
-
 COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 PULL_REQUEST_URL="https://github.com/apache/spark/pull/$ghprbPullId"
+
+COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
+# GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
+SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
+
+# NOTE: Jenkins will kill the whole build after 120 minutes.
+#       Tests are a large part of that, but not all of it.
+TESTS_TIMEOUT="120m"
 
 function post_message () {
   local message=$1
@@ -96,10 +86,6 @@ function post_message () {
   fi
 }
 
-COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
-# GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
-short_commit_hash=${ghprbActualCommit:0:7}
-
 # check PR merge-ability and check for new public classes
 {
   if [ "$sha1" == "$ghprbActualCommit" ]; then
@@ -138,7 +124,7 @@ short_commit_hash=${ghprbActualCommit:0:7}
 {
   start_message="\
   [QA tests have started](${BUILD_URL}consoleFull) for \
-  PR $ghprbPullId at commit [\`${short_commit_hash}\`](${COMMIT_URL})."
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
   
   start_message="${start_message}\n${merge_note}"
   # start_message="${start_message}\n${public_classes_note}"
@@ -148,13 +134,19 @@ short_commit_hash=${ghprbActualCommit:0:7}
 
 # run tests
 {
-  ./dev/run-tests
+  timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 
-  if [ "$test_result" -eq "0" ]; then
-    test_result_note=" * This patch **passes** unit tests."
+  if [ "$test_result" -eq "124" ]; then
+    fail_message="**Tests timed out** after a configured wait of \`${TESTS_TIMEOUT}\`."
+    post_message "$fail_message"
+    exit $test_result
   else
-    test_result_note=" * This patch **fails** unit tests."
+    if [ "$test_result" -eq "0" ]; then
+      test_result_note=" * This patch **passes** unit tests."
+    else
+      test_result_note=" * This patch **fails** unit tests."
+    fi
   fi
 }
 
@@ -162,7 +154,7 @@ short_commit_hash=${ghprbActualCommit:0:7}
 {
   result_message="\
   [QA tests have finished](${BUILD_URL}consoleFull) for \
-  PR $ghprbPullId at commit [\`${short_commit_hash}\`](${COMMIT_URL})."
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"
   result_message="${result_message}\n${merge_note}"
