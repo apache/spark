@@ -28,6 +28,7 @@
 function parse_java_property() {
   JAVA_PROPERTY_VALUE=$(\
     grep "^[[:space:]]*$1" "$PROPERTIES_FILE" | \
+    head -n 1 | \
     sed "s/^[[:space:]]*$1//g" | \
     sed "s/^[[:space:]]*[:=]\{0,1\}//g" | \
     sed "s/^[[:space:]]*//g" | \

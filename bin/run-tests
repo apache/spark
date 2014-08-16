@@ -173,10 +173,6 @@ for delimiter in "${delimiters[@]}"; do
     "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \""
   test_parse_java_property "spark.$delimiter.10" \
     "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \"" IGNORE_WHITESPACE
-  test_parse_java_property "spark.$delimiter.11" \
-    "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \" -Dcherry=berry" IGNORE_WHITESPACE
-  test_parse_java_property "spark.$delimiter.12" \
-    "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \" -Dcherry=berry" IGNORE_WHITESPACE
 done
 log_error
 
@@ -197,10 +193,6 @@ test_split_java_options "spark.space.9" 3 \
   "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ "
 test_split_java_options "spark.space.10" 3 \
   "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ "
-test_split_java_options "spark.space.11" 4 \
-  "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ " "-Dcherry=berry"
-test_split_java_options "spark.space.12" 4 \
-  "-Dstraw=berry space" "-Dblue=berry \"quotes\"" "-Dblack=berry \\backslashes\\ " "-Dcherry=berry"
 log_error
 
 # Test quote_java_property. Note that this relies on split_java_options to work correctly.
@@ -220,10 +212,6 @@ test_quote_java_property "spark.space.9" 3 \
   "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \""
 test_quote_java_property "spark.space.10" 3 \
   "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \""
-test_quote_java_property "spark.space.11" 4 \
-  "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \"" "\"-Dcherry=berry\""
-test_quote_java_property "spark.space.12" 4 \
-  "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \"" "\"-Dcherry=berry\""
 log_error
 
 # Final test result
