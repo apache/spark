@@ -389,14 +389,26 @@ class DStream(object):
         return self.foreachRDD(saveAsTextFile)
 
 
+# TODO: implement updateStateByKey
+# TODO: implement slice
+
+# Window Operations
+# TODO: implement window
+# TODO: implement groupByKeyAndWindow
+# TODO: implement reduceByKeyAndWindow
+# TODO: implement countByValueAndWindow
+# TODO: implement countByWindow
+# TODO: implement reduceByWindow
+
 # Following operation has dependency to transform
-# TODO: impelment union
+# TODO: implement transform
+# TODO: implement transformWith
+# TODO: implement union
 # TODO: implement repertitions
 # TODO: implement cogroup
 # TODO: implement join
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
-
 
 class PipelinedDStream(DStream):
     def __init__(self, prev, func, preservesPartitioning=False):
