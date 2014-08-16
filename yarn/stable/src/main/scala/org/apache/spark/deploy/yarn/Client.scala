@@ -103,13 +103,17 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
       clusterMetrics.getNumNodeManagers)
 
     val queueInfo: QueueInfo = yarnClient.getQueueInfo(args.amQueue)
-    logInfo( """Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
+    if (queueInfo != null) {
+      logInfo( """Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
       queueApplicationCount = %s, queueChildQueueCount = %s""".format(
         queueInfo.getQueueName,
         queueInfo.getCurrentCapacity,
         queueInfo.getMaximumCapacity,
         queueInfo.getApplications.size,
         queueInfo.getChildQueues.size))
+    } else {
+      logInfo("Queue %s not found.".format(args.amQueue))
+    }
   }
 
   def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
