@@ -69,11 +69,11 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
 
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
-   * @deprecated use [[setNumIterations()]] instead
+   * @deprecated use [[LBFGS#setNumIterations]] instead
    */
   @deprecated("use setNumIterations instead", "1.1.0")
   def setMaxNumIterations(iters: Int): this.type = {
-    this.setNumCorrections(iters)
+    this.setNumIterations(iters)
   }
 
   /**
