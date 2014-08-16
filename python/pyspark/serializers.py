@@ -67,6 +67,7 @@ import struct
 import sys
 import types
 import collections
+import zlib
 
 from pyspark import cloudpickle
 
@@ -401,6 +402,22 @@ class AutoSerializer(FramedSerializer):
             return cPickle.loads(obj[1:])
         else:
             raise ValueError("invalid sevialization type: %s" % _type)
+
+
+class CompressedSerializer(FramedSerializer):
+    """
+    compress the serialized data
+    """
+
+    def __init__(self, serializer):
+        FramedSerializer.__init__(self)
+        self.serializer = serializer
+
+    def dumps(self, obj):
+        return zlib.compress(self.serializer.dumps(obj), 1)
+
+    def loads(self, obj):
+        return self.serializer.loads(zlib.decompress(obj))
 
 
 class UTF8Deserializer(Serializer):
