@@ -17,7 +17,6 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
-from tempfile import NamedTemporaryFile
 
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.context import SparkContext
