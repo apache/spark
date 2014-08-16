@@ -19,12 +19,10 @@ package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.{HashMap => JHashMap}
+import java.util.{Date, HashMap => JHashMap}
 
+import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
-import scala.collection.Map
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -34,18 +32,19 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob,
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
 RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -91,7 +90,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
-      new ShuffledRDD[K, V, C, (K, C)](self, partitioner)
+      new ShuffledRDD[K, V, C](self, partitioner)
         .setSerializer(serializer)
         .setAggregator(aggregator)
         .setMapSideCombine(mapSideCombine)
@@ -195,12 +194,89 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map, via simple random sampling with one pass over the
+   * RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values.
+   *
+   * @param withReplacement whether to sample with or without replacement
+   * @param fractions map of specific keys to sampling rates
+   * @param seed seed for the random number generator
+   * @return RDD containing the sampled subset
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: Map[K, Double],
+      seed: Long = Utils.random.nextLong): RDD[(K, V)] = {
+
+    require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
+
+    val samplingFunc = if (withReplacement) {
+      StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, false, seed)
+    } else {
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)
+    }
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
+  }
+
+  /**
+   * ::Experimental::
+   * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
+   * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
+   *
+   * This method differs from [[sampleByKey]] in that we make additional passes over the RDD to
+   * create a sample size that's exactly equal to the sum of math.ceil(numItems * samplingRate)
+   * over all key values with a 99.99% confidence. When sampling without replacement, we need one
+   * additional pass over the RDD to guarantee sample size; when sampling with replacement, we need
+   * two additional passes.
+   *
+   * @param withReplacement whether to sample with or without replacement
+   * @param fractions map of specific keys to sampling rates
+   * @param seed seed for the random number generator
+   * @return RDD containing the sampled subset
+   */
+  @Experimental
+  def sampleByKeyExact(withReplacement: Boolean,
+      fractions: Map[K, Double],
+      seed: Long = Utils.random.nextLong): RDD[(K, V)] = {
+
+    require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
+
+    val samplingFunc = if (withReplacement) {
+      StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, true, seed)
+    } else {
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)
+    }
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
+  }
+
+  /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, partitioner)
+  }
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
+   */
+  def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
+    reduceByKey(new HashPartitioner(numPartitions), func)
+  }
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
+   * parallelism level.
+   */
+  def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
+    reduceByKey(defaultPartitioner(self), func)
   }
 
   /**
@@ -341,15 +417,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
-   */
-  def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
-    reduceByKey(new HashPartitioner(numPartitions), func)
-  }
-
-  /**
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
@@ -361,12 +428,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
-    val createCombiner = (v: V) => ArrayBuffer(v)
-    val mergeValue = (buf: ArrayBuffer[V], v: V) => buf += v
-    val mergeCombiners = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => c1 ++ c2
-    val bufs = combineByKey[ArrayBuffer[V]](
+    val createCombiner = (v: V) => CompactBuffer(v)
+    val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
+    val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
+    val bufs = combineByKey[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine=false)
-    bufs.mapValues(_.toIterable)
+    bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
 
   /**
@@ -391,7 +458,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
-      new ShuffledRDD[K, V, V, (K, V)](self, partitioner)
+      new ShuffledRDD[K, V, V](self, partitioner)
     }
   }
 
@@ -446,16 +513,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
     : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
-  }
-
-  /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
-   * parallelism level.
-   */
-  def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
-    reduceByKey(defaultPartitioner(self), func)
   }
 
   /**
@@ -530,6 +587,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Return the key-value pairs in this RDD to the master as a Map.
+   *
+   * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
+   *          one value per key is preserved in the map returned)
    */
   def collectAsMap(): Map[K, V] = {
     val data = self.collect()
@@ -571,11 +631,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
-    cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
-       (vs.asInstanceOf[Seq[V]],
-         w1s.asInstanceOf[Seq[W1]],
-         w2s.asInstanceOf[Seq[W2]],
-         w3s.asInstanceOf[Seq[W3]])
+    cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
+       (vs.asInstanceOf[Iterable[V]],
+         w1s.asInstanceOf[Iterable[W1]],
+         w2s.asInstanceOf[Iterable[W2]],
+         w3s.asInstanceOf[Iterable[W3]])
     }
   }
 
@@ -589,8 +649,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
-    cg.mapValues { case Seq(vs, w1s) =>
-      (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W]])
+    cg.mapValues { case Array(vs, w1s) =>
+      (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
     }
   }
 
@@ -604,10 +664,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
-    cg.mapValues { case Seq(vs, w1s, w2s) =>
-      (vs.asInstanceOf[Seq[V]],
-        w1s.asInstanceOf[Seq[W1]],
-        w2s.asInstanceOf[Seq[W2]])
+    cg.mapValues { case Array(vs, w1s, w2s) =>
+      (vs.asInstanceOf[Iterable[V]],
+        w1s.asInstanceOf[Iterable[W1]],
+        w2s.asInstanceOf[Iterable[W2]])
     }
   }
 

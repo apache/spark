@@ -51,9 +51,11 @@ unit-tests.log
 rat-results.txt
 scalastyle.txt
 conf/*.conf
+scalastyle-output.xml
 
 # For Hive
 metastore_db/
 metastore/
 warehouse/
 TempStatsStore/
+sql/hive-thriftserver/test_warehouses

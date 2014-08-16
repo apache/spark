@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import _root_.java.io.File
 
 /* Implicits */
 import org.apache.spark.sql.test.TestSQLContext._
@@ -31,7 +31,7 @@ class InsertIntoSuite extends QueryTest {
     testFilePath.delete()
     testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
-    testFile.registerAsTable("createAndInsertTest")
+    testFile.registerTempTable("createAndInsertTest")
 
     // Add some data.
     testData.insertInto("createAndInsertTest")
@@ -86,7 +86,7 @@ class InsertIntoSuite extends QueryTest {
     testFilePath.delete()
     testFilePath.deleteOnExit()
     val testFile = createParquetFile[TestData](testFilePath.getCanonicalPath)
-    testFile.registerAsTable("createAndInsertSQLTest")
+    testFile.registerTempTable("createAndInsertSQLTest")
 
     sql("INSERT INTO createAndInsertSQLTest SELECT * FROM testData")
 

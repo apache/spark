@@ -41,13 +41,13 @@ class StorageStatusListenerSuite extends FunSuite {
     assert(listener.executorIdToStorageStatus.get("big").isDefined)
     assert(listener.executorIdToStorageStatus("big").blockManagerId === bm1)
     assert(listener.executorIdToStorageStatus("big").maxMem === 1000L)
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm2, 2000L))
     assert(listener.executorIdToStorageStatus.size === 2)
     assert(listener.executorIdToStorageStatus.get("fat").isDefined)
     assert(listener.executorIdToStorageStatus("fat").blockManagerId === bm2)
     assert(listener.executorIdToStorageStatus("fat").maxMem === 2000L)
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
 
     // Block manager remove
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(bm1))
@@ -67,14 +67,14 @@ class StorageStatusListenerSuite extends FunSuite {
     val taskMetrics = new TaskMetrics
 
     // Task end with no updated blocks
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo1, taskMetrics))
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo2, taskMetrics))
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
   }
 
   test("task end with updated blocks") {
@@ -90,20 +90,20 @@ class StorageStatusListenerSuite extends FunSuite {
     taskMetrics2.updatedBlocks = Some(Seq(block3))
 
     // Task end with new blocks
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo1, taskMetrics1))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 2)
-    assert(listener.executorIdToStorageStatus("fat").blocks.size === 0)
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 1)))
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 2)))
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 2)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 1)))
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo2, taskMetrics2))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 2)
-    assert(listener.executorIdToStorageStatus("fat").blocks.size === 1)
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 1)))
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 2)))
-    assert(listener.executorIdToStorageStatus("fat").blocks.contains(RDDBlockId(4, 0)))
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 2)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 1)
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 1)))
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
+    assert(listener.executorIdToStorageStatus("fat").containsBlock(RDDBlockId(4, 0)))
 
     // Task end with dropped blocks
     val droppedBlock1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.NONE, 0L, 0L, 0L))
@@ -112,17 +112,17 @@ class StorageStatusListenerSuite extends FunSuite {
     taskMetrics1.updatedBlocks = Some(Seq(droppedBlock1, droppedBlock3))
     taskMetrics2.updatedBlocks = Some(Seq(droppedBlock2, droppedBlock3))
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo1, taskMetrics1))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 1)
-    assert(listener.executorIdToStorageStatus("fat").blocks.size === 1)
-    assert(!listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 1)))
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 2)))
-    assert(listener.executorIdToStorageStatus("fat").blocks.contains(RDDBlockId(4, 0)))
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 1)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 1)
+    assert(!listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 1)))
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
+    assert(listener.executorIdToStorageStatus("fat").containsBlock(RDDBlockId(4, 0)))
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo2, taskMetrics2))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 1)
-    assert(listener.executorIdToStorageStatus("fat").blocks.size === 0)
-    assert(!listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 1)))
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 2)))
-    assert(listener.executorIdToStorageStatus("fat").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 1)
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
+    assert(!listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 1)))
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
+    assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
   }
 
   test("unpersist RDD") {
@@ -137,16 +137,16 @@ class StorageStatusListenerSuite extends FunSuite {
     taskMetrics2.updatedBlocks = Some(Seq(block3))
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo1, taskMetrics1))
     listener.onTaskEnd(SparkListenerTaskEnd(1, "obliteration", Success, taskInfo1, taskMetrics2))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 3)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 3)
 
     // Unpersist RDD
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(9090))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 3)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 3)
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(4))
-    assert(listener.executorIdToStorageStatus("big").blocks.size === 2)
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 1)))
-    assert(listener.executorIdToStorageStatus("big").blocks.contains(RDDBlockId(1, 2)))
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 2)
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 1)))
+    assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(1))
-    assert(listener.executorIdToStorageStatus("big").blocks.isEmpty)
+    assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
   }
 }

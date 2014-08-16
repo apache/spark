@@ -45,6 +45,7 @@ class QueryTest extends PlanTest {
             |${rdd.queryExecution}
             |== Exception ==
             |$e
+            |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin)
     }
 

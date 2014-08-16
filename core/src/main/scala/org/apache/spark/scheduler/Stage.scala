@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
@@ -56,7 +58,21 @@ private[spark] class Stage(
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
+
+  /** Set of jobs that this stage belongs to. */
+  val jobIds = new HashSet[Int]
+
+  /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
+  var resultOfJob: Option[ActiveJob] = None
+  var pendingTasks = new HashSet[Task[_]]
+
   private var nextAttemptId = 0
+
+  val name = callSite.shortForm
+  val details = callSite.longForm
+
+  /** Pointer to the [StageInfo] object, set by DAGScheduler. */
+  var info: StageInfo = StageInfo.fromStage(this)
 
   def isAvailable: Boolean = {
     if (!isShuffleMap) {
@@ -107,9 +123,6 @@ private[spark] class Stage(
   }
 
   def attemptId: Int = nextAttemptId
-
-  val name = callSite.short
-  val details = callSite.long
 
   override def toString = "Stage " + id
 

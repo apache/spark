@@ -28,14 +28,14 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("simple columnar query") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
 
   test("projection") {
     val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -44,7 +44,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -72,5 +72,17 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq)
+  }
+
+  test("SPARK-2729 regression: timestamp data type") {
+    checkAnswer(
+      sql("SELECT time FROM timestamps"),
+      timestamps.collect().toSeq)
+
+    TestSQLContext.cacheTable("timestamps")
+
+    checkAnswer(
+      sql("SELECT time FROM timestamps"),
+      timestamps.collect().toSeq)
   }
 }

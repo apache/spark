@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.CompactBuffer
 
 import scala.reflect.ClassTag
 
@@ -46,16 +47,23 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize = conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
+  private val bufferSize =
+    (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
+
+  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
+  private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val registrator = conf.getOption("spark.kryo.registrator")
 
-  def newKryoOutput() = new KryoOutput(bufferSize)
+  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
-    val classLoader = Thread.currentThread.getContextClassLoader
+    kryo.setRegistrationRequired(registrationRequired)
+
+    val oldClassLoader = Thread.currentThread.getContextClassLoader
+    val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
     // Do this before we invoke the user registrator so the user registrator can override this.
@@ -73,15 +81,21 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
-    try {
-      for (regCls <- registrator) {
-        logDebug("Running user registrator: " + regCls)
+    for (regCls <- registrator) {
+      logDebug("Running user registrator: " + regCls)
+      try {
         val reg = Class.forName(regCls, true, classLoader).newInstance()
           .asInstanceOf[KryoRegistrator]
+
+        // Use the default classloader when calling the user registrator.
+        Thread.currentThread.setContextClassLoader(classLoader)
         reg.registerClasses(kryo)
+      } catch {
+        case e: Exception => 
+          throw new SparkException(s"Failed to invoke $regCls", e)
+      } finally {
+        Thread.currentThread.setContextClassLoader(oldClassLoader)
       }
-    } catch {
-      case e: Exception => logError("Failed to run spark.kryo.registrator", e)
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
@@ -183,9 +197,11 @@ private[serializer] object KryoSerializer {
     classOf[GotBlock],
     classOf[GetBlock],
     classOf[MapStatus],
+    classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
-    classOf[BoundedPriorityQueue[_]]
+    classOf[BoundedPriorityQueue[_]],
+    classOf[SparkConf]
   )
 }
 

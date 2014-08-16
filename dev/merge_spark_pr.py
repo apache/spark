@@ -29,7 +29,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import urllib2
 
 try:
@@ -39,15 +38,15 @@ except ImportError:
     JIRA_IMPORTED = False
 
 # Location of your Spark git development area
-SPARK_HOME = os.environ.get("SPARK_HOME", "/home/patrick/Documents/spark")
+SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 # Remote name which points to the Gihub site
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 # ASF JIRA username
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "1234")
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
@@ -75,8 +74,10 @@ def fail(msg):
 
 def run_cmd(cmd):
     if isinstance(cmd, list):
+        print " ".join(cmd)
         return subprocess.check_output(cmd)
     else:
+        print cmd
         return subprocess.check_output(cmd.split(" "))
 
 
@@ -129,7 +130,7 @@ def merge_pr(pr_num, target_ref):
     merge_message_flags = []
 
     merge_message_flags += ["-m", title]
-    if body != None:
+    if body is not None:
         # We remove @ symbols from the body to avoid triggering e-mails
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
@@ -179,7 +180,14 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     run_cmd("git checkout %s" % pick_branch_name)
-    run_cmd("git cherry-pick -sx %s" % merge_hash)
+
+    try:
+        run_cmd("git cherry-pick -sx %s" % merge_hash)
+    except Exception as e:
+        msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
+        continue_maybe(msg)
+        msg = "Okay, please fix any conflicts and finish the cherry-pick. Finished?"
+        continue_maybe(msg)
 
     continue_maybe("Pick complete (local ref %s). Push to %s?" % (
         pick_branch_name, PUSH_REMOTE_NAME))
@@ -280,6 +288,7 @@ latest_branch = sorted(branch_names, reverse=True)[0]
 
 pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
 pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
 url = pr["url"]
 title = pr["title"]
@@ -289,19 +298,23 @@ user_login = pr["user"]["login"]
 base_ref = pr["head"]["ref"]
 pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
-if pr["merged"] is True:
+# Merged pull requests don't appear as merged in the GitHub API;
+# Instead, they're closed by asfgit.
+merge_commits = \
+    [e for e in pr_events if e["actor"]["login"] == "asfgit" and e["event"] == "closed"]
+
+if merge_commits:
+    merge_hash = merge_commits[0]["commit_id"]
+    message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
+
     print "Pull request %s has already been merged, assuming you want to backport" % pr_num
-    merge_commit_desc = run_cmd([
-        'git', 'log', '--merges', '--first-parent',
-        '--grep=pull request #%s' % pr_num, '--oneline']).split("\n")[0]
-    if merge_commit_desc == "":
+    commit_is_downloaded = run_cmd(['git', 'rev-parse', '--quiet', '--verify',
+                                    "%s^{commit}" % merge_hash]).strip() != ""
+    if not commit_is_downloaded:
         fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
-    merge_hash = merge_commit_desc[:7]
-    message = merge_commit_desc[8:]
-
-    print "Found: %s" % message
-    maybe_cherry_pick(pr_num, merge_hash, latest_branch)
+    print "Found commit %s:\n%s" % (merge_hash, message)
+    cherry_pick(pr_num, merge_hash, latest_branch)
     sys.exit(0)
 
 if not bool(pr["mergeable"]):
@@ -323,9 +336,13 @@ while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
     merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
 if JIRA_IMPORTED:
-    continue_maybe("Would you like to update an associated JIRA?")
-    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
-    resolve_jira(title, merged_refs, jira_comment)
+    if JIRA_USERNAME and JIRA_PASSWORD:
+        continue_maybe("Would you like to update an associated JIRA?")
+        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
+        resolve_jira(title, merged_refs, jira_comment)
+    else:
+        print "JIRA_USERNAME and JIRA_PASSWORD not set"
+        print "Exiting without trying to close the associated JIRA."
 else:
     print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
     print "Exiting without trying to close the associated JIRA."

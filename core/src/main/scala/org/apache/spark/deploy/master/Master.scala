@@ -35,20 +35,21 @@ import akka.serialization.SerializationExtension
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
     val securityMgr: SecurityManager)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
@@ -153,6 +154,8 @@ private[spark] class Master(
   }
 
   override def postStop() {
+    masterMetricsSystem.report()
+    applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
     if (recoveryCompletionTask != null) {
       recoveryCompletionTask.cancel()
@@ -164,7 +167,7 @@ private[spark] class Master(
     context.stop(leaderElectionAgent)
   }
 
-  override def receive = {
+  override def receiveWithLogging = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
@@ -664,9 +667,10 @@ private[spark] class Master(
    */
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
+    val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     val eventLogDir = app.desc.eventLogDir.getOrElse {
       // Event logging is not enabled for this application
-      app.desc.appUiUrl = "/history/not-found"
+      app.desc.appUiUrl = notFoundBasePath
       return false
     }
     val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
@@ -681,13 +685,14 @@ private[spark] class Master(
       logWarning(msg)
       msg += " Did you specify the correct logging directory?"
       msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = s"/history/not-found?msg=$msg&title=$title"
+      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
       return false
     }
 
     try {
       val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
+      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
+        HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       replayBus.replay()
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
@@ -702,7 +707,7 @@ private[spark] class Master(
         var msg = s"Exception in replaying log for application $appName!"
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = s"/history/not-found?msg=$msg&exception=$exception&title=$title"
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
         false
     }
   }

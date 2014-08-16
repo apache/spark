@@ -22,11 +22,13 @@ set -e
 
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+cd "$FWDIR"
 
 echo -e "q\n" | sbt/sbt oldDeps/update
 
-export SPARK_CLASSPATH=`find lib_managed \( -name '*spark*jar' -a -type f \) -printf "%p:" `
+export SPARK_CLASSPATH=`find lib_managed \( -name '*spark*jar' -a -type f \) | tr "\\n" ":"`
+echo "SPARK_CLASSPATH=$SPARK_CLASSPATH"
+
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
 echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?

@@ -53,15 +53,31 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
+class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
 
-  override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  override lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
+  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+
+  /** Sets up the system initially or after a RESET command */
+  protected def configure() {
+    setConf("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    setConf("hive.metastore.warehouse.dir", warehousePath)
+  }
+
+  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
+  testTempDir.delete()
+  testTempDir.mkdir()
+
+  // For some hive test case which contain ${system:test.tmp.dir}
+  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+
+  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -99,6 +115,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   hiveFilesTemp.deleteOnExit()
+
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -139,7 +156,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         describedTables ++
         logical.collect { case UnresolvedRelation(databaseName, name, _) => name }
       val referencedTestTables = referencedTables.filter(testTables.contains)
-      logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
+      logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
       analyzer(logical)
@@ -264,7 +281,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infite mutually recursive table loading.
       loadedTables += name
-      logger.info(s"Loading test table $name")
+      logInfo(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
@@ -288,8 +305,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   def reset() {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach { logger =>
-        logger.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+      org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
+        log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
       // It is important that we RESET first as broken hooks that might have been set could break
@@ -303,7 +320,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
-        logger.debug(s"Deleting table $t")
+        logDebug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
         catalog.client.getIndexes("default", t, 255).foreach { index =>
@@ -316,7 +333,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       }
 
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
-        logger.debug(s"Dropping Database: $db")
+        logDebug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
 
@@ -338,7 +355,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       loadTestTable("srcpart")
     } catch {
       case e: Exception =>
-        logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        logError(s"FATAL ERROR: Failed to reset TestDB state. $e")
         // At this point there is really no reason to continue, but the test framework traps exits.
         // So instead we just pause forever so that at least the developer can see where things
         // started to go wrong.
