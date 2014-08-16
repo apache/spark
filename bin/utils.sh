@@ -21,37 +21,17 @@
 # * ---------------------------------------------------- *
 
 # Parse the value of a config from a java properties file according to the specifications in
-# http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader).
-# This accepts the name of the config as an argument, and expects the path of the property
-# file to be found in PROPERTIES_FILE. The value is returned through JAVA_PROPERTY_VALUE.
+# http://docs.oracle.com/javase/7/docs/api/java/util/Properties.html#load(java.io.Reader),
+# with the exception of the support for multi-line arguments. This accepts the name of the
+# config as an argument, and expects the path of the property file to be found in
+# PROPERTIES_FILE. The value is returned through JAVA_PROPERTY_VALUE.
 function parse_java_property() {
-  JAVA_PROPERTY_VALUE=""  # return value
-  config_buffer=""        # buffer for collecting parts of a config value
-  multi_line=0            # whether this config is spanning multiple lines
-  while read -r line; do
-    # Strip leading and trailing whitespace
-    line=$(echo "$line" | sed "s/^[[:space:]]\(.*\)[[:space:]]*$/\1/")
-    contains_config=$(echo "$line" | grep -e "^$1")
-    if [[ -n "$contains_config" || "$multi_line" == 1 ]]; then
-      has_more_lines=$(echo "$line" | grep -e "\\\\$")
-      if [[ -n "$has_more_lines" ]]; then
-        # Strip trailing backslash
-        line=$(echo "$line" | sed "s/\\\\$//")
-        config_buffer="$config_buffer $line"
-        multi_line=1
-      else
-        JAVA_PROPERTY_VALUE="$config_buffer $line"
-        break
-      fi
-    fi
-  done < "$PROPERTIES_FILE"
-
-  # Actually extract the value of the config
-  JAVA_PROPERTY_VALUE=$( \
-    echo "$JAVA_PROPERTY_VALUE" | \
-    sed "s/$1//" | \
-    sed "s/^[[:space:]]*[:=]\{0,1\}//" | \
-    sed "s/^[[:space:]]*\(.*\)[[:space:]]*$/\1/g" \
+  JAVA_PROPERTY_VALUE=$(\
+    grep "^[[:space:]]*$1" "$PROPERTIES_FILE" | \
+    sed "s/^[[:space:]]*$1//g" | \
+    sed "s/^[[:space:]]*[:=]\{0,1\}//g" | \
+    sed "s/^[[:space:]]*//g" | \
+    sed "s/[[:space:]]*$//g"
   )
   export JAVA_PROPERTY_VALUE
 }
@@ -82,7 +62,6 @@ function quote_java_property() {
 
 # Gather all all spark-submit options into SUBMISSION_OPTS
 function gatherSparkSubmitOpts() {
-
   if [ -z "$SUBMIT_USAGE_FUNCTION" ]; then
     echo "Function for printing usage of $0 is not set." 1>&2
     echo "Please set usage function to shell variable 'SUBMIT_USAGE_FUNCTION' in $0" 1>&2
@@ -120,3 +99,4 @@ function gatherSparkSubmitOpts() {
   export SUBMISSION_OPTS
   export APPLICATION_OPTS
 }
+
