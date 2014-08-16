@@ -1627,7 +1627,7 @@ class RDD(object):
                     BatchedSerializer(PickleSerializer(), 1024), 10)
                 sorter = ExternalSorter(memory * 0.9, ser)
                 it = sorter.sorted(it, key=operator.itemgetter(0))
-                return imap(lambda (k, v): ResultIterable(v), GroupByKey(it))
+                return imap(lambda (k, v): (k, ResultIterable(v)), GroupByKey(it))
 
             else:
                 # this is faster than sort based
