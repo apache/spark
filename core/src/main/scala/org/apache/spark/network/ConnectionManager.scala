@@ -135,7 +135,6 @@ private[spark] class ConnectionManager(
   // to be able to track asynchronous messages
   private val idCount: AtomicInteger = new AtomicInteger(1)
 
-  private var isAckTimeout = false
   private val selectorThread = new Thread("connection-manager-thread") {
     override def run() = ConnectionManager.this.run()
   }
@@ -661,11 +660,17 @@ private[spark] class ConnectionManager(
                 status.markDone(Some(message))
               }
               case None => {
-                if (isAckTimeout) {
-                  logWarning(s"Ack message ${message.id} maybe received after timeout")
-                }
-                throw new Exception("Could not find reference for received ack message " +
-                  message.id)
+                /**
+                 * We can fall down on this code because of following 2 cases
+                 *
+                 * (1) Invalid ack sent due to buggy code.
+                 *
+                 * (2) Late-arriving ack for a SendMessageStatus
+                 *     To avoid unwilling late-arriving ack
+                 *     caused by long pause like GC, you can set
+                 *     larger value than default to spark.core.connection.ack.wait.timeout
+                 */
+                logWarning(s"Could not find reference for received ack Message ${message.id}")
               }
             }
           }
@@ -844,7 +849,6 @@ private[spark] class ConnectionManager(
     val timeoutTask = new TimerTask {
       override def run(): Unit = {
         messageStatuses.synchronized {
-          isAckTimeout = true
           messageStatuses.remove(message.id).foreach ( s => {
             promise.failure(
               new IOException(s"sendMessageReliably failed because ack " +
