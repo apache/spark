@@ -1,5 +1,6 @@
 # Default system properties included when running spark-submit.
 # This is useful for setting default environmental settings.
+# Note that properties that span multiple lines are not supported.
 
 # Example:
 # spark.master                     spark://master:7077
