@@ -34,7 +34,7 @@ import org.apache.spark.util.StatCounter
  *
  * TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
  */
-class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Serializable {
+class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable {
 
   def testGeneratedRDD(rdd: RDD[Double],
       expectedSize: Long,
@@ -113,18 +113,18 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
     val poissonMean = 100.0
 
     for (seed <- 0 until 5) {
-      val uniform = RandomRDDGenerators.uniformRDD(sc, size, numPartitions, seed)
+      val uniform = RandomRDDs.uniformRDD(sc, size, numPartitions, seed)
       testGeneratedRDD(uniform, size, numPartitions, 0.5, 1 / math.sqrt(12))
 
-      val normal = RandomRDDGenerators.normalRDD(sc, size, numPartitions, seed)
+      val normal = RandomRDDs.normalRDD(sc, size, numPartitions, seed)
       testGeneratedRDD(normal, size, numPartitions, 0.0, 1.0)
 
-      val poisson = RandomRDDGenerators.poissonRDD(sc, poissonMean, size, numPartitions, seed)
+      val poisson = RandomRDDs.poissonRDD(sc, poissonMean, size, numPartitions, seed)
       testGeneratedRDD(poisson, size, numPartitions, poissonMean, math.sqrt(poissonMean), 0.1)
     }
 
     // mock distribution to check that partitions have unique seeds
-    val random = RandomRDDGenerators.randomRDD(sc, new MockDistro(), 1000L, 1000, 0L)
+    val random = RandomRDDs.randomRDD(sc, new MockDistro(), 1000L, 1000, 0L)
     assert(random.collect.size === random.collect.distinct.size)
   }
 
@@ -135,13 +135,13 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
     val poissonMean = 100.0
 
     for (seed <- 0 until 5) {
-      val uniform = RandomRDDGenerators.uniformVectorRDD(sc, rows, cols, parts, seed)
+      val uniform = RandomRDDs.uniformVectorRDD(sc, rows, cols, parts, seed)
       testGeneratedVectorRDD(uniform, rows, cols, parts, 0.5, 1 / math.sqrt(12))
 
-      val normal = RandomRDDGenerators.normalVectorRDD(sc, rows, cols, parts, seed)
+      val normal = RandomRDDs.normalVectorRDD(sc, rows, cols, parts, seed)
       testGeneratedVectorRDD(normal, rows, cols, parts, 0.0, 1.0)
 
-      val poisson = RandomRDDGenerators.poissonVectorRDD(sc, poissonMean, rows, cols, parts, seed)
+      val poisson = RandomRDDs.poissonVectorRDD(sc, poissonMean, rows, cols, parts, seed)
       testGeneratedVectorRDD(poisson, rows, cols, parts, poissonMean, math.sqrt(poissonMean), 0.1)
     }
   }
