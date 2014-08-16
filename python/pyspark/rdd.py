@@ -201,6 +201,71 @@ class MaxHeapQ(object):
             self._sink(1)
 
 
+class SameKey(object):
+    """
+    take the first few items which has the same expected key
+
+    This is used by GroupByKey.
+    """
+    def __init__(self, key, values, it, groupBy):
+        self.key = key
+        self.values = values
+        self.it = it
+        self.groupBy = groupBy
+        self._index = 0
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self._index < len(self.values):
+            self._index += 1
+            return self.values[self._index - 1]
+
+        if self.it is None:
+            raise StopIteration
+
+        key, value = self.it.next()
+        if key == self.key:
+            return value
+
+        self.groupBy._next_item = (key, value)
+        raise StopIteration
+
+
+class GroupByKey(object):
+    """
+    group a sorted iterator into [(k1, it1), (k2, it2), ...]
+    """
+    def __init__(self, it):
+        self.it = iter(it)
+        self._next_item = None
+        self.current = None
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self._next_item is None:
+            while True:
+                key, value = self.it.next()
+                if self.current is None:
+                    break
+                if key != self.current.key:
+                    break
+                self.current.values.append(value)
+
+        else:
+            key, value = self._next_item
+            self._next_item = None
+
+        if self.current is not None:
+            self.current.it = None
+        self.current = SameKey(key, [value], self.it, self)
+
+        return key, self.current
+
+
 def _parse_memory(s):
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
@@ -1496,6 +1561,12 @@ class RDD(object):
 
         return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
 
+    def _can_spill(self):
+        return (self.ctx._conf.get("spark.shuffle.spill", 'True').lower() == 'true')
+
+    def _memory_limit(self):
+        return _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
+
     # TODO: support variant with custom partitioner
     def groupByKey(self, numPartitions=None):
         """
@@ -1510,20 +1581,20 @@ class RDD(object):
         >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))
         [('a', [1, 1]), ('b', [1])]
         """
+        serializer = self.ctx.serializer
+        spill = self._can_spill()
+        memory = self._memory_limit()
 
-        def createCombiner(x):
-            return [x]
+        def groupByKey(it):
+            if spill:
+                sorted = ExternalSorter(memory * 0.9, serializer).sorted
+            it = sorted(it, key=operator.itemgetter(0))
+            for k, v in GroupByKey(it):
+                yield k, ResultIterable(v)
 
-        def mergeValue(xs, x):
-            xs.append(x)
-            return xs
-
-        def mergeCombiners(a, b):
-            a.extend(b)
-            return a
-
-        return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                                 numPartitions).mapValues(lambda x: ResultIterable(x))
+        # TODO: combine before shuffle ?
+        shuffled = self.partitionBy(numPartitions)
+        return shuffled.mapPartitions(groupByKey)
 
     # TODO: add tests
     def flatMapValues(self, f):

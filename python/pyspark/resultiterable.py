@@ -20,19 +20,20 @@ __all__ = ["ResultIterable"]
 import collections
 
 
-class ResultIterable(collections.Iterable):
+class ResultIterable(object):
 
     """
     A special result iterable. This is used because the standard iterator can not be pickled
     """
 
-    def __init__(self, data):
-        self.data = data
-        self.index = 0
-        self.maxindex = len(data)
+    def __init__(self, it):
+        self.it = it
 
     def __iter__(self):
-        return iter(self.data)
+        return iter(self.it)
 
     def __len__(self):
-        return len(self.data)
+        return sum(1 for _ in self.it)
+
+    def __reduce__(self):
+        return (ResultIterable, (list(self.it),))
