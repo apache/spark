@@ -208,6 +208,26 @@ class BatchedSerializer(Serializer):
         return "BatchedSerializer<%s>" % str(self.serializer)
 
 
+class FlattedValuesSerializer(BatchedSerializer):
+
+    """
+    Serializes a stream of list of pairs, split the list of values
+    which contain more than a certain number of objects to make them
+    have similar sizes.
+    """
+    def __init__(self, serializer, batchSize=10):
+        BatchedSerializer.__init__(self, serializer, batchSize)
+
+    def _batched(self, iterator):
+        n = self.batchSize
+        for key, values in iterator:
+            for i in xrange(0, len(values), n):
+                yield key, values[i:i + n]
+
+    def load_stream(self, stream):
+        return self.serializer.load_stream(stream)
+
+
 class CartesianDeserializer(FramedSerializer):
 
     """

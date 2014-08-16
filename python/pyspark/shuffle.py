@@ -479,7 +479,9 @@ class ExternalSorter(object):
                 with open(path, 'w') as f:
                     self.serializer.dump_stream(current_chunk, f)
                 chunks.append(self.serializer.load_stream(open(path)))
+                os.unlink(path)  # data will be deleted after close
                 current_chunk = []
+                gc.collect()
 
             elif not chunks:
                 batch = min(batch * 2, 10000)
@@ -490,7 +492,6 @@ class ExternalSorter(object):
 
         if current_chunk:
             chunks.append(iter(current_chunk))
-
         return heapq.merge(chunks, key=key, reverse=reverse)
 
 

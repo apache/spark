@@ -36,7 +36,7 @@ from math import sqrt, log
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long
+    PickleSerializer, pack_long, FlattedValuesSerializer
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -1592,7 +1592,7 @@ class RDD(object):
             a.extend(b)
             return a
 
-        serializer = self.ctx.serializer
+        serializer = self._jrdd_deserializer
         spill = self._can_spill()
         memory = self._memory_limit()
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
@@ -1603,12 +1603,18 @@ class RDD(object):
             merger.mergeValues(iterator)
             return merger.iteritems()
 
+        # combine them before shuffle could reduce the comparison later
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def groupByKey(it):
             if spill:
+                # Flatten the combined values, so it will not consume huge
+                # memory during merging sort.
+                serializer = FlattedValuesSerializer(
+                    BatchedSerializer(PickleSerializer(), 1024), 10)
                 sorted = ExternalSorter(memory * 0.9, serializer).sorted
+
             it = sorted(it, key=operator.itemgetter(0))
             for k, v in GroupByKey(it):
                 yield k, ResultIterable(v)
