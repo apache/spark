@@ -122,7 +122,8 @@ private[spark] class Master(
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
-    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    val masterWebUiUrlPrefix = conf.get("spark.http.policy") + "://"
+    masterWebUiUrl = masterWebUiUrlPrefix + masterPublicAddress + ":" + webUi.boundPort
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
     masterMetricsSystem.registerSource(masterSource)
@@ -190,7 +191,7 @@ private[spark] class Master(
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiUrl, publicAddress) =>
     {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
@@ -200,7 +201,7 @@ private[spark] class Master(
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          sender, workerUiPort, publicAddress)
+          sender, workerWebUiUrl, publicAddress)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           sender ! RegisteredWorker(masterUrl, masterWebUiUrl)

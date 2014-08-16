@@ -99,7 +99,11 @@ private[spark] abstract class WebUI(
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
       serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
-      logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
+      if (conf.get("spark.http.policy").equals("https")) {
+        logInfo("Started %s at https://%s:%d".format(className, publicHostName, boundPort))
+      } else {
+        logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
+      }
     } catch {
       case e: Exception =>
         logError("Failed to bind %s".format(className), e)

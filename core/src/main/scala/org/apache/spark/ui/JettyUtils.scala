@@ -26,7 +26,7 @@ import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.{Connector, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
@@ -35,6 +35,8 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
+import org.eclipse.jetty.server.nio.SelectChannelConnector
+import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -183,7 +185,8 @@ private[spark] object JettyUtils extends Logging {
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
-      val server = new Server(new InetSocketAddress(hostName, currentPort))
+      val server = new Server
+      server.addConnector(getConnector(currentPort, conf))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
@@ -206,6 +209,48 @@ private[spark] object JettyUtils extends Logging {
   /** Attach a prefix to the given path, but avoid returning an empty path */
   private def attachPrefix(basePath: String, relativePath: String): String = {
     if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
+  }
+
+  private def getConnector(port: Int, conf: SparkConf): Connector = {
+    val https = getHttpPolicy(conf)
+    if (https) {
+      buildSslSelectChannelConnector(port, conf)
+    } else {
+      conf.set("spark.http.policy", "http")
+      val connector = new SelectChannelConnector
+      connector.setPort(port)
+      connector
+    }
+  }
+
+  private def buildSslSelectChannelConnector(port: Int, conf: SparkConf): Connector =
+  {
+    val connector = new SslSelectChannelConnector
+    connector.setPort(port)
+
+    val context = connector.getSslContextFactory
+    val needAuth = conf.getBoolean("spark.client.https.need-auth", false)
+    context.setNeedClientAuth(needAuth)
+    context.setKeyManagerPassword(conf.get("spark.ssl.server.keystore.keypassword"))
+    if (conf.contains("spark.ssl.server.keystore.location")) {
+      context.setKeyStorePath(conf.get("spark.ssl.server.keystore.location"))
+      context.setKeyStorePassword(conf.get("spark.ssl.server.keystore.password"))
+      context.setKeyStoreType(conf.get("spark.ssl.server.keystore.type", "jks"))
+    }
+    if (needAuth && conf.contains("spark.ssl.server.truststore.location")) {
+      context.setTrustStore(conf.get("spark.ssl.server.truststore.location"))
+      context.setTrustStorePassword(conf.get("spark.ssl.server.truststore.password"))
+      context.setTrustStoreType(conf.get("spark.ssl.server.truststore.type", "jks"))
+    }
+    connector
+  }
+
+  def getHttpPolicy(conf: SparkConf): Boolean = {
+    if (conf.contains("spark.http.policy") && conf.get("spark.http.policy").equals("https")) {
+      true
+    } else {
+      false
+    }
   }
 }
 
