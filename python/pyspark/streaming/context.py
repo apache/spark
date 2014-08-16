@@ -114,7 +114,7 @@ class StreamingContext(object):
         Create an input stream that monitors a Hadoop-compatible file system
         for new files and reads them as text files. Files must be wrriten to the
         monitored directory by "moving" them from another location within the same
-        file system. FIle names starting with . are ignored.
+        file system. File names starting with . are ignored.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
@@ -132,8 +132,9 @@ class StreamingContext(object):
 
     def _testInputStream(self, test_inputs, numSlices=None):
         """
-        This is inpired by QueStream implementation. Give list of RDD and generate DStream
-        which contain the RDD.
+        This function is only for test.
+        This implementation is inpired by QueStream implementation. 
+        Give list of RDD to generate DStream which contains the RDD.
         """
         test_rdds = list()
         test_rdd_deserializers = list()
@@ -142,12 +143,10 @@ class StreamingContext(object):
             test_rdds.append(test_rdd._jrdd)
             test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
 
+#        if len(set(test_rdd_deserializers)) > 1:
+#            raise IOError("Deserializer should be one type to run test case. "
+#                          "See the SparkContext.parallelize to understand how to decide deserializer")
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
 
-        dstream = DStream(jinput_stream, self, test_rdd_deserializers[0])
-        return dstream
-
-    def _testInputStream3(self):
-        jinput_stream = self._jvm.PythonTestInputStream3(self._jssc).asJavaDStream()
-        return DStream(jinput_stream, self, UTF8Deserializer())
+        return DStream(jinput_stream, self, test_rdd_deserializers[0])

@@ -301,6 +301,38 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         output = self._run_stream(test_input, test_func, expected_output, numSlices)
         self.assertEqual(expected_output, output)
 
+    def test_countByValue_batch(self):
+        """Basic operation test for DStream.countByValue with batch deserializer"""
+        test_input = [range(1, 5) + range(1,5), range(5, 7) + range(5, 9), ["a"] * 2 + ["b"] + [""] ]
+
+        def test_func(dstream):
+            return dstream.countByValue()
+        expected_output = [[(1, 2), (2, 2), (3, 2), (4, 2)],
+                           [(5, 2), (6, 2), (7, 1), (8, 1)],
+                           [("a", 2), ("b", 1), ("", 1)]]
+        output = self._run_stream(test_input, test_func, expected_output)
+        for result in (output, expected_output):
+            self._sort_result_based_on_key(result)
+        self.assertEqual(expected_output, output)
+
+    def test_countByValue_unbatch(self):
+        """Basic operation test for DStream.countByValue with unbatch deserializer"""
+        test_input = [range(1, 4), [1, 1, ""], ["a", "a", "b"]]
+
+        def test_func(dstream):
+            return dstream.countByValue()
+        expected_output = [[(1, 1), (2, 1), (3, 1)],
+                           [(1, 2), ("", 1)],
+                           [("a", 2), ("b", 1)]]
+        output = self._run_stream(test_input, test_func, expected_output)
+        for result in (output, expected_output):
+            self._sort_result_based_on_key(result)
+        self.assertEqual(expected_output, output)
+
+    def _sort_result_based_on_key(self, outputs):
+        for output in outputs:
+            output.sort(key=lambda x: x[0])
+
     def _run_stream(self, test_input, test_func, expected_output, numSlices=None):
         """Start stream and return the output"""
         # Generate input stream with user-defined input
