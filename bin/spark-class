@@ -157,7 +157,7 @@ fi
 export CLASSPATH
 
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
-  # Put quotes around system properties in case they contain spaces
+  # Put quotes around system properties in case they contain spaces for readability
   # This exports the resulting list of java opts into QUOTED_JAVA_OPTS
   quote_java_property "${SPLIT_JAVA_OPTS[@]}"
   echo -n "Spark Command: " 1>&2

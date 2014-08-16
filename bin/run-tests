@@ -72,8 +72,8 @@ function echo_test_result() {
   fi
 }
 
-# Test parse_java_property. This takes in three parameters, the name of the config,
-# the expected value, and whether or not to ignore whitespace (e.g. for multi-line).
+# Test parse_java_property. This takes in three parameters, the name of
+# the config, the expected value, and whether or not to ignore whitespace.
 function test_parse_java_property() {
   key="$1"
   expected_value="$2"
@@ -166,20 +166,25 @@ for delimiter in "${delimiters[@]}"; do
   test_parse_java_property "spark.$delimiter.3" "-Dstraw=\"berry again\""
   test_parse_java_property "spark.$delimiter.4" "-Dstraw=\"berry \\\"quote\""
   test_parse_java_property "spark.$delimiter.5" "-Dstraw=\"berry \\\\backslash\""
-  test_parse_java_property "spark.$delimiter.6" "-Dstraw=\"berry \\\"quotes\\\" and \\\\backslashes\\\\ \""
-  test_parse_java_property "spark.$delimiter.7" "-Dstraw=berry -Dblue=berry -Dblack=berry"
-  test_parse_java_property "spark.$delimiter.8" "-Dstraw=\"berry space\" -Dblue=\"berry\" -Dblack=berry"
+  test_parse_java_property "spark.$delimiter.6" \
+    "-Dstraw=\"berry \\\"quotes\\\" and \\\\backslashes\\\\ \""
+  test_parse_java_property "spark.$delimiter.7" \
+    "-Dstraw=berry -Dblue=berry -Dblack=berry"
+  test_parse_java_property "spark.$delimiter.8" \
+    "-Dstraw=\"berry space\" -Dblue=\"berry\" -Dblack=berry"
   test_parse_java_property "spark.$delimiter.9" \
     "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \""
   test_parse_java_property "spark.$delimiter.10" \
-    "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \"" IGNORE_WHITESPACE
+    "-Dstraw=\"berry space\" -Dblue=\"berry \\\"quotes\\\"\" -Dblack=\"berry \\\\backslashes\\\\ \"" \
+    IGNORE_WHITESPACE
 done
 log_error
 
 # Test split_java_options. Note that this relies on parse_java_property to work correctly.
 log_error "--- Testing split_java_options ---"
 if [[ "$tests_failed" == 1 ]]; then
-  log_error "* WARNING: Tests for parse_java_property failed! This should also fail tests for split_java_options"
+  log_error "* WARNING: Tests for parse_java_property failed!"
+  log_error "This should also fail tests for split_java_options"
 fi
 test_split_java_options "spark.space.1" 1 "-Dstraw=berry"
 test_split_java_options "spark.space.2" 1 "-Dstraw=berry"
@@ -198,16 +203,20 @@ log_error
 # Test quote_java_property. Note that this relies on split_java_options to work correctly.
 log_error "--- Testing quote_java_property ---"
 if [[ "$tests_failed" == 1 ]]; then
-  log_error "* WARNING: Tests for split_java_options failed! This should also fail tests for quote_java_property"
+  log_error "* WARNING: Tests for split_java_options failed!"
+  log_error "This should also fail tests for quote_java_property"
 fi
 test_quote_java_property "spark.space.1" 1 "\"-Dstraw=berry\""
 test_quote_java_property "spark.space.2" 1 "\"-Dstraw=berry\""
 test_quote_java_property "spark.space.3" 1 "\"-Dstraw=berry again\""
 test_quote_java_property "spark.space.4" 1 "\"-Dstraw=berry \"quote\""
 test_quote_java_property "spark.space.5" 1 "\"-Dstraw=berry \\backslash\""
-test_quote_java_property "spark.space.6" 1 "\"-Dstraw=berry \"quotes\" and \\backslashes\\ \""
-test_quote_java_property "spark.space.7" 3 "\"-Dstraw=berry\"" "\"-Dblue=berry\"" "\"-Dblack=berry\""
-test_quote_java_property "spark.space.8" 3 "\"-Dstraw=berry space\"" "\"-Dblue=berry\"" "\"-Dblack=berry\""
+test_quote_java_property "spark.space.6" 1 \
+  "\"-Dstraw=berry \"quotes\" and \\backslashes\\ \""
+test_quote_java_property "spark.space.7" 3 \
+  "\"-Dstraw=berry\"" "\"-Dblue=berry\"" "\"-Dblack=berry\""
+test_quote_java_property "spark.space.8" 3 \
+  "\"-Dstraw=berry space\"" "\"-Dblue=berry\"" "\"-Dblack=berry\""
 test_quote_java_property "spark.space.9" 3 \
   "\"-Dstraw=berry space\"" "\"-Dblue=berry \"quotes\"\"" "\"-Dblack=berry \\backslashes\\ \""
 test_quote_java_property "spark.space.10" 3 \
