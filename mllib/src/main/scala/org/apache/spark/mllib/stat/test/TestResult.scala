@@ -78,7 +78,7 @@ trait TestResult[DF] {
  * Object containing the test results for the chi-squared hypothesis test.
  */
 @Experimental
-class ChiSqTestResult(override val pValue: Double,
+class ChiSqTestResult private[stat] (override val pValue: Double,
     override val degreesOfFreedom: Int,
     override val statistic: Double,
     val method: String,
