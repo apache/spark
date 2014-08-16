@@ -44,6 +44,23 @@ import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
  */
 @DeveloperApi
 trait Serializer {
+
+  /**
+   * Default ClassLoader to use in deserialization. Implementations of [[Serializer]] should
+   * make sure it is using this when set.
+   */
+  @volatile protected var defaultClassLoader: Option[ClassLoader] = None
+
+  /**
+   * Sets a class loader for the serializer to use in deserialization.
+   *
+   * @return this Serializer object
+   */
+  def setDefaultClassLoader(classLoader: ClassLoader): Serializer = {
+    defaultClassLoader = Some(classLoader)
+    this
+  }
+
   def newInstance(): SerializerInstance
 }
 
