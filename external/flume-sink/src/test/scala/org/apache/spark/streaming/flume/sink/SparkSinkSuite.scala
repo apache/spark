@@ -123,7 +123,7 @@ class SparkSinkSuite extends TestSuiteBase {
         var events: EventBatch = null
         Try {
           events = client.getEventBatch(1000)
-          if(!failSome || counter.incrementAndGet() % 2 == 0) {
+          if(!failSome || counter.getAndIncrement() % 2 == 0) {
             client.ack(events.getSequenceNumber)
           } else {
             client.nack(events.getSequenceNumber)
@@ -141,7 +141,7 @@ class SparkSinkSuite extends TestSuiteBase {
     })
     batchCounter.await()
     if(failSome) {
-      assert(availableChannelSlots(channel) === 2000)
+      assert(availableChannelSlots(channel) === 3000)
     } else {
       assertChannelIsEmpty(channel)
     }
@@ -165,6 +165,7 @@ class SparkSinkSuite extends TestSuiteBase {
     val sinkContext = new Context()
     sinkContext.put(SparkSinkConfig.CONF_HOSTNAME, "0.0.0.0")
     sinkContext.put(SparkSinkConfig.CONF_PORT, 0.toString)
+    sink.configure(sinkContext)
     sink.setChannel(channel)
     (channel, sink)
   }
