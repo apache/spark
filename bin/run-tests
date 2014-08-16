@@ -36,7 +36,7 @@ error_output_buffer=""
 temp_output_buffer=""
 
 # Echo only if the verbose flag is set
-verbose_echo() {
+function verbose_echo() {
   if [[ -n "$SPARK_TESTING_VERBOSE" ]]; then
     echo -e "$1"
   fi
@@ -44,7 +44,7 @@ verbose_echo() {
 
 # Collect error output for echoing at the end if tests fail
 # This also echoes the given string if the verbose flag is set
-log_error() {
+function log_error() {
   verbose_echo "$1"
   if [[ -n "$error_output_buffer" ]]; then
     error_output_buffer=$(echo -e "$error_output_buffer\n$1")
@@ -54,7 +54,7 @@ log_error() {
 }
 
 # Collect temporary output for logging
-collect_temp_output() {
+function collect_temp_output() {
   if [[ -n "$temp_output_buffer" ]]; then
     temp_output_buffer=$(echo -e "$temp_output_buffer\n$1")
   else
@@ -63,7 +63,7 @@ collect_temp_output() {
 }
 
 # Print the result of an individual test
-echo_test_result() {
+function echo_test_result() {
   if [[ "$this_test_failed" == 1 ]]; then
     log_error "$temp_output_buffer"
     tests_failed=1
@@ -74,7 +74,7 @@ echo_test_result() {
 
 # Test parse_java_property. This takes in three parameters, the name of the config,
 # the expected value, and whether or not to ignore whitespace (e.g. for multi-line).
-test_parse_java_property() {
+function test_parse_java_property() {
   key="$1"
   expected_value="$2"
   ignore_whitespace="$3"
@@ -99,7 +99,7 @@ test_parse_java_property() {
 
 # Test split_java_options. This takes in three or more parameters, the name of the config,
 # the expected number of java options, and values of the java options themselves.
-test_split_java_options() {
+function test_split_java_options() {
   key="$1"
   expected_size="$2"
   expected_values=("${@:3}")
@@ -131,7 +131,7 @@ test_split_java_options() {
 
 # Test split_java_options. This takes in three or more parameters, the name of the config,
 # the expected number of java options, and values of the java options themselves.
-test_quote_java_property() {
+function test_quote_java_property() {
   key="$1"
   expected_size="$2"
   expected_values=("${@:3}")
