@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext, MLUtils}
+import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
@@ -55,7 +55,7 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
     val numBatches = 10
     val batchDuration = Milliseconds(1000)
     val ssc = new StreamingContext(sc, batchDuration)
-    val data = MLUtils.loadStreamingLabeledPoints(ssc, testDir.toString)
+    val data = ssc.textFileStream(testDir.toString).map(LabeledPoint.parse)
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.1)
@@ -97,7 +97,7 @@ class StreamingLinearRegressionSuite extends FunSuite with LocalSparkContext {
     val batchDuration = Milliseconds(2000)
     val ssc = new StreamingContext(sc, batchDuration)
     val numBatches = 5
-    val data = MLUtils.loadStreamingLabeledPoints(ssc, testDir.toString)
+    val data = ssc.textFileStream(testDir.toString()).map(LabeledPoint.parse)
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0))
       .setStepSize(0.1)

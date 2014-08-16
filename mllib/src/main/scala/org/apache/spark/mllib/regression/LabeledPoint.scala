@@ -36,7 +36,7 @@ case class LabeledPoint(label: Double, features: Vector) {
 /**
  * Parser for [[org.apache.spark.mllib.regression.LabeledPoint]].
  */
-private[mllib] object LabeledPointParser {
+object LabeledPoint {
   /**
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].

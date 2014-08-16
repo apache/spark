@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Train or predict a linear regression model on streaming data. Training uses
