@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 import org.apache.spark.annotation.Experimental
 
@@ -42,9 +43,9 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     f.run {
       val totalCount = new AtomicLong
       f.runJob(self,
-               (iter: Iterator[T]) => iter.length,
+               (iter: Iterator[T]) => Utils.getIteratorSize(iter),
                Range(0, self.partitions.size),
-               (index: Int, data: Int) => totalCount.addAndGet(data.toLong),
+               (index: Int, data: Long) => totalCount.addAndGet(data),
                totalCount.get())
     }
   }
