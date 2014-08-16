@@ -73,6 +73,8 @@ class LogisticRegressionModel (
 /**
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
+ *
+ * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,
@@ -191,51 +193,19 @@ object LogisticRegressionWithSGD {
 
 /**
  * Train a classification model for Logistic Regression using Limited-memory BFGS.
+ * Standard feature scaling and L2 regularization are used by default.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
-class LogisticRegressionWithLBFGS private (
-    private var convergenceTol: Double,
-    private var maxNumIterations: Int,
-    private var regParam: Double)
+class LogisticRegressionWithLBFGS
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
-
-  /**
-   * Construct a LogisticRegression object with default parameters
-   */
-  def this() = this(1E-4, 100, 0.0)
 
   this.setFeatureScaling(true)
 
-  private val gradient = new LogisticGradient()
-  private val updater = new SimpleUpdater()
-  // Have to return new LBFGS object every time since users can reset the parameters anytime.
-  override def optimizer = new LBFGS(gradient, updater)
-    .setNumCorrections(10)
-    .setConvergenceTol(convergenceTol)
-    .setMaxNumIterations(maxNumIterations)
-    .setRegParam(regParam)
+  override val optimizer = new LBFGS(new LogisticGradient, new SquaredL2Updater)
 
   override protected val validators = List(DataValidators.binaryLabelValidator)
-
-  /**
-   * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
-   */
-  def setConvergenceTol(convergenceTol: Double): this.type = {
-    this.convergenceTol = convergenceTol
-    this
-  }
-
-  /**
-   * Set the maximal number of iterations for L-BFGS. Default 100.
-   */
-  def setNumIterations(numIterations: Int): this.type = {
-    this.maxNumIterations = numIterations
-    this
-  }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
-
 }
