@@ -330,7 +330,7 @@ private[parquet] class FilteringParquetRowInputFormat
       val toFetch = new ArrayList[FileStatus]
       footerCache.synchronized {
         for (status <- statuses) {
-          if (!footerCache.contains(status)) {
+          if (footerCache.contains(status)) {
             footers.add(footerCache(status))
           } else {
             footers.add(null)
@@ -348,7 +348,7 @@ private[parquet] class FilteringParquetRowInputFormat
         var i = 0
         var j = 0
         while (i < toFetch.size) {
-          while (statuses(j) ne toFetch.get(i)) {
+          while (statuses.get(j) ne toFetch.get(i)) {
             j += 1
           }
           footers(j) = fetched(i)
