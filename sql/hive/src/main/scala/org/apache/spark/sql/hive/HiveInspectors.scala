@@ -71,6 +71,9 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
 
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
+
+    // Hive seems to return this for struct types?
+    case c: Class[_] if c == classOf[java.lang.Object] => NullType
   }
 
   /** Converts hive types to native catalyst types. */
@@ -147,7 +150,10 @@ private[hive] trait HiveInspectors {
     case t: java.sql.Timestamp => t
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
     case m: Map[_,_] =>
-      mapAsJavaMap(m.map { case (k, v) => wrap(k) -> wrap(v) })
+      // Some UDFs seem to assume we pass in a HashMap.
+      val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
+      hashMap.putAll(m.map { case (k, v) => wrap(k) -> wrap(v) })
+      hashMap
     case null => null
   }
 
@@ -214,6 +220,12 @@ private[hive] trait HiveInspectors {
     import TypeInfoFactory._
 
     def toTypeInfo: TypeInfo = dt match {
+      case ArrayType(elemType, _) =>
+        getListTypeInfo(elemType.toTypeInfo)
+      case StructType(fields) =>
+        getStructTypeInfo(fields.map(_.name), fields.map(_.dataType.toTypeInfo))
+      case MapType(keyType, valueType, _) =>
+        getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo
       case BooleanType => booleanTypeInfo
       case ByteType => byteTypeInfo

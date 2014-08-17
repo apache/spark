@@ -15,12 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty;
+package org.apache.spark.util;
 
-import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.FileSegment;
+import org.apache.spark.TaskContext;
 
-public interface PathResolver {
-  /** Get the file segment in which the given block resides. */
-  FileSegment getBlockLocation(BlockId blockId);
+
+/**
+ * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+ * TaskContext is Java friendly.
+ */
+public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+
+  @Override
+  public void onTaskCompletion(TaskContext context) {
+    context.isCompleted();
+    context.isInterrupted();
+    context.stageId();
+    context.partitionId();
+    context.runningLocally();
+    context.taskMetrics();
+    context.addTaskCompletionListener(this);
+  }
 }

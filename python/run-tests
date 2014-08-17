@@ -48,6 +48,14 @@ function run_test() {
 
 echo "Running PySpark tests. Output is in python/unit-tests.log."
 
+# Try to test with Python 2.6, since that's the minimum version that we support:
+if [ $(which python2.6) ]; then
+    export PYSPARK_PYTHON="python2.6"
+fi
+
+echo "Testing with Python version:"
+$PYSPARK_PYTHON --version
+
 run_test "pyspark/rdd.py"
 run_test "pyspark/context.py"
 run_test "pyspark/conf.py"
