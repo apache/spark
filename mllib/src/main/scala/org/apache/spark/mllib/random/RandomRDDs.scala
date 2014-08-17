@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.random
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
@@ -24,14 +26,12 @@ import org.apache.spark.mllib.rdd.{RandomVectorRDD, RandomRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-import scala.reflect.ClassTag
-
 /**
  * :: Experimental ::
  * Generator methods for creating RDDs comprised of i.i.d. samples from some distribution.
  */
 @Experimental
-object RandomRDDGenerators {
+object RandomRDDs {
 
   /**
    * :: Experimental ::

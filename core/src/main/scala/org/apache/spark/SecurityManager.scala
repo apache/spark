@@ -294,7 +294,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) == false
+    if (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
   }
 
   /**
@@ -309,7 +309,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    (aclsEnabled() && (user != null) && (!modifyAcls.contains(user))) == false
+    if (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
   }
 
 
