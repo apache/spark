@@ -886,6 +886,7 @@ private[spark] class ConnectionManager(
   }
 
   def stop() {
+    ackTimeoutMonitor.cancel()
     selectorThread.interrupt()
     selectorThread.join()
     selector.close()
