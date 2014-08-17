@@ -45,7 +45,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private val settings = new HashMap[String, String]()
+  private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
