@@ -309,7 +309,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    if (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
+    if (aclsEnabled() && (user != null) && (!modifyAcls.contains(user))) false else true
   }
 
 
