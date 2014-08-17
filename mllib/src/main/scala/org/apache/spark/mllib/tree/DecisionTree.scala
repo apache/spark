@@ -530,7 +530,7 @@ object DecisionTree extends Serializable with Logging {
     logDebug("numNodes = " + numNodes)
 
     // Find the number of features by looking at the first sample.
-    val numFeatures = input.first().binnedFeatures.size
+    val numFeatures = metadata.numFeatures
     logDebug("numFeatures = " + numFeatures)
 
     // numBins:  Number of bins = 1 + number of possible splits
@@ -945,13 +945,7 @@ object DecisionTree extends Serializable with Logging {
         val leftWeight = leftCount.toDouble / (leftCount + rightCount)
         val rightWeight = rightCount.toDouble / (leftCount + rightCount)
 
-        val gain = {
-          if (level > 0) {
-            impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-          } else {
-            impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-          }
-        }
+        val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 
         val predict = (leftSum + rightSum) / (leftCount + rightCount)
         new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)

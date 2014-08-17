@@ -30,6 +30,8 @@ import org.apache.spark.rdd.RDD
 /**
  * Learning and dataset metadata for DecisionTree.
  *
+ * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
+ *                      For regression: fixed at 0 (no meaning).
  * @param featureArity  Map: categorical feature index --> arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  */
@@ -69,23 +71,25 @@ private[tree] object DTMetadata {
     }
 
     val maxBins = math.min(strategy.maxBins, numExamples).toInt
+    val log2MaxBinsp1 = math.log(maxBins + 1) / math.log(2.0)
 
     val unorderedFeatures = new mutable.HashSet[Int]()
     if (numClasses > 2) {
       strategy.categoricalFeaturesInfo.foreach { case (f, k) =>
-        val numUnorderedBins = (1 << k - 1) - 1
-        if (numUnorderedBins < maxBins) {
+        if (k - 1 < log2MaxBinsp1) {
+          // Note: The above check is equivalent to checking:
+          //       numUnorderedBins = (1 << k - 1) - 1 < maxBins
           unorderedFeatures.add(f)
         } else {
           // TODO: Allow this case, where we simply will know nothing about some categories?
-          require(k < maxBins, "maxBins should be greater than max categories " +
-            "in categorical features")
+          require(k < maxBins, s"maxBins (= $maxBins) should be greater than max categories " +
+            s"in categorical features (>= $k)")
         }
       }
     } else {
       strategy.categoricalFeaturesInfo.foreach { case (f, k) =>
-        require(k < maxBins, "maxBins should be greater than max categories " +
-          "in categorical features")
+        require(k < maxBins, s"maxBins (= $maxBins) should be greater than max categories " +
+          s"in categorical features (>= $k)")
       }
     }
 
