@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.model.Bin
 import org.apache.spark.rdd.RDD
 
@@ -48,50 +47,35 @@ private[tree] object TreePoint {
    * Convert an input dataset into its TreePoint representation,
    * binning feature values in preparation for DecisionTree training.
    * @param input     Input dataset.
-   * @param strategy  DecisionTree training info, used for dataset metadata.
    * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param metadata Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
-      bins: Array[Array[Bin]]): RDD[TreePoint] = {
+      bins: Array[Array[Bin]],
+      metadata: DecisionTreeMetadata): RDD[TreePoint] = {
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, strategy.isMulticlassClassification, bins,
-        strategy.categoricalFeaturesInfo)
+      TreePoint.labeledPointToTreePoint(x, bins, metadata)
     }
   }
 
   /**
    * Convert one LabeledPoint into its TreePoint representation.
    * @param bins      Bins for features, of size (numFeatures, numBins).
-   * @param categoricalFeaturesInfo  Map over categorical features: feature index --> feature arity
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
-      isMulticlassClassification: Boolean,
       bins: Array[Array[Bin]],
-      categoricalFeaturesInfo: Map[Int, Int]): TreePoint = {
+      metadata: DecisionTreeMetadata): TreePoint = {
 
     val numFeatures = labeledPoint.features.size
     val numBins = bins(0).size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
-      val featureInfo = categoricalFeaturesInfo.get(featureIndex)
-      val isFeatureContinuous = featureInfo.isEmpty
-      if (isFeatureContinuous) {
-        arr(featureIndex) = findBin(featureIndex, labeledPoint, isFeatureContinuous, false,
-          bins, categoricalFeaturesInfo)
-      } else {
-        val featureCategories = featureInfo.get
-        val isSpaceSufficientForAllCategoricalSplits
-          = numBins > math.pow(2, featureCategories.toInt - 1) - 1
-        val isUnorderedFeature =
-          isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits
-        arr(featureIndex) = findBin(featureIndex, labeledPoint, isFeatureContinuous,
-          isUnorderedFeature, bins, categoricalFeaturesInfo)
-      }
+      arr(featureIndex) = findBin(featureIndex, labeledPoint, metadata.isContinuous(featureIndex),
+        metadata.isUnordered(featureIndex), bins, metadata.featureArity)
       featureIndex += 1
     }
 
