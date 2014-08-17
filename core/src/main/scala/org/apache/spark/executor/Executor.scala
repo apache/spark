@@ -66,10 +66,10 @@ private[spark] class Executor(
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
   if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
-    conf.set("spark.local.dir", getYarnLocalDirs())
-  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
-    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
+      System.getProperty("SPARK_YARN_MODE", conf.getenv("SPARK_YARN_MODE")))) {
+    conf.set("spark.local.dir", getYarnLocalDirs(conf))
+  } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+    conf.set("spark.local.dir", conf.getenv("SPARK_LOCAL_DIRS"))
   }
 
   if (!isLocal) {
@@ -135,12 +135,12 @@ private[spark] class Executor(
   }
 
   /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(): String = {
+  private def getYarnLocalDirs(conf: SparkConf): String = {
     // Hadoop 0.23 and 2.x have different Environment variable names for the
     // local dirs, so lets check both. We assume one of the 2 is set.
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(System.getenv("LOCAL_DIRS"))
+    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
+      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
       .getOrElse(""))
 
     if (localDirs.isEmpty) {
