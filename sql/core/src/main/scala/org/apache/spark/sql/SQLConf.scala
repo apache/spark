@@ -50,8 +50,8 @@ private[spark] object SQLConf {
 trait SQLConf {
   import SQLConf._
 
-  @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
+  @transient protected[spark] val settings =
+    new java.util.concurrent.ConcurrentHashMap[String, String]
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
