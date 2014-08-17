@@ -85,3 +85,17 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
+
+case class MaxOf(left: Expression, right: Expression) extends Expression {
+  type EvaluatedType = Any
+
+  override def nullable = left.nullable && right.nullable
+
+  override def children = left :: right :: Nil
+
+  override def references = (left.flatMap(_.references) ++ right.flatMap(_.references)).toSet
+
+  override def dataType = left.dataType
+
+  override def eval(input: Row): Any = ???
+}

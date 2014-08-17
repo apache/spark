@@ -27,7 +27,8 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
-  protected val exprArray = expressions.toArray
+  // null check is required for when Kryo invokes the no-arg constructor.
+  protected val exprArray = if (expressions != null) expressions.toArray else null
 
   def apply(input: Row): Row = {
     val outputArray = new Array[Any](exprArray.length)

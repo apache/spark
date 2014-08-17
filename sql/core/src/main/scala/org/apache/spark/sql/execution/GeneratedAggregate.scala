@@ -103,6 +103,40 @@ case class GeneratedAggregate(
           updateCount :: updateSum :: Nil,
           result
         )
+
+      case m @ Max(expr) =>
+        val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
+        val initialValue = Literal(null, expr.dataType)
+        val updateMax = MaxOf(currentMax, expr)
+          //If(IsNull(currentMax), expr, If(GreaterThan(currentMax, expr), currentMax, expr))
+
+        AggregateEvaluation(
+          currentMax :: Nil,
+          initialValue :: Nil,
+          updateMax :: Nil,
+          currentMax)
+
+      case CollectHashSet(Seq(expr)) =>
+        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val initialValue = NewSet(expr.dataType)
+        val addToSet = AddItemToSet(expr, set)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          addToSet :: Nil,
+          set)
+
+      case CombineSetsAndCount(inputSet) =>
+        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
+        val initialValue = NewSet(IntegerType) // NOT TRUE
+        val collectSets = CombineSets(set, inputSet)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          collectSets :: Nil,
+          CountSet(set))
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)

@@ -148,7 +148,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
-      case _: Sum | _: Count => false
+      case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
+      case CollectHashSet(exprs) if exprs.size == 1 => false
       case _ => true
     }
 

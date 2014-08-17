@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.util.collection.OpenHashSet
+
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
@@ -31,6 +33,8 @@ import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{IntegerHashSet, LongHashSet}
+
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
     val kryo = new Kryo()
@@ -41,6 +45,10 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
                   new HyperLogLogSerializer)
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
+    // Specific hashset must come first
+    kryo.register(classOf[IntegerHashSet], new IntegerHashSetSerializer)
+    kryo.register(classOf[LongHashSet], new LongHashSetSerializer)
+    kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]], new OpenHashSetSerializer)
     kryo.setReferences(false)
     kryo.setClassLoader(Utils.getSparkClassLoader)
     new AllScalaRegistrar().apply(kryo)
@@ -107,5 +115,77 @@ private[sql] class HyperLogLogSerializer extends Serializer[HyperLogLog] {
     val length = input.readInt()
     val bytes = input.readBytes(length)
     HyperLogLog.Builder.build(bytes)
+  }
+}
+
+private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
+  def write(kryo: Kryo, output: Output, hs: OpenHashSet[_]) {
+    output.writeInt(hs.size)
+    val rowSerializer = kryo.getSerializer(classOf[Any]).asInstanceOf[Serializer[Any]]
+    val iterator = hs.iterator
+    while(iterator.hasNext) {
+      val row = iterator.next()
+      rowSerializer.write(kryo, output, row)
+    }
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[OpenHashSet[_]]): OpenHashSet[_] = {
+    val rowSerializer = kryo.getSerializer(classOf[Any]).asInstanceOf[Serializer[Any]]
+
+    val numItems = input.readInt()
+    val set = new OpenHashSet[Any](numItems)
+    var i = 0
+    while (i < numItems) {
+      val row = rowSerializer.read(kryo, input, classOf[Any].asInstanceOf[Class[Any]])
+      set.add(row)
+      i += 1
+    }
+    set
+  }
+}
+
+private[sql] class IntegerHashSetSerializer extends Serializer[IntegerHashSet] {
+  def write(kryo: Kryo, output: Output, hs: IntegerHashSet) {
+    output.writeInt(hs.size)
+    val iterator = hs.iterator
+    while(iterator.hasNext) {
+      val value: Int = iterator.next()
+      output.writeInt(value)
+    }
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[IntegerHashSet]): IntegerHashSet = {
+    val numItems = input.readInt()
+    val set = new IntegerHashSet
+    var i = 0
+    while (i < numItems) {
+      val value = input.readInt()
+      set.add(value)
+      i += 1
+    }
+    set
+  }
+}
+
+private[sql] class LongHashSetSerializer extends Serializer[LongHashSet] {
+  def write(kryo: Kryo, output: Output, hs: LongHashSet) {
+    output.writeInt(hs.size)
+    val iterator = hs.iterator
+    while(iterator.hasNext) {
+      val value = iterator.next()
+      output.writeLong(value)
+    }
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[LongHashSet]): LongHashSet = {
+    val numItems = input.readInt()
+    val set = new LongHashSet
+    var i = 0
+    while (i < numItems) {
+      val value = input.readLong()
+      set.add(value)
+      i += 1
+    }
+    set
   }
 }
