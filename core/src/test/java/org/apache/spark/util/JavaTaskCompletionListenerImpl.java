@@ -15,25 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.util;
 
-import org.scalatest.FunSuite
+import org.apache.spark.TaskContext;
 
-import org.apache.spark.mllib.linalg.Vectors
 
-class LabeledPointSuite extends FunSuite {
+/**
+ * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+ * TaskContext is Java friendly.
+ */
+public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
 
-  test("parse labeled points") {
-    val points = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
-      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
-    points.foreach { p =>
-      assert(p === LabeledPoint.parse(p.toString))
-    }
-  }
-
-  test("parse labeled points with v0.9 format") {
-    val point = LabeledPoint.parse("1.0,1.0 0.0 -2.0")
-    assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
+  @Override
+  public void onTaskCompletion(TaskContext context) {
+    context.isCompleted();
+    context.isInterrupted();
+    context.stageId();
+    context.partitionId();
+    context.runningLocally();
+    context.taskMetrics();
+    context.addTaskCompletionListener(this);
   }
 }

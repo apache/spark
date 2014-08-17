@@ -185,6 +185,63 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
+
+  test("numerical stability of scaling features using logistic regression with LBFGS") {
+    /**
+     * If we rescale the features, the condition number will be changed so the convergence rate
+     * and the solution will not equal to the original solution multiple by the scaling factor
+     * which it should be.
+     *
+     * However, since in the LogisticRegressionWithLBFGS, we standardize the training dataset first,
+     * no matter how we multiple a scaling factor into the dataset, the convergence rate should be
+     * the same, and the solution should equal to the original solution multiple by the scaling
+     * factor.
+     */
+
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
+
+    val initialWeights = Vectors.dense(0.0)
+
+    val testRDD1 = sc.parallelize(testData, 2)
+
+    val testRDD2 = sc.parallelize(
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E3))), 2)
+
+    val testRDD3 = sc.parallelize(
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E6))), 2)
+
+    testRDD1.cache()
+    testRDD2.cache()
+    testRDD3.cache()
+
+    val lrA = new LogisticRegressionWithLBFGS().setIntercept(true)
+    val lrB = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(false)
+
+    val modelA1 = lrA.run(testRDD1, initialWeights)
+    val modelA2 = lrA.run(testRDD2, initialWeights)
+    val modelA3 = lrA.run(testRDD3, initialWeights)
+
+    val modelB1 = lrB.run(testRDD1, initialWeights)
+    val modelB2 = lrB.run(testRDD2, initialWeights)
+    val modelB3 = lrB.run(testRDD3, initialWeights)
+
+    // For model trained with feature standardization, the weights should
+    // be the same in the scaled space. Note that the weights here are already
+    // in the original space, we transform back to scaled space to compare.
+    assert(modelA1.weights(0) ~== modelA2.weights(0) * 1.0E3 absTol 0.01)
+    assert(modelA1.weights(0) ~== modelA3.weights(0) * 1.0E6 absTol 0.01)
+
+    // Training data with different scales without feature standardization
+    // will not yield the same result in the scaled space due to poor
+    // convergence rate.
+    assert(modelB1.weights(0) !~== modelB2.weights(0) * 1.0E3 absTol 0.1)
+    assert(modelB1.weights(0) !~== modelB3.weights(0) * 1.0E6 absTol 0.1)
+  }
+
 }
 
 class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
@@ -215,8 +272,9 @@ class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model =
-      (new LogisticRegressionWithLBFGS().setIntercept(true).setNumIterations(2)).run(points)
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+    lr.optimizer.setNumIterations(2)
+    val model = lr.run(points)
 
     val predictions = model.predict(points.map(_.features))
 

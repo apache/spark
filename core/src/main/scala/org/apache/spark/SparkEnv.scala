@@ -210,12 +210,22 @@ object SparkEnv extends Logging {
       "MapOutputTracker",
       new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
+    // Let the user specify short names for shuffle managers
+    val shortShuffleMgrNames = Map(
+      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
+      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
+    val shuffleMgrName = conf.get("spark.shuffle.manager", "hash")
+    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
+    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
+
+    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager, mapOutputTracker)
+      serializer, conf, securityManager, mapOutputTracker, shuffleManager)
 
     val connectionManager = blockManager.connectionManager
 
@@ -249,16 +259,6 @@ object SparkEnv extends Logging {
     } else {
       "."
     }
-
-    // Let the user specify short names for shuffle managers
-    val shortShuffleMgrNames = Map(
-      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
-      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "hash")
-    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
-    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
-
-    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {

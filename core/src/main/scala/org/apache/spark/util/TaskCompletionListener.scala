@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.util
 
-import org.scalatest.FunSuite
+import java.util.EventListener
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.TaskContext
+import org.apache.spark.annotation.DeveloperApi
 
-class LabeledPointSuite extends FunSuite {
-
-  test("parse labeled points") {
-    val points = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
-      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
-    points.foreach { p =>
-      assert(p === LabeledPoint.parse(p.toString))
-    }
-  }
-
-  test("parse labeled points with v0.9 format") {
-    val point = LabeledPoint.parse("1.0,1.0 0.0 -2.0")
-    assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
-  }
+/**
+ * :: DeveloperApi ::
+ *
+ * Listener providing a callback function to invoke when a task's execution completes.
+ */
+@DeveloperApi
+trait TaskCompletionListener extends EventListener {
+  def onTaskCompletion(context: TaskContext)
 }
