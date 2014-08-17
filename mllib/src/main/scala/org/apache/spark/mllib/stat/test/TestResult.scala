@@ -45,6 +45,11 @@ trait TestResult[DF] {
   def statistic: Double
 
   /**
+   * Null hypothesis of the test.
+   */
+  def nullHypothesis: String
+
+  /**
    * String explaining the hypothesis test result.
    * Specific classes implementing this trait should override this method to output test-specific
    * information.
@@ -53,13 +58,13 @@ trait TestResult[DF] {
 
     // String explaining what the p-value indicates.
     val pValueExplain = if (pValue <= 0.01) {
-      "Very strong presumption against null hypothesis."
+      s"Very strong presumption against null hypothesis: $nullHypothesis."
     } else if (0.01 < pValue && pValue <= 0.05) {
-      "Strong presumption against null hypothesis."
-    } else if (0.05 < pValue && pValue <= 0.01) {
-      "Low presumption against null hypothesis."
+      s"Strong presumption against null hypothesis: $nullHypothesis."
+    } else if (0.05 < pValue && pValue <= 0.1) {
+      s"Low presumption against null hypothesis: $nullHypothesis."
     } else {
-      "No presumption against null hypothesis."
+      s"No presumption against null hypothesis: $nullHypothesis."
     }
 
     s"degrees of freedom = ${degreesOfFreedom.toString} \n" +
@@ -70,19 +75,18 @@ trait TestResult[DF] {
 
 /**
  * :: Experimental ::
- * Object containing the test results for the chi squared hypothesis test.
+ * Object containing the test results for the chi-squared hypothesis test.
  */
 @Experimental
-class ChiSqTestResult(override val pValue: Double,
+class ChiSqTestResult private[stat] (override val pValue: Double,
     override val degreesOfFreedom: Int,
     override val statistic: Double,
     val method: String,
-    val nullHypothesis: String) extends TestResult[Int] {
+    override val nullHypothesis: String) extends TestResult[Int] {
 
   override def toString: String = {
-    "Chi squared test summary: \n" +
-    s"method: $method \n" +
-    s"null hypothesis: $nullHypothesis \n" +
-    super.toString
+    "Chi squared test summary:\n" +
+      s"method: $method\n" +
+      super.toString
   }
 }

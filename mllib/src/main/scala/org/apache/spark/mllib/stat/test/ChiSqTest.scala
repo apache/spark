@@ -56,7 +56,7 @@ private[stat] object ChiSqTest extends Logging {
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
     val goodnessOfFit = Value("observed follows the same distribution as expected.")
-    val independence = Value("observations in each column are statistically independent.")
+    val independence = Value("the occurrence of the outcomes is statistically independent.")
   }
 
   // Method identification based on input methodName string
