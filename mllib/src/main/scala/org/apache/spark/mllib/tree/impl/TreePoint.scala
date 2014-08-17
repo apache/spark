@@ -54,7 +54,7 @@ private[tree] object TreePoint {
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
       bins: Array[Array[Bin]],
-      metadata: DTMetadata): RDD[TreePoint] = {
+      metadata: DecisionTreeMetadata): RDD[TreePoint] = {
     input.map { x =>
       TreePoint.labeledPointToTreePoint(x, bins, metadata)
     }
@@ -67,7 +67,7 @@ private[tree] object TreePoint {
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
       bins: Array[Array[Bin]],
-      metadata: DTMetadata): TreePoint = {
+      metadata: DecisionTreeMetadata): TreePoint = {
 
     val numFeatures = labeledPoint.features.size
     val numBins = bins(0).size

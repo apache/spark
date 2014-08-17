@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impl.{DTMetadata, TimeTracker, TreePoint}
+import org.apache.spark.mllib.tree.impl.{DecisionTreeMetadata, TimeTracker, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
@@ -62,7 +62,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     timer.start("init")
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
-    val metadata = DTMetadata.buildMetadata(retaggedInput, strategy)
+    val metadata = DecisionTreeMetadata.buildMetadata(retaggedInput, strategy)
     logDebug("algo = " + strategy.algo)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
@@ -443,7 +443,7 @@ object DecisionTree extends Serializable with Logging {
   protected[tree] def findBestSplits(
       input: RDD[TreePoint],
       parentImpurities: Array[Double],
-      metadata: DTMetadata,
+      metadata: DecisionTreeMetadata,
       level: Int,
       nodes: Array[Node],
       splits: Array[Array[Split]],
@@ -489,7 +489,7 @@ object DecisionTree extends Serializable with Logging {
   private def findBestSplitsPerGroup(
       input: RDD[TreePoint],
       parentImpurities: Array[Double],
-      metadata: DTMetadata,
+      metadata: DecisionTreeMetadata,
       level: Int,
       nodes: Array[Node],
       splits: Array[Array[Split]],
@@ -551,7 +551,9 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Get the node index corresponding to this data point.
-     * This is used during training, mimicking prediction.
+     * This function mimics prediction, passing an example from the root node down to a node
+     * at the current level being trained; that node's index is returned.
+     *
      * @return  Leaf index if the data point reaches a leaf.
      *          Otherwise, last node reachable in tree matching this example.
      */
@@ -608,7 +610,8 @@ object DecisionTree extends Serializable with Logging {
     val levelOffset = (1 << level) - 1
 
     /**
-     * Find the node (indexed from 0 at the start of this level) for the given example.
+     * Find the node index for the given example.
+     * Nodes are indexed from 0 at the start of this (level, group).
      * If the example does not reach this level, returns a value < 0.
      */
     def treePointToNodeIndex(treePoint: TreePoint): Int = {
@@ -1261,7 +1264,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param numBins  Number of bins = 1 + number of possible splits.
    */
-  private def getElementsPerNode(metadata: DTMetadata, numBins: Int): Int = {
+  private def getElementsPerNode(metadata: DecisionTreeMetadata, numBins: Int): Int = {
     if (metadata.isClassification) {
       if (metadata.isMulticlassWithCategoricalFeatures) {
         2 * metadata.numClasses * numBins * metadata.numFeatures
@@ -1304,7 +1307,7 @@ object DecisionTree extends Serializable with Logging {
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-      metadata: DTMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
+      metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     val count = input.count()
 

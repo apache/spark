@@ -35,7 +35,7 @@ import org.apache.spark.rdd.RDD
  * @param featureArity  Map: categorical feature index --> arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  */
-private[tree] class DTMetadata(
+private[tree] class DecisionTreeMetadata(
     val numFeatures: Int,
     val numExamples: Long,
     val numClasses: Int,
@@ -59,9 +59,9 @@ private[tree] class DTMetadata(
 
 }
 
-private[tree] object DTMetadata {
+private[tree] object DecisionTreeMetadata {
 
-  def buildMetadata(input: RDD[LabeledPoint], strategy: Strategy): DTMetadata = {
+  def buildMetadata(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeMetadata = {
 
     val numFeatures = input.take(1)(0).features.size
     val numExamples = input.count()
@@ -93,7 +93,7 @@ private[tree] object DTMetadata {
       }
     }
 
-    new DTMetadata(numFeatures, numExamples, numClasses, maxBins,
+    new DecisionTreeMetadata(numFeatures, numExamples, numClasses, maxBins,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet,
       strategy.impurity, strategy.quantileCalculationStrategy)
   }
