@@ -20,12 +20,14 @@ package org.apache.spark.sql.parquet
 import java.io.IOException
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
+import java.util.concurrent.{Callable, TimeUnit}
 import java.util.{ArrayList, Date, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Try
 
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path}
 import org.apache.hadoop.mapreduce._
@@ -40,6 +42,7 @@ import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
@@ -93,6 +96,11 @@ case class ParquetTableScan(
       sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
       ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
     }
+
+    // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
+    conf.set(
+      SQLConf.PARQUET_CACHE_METADATA,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "false"))
 
     sc.newAPIHadoopRDD(
       conf,
@@ -324,35 +332,33 @@ private[parquet] class FilteringParquetRowInputFormat
     import FilteringParquetRowInputFormat.footerCache
 
     if (footers eq null) {
+      val conf = ContextUtil.getConfiguration(jobContext)
+      val cacheMetadata = conf.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
       val statuses = listStatus(jobContext)
       fileStatuses = statuses.map(file => file.getPath -> file).toMap
-      footers = new ArrayList[Footer](statuses.size)
-      val toFetch = new ArrayList[FileStatus]
-      footerCache.synchronized {
+      if (!cacheMetadata) {
+        // Read the footers from HDFS
+        footers = getFooters(conf, statuses)
+      } else {
+        // Read only the footers that are not in the footerCache
+        val foundFooters = footerCache.getAllPresent(statuses)
+        val toFetch = new ArrayList[FileStatus]
+        for (s <- statuses) {
+          if (!foundFooters.containsKey(s)) {
+            toFetch.add(s)
+          }
+        }
+        val newFooters = new mutable.HashMap[FileStatus, Footer]
+        if (toFetch.size > 0) {
+          val fetched = getFooters(conf, toFetch)
+          for ((footer, i) <- fetched.zipWithIndex) {
+            newFooters(statuses.get(i)) = footer
+            footerCache.putAll(newFooters)
+          }
+        }
+        footers = new ArrayList[Footer](statuses.size)
         for (status <- statuses) {
-          if (footerCache.contains(status)) {
-            footers.add(footerCache(status))
-          } else {
-            footers.add(null)
-            toFetch.add(status)
-          }
-        }
-      }
-      if (toFetch.size > 0) {
-        val fetched = getFooters(ContextUtil.getConfiguration(jobContext), toFetch)
-        footerCache.synchronized {
-          for ((status, i) <- toFetch.zipWithIndex) {
-            footerCache(status) = fetched.get(i)
-          }
-        }
-        var i = 0
-        var j = 0
-        while (i < toFetch.size) {
-          while (statuses.get(j) ne toFetch.get(i)) {
-            j += 1
-          }
-          footers(j) = fetched(i)
-          i += 1
+          footers.add(newFooters.getOrElse(status, foundFooters.get(status)))
         }
       }
     }
@@ -368,6 +374,8 @@ private[parquet] class FilteringParquetRowInputFormat
       footers: JList[Footer]): JList[ParquetInputSplit] = {
 
     import FilteringParquetRowInputFormat.blockLocationCache
+
+    val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
 
     val maxSplitSize: JLong = configuration.getLong("mapred.max.split.size", Long.MaxValue)
     val minSplitSize: JLong =
@@ -396,27 +404,23 @@ private[parquet] class FilteringParquetRowInputFormat
     for (footer <- footers) {
       val fs = footer.getFile.getFileSystem(configuration)
       val file = footer.getFile
-      val fileStatus = fileStatuses.getOrElse(file, fs.getFileStatus(file))
+      val status = fileStatuses.getOrElse(file, fs.getFileStatus(file))
       val parquetMetaData = footer.getParquetMetadata
       val blocks = parquetMetaData.getBlocks
-      var fileBlockLocations: Array[BlockLocation] = null
-      blockLocationCache.synchronized {
-        if (blockLocationCache.contains(fileStatus)) {
-          fileBlockLocations = blockLocationCache(fileStatus)
-        }
-      }
-      if (fileBlockLocations == null) {
-        fileBlockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen)
-        blockLocationCache.synchronized {
-          blockLocationCache(fileStatus) = fileBlockLocations
-        }
+      var blockLocations: Array[BlockLocation] = null
+      if (!cacheMetadata) {
+        blockLocations = fs.getFileBlockLocations(status, 0, status.getLen)
+      } else {
+        blockLocations = blockLocationCache.get(status, new Callable[Array[BlockLocation]] {
+          def call(): Array[BlockLocation] = fs.getFileBlockLocations(status, 0, status.getLen)
+        })
       }
       splits.addAll(
         generateSplits.invoke(
           null,
           blocks,
-          fileBlockLocations,
-          fileStatus,
+          blockLocations,
+          status,
           parquetMetaData.getFileMetaData,
           readContext.getRequestedSchema.toString,
           readContext.getReadSupportMetadata,
@@ -429,9 +433,14 @@ private[parquet] class FilteringParquetRowInputFormat
 }
 
 private[parquet] object FilteringParquetRowInputFormat {
-  // TODO: make these LRU maps with a bounded size
-  private val footerCache = new mutable.HashMap[FileStatus, Footer]
-  private val blockLocationCache = new mutable.HashMap[FileStatus, Array[BlockLocation]]
+  private val footerCache = CacheBuilder.newBuilder()
+    .maximumSize(20000)
+    .build[FileStatus, Footer]()
+
+  private val blockLocationCache = CacheBuilder.newBuilder()
+    .maximumSize(20000)
+    .expireAfterWrite(15, TimeUnit.MINUTES)  // Expire locations since HDFS nodes might fail
+    .build[FileStatus, Array[BlockLocation]]()
 }
 
 private[parquet] object FileSystemHelper {
