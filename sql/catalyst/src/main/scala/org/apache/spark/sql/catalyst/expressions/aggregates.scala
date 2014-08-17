@@ -194,7 +194,7 @@ case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpress
 case class CollectHashSetFunction(
     @transient expr: Seq[Expression],
     @transient base: AggregateExpression)
-  extends MergableAggregateFunction {
+  extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
 
@@ -203,13 +203,14 @@ case class CollectHashSetFunction(
   @transient
   val distinctValue = new InterpretedProjection(expr)
 
+/*
   override def merge(other: MergableAggregateFunction): MergableAggregateFunction = {
     val otherSetIterator = other.asInstanceOf[CountDistinctFunction].seen.iterator
     while(otherSetIterator.hasNext) {
       seen.add(otherSetIterator.next())
     }
     this
-  }
+  }*/
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = distinctValue(input)
@@ -466,7 +467,7 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
 case class CountDistinctFunction(
     @transient expr: Seq[Expression],
     @transient base: AggregateExpression)
-  extends MergableAggregateFunction {
+  extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
 
