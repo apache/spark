@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.parquet
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable
-import scala.util.Try
-
 import java.io.IOException
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
-import java.util.{Date, List => JList}
+import java.util.{ArrayList, Date, List => JList}
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -32,7 +32,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-
 import parquet.hadoop._
 import parquet.hadoop.api.{InitContext, ReadSupport}
 import parquet.hadoop.metadata.GlobalMetaData
@@ -41,7 +40,6 @@ import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
@@ -323,10 +321,40 @@ private[parquet] class FilteringParquetRowInputFormat
   }
 
   override def getFooters(jobContext: JobContext): JList[Footer] = {
+    import FilteringParquetRowInputFormat.footerCache
+
     if (footers eq null) {
       val statuses = listStatus(jobContext)
       fileStatuses = statuses.map(file => file.getPath -> file).toMap
-      footers = getFooters(ContextUtil.getConfiguration(jobContext), statuses)
+      footers = new ArrayList[Footer](statuses.size)
+      val toFetch = new ArrayList[FileStatus]
+      footerCache.synchronized {
+        for (status <- statuses) {
+          if (!footerCache.contains(status)) {
+            footers.add(footerCache(status))
+          } else {
+            footers.add(null)
+            toFetch.add(status)
+          }
+        }
+      }
+      if (toFetch.size > 0) {
+        val fetched = getFooters(ContextUtil.getConfiguration(jobContext), toFetch)
+        footerCache.synchronized {
+          for ((status, i) <- toFetch.zipWithIndex) {
+            footerCache(status) = fetched.get(i)
+          }
+        }
+        var i = 0
+        var j = 0
+        while (i < toFetch.size) {
+          while (statuses(j) ne toFetch.get(i)) {
+            j += 1
+          }
+          footers(j) = fetched(i)
+          i += 1
+        }
+      }
     }
 
     footers
@@ -385,6 +413,11 @@ private[parquet] class FilteringParquetRowInputFormat
 
     splits
   }
+}
+
+private[parquet] object FilteringParquetRowInputFormat {
+  // TODO: make this an LRU map with a bounded size
+  private val footerCache = new mutable.HashMap[FileStatus, Footer]
 }
 
 private[parquet] object FileSystemHelper {
