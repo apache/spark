@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
@@ -367,6 +367,8 @@ private[parquet] class FilteringParquetRowInputFormat
       configuration: Configuration,
       footers: JList[Footer]): JList[ParquetInputSplit] = {
 
+    import FilteringParquetRowInputFormat.blockLocationCache
+
     val maxSplitSize: JLong = configuration.getLong("mapred.max.split.size", Long.MaxValue)
     val minSplitSize: JLong =
       Math.max(getFormatMinSplitSize(), configuration.getLong("mapred.min.split.size", 0L))
@@ -397,7 +399,18 @@ private[parquet] class FilteringParquetRowInputFormat
       val fileStatus = fileStatuses.getOrElse(file, fs.getFileStatus(file))
       val parquetMetaData = footer.getParquetMetadata
       val blocks = parquetMetaData.getBlocks
-      val fileBlockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen)
+      var fileBlockLocations: Array[BlockLocation] = null
+      blockLocationCache.synchronized {
+        if (blockLocationCache.contains(fileStatus)) {
+          fileBlockLocations = blockLocationCache(fileStatus)
+        }
+      }
+      if (fileBlockLocations == null) {
+        fileBlockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen)
+        blockLocationCache.synchronized {
+          blockLocationCache(fileStatus) = fileBlockLocations
+        }
+      }
       splits.addAll(
         generateSplits.invoke(
           null,
@@ -416,8 +429,9 @@ private[parquet] class FilteringParquetRowInputFormat
 }
 
 private[parquet] object FilteringParquetRowInputFormat {
-  // TODO: make this an LRU map with a bounded size
+  // TODO: make these LRU maps with a bounded size
   private val footerCache = new mutable.HashMap[FileStatus, Footer]
+  private val blockLocationCache = new mutable.HashMap[FileStatus, Array[BlockLocation]]
 }
 
 private[parquet] object FileSystemHelper {
