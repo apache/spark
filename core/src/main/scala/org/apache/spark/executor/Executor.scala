@@ -62,16 +62,6 @@ private[spark] class Executor(
   val conf = new SparkConf(true)
   conf.setAll(properties)
 
-  // If we are in yarn mode, systems can have different disk layouts so we must set it
-  // to what Yarn on this system said was available. This will be used later when SparkEnv
-  // created.
-  if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", conf.getenv("SPARK_YARN_MODE")))) {
-    conf.set("spark.local.dir", getYarnLocalDirs(conf))
-  } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
-    conf.set("spark.local.dir", conf.getenv("SPARK_LOCAL_DIRS"))
-  }
-
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -132,21 +122,6 @@ private[spark] class Executor(
     env.metricsSystem.report()
     isStopped = true
     threadPool.shutdown()
-  }
-
-  /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
-
-    if (localDirs.isEmpty) {
-      throw new Exception("Yarn Local dirs can't be empty")
-    }
-    localDirs
   }
 
   class TaskRunner(
