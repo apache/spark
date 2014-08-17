@@ -133,7 +133,7 @@ private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
     val rowSerializer = kryo.getSerializer(classOf[Any]).asInstanceOf[Serializer[Any]]
 
     val numItems = input.readInt()
-    val set = new OpenHashSet[Any](numItems)
+    val set = new OpenHashSet[Any](numItems + 1)
     var i = 0
     while (i < numItems) {
       val row = rowSerializer.read(kryo, input, classOf[Any].asInstanceOf[Class[Any]])
