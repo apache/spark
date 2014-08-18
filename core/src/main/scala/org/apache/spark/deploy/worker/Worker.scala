@@ -240,7 +240,6 @@ private[spark] class Worker(
           coresUsed += cores_
           memoryUsed += memory_
           master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
-
         } catch {
           case e: Exception => {
             logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
