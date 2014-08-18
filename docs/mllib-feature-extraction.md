@@ -9,7 +9,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction
 
 ## Word2Vec 
 
-Wor2Vec computes distributed vector representation of words. The main advantage of the distributed 
+Word2Vec computes distributed vector representation of words. The main advantage of the distributed
 representations is that similar words are close in the vector space, which makes generalization to 
 novel patterns easier and model estimation more robust. Distributed vector representation is 
 showed to be useful in many natural language processing applications such as named entity 
@@ -64,7 +64,7 @@ val model = word2vec.fit(input)
 val synonyms = model.findSynonyms("china", 40)
 
 for((synonym, cosineSimilarity) <- synonyms) {
-  println(synonym + " " + cosineSimilarity.toString)
+  println(s"$synonym $cosineSimilarity")
 }
 {% endhighlight %}
 </div>
