@@ -90,7 +90,7 @@ echo "Running Spark unit tests"
 echo "========================================================================="
 
 if [ -n "$_RUN_SQL_TESTS" ]; then
-  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
 fi
 # echo "q" is needed because sbt on encountering a build file with failure 
 # (either resolution or compilation) prompts the user for input either q, r, 
