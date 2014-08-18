@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.Logger
+import org.apache.spark.Logging
 
 /**
  * A library for easily manipulating trees of operators.  Operators that extend TreeNode are
@@ -33,7 +33,8 @@ import org.apache.spark.sql.Logger
  *   <li>debugging support - pretty printing, easy splicing of trees, etc.</li>
  * </ul>
  */
-package object trees {
+package object trees extends Logging {
   // Since we want tree nodes to be lightweight, we create one logger for all treenode instances.
-  protected val logger = Logger("catalyst.trees")
+  protected override def logName = "catalyst.trees"
+
 }

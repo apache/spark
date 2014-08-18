@@ -22,11 +22,11 @@ import scala.math.abs
 import scala.util.Random
 
 import org.scalatest.FunSuite
-
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.recommendation.ALS.BlockStats
 
 object ALSSuite {
 
@@ -67,8 +67,10 @@ object ALSSuite {
       case true =>
         // Generate raw values from [0,9], or if negativeWeights, from [-2,7]
         val raw = new DoubleMatrix(users, products,
-          Array.fill(users * products)((if (negativeWeights) -2 else 0) + rand.nextInt(10).toDouble): _*)
-        val prefs = new DoubleMatrix(users, products, raw.data.map(v => if (v > 0) 1.0 else 0.0): _*)
+          Array.fill(users * products)(
+            (if (negativeWeights) -2 else 0) + rand.nextInt(10).toDouble): _*)
+        val prefs =
+          new DoubleMatrix(users, products, raw.data.map(v => if (v > 0) 1.0 else 0.0): _*)
         (raw, prefs)
       case false => (userMatrix.mmul(productMatrix), null)
     }
@@ -159,6 +161,22 @@ class ALSSuite extends FunSuite with LocalSparkContext {
   test("NNALS, rank 2") {
     testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, -1, false)
   }
+
+  test("analyze one user block and one product block") {
+    val localRatings = Seq(
+      Rating(0, 100, 1.0),
+      Rating(0, 101, 2.0),
+      Rating(0, 102, 3.0),
+      Rating(1, 102, 4.0),
+      Rating(2, 103, 5.0))
+    val ratings = sc.makeRDD(localRatings, 2)
+    val stats = ALS.analyzeBlocks(ratings, 1, 1)
+    assert(stats.size === 2)
+    assert(stats(0) === BlockStats("user", 0, 3, 5, 4, 3))
+    assert(stats(1) === BlockStats("product", 0, 4, 5, 3, 4))
+  }
+
+  // TODO: add tests for analyzing multiple user/product blocks
 
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.

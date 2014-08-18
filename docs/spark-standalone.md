@@ -242,9 +242,6 @@ To run an interactive Spark shell against the cluster, run the following command
 
     ./bin/spark-shell --master spark://IP:PORT
 
-Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script will
-automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
-
 You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
 # Launching Compiled Spark Applications
@@ -302,97 +299,15 @@ You can run Spark alongside your existing Hadoop cluster by just launching it as
 
 # Configuring Ports for Network Security
 
-Spark makes heavy use of the network, and some environments have strict requirements for using tight
-firewall settings.  Below are the primary ports that Spark uses for its communication and how to
-configure those ports.
-
-<table class="table">
-  <tr>
-    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
-    Setting</th><th>Notes</th>
-  </tr>
-  <!-- Web UIs -->
-  <tr>
-    <td>Browser</td>
-    <td>Standalone Cluster Master</td>
-    <td>8080</td>
-    <td>Web UI</td>
-    <td><code>master.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>Driver</td>
-    <td>4040</td>
-    <td>Web UI</td>
-    <td><code>spark.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>History Server</td>
-    <td>18080</td>
-    <td>Web UI</td>
-    <td><code>spark.history.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>Worker</td>
-    <td>8081</td>
-    <td>Web UI</td>
-    <td><code>worker.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <!-- Cluster interactions -->
-  <tr>
-    <td>Application</td>
-    <td>Standalone Cluster Master</td>
-    <td>7077</td>
-    <td>Submit job to cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
-  </tr>
-  <tr>
-    <td>Worker</td>
-    <td>Standalone Cluster Master</td>
-    <td>7077</td>
-    <td>Join cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
-  </tr>
-  <tr>
-    <td>Application</td>
-    <td>Worker</td>
-    <td>(random)</td>
-    <td>Join cluster</td>
-    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
-    <td>Akka-based</td>
-  </tr>
-
-  <!-- Other misc stuff -->
-  <tr>
-    <td>Driver and other Workers</td>
-    <td>Worker</td>
-    <td>(random)</td>
-    <td>
-      <ul>
-        <li>File server for file and jars</li>
-        <li>Http Broadcast</li>
-        <li>Class file server (Spark Shell only)</li>
-      </ul>
-    </td>
-    <td>None</td>
-    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
-  </tr>
-
-</table>
+Spark makes heavy use of the network, and some environments have strict requirements for using
+tight firewall settings. For a complete list of ports to configure, see the
+[security page](security.html#configuring-ports-for-network-security).
 
 # High Availability
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.
 
-## Standby Masters with ZooKeeper
+# Standby Masters with ZooKeeper
 
 **Overview**
 
@@ -432,7 +347,7 @@ There's an important distinction to be made between "registering with a Master" 
 
 Due to this property, new Masters can be created at any time, and the only thing you need to worry about is that _new_ applications and Workers can find it to register with in case it becomes the leader. Once registered, you're taken care of.
 
-## Single-Node Recovery with Local File System
+# Single-Node Recovery with Local File System
 
 **Overview**
 

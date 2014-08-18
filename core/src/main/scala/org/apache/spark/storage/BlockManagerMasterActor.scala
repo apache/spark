@@ -31,7 +31,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -39,7 +39,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -52,24 +52,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
-  val slaveTimeout = conf.get("spark.storage.blockManagerSlaveTimeoutMs",
-    "" + (BlockManager.getHeartBeatFrequency(conf) * 3)).toLong
+  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
+    math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
-  val checkTimeoutInterval = conf.get("spark.storage.blockManagerTimeoutIntervalMs",
-    "60000").toLong
+  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
   var timeoutCheckingTask: Cancellable = null
 
   override def preStart() {
-    if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
-      import context.dispatcher
-      timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-        checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    }
+    import context.dispatcher
+    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     super.preStart()
   }
 
-  def receive = {
+  override def receiveWithLogging = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
@@ -119,7 +116,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       sender ! true
 
     case StopBlockManagerMaster =>
-      logInfo("Stopping BlockManagerMaster")
       sender ! true
       if (timeoutCheckingTask != null) {
         timeoutCheckingTask.cancel()
@@ -129,8 +125,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case ExpireDeadHosts =>
       expireDeadHosts()
 
-    case HeartBeat(blockManagerId) =>
-      sender ! heartBeat(blockManagerId)
+    case BlockManagerHeartbeat(blockManagerId) =>
+      sender ! heartbeatReceived(blockManagerId)
 
     case other =>
       logWarning("Got unknown message: " + other)
@@ -216,7 +212,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val minSeenTime = now - slaveTimeout
     val toRemove = new mutable.HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime) {
+      if (info.lastSeenMs < minSeenTime && info.blockManagerId.executorId != "<driver>") {
         logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
           + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
         toRemove += info.blockManagerId
@@ -230,7 +226,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
-  private def heartBeat(blockManagerId: BlockManagerId): Boolean = {
+  /**
+   * Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
     if (!blockManagerInfo.contains(blockManagerId)) {
       blockManagerId.executorId == "<driver>" && !isLocal
     } else {
@@ -264,9 +264,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
-      val blockMap = mutable.Map[BlockId, BlockStatus](info.blocks.toSeq: _*)
-      new StorageStatus(blockManagerId, info.maxMem, blockMap)
+    blockManagerInfo.map { case (blockManagerId, info) =>
+      new StorageStatus(blockManagerId, info.maxMem, info.blocks)
     }.toArray
   }
 
@@ -421,7 +420,14 @@ case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    tachyonSize: Long)
+    tachyonSize: Long) {
+  def isCached: Boolean = memSize + diskSize + tachyonSize > 0
+}
+
+@DeveloperApi
+object BlockStatus {
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+}
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,

@@ -30,7 +30,8 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
+    CompressedSerializer
 
 
 pickleSer = PickleSerializer()
@@ -65,24 +66,30 @@ def main(infile, outfile):
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)
+        ser = CompressedSerializer(pickleSer)
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
-            value = pickleSer._read_with_length(infile)
+            value = ser._read_with_length(infile)
             _broadcastRegistry[bid] = Broadcast(bid, value)
 
-        command = pickleSer._read_with_length(infile)
+        command = ser._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
         serializer.dump_stream(func(split_index, iterator), outfile)
-    except Exception as e:
-        # Write the error to stderr in addition to trying to pass it back to
-        # Java, in case it happened while serializing a record
-        print >> sys.stderr, "PySpark worker failed with exception:"
-        print >> sys.stderr, traceback.format_exc()
-        write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(traceback.format_exc(), outfile)
-        sys.exit(-1)
+    except Exception:
+        try:
+            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+            write_with_length(traceback.format_exc(), outfile)
+            outfile.flush()
+        except IOError:
+            # JVM close the socket
+            pass
+        except Exception:
+            # Write the error to stderr if it happened while serializing
+            print >> sys.stderr, "PySpark worker failed with exception:"
+            print >> sys.stderr, traceback.format_exc()
+        exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     # Mark the beginning of the accumulators section of the output

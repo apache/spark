@@ -16,6 +16,7 @@
 #
 
 import struct
+import sys
 import numpy
 from numpy import ndarray, float64, int64, int32, array_equal, array
 from pyspark import SparkContext, RDD
@@ -72,10 +73,18 @@ except:
 # Python interpreter must agree on what endian the machine is.
 
 
-DENSE_VECTOR_MAGIC  = 1
+DENSE_VECTOR_MAGIC = 1
 SPARSE_VECTOR_MAGIC = 2
-DENSE_MATRIX_MAGIC  = 3
+DENSE_MATRIX_MAGIC = 3
 LABELED_POINT_MAGIC = 4
+
+
+# Workaround for SPARK-2954: before Python 2.7, struct.unpack couldn't unpack bytearray()s.
+if sys.version_info[:2] <= (2, 6):
+    def _unpack(fmt, string):
+        return struct.unpack(fmt, buffer(string))
+else:
+    _unpack = struct.unpack
 
 
 def _deserialize_numpy_array(shape, ba, offset, dtype=float64):
@@ -101,7 +110,7 @@ def _serialize_double(d):
     """
     Serialize a double (float or numpy.float64) into a mutually understood format.
     """
-    if type(d) == float or type(d) == float64:
+    if type(d) == float or type(d) == float64 or type(d) == int or type(d) == long:
         d = float64(d)
         ba = bytearray(8)
         _copyto(d, buffer=ba, offset=0, shape=[1], dtype=float64)
@@ -176,6 +185,10 @@ def _deserialize_double(ba, offset=0):
     True
     >>> _deserialize_double(_serialize_double(float64(0.0))) == 0.0
     True
+    >>> _deserialize_double(_serialize_double(1)) == 1.0
+    True
+    >>> _deserialize_double(_serialize_double(1L)) == 1.0
+    True
     >>> x = sys.float_info.max
     >>> _deserialize_double(_serialize_double(sys.float_info.max)) == x
     True
@@ -187,7 +200,7 @@ def _deserialize_double(ba, offset=0):
         raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
     if len(ba) - offset != 8:
         raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
-    return struct.unpack("d", ba[offset:])[0]
+    return _unpack("d", ba[offset:])[0]
 
 
 def _deserialize_double_vector(ba, offset=0):
@@ -339,22 +352,35 @@ def _copyto(array, buffer, offset, shape, dtype):
     temp_array[...] = array
 
 
-def _get_unmangled_rdd(data, serializer):
+def _get_unmangled_rdd(data, serializer, cache=True):
+    """
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
     dataBytes = data.map(serializer)
     dataBytes._bypass_serializer = True
-    dataBytes.cache()  # TODO: users should unpersist() this later!
+    if cache:
+        dataBytes.cache()
     return dataBytes
 
 
-# Map a pickled Python RDD of Python dense or sparse vectors to a Java RDD of
-# _serialized_double_vectors
-def _get_unmangled_double_vector_rdd(data):
-    return _get_unmangled_rdd(data, _serialize_double_vector)
+def _get_unmangled_double_vector_rdd(data, cache=True):
+    """
+    Map a pickled Python RDD of Python dense or sparse vectors to a Java RDD of
+    _serialized_double_vectors.
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
+    return _get_unmangled_rdd(data, _serialize_double_vector, cache)
 
 
-# Map a pickled Python RDD of LabeledPoint to a Java RDD of _serialized_labeled_points
-def _get_unmangled_labeled_point_rdd(data):
-    return _get_unmangled_rdd(data, _serialize_labeled_point)
+def _get_unmangled_labeled_point_rdd(data, cache=True):
+    """
+    Map a pickled Python RDD of LabeledPoint to a Java RDD of _serialized_labeled_points.
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
+    return _get_unmangled_rdd(data, _serialize_labeled_point, cache)
 
 
 # Common functions for dealing with and training linear models
@@ -376,7 +402,7 @@ def _linear_predictor_typecheck(x, coeffs):
         if x.size != coeffs.shape[0]:
             raise RuntimeError("Got sparse vector of size %d; wanted %d" % (
                 x.size, coeffs.shape[0]))
-    elif (type(x) == RDD):
+    elif isinstance(x, RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
         raise TypeError("Argument of type " + type(x).__name__ + " unsupported")
@@ -426,6 +452,7 @@ def _serialize_rating(r):
 
 
 class RatingDeserializer(Serializer):
+
     def loads(self, stream):
         length = struct.unpack("!i", stream.read(4))[0]
         ba = stream.read(length)

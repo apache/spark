@@ -27,7 +27,7 @@ import com.bealetech.metrics.reporting.{Statsd, StatsdReporter}
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class StatsdSink(val property: Properties, val registry: MetricRegistry,
+private[spark] class StatsdSink(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
   val STATSD_DEFAULT_PERIOD = 10
   val STATSD_DEFAULT_UNIT = "SECONDS"
@@ -74,14 +74,15 @@ class StatsdSink(val property: Properties, val registry: MetricRegistry,
       .prefixedWith(prefix)
       .build(statsd)
 
-reporter.start(15, TimeUnit.SECONDS);
-
-
   override def start() {
     reporter.start(pollPeriod, pollUnit)
   }
 
   override def stop() {
     reporter.stop()
+  }
+
+  override def report() {
+    reporter.report()
   }
 }

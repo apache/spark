@@ -57,4 +57,6 @@ private[spark] class MetricsServlet(val property: Properties, val registry: Metr
   override def start() { }
 
   override def stop() { }
+
+  override def report() { }
 }

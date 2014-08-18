@@ -24,7 +24,7 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
   <properties>
-     <sbt.project.name>yarn-stable</sbt.project.name>
+    <sbt.project.name>yarn-stable</sbt.project.name>
   </properties>
 
   <groupId>org.apache.spark</groupId>

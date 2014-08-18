@@ -29,10 +29,11 @@ import akka.actor.{ActorSystem, Cancellable, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
-import org.apache.spark.executor.{DataReadMethod, InputMetrics}
+import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
 
 private[spark] sealed trait BlockValues
@@ -57,13 +58,16 @@ private[spark] class BlockManager(
     maxMemory: Long,
     val conf: SparkConf,
     securityManager: SecurityManager,
-    mapOutputTracker: MapOutputTracker)
+    mapOutputTracker: MapOutputTracker,
+    shuffleManager: ShuffleManager)
   extends Logging {
 
-  val shuffleBlockManager = new ShuffleBlockManager(this)
+  private val port = conf.getInt("spark.blockManager.port", 0)
+  val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-  val connectionManager = new ConnectionManager(0, conf, securityManager)
+  val connectionManager =
+    new ConnectionManager(port, conf, securityManager, "Connection manager for block manager")
 
   implicit val futureExecContext = connectionManager.futureExecContext
 
@@ -116,15 +120,6 @@ private[spark] class BlockManager(
   private var asyncReregisterTask: Future[Unit] = null
   private val asyncReregisterLock = new Object
 
-  private def heartBeat(): Unit = {
-    if (!master.sendHeartBeat(blockManagerId)) {
-      reregister()
-    }
-  }
-
-  private val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
-  private var heartBeatTask: Cancellable = null
-
   private val metadataCleaner = new MetadataCleaner(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
@@ -149,9 +144,10 @@ private[spark] class BlockManager(
       serializer: Serializer,
       conf: SparkConf,
       securityManager: SecurityManager,
-      mapOutputTracker: MapOutputTracker) = {
+      mapOutputTracker: MapOutputTracker,
+      shuffleManager: ShuffleManager) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, securityManager, mapOutputTracker)
+      conf, securityManager, mapOutputTracker, shuffleManager)
   }
 
   /**
@@ -161,11 +157,6 @@ private[spark] class BlockManager(
   private def initialize(): Unit = {
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
-    if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
-      heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
-        Utils.tryOrExit { heartBeat() }
-      }
-    }
   }
 
   /**
@@ -195,7 +186,7 @@ private[spark] class BlockManager(
    *
    * Note that this method must be called without any BlockInfo locks held.
    */
-  private def reregister(): Unit = {
+  def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
@@ -551,12 +542,15 @@ private[spark] class BlockManager(
    */
   def getMultiple(
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer): BlockFetcherIterator = {
+      serializer: Serializer,
+      readMetrics: ShuffleReadMetrics): BlockFetcherIterator = {
     val iter =
       if (conf.getBoolean("spark.shuffle.use.netty", false)) {
-        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer)
+        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer,
+          readMetrics)
       } else {
-        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer)
+        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
+          readMetrics)
       }
     iter.initialize()
     iter
@@ -574,17 +568,19 @@ private[spark] class BlockManager(
 
   /**
    * A short circuited method to get a block writer that can write data directly to disk.
-   * The Block will be appended to the File specified by filename. This is currently used for
-   * writing shuffle files out. Callers should handle error cases.
+   * The Block will be appended to the File specified by filename. Callers should handle error
+   * cases.
    */
   def getDiskWriter(
       blockId: BlockId,
       file: File,
       serializer: Serializer,
-      bufferSize: Int): BlockObjectWriter = {
+      bufferSize: Int,
+      writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites)
+    new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites,
+      writeMetrics)
   }
 
   /**
@@ -1065,9 +1061,6 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    if (heartBeatTask != null) {
-      heartBeatTask.cancel()
-    }
     connectionManager.stop()
     shuffleBlockManager.stop()
     diskBlockManager.stop()
@@ -1094,12 +1087,6 @@ private[spark] object BlockManager extends Logging {
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
-
-  def getHeartBeatFrequency(conf: SparkConf): Long =
-    conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000) / 4
-
-  def getDisableHeartBeatsForTesting(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.test.disableBlockManagerHeartBeat", false)
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
