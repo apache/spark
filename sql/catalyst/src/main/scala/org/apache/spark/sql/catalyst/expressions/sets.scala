@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/**
+ * Creates a new set of the specified type
+ */
 case class NewSet(elementType: DataType) extends LeafExpression {
   type EvaluatedType = Any
 
@@ -27,7 +30,8 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 
   def nullable = false
 
-  // This is not completely accurate..
+  // We are currently only using these Expressions internally for aggregation.  However, if we ever
+  // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
   def dataType = ArrayType(elementType)
 
   def eval(input: Row): Any = {
@@ -37,7 +41,10 @@ case class NewSet(elementType: DataType) extends LeafExpression {
   override def toString = s"new Set($dataType)"
 }
 
-// THIS MUTATES ITS ARUGMENTS
+/**
+ * Adds an item to a set.
+ * For performance, this expression mutates its input during evaluation.
+ */
 case class AddItemToSet(item: Expression, set: Expression) extends Expression {
   type EvaluatedType = Any
 
@@ -67,7 +74,10 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
   override def toString = s"$set += $item"
 }
 
-// THIS MUTATES ITS ARUGMENTS
+/**
+ * Combines the elements of two sets.
+ * For performance, this expression mutates its left input set during evaluation.
+ */
 case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
   type EvaluatedType = Any
 
@@ -97,6 +107,9 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
   }
 }
 
+/**
+ * Returns the number of elements in the input set.
+ */
 case class CountSet(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 

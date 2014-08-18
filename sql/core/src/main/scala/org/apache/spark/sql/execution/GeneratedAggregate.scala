@@ -108,7 +108,6 @@ case class GeneratedAggregate(
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
         val initialValue = Literal(null, expr.dataType)
         val updateMax = MaxOf(currentMax, expr)
-          //If(IsNull(currentMax), expr, If(GreaterThan(currentMax, expr), currentMax, expr))
 
         AggregateEvaluation(
           currentMax :: Nil,
@@ -128,8 +127,9 @@ case class GeneratedAggregate(
           set)
 
       case CombineSetsAndCount(inputSet) =>
+        val ArrayType(inputType) = inputSet.dataType
         val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
-        val initialValue = NewSet(IntegerType) // NOT TRUE
+        val initialValue = NewSet(inputType)
         val collectSets = CombineSets(set, inputSet)
 
         AggregateEvaluation(

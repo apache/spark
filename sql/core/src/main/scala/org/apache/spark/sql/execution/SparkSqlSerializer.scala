@@ -45,10 +45,13 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
                   new HyperLogLogSerializer)
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
-    // Specific hashset must come first
+
+    // Specific hashsets must come first
     kryo.register(classOf[IntegerHashSet], new IntegerHashSetSerializer)
     kryo.register(classOf[LongHashSet], new LongHashSetSerializer)
-    kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]], new OpenHashSetSerializer)
+    kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]],
+                  new OpenHashSetSerializer)
+
     kryo.setReferences(false)
     kryo.setClassLoader(Utils.getSparkClassLoader)
     new AllScalaRegistrar().apply(kryo)

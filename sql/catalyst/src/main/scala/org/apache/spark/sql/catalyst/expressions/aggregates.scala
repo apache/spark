@@ -203,15 +203,6 @@ case class CollectHashSetFunction(
   @transient
   val distinctValue = new InterpretedProjection(expr)
 
-/*
-  override def merge(other: MergableAggregateFunction): MergableAggregateFunction = {
-    val otherSetIterator = other.asInstanceOf[CountDistinctFunction].seen.iterator
-    while(otherSetIterator.hasNext) {
-      seen.add(otherSetIterator.next())
-    }
-    this
-  }*/
-
   override def update(input: Row): Unit = {
     val evaluatedExpr = distinctValue(input)
     if (!evaluatedExpr.anyNull) {
