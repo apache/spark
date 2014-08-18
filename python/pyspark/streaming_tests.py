@@ -18,12 +18,11 @@
 """
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
-Other option is separate this test case with other tests.
-This makes sense becuase streaming tests takes long time due to waiting time
-for stoping callback server.
 
-This file will merged to tests.py. But for now, this file is separated due
-to focusing to streaming test case
+This file would be merged to tests.py after all functions are ready.
+But for now, this file is separated due to focusing to streaming test case.
+
+Callback server seems like unstable sometimes, which cause error in test case.
 
 """
 from itertools import chain
@@ -43,10 +42,10 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def tearDown(self):
         # Do not call pyspark.streaming.context.StreamingContext.stop directly because
-        # we do not wait to shutdowncall back server and py4j client
+        # we do not wait to shutdown call back server and py4j client
         self.ssc._jssc.stop()
         self.ssc._sc.stop()
-        # Why does it long time to terminaete StremaingContext and SparkContext?
+        # Why does it long time to terminate StremaingContext and SparkContext?
         # Should we change the sleep time if this depends on machine spec?
         time.sleep(10)
 
@@ -68,7 +67,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     I am wondering if these test are enough or not.
     All tests input should have list of lists. This represents stream.
     Every batch interval, the first object of list are chosen to make DStream.
-    Please see the BasicTestSuits in Scala or QueStream which is close to this implementation.
+    Please see the BasicTestSuits in Scala which is close to this implementation.
     """
     def setUp(self):
         PySparkStreamingTestCase.setUp(self)
@@ -357,6 +356,25 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
                 break
 
         return self.result
+
+class TestSaveAsFilesSuite(PySparkStreamingTestCase):
+    def setUp(self):
+        PySparkStreamingTestCase.setUp(self)
+        self.timeout = 10  # seconds
+        self.numInputPartitions = 2
+        self.result = list()
+
+    def tearDown(self):
+        PySparkStreamingTestCase.tearDown(self)
+
+    @classmethod
+    def tearDownClass(cls):
+        PySparkStreamingTestCase.tearDownClass()
+
+
+
+
+
 
 if __name__ == "__main__":
     unittest.main()

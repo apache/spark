@@ -331,6 +331,17 @@ class DStream(object):
         return self
 
     def groupByKey(self, numPartitions=None):
+        """
+        Return a new DStream which contains group the values for each key in the
+        DStream into a single sequence.
+        Hash-partitions the resulting RDD with into numPartitions partitions in
+        the DStream.
+
+        Note: If you are grouping in order to perform an aggregation (such as a
+        sum or average) over each key, using reduceByKey will provide much
+        better performance.
+
+        """
         def createCombiner(x):
             return [x]
 
@@ -346,6 +357,10 @@ class DStream(object):
                                  numPartitions).mapValues(lambda x: ResultIterable(x))
 
     def countByValue(self):
+        """
+        Return new DStream which contains the count of each unique value in this
+        DStreeam as a (value, count) pairs.
+        """
         def countPartition(iterator):
             counts = defaultdict(int)
             for obj in iterator:
@@ -360,6 +375,9 @@ class DStream(object):
         return self.mapPartitions(countPartition).reduce(mergeMaps).flatMap(lambda x: x.items())
 
     def saveAsTextFiles(self, prefix, suffix=None):
+        """
+        Save this DStream as a text file, using string representations of elements.
+        """
 
         def saveAsTextFile(rdd, time):
             path = rddToFileName(prefix, suffix, time)
@@ -368,6 +386,11 @@ class DStream(object):
         return self.foreachRDD(saveAsTextFile)
 
     def saveAsPickledFiles(self, prefix, suffix=None):
+        """
+        Save this DStream as a SequenceFile of serialized objects. The serializer
+        used is L{pyspark.serializers.PickleSerializer}, default batch size
+        is 10.
+        """
 
         def saveAsTextFile(rdd, time):
             path = rddToFileName(prefix, suffix, time)
@@ -396,6 +419,7 @@ class DStream(object):
 # TODO: implement join
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
+
 
 class PipelinedDStream(DStream):
     def __init__(self, prev, func, preservesPartitioning=False):
