@@ -52,8 +52,7 @@ class Node (
    */
   def build(nodes: Array[Node]): Unit = {
 
-    logDebug("building node " + id + " at level " +
-      (scala.math.log(id + 1)/scala.math.log(2)).toInt )
+    logDebug("building node " + id + " at level " + Node.indexToLevel(id))
     logDebug("id = " + id + ", split = " + split)
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)
@@ -146,5 +145,47 @@ class Node (
         rightNode.get.subtreeToString(indentFactor + 1)
     }
   }
+
+}
+
+private[tree] object Node {
+
+  /**
+   * Return the level of a tree which the given node is in.
+   */
+  def indexToLevel(nodeIndex: Int): Int = {
+    math.floor(math.log(nodeIndex + 1) / math.log(2)).toInt
+  }
+
+  /**
+   * Returns true if this is a left child.
+   * Note: Returns false for the root.
+   */
+  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex != 0 && nodeIndex % 2 == 1
+
+  /**
+   * Get the parent index of the given node, or -1 if it is the root.
+   */
+  def parentIndex(nodeIndex: Int): Int = {
+    if (isLeftChild(nodeIndex)) { // -1 for root node
+      (nodeIndex - 1) / 2
+    } else {
+      (nodeIndex - 2) / 2
+    }
+
+  }
+
+  /**
+   * Return the maximum number of nodes which can be in the given level of the tree.
+   * @param level  Level of tree (0 = root).
+   */
+  private[tree] def maxNodesInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Return the maximum number of nodes which can be in or above the given level of the tree
+   * (i.e., for the entire subtree from the root to this level).
+   * @param level  Level of tree (0 = root).
+   */
+  private[tree] def maxNodesInSubtree(level: Int): Int = (2 << level) - 1
 
 }

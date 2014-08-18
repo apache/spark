@@ -102,7 +102,7 @@ private[tree] object DecisionTreeMetadata {
           // Note: The above check is equivalent to checking:
           //       numUnorderedBins = (1 << k - 1) - 1 < maxBins
           unorderedFeatures.add(f)
-          numBins(f) = DecisionTree.numUnorderedBins(k)
+          numBins(f) = numUnorderedBins(k)
         } else {
           // TODO: Check the below k <= maxBins.
           //       This used to be k < maxPossibleBins, but <= should work.
@@ -127,6 +127,14 @@ private[tree] object DecisionTreeMetadata {
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet, numBins,
       strategy.impurity, strategy.quantileCalculationStrategy)
+  }
+
+  /**
+   * Given the arity of a categorical feature (arity = number of categories),
+   * return the number of bins for the feature if it is to be treated as an unordered feature.
+   */
+  def numUnorderedBins(arity: Int): Int = {
+    (1 << arity - 1) - 1
   }
 
 }

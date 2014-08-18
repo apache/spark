@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.Logging
+import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -100,8 +100,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     // the max number of nodes possible given the depth of the tree
-    val maxNumNodes = DecisionTree.maxNodesInLevel(maxDepth + 1) - 1
-    // TODO: CHECK val maxNumNodes = (2 << maxDepth) - 1
+    val maxNumNodes = Node.maxNodesInLevel(maxDepth + 1) - 1
     // Initialize an array to hold parent impurity calculations for each node.
     val parentImpurities = new Array[Double](maxNumNodes)
     // dummy value for top node (updated during first split calculation)
@@ -153,18 +152,15 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           metadata, level, nodes, splits, bins, maxLevelForSingleGroup, timer)
       timer.stop("findBestSplits")
 
-      val levelNodeIndexOffset = DecisionTree.maxNodesInLevel(level) - 1
+      val levelNodeIndexOffset = Node.maxNodesInLevel(level) - 1
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
         /*println(s"splitsStatsForLevel: index=$index")
         println(s"\t split: ${nodeSplitStats._1}")
         println(s"\t gain stats: ${nodeSplitStats._2}")*/
         val nodeIndex = levelNodeIndexOffset + index
-        val isLeftChild = level != 0 && nodeIndex % 2 == 1
-        val parentNodeIndex = if (isLeftChild) { // -1 for root node
-            (nodeIndex - 1) / 2
-          } else {
-            (nodeIndex - 2) / 2
-          }
+        val isLeftChild = Node.isLeftChild(nodeIndex)
+        val parentNodeIndex = Node.parentIndex(nodeIndex) // -1 for root node
+
         // if (level == 0 || (nodesInTree(parentNodeIndex) && !nodes(parentNodeIndex).isLeaf))
         // TODO: Use above check to skip unused branch of tree
 
@@ -192,7 +188,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         timer.stop("extractInfoForLowerLevels")
         logDebug("final best split = " + nodeSplitStats._1)
       }
-      require(DecisionTree.maxNodesInLevel(level) == splitsStatsForLevel.length)
+      require(Node.maxNodesInLevel(level) == splitsStatsForLevel.length)
       // Check whether all the nodes at the current level at leaves.
       val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
       logDebug("all leaf = " + allLeaf)
@@ -232,8 +228,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     if (level >= maxDepth) {
       return
     }
-    // TODO: Move nodeIndexOffset calc out of function?
-    val leftNodeIndex = (2 << level) - 1 + 2 * index
+    val leftNodeIndex = Node.maxNodesInSubtree(level) + 2 * index
     val leftImpurity = nodeSplitStats._2.leftImpurity
     logDebug("leftNodeIndex = " + leftNodeIndex + ", impurity = " + leftImpurity)
     parentImpurities(leftNodeIndex) = leftImpurity
@@ -547,7 +542,7 @@ object DecisionTree extends Serializable with Logging {
 
     // numNodes:  Number of nodes in this (level of tree, group),
     //            where nodes at deeper (larger) levels may be divided into groups.
-    val numNodes = DecisionTree.maxNodesInLevel(level) / numGroups
+    val numNodes = Node.maxNodesInLevel(level) / numGroups
     logDebug("numNodes = " + numNodes)
 
     // Find the number of features by looking at the first sample.
@@ -619,16 +614,8 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    def nodeIndexToLevel(idx: Int): Int = {
-      if (idx == 0) {
-        0
-      } else {
-        math.floor(math.log(idx) / math.log(2)).toInt
-      }
-    }
-
     // Used for treePointToNodeIndex
-    val levelOffset = DecisionTree.maxNodesInLevel(level) - 1
+    val levelOffset = Node.maxNodesInLevel(level) - 1
 
     /**
      * Find the node index for the given example.
@@ -787,7 +774,7 @@ object DecisionTree extends Serializable with Logging {
     timer.start("aggregation")
     val binAggregates = {
       val initAgg = getEmptyBinAggregates(metadata, numNodes)
-      input.aggregate(initAgg)(binSeqOp, binCombOp)
+      input.treeAggregate(initAgg)(binSeqOp, binCombOp)
     }
     timer.stop("aggregation")
     /*
@@ -804,7 +791,7 @@ object DecisionTree extends Serializable with Logging {
     // Calculate best splits for all nodes at a given level
     timer.start("chooseSplits")
     val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
-    val nodeIndexOffset = DecisionTree.maxNodesInLevel(level) - 1
+    val nodeIndexOffset = Node.maxNodesInLevel(level) - 1
     // Iterating over all nodes at this level
     var nodeIndex = 0
     while (nodeIndex < numNodes) {
@@ -1160,7 +1147,6 @@ object DecisionTree extends Serializable with Logging {
    *       For multiclass classification with a low-arity feature
    *       (i.e., if isMulticlass && isSpaceSufficientForAllCategoricalSplits),
    *       the feature is split based on subsets of categories.
-   *       There are (1 << maxFeatureValue - 1) - 1 splits.
    *   (b) "ordered features"
    *       For regression and binary classification,
    *       and for multiclass classification with a high-arity feature,
@@ -1364,14 +1350,6 @@ object DecisionTree extends Serializable with Logging {
       j += 1
     }
     categories
-  }
-
-  private[tree] def maxNodesInLevel(level: Int): Int = {
-    math.pow(2, level).toInt
-  }
-
-  private[tree] def numUnorderedBins(arity: Int): Int = {
-    (math.pow(2, arity - 1) - 1).toInt
   }
 
 }
