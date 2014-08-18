@@ -111,7 +111,7 @@ abstract class Expression extends TreeNode[Expression] {
       } else {
         e1.dataType match {
           case n: NumericType =>
-            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
+            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => n.JvmType](
               n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }

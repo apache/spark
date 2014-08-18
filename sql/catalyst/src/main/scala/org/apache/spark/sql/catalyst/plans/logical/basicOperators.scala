@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, JoinType}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
@@ -46,10 +46,16 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] =
-    alias
+  protected def generatorOutput: Seq[Attribute] = {
+    val output = alias
       .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
       .getOrElse(generator.output)
+    if (join && outer) {
+      output.map(_.withNullability(true))
+    } else {
+      output
+    }
+  }
 
   override def output =
     if (join) child.output ++ generatorOutput else generatorOutput
@@ -81,12 +87,27 @@ case class Join(
   condition: Option[Expression]) extends BinaryNode {
 
   override def references = condition.map(_.references).getOrElse(Set.empty)
-  override def output = joinType match {
-    case LeftSemi =>
-      left.output
-    case _ =>
-      left.output ++ right.output
+
+  override def output = {
+    joinType match {
+      case LeftSemi =>
+        left.output
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case _ =>
+        left.output ++ right.output
+    }
   }
+}
+
+case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  def output = left.output
+
+  def references = Set.empty
 }
 
 case class InsertIntoTable(
@@ -156,7 +177,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
     case StructType(fields) =>
       StructType(fields.map(f =>
         StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable)))
-    case ArrayType(elemType) => ArrayType(lowerCaseSchema(elemType))
+    case ArrayType(elemType, containsNull) => ArrayType(lowerCaseSchema(elemType), containsNull)
     case otherType => otherType
   }
 
@@ -188,4 +209,9 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 
 case object NoRelation extends LeafNode {
   override def output = Nil
+}
+
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output = left.output
+  override def references = Set.empty
 }

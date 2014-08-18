@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -33,17 +32,23 @@ class DslQuerySuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("repartition") {
+    checkAnswer(
+      testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
   test("agg") {
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b)),
+      testData2.groupBy('a)('a, sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      testData2.groupBy('a)('a, sum('b) as 'totB).aggregate(sum('totB)),
       9
     )
     checkAnswer(
-      testData2.aggregate(Sum('b)),
+      testData2.aggregate(sum('b)),
       9
     )
   }
@@ -58,6 +63,26 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       testData.where('key === 1).select('value),
       Seq(Seq("1")))
+  }
+
+  test("select with functions") {
+    checkAnswer(
+      testData.select(sum('value), avg('value), count(1)),
+      Seq(Seq(5050.0, 50.5, 100)))
+
+    checkAnswer(
+      testData2.select('a + 'b, 'a < 'b),
+      Seq(
+        Seq(2, false),
+        Seq(3, true),
+        Seq(3, false),
+        Seq(4, false),
+        Seq(4, false),
+        Seq(5, false)))
+
+    checkAnswer(
+      testData2.select(sumDistinct('a)),
+      Seq(Seq(6)))
   }
 
   test("sorting") {
@@ -78,19 +103,19 @@ class DslQuerySuite extends QueryTest {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).asc),
+      arrayData.orderBy('data.getItem(0).asc),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).desc),
+      arrayData.orderBy('data.getItem(0).desc),
       arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).asc),
+      mapData.orderBy('data.getItem(1).asc),
       mapData.collect().sortBy(_.data(1)).toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).desc),
+      mapData.orderBy('data.getItem(1).desc),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
@@ -110,17 +135,17 @@ class DslQuerySuite extends QueryTest {
 
   test("average") {
     checkAnswer(
-      testData2.groupBy()(Average('a)),
+      testData2.groupBy()(avg('a)),
       2.0)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(Average('b)),
+      testData3.groupBy()(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
+      testData3.groupBy()(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
   }
 
@@ -130,22 +155,43 @@ class DslQuerySuite extends QueryTest {
 
   test("null count") {
     checkAnswer(
-      testData3.groupBy('a)('a, Count('b)),
+      testData3.groupBy('a)('a, count('b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy('a)('a, Count('a + 'b)),
+      testData3.groupBy('a)('a, count('a + 'b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+  }
+
+  test("except") {
+    checkAnswer(
+      lowerCaseData.except(upperCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
+    checkAnswer(upperCaseData.except(upperCaseData), Nil)
+  }
+
+  test("intersect") {
+    checkAnswer(
+      lowerCaseData.intersect(lowerCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 }

@@ -22,7 +22,10 @@ slaves
 spark-env.sh
 spark-env.sh.template
 log4j-defaults.properties
+bootstrap-tooltip.js
+jquery-1.11.1.min.js
 sorttable.js
+.*avsc
 .*txt
 .*json
 .*data
@@ -53,3 +56,4 @@ dist/*
 .*ipr
 .*iws
 logs
+.*scalastyle-output.xml

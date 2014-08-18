@@ -1,0 +1,2 @@
+unix_timestamp([date[, pattern]]) - Returns the UNIX timestamp
+Converts the current or specified time to number of seconds since 1970-01-01.

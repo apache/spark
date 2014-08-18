@@ -45,7 +45,7 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.InsertIntoTable(
-             InMemoryRelation(_, _,
+             InMemoryRelation(_, _, _,
                HiveTableScan(_, table, _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case _ => Nil
@@ -80,6 +80,10 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.NativeCommand(sql) =>
         NativeCommand(sql, plan.output)(context) :: Nil
+
+      case DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
+
+      case AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 
       case describe: logical.DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed

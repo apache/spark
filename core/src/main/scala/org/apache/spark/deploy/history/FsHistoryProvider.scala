@@ -36,11 +36,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     conf.getInt("spark.history.updateInterval", 10)) * 1000
 
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
-  if (logDir == null) {
-    throw new IllegalArgumentException("Logging directory must be specified.")
-  }
+  private val resolvedLogDir = Option(logDir)
+    .map { d => Utils.resolveURI(d) }
+    .getOrElse { throw new IllegalArgumentException("Logging directory must be specified.") }
 
-  private val fs = Utils.getHadoopFileSystem(logDir)
+  private val fs = Utils.getHadoopFileSystem(resolvedLogDir)
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTimeMs = -1L
@@ -76,14 +76,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private def initialize() {
     // Validate the log directory.
-    val path = new Path(logDir)
+    val path = new Path(resolvedLogDir)
     if (!fs.exists(path)) {
       throw new IllegalArgumentException(
-        "Logging directory specified does not exist: %s".format(logDir))
+        "Logging directory specified does not exist: %s".format(resolvedLogDir))
     }
     if (!fs.getFileStatus(path).isDir) {
       throw new IllegalArgumentException(
-        "Logging directory specified is not a directory: %s".format(logDir))
+        "Logging directory specified is not a directory: %s".format(resolvedLogDir))
     }
 
     checkForLogs()
@@ -95,15 +95,16 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   override def getAppUI(appId: String): SparkUI = {
     try {
-      val appLogDir = fs.getFileStatus(new Path(logDir, appId))
-      loadAppInfo(appLogDir, true)._2
+      val appLogDir = fs.getFileStatus(new Path(resolvedLogDir.toString, appId))
+      val (_, ui) = loadAppInfo(appLogDir, renderUI = true)
+      ui
     } catch {
       case e: FileNotFoundException => null
     }
   }
 
   override def getConfig(): Map[String, String] =
-    Map(("Event Log Location" -> logDir))
+    Map("Event Log Location" -> resolvedLogDir.toString)
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -114,14 +115,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     lastLogCheckTimeMs = getMonotonicTimeMs()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
-      val logStatus = fs.listStatus(new Path(logDir))
+      val logStatus = fs.listStatus(new Path(resolvedLogDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-      val logInfos = logDirs.filter {
-        dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
+      val logInfos = logDirs.filter { dir =>
+        fs.isFile(new Path(dir.getPath, EventLoggingListener.APPLICATION_COMPLETE))
       }
 
       val currentApps = Map[String, ApplicationHistoryInfo](
-        appList.map(app => (app.id -> app)):_*)
+        appList.map(app => app.id -> app):_*)
 
       // For any application that either (i) is not listed or (ii) has changed since the last time
       // the listing was created (defined by the log dir's modification time), load the app's info.
@@ -131,7 +132,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val curr = currentApps.getOrElse(dir.getPath().getName(), null)
         if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
           try {
-            newApps += loadAppInfo(dir, false)._1
+            val (app, _) = loadAppInfo(dir, renderUI = false)
+            newApps += app
           } catch {
             case e: Exception => logError(s"Failed to load app info from directory $dir.")
           }
@@ -159,9 +161,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    * @return A 2-tuple `(app info, ui)`. `ui` will be null if `renderUI` is false.
    */
   private def loadAppInfo(logDir: FileStatus, renderUI: Boolean) = {
-    val elogInfo = EventLoggingListener.parseLoggingInfo(logDir.getPath(), fs)
     val path = logDir.getPath
     val appId = path.getName
+    val elogInfo = EventLoggingListener.parseLoggingInfo(path, fs)
     val replayBus = new ReplayListenerBus(elogInfo.logPaths, fs, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
@@ -169,7 +171,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     val ui: SparkUI = if (renderUI) {
         val conf = this.conf.clone()
         val appSecManager = new SecurityManager(conf)
-        new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+        new SparkUI(conf, appSecManager, replayBus, appId,
+          HistoryServer.UI_PATH_PREFIX + s"/$appId")
         // Do not call ui.bind() to avoid creating a new server for each application
       } else {
         null
@@ -186,7 +189,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     if (ui != null) {
       val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-      ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+      ui.getSecurityManager.setAcls(uiAclsEnabled)
+      // make sure to set admin acls before view acls so properly picked up
+      ui.getSecurityManager.setAdminAcls(appListener.adminAcls)
       ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
     }
     (appInfo, ui)

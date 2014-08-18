@@ -48,18 +48,18 @@ class BooleanBitSetSuite extends FunSuite {
     }
 
     // 4 extra bytes for compression scheme type ID
-    expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+    assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
     // Skips column header
     buffer.position(headerSize)
-    expectResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
-    expectResult(count, "Wrong element count")(buffer.getInt())
+    assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
+    assertResult(count, "Wrong element count")(buffer.getInt())
 
     var word = 0: Long
     for (i <- 0 until count) {
       val bit = i % BITS_PER_LONG
       word = if (bit == 0) buffer.getLong() else word
-      expectResult(values(i), s"Wrong value in compressed buffer, index=$i") {
+      assertResult(values(i), s"Wrong value in compressed buffer, index=$i") {
         (word & ((1: Long) << bit)) != 0
       }
     }
@@ -75,7 +75,7 @@ class BooleanBitSetSuite extends FunSuite {
     if (values.nonEmpty) {
       values.foreach {
         assert(decoder.hasNext)
-        expectResult(_, "Wrong decoded value")(decoder.next())
+        assertResult(_, "Wrong decoded value")(decoder.next())
       }
     }
     assert(!decoder.hasNext)

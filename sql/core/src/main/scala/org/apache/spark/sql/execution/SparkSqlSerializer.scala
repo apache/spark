@@ -24,10 +24,10 @@ import scala.reflect.ClassTag
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
-import com.twitter.chill.AllScalaRegistrar
+import com.twitter.chill.{AllScalaRegistrar, ResourcePool}
 
 import org.apache.spark.{SparkEnv, SparkConf}
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils
 
@@ -48,22 +48,41 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
   }
 }
 
-private[sql] object SparkSqlSerializer {
-  // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
-  // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization
-  // related error.
-  @transient lazy val ser: KryoSerializer = {
+private[execution] class KryoResourcePool(size: Int)
+    extends ResourcePool[SerializerInstance](size) {
+
+  val ser: KryoSerializer = {
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
+    // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization
+    // related error.
     new KryoSerializer(sparkConf)
   }
 
-  def serialize[T: ClassTag](o: T): Array[Byte] = {
-    ser.newInstance().serialize(o).array()
+  def newInstance() = ser.newInstance()
+}
+
+private[sql] object SparkSqlSerializer {
+  @transient lazy val resourcePool = new KryoResourcePool(30)
+
+  private[this] def acquireRelease[O](fn: SerializerInstance => O): O = {
+    val kryo = resourcePool.borrow
+    try {
+      fn(kryo)
+    } finally {
+      resourcePool.release(kryo)
+    }
   }
 
-  def deserialize[T: ClassTag](bytes: Array[Byte]): T  = {
-    ser.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
-  }
+  def serialize[T: ClassTag](o: T): Array[Byte] =
+    acquireRelease { k =>
+      k.serialize(o).array()
+    }
+
+  def deserialize[T: ClassTag](bytes: Array[Byte]): T =
+    acquireRelease { k =>
+      k.deserialize[T](ByteBuffer.wrap(bytes))
+    }
 }
 
 private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {

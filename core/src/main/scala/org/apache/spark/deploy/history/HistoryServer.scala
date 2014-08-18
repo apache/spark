@@ -25,9 +25,9 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.ui.{WebUI, SparkUI, UIUtils}
+import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SignalLogger
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -114,7 +114,7 @@ class HistoryServer(
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
-    contextHandler.setContextPath("/history")
+    contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
   }
@@ -169,12 +169,15 @@ class HistoryServer(
  *
  * This launches the HistoryServer as a Spark daemon.
  */
-object HistoryServer {
+object HistoryServer extends Logging {
   private val conf = new SparkConf
 
+  val UI_PATH_PREFIX = "/history"
+
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     initSecurity()
-    val args = new HistoryServerArguments(conf, argStrings)
+    new HistoryServerArguments(conf, argStrings)
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")

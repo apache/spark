@@ -75,21 +75,21 @@ private[sql] object CatalystConverter {
     val fieldType: DataType = field.dataType
     fieldType match {
       // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType) => {
+      case ArrayType(elementType: NativeType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
       }
       // This is for other types of arrays, including those with nested fields
-      case ArrayType(elementType: DataType) => {
+      case ArrayType(elementType: DataType, false) => {
         new CatalystArrayConverter(elementType, fieldIndex, parent)
       }
       case StructType(fields: Seq[StructField]) => {
         new CatalystStructConverter(fields.toArray, fieldIndex, parent)
       }
-      case MapType(keyType: DataType, valueType: DataType) => {
+      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) => {
         new CatalystMapConverter(
           Array(
             new FieldType(MAP_KEY_SCHEMA_NAME, keyType, false),
-            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, true)),
+            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, valueContainsNull)),
           fieldIndex,
           parent)
       }
@@ -114,7 +114,7 @@ private[sql] object CatalystConverter {
         }
       }
       // All other primitive types use the default converter
-      case ctype: NativeType => { // note: need the type tag here!
+      case ctype: PrimitiveType => { // note: need the type tag here!
         new CatalystPrimitiveConverter(parent, fieldIndex)
       }
       case _ => throw new RuntimeException(
@@ -229,9 +229,9 @@ private[parquet] class CatalystGroupConverter(
     this(attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)), 0, null)
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-    .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 
@@ -288,9 +288,9 @@ private[parquet] class CatalystPrimitiveRowConverter(
       new ParquetRelation.RowType(attributes.length))
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-      .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 

@@ -21,7 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import akka.actor.ActorRef
 
-private[storage] object BlockManagerMessages {
+private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
@@ -53,9 +53,7 @@ private[storage] object BlockManagerMessages {
       sender: ActorRef)
     extends ToBlockManagerMaster
 
-  case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
-  class UpdateBlockInfo(
+  case class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
       var blockId: BlockId,
       var storageLevel: StorageLevel,
@@ -86,24 +84,6 @@ private[storage] object BlockManagerMessages {
     }
   }
 
-  object UpdateBlockInfo {
-    def apply(
-        blockManagerId: BlockManagerId,
-        blockId: BlockId,
-        storageLevel: StorageLevel,
-        memSize: Long,
-        diskSize: Long,
-        tachyonSize: Long): UpdateBlockInfo = {
-      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize)
-    }
-
-    // For pattern-matching
-    def unapply(h: UpdateBlockInfo)
-      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
-      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
-    }
-  }
-
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
@@ -123,6 +103,8 @@ private[storage] object BlockManagerMessages {
 
   case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
+
+  case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case object ExpireDeadHosts extends ToBlockManagerMaster
 }

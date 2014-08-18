@@ -28,26 +28,29 @@ import org.apache.spark.scheduler._
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {
-  private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
+  private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq
 
   /** Update storage status list to reflect updated block statuses */
-  def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
-    filteredStatus.foreach { storageStatus =>
+  private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
+    executorIdToStorageStatus.get(execId).foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
-        storageStatus.blocks(blockId) = updatedStatus
+        if (updatedStatus.storageLevel == StorageLevel.NONE) {
+          storageStatus.removeBlock(blockId)
+        } else {
+          storageStatus.updateBlock(blockId, updatedStatus)
+        }
       }
     }
   }
 
   /** Update storage status list to reflect the removal of an RDD from the cache */
-  def updateStorageStatus(unpersistedRDDId: Int) {
+  private def updateStorageStatus(unpersistedRDDId: Int) {
     storageStatusList.foreach { storageStatus =>
-      val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
-      unpersistedBlocksIds.foreach { blockId =>
-        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+      storageStatus.rddBlocksById(unpersistedRDDId).foreach { case (blockId, _) =>
+        storageStatus.removeBlock(blockId)
       }
     }
   }

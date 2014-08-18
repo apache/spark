@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-graphx_2.10</artifactId>
+  <properties>
+    <sbt.project.name>graphx</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project GraphX</name>
   <url>http://spark.apache.org/</url>

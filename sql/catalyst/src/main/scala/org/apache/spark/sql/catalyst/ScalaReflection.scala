@@ -47,10 +47,13 @@ object ScalaReflection {
       val TypeRef(_, _, Seq(optType)) = t
       Schema(schemaFor(optType).dataType, nullable = true)
     case t if t <:< typeOf[Product] =>
-      val params = t.member("<init>": TermName).asMethod.paramss
+      val formalTypeArgs = t.typeSymbol.asClass.typeParams
+      val TypeRef(_, _, actualTypeArgs) = t
+      val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
       Schema(StructType(
         params.head.map { p =>
-          val Schema(dataType, nullable) = schemaFor(p.typeSignature)
+          val Schema(dataType, nullable) =
+            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
           StructField(p.name.toString, dataType, nullable)
         }), nullable = true)
     // Need to decide if we actually need a special type here.
@@ -80,6 +83,26 @@ object ScalaReflection {
     case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
     case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
     case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+  }
+
+  def typeOfObject: PartialFunction[Any, DataType] = {
+    // The data type can be determined without ambiguity.
+    case obj: BooleanType.JvmType => BooleanType
+    case obj: BinaryType.JvmType => BinaryType
+    case obj: StringType.JvmType => StringType
+    case obj: ByteType.JvmType => ByteType
+    case obj: ShortType.JvmType => ShortType
+    case obj: IntegerType.JvmType => IntegerType
+    case obj: LongType.JvmType => LongType
+    case obj: FloatType.JvmType => FloatType
+    case obj: DoubleType.JvmType => DoubleType
+    case obj: DecimalType.JvmType => DecimalType
+    case obj: TimestampType.JvmType => TimestampType
+    case null => NullType
+    // For other cases, there is no obvious mapping from the type of the given object to a
+    // Catalyst data type. A user should provide his/her specific rules
+    // (in a user-defined PartialFunction) to infer the Catalyst data type for other types of
+    // objects and then compose the user-defined PartialFunction with this one.
   }
 
   implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {

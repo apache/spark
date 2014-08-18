@@ -17,13 +17,14 @@
 
 package org.apache.spark.api.python
 
-import scala.util.Try
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
-import scala.util.Success
+import scala.collection.JavaConversions._
 import scala.util.Failure
-import net.razorvine.pickle.Pickler
+import scala.util.Try
 
+import net.razorvine.pickle.{Unpickler, Pickler}
+
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.rdd.RDD
 
 /** Utilities for serialization / deserialization between Python and Java, using Pickle. */
 private[python] object SerDeUtil extends Logging {
@@ -65,20 +66,52 @@ private[python] object SerDeUtil extends Logging {
    * by PySpark. By default, if serialization fails, toString is called and the string
    * representation is serialized
    */
-  def rddToPython(rdd: RDD[(Any, Any)]): RDD[Array[Byte]] = {
+  def pairRDDToPython(rdd: RDD[(Any, Any)], batchSize: Int): RDD[Array[Byte]] = {
     val (keyFailed, valueFailed) = checkPickle(rdd.first())
     rdd.mapPartitions { iter =>
       val pickle = new Pickler
-      iter.map { case (k, v) =>
-        if (keyFailed && valueFailed) {
-          pickle.dumps(Array(k.toString, v.toString))
-        } else if (keyFailed) {
-          pickle.dumps(Array(k.toString, v))
-        } else if (!keyFailed && valueFailed) {
-          pickle.dumps(Array(k, v.toString))
+      val cleaned = iter.map { case (k, v) =>
+        val key = if (keyFailed) k.toString else k
+        val value = if (valueFailed) v.toString else v
+        Array[Any](key, value)
+      }
+      if (batchSize > 1) {
+        cleaned.grouped(batchSize).map(batched => pickle.dumps(seqAsJavaList(batched)))
+      } else {
+        cleaned.map(pickle.dumps(_))
+      }
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python tuple (K, V) to RDD[(K, V)].
+   */
+  def pythonToPairRDD[K, V](pyRDD: RDD[Array[Byte]], batchSerialized: Boolean): RDD[(K, V)] = {
+    def isPair(obj: Any): Boolean = {
+      Option(obj.getClass.getComponentType).map(!_.isPrimitive).getOrElse(false) &&
+        obj.asInstanceOf[Array[_]].length == 2
+    }
+    pyRDD.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      val unpickled =
+        if (batchSerialized) {
+          iter.flatMap { batch =>
+            unpickle.loads(batch) match {
+              case objs: java.util.List[_] => collectionAsScalaIterable(objs)
+              case other => throw new SparkException(
+                s"Unexpected type ${other.getClass.getName} for batch serialized Python RDD")
+            }
+          }
         } else {
-          pickle.dumps(Array(k, v))
+          iter.map(unpickle.loads(_))
         }
+      unpickled.map {
+        case obj if isPair(obj) =>
+          // we only accept (K, V)
+          val arr = obj.asInstanceOf[Array[_]]
+          (arr.head.asInstanceOf[K], arr.last.asInstanceOf[V])
+        case other => throw new SparkException(
+          s"RDD element of type ${other.getClass.getName} cannot be used")
       }
     }
   }

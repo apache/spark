@@ -170,10 +170,10 @@ class AppendOnlyMapSuite extends FunSuite {
       case e: IllegalStateException => fail()
     }
 
-    val it = map.destructiveSortedIterator(new Comparator[(String, String)] {
-      def compare(kv1: (String, String), kv2: (String, String)): Int = {
-        val x = if (kv1 != null && kv1._1 != null) kv1._1.toInt else Int.MinValue
-        val y = if (kv2 != null && kv2._1 != null) kv2._1.toInt else Int.MinValue
+    val it = map.destructiveSortedIterator(new Comparator[String] {
+      def compare(key1: String, key2: String): Int = {
+        val x = if (key1 != null) key1.toInt else Int.MinValue
+        val y = if (key2 != null) key2.toInt else Int.MinValue
         x.compareTo(y)
       }
     })

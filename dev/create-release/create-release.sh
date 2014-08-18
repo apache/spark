@@ -35,6 +35,12 @@ RELEASE_VERSION=${RELEASE_VERSION:-1.0.0}
 RC_NAME=${RC_NAME:-rc2}
 USER_NAME=${USER_NAME:-pwendell}
 
+if [ -z "$JAVA_HOME" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+JAVA_7_HOME=${JAVA_7_HOME:-$JAVA_HOME}
+
 set -e
 
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
@@ -53,15 +59,15 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
     -Dmaven.javadoc.skip=true \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
+    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     --batch-mode release:prepare
 
   mvn -DskipTests \
     -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dmaven.javadoc.skip=true \
-    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
+    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     release:perform
 
   cd ..
@@ -95,7 +101,7 @@ make_binary_release() {
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
   
   cd spark-$RELEASE_VERSION-bin-$NAME
-  ./make-distribution.sh $FLAGS --name $NAME --tgz
+  ./make-distribution.sh --name $NAME --tgz $FLAGS
   cd ..
   cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
   rm -rf spark-$RELEASE_VERSION-bin-$NAME
@@ -111,9 +117,13 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
-make_binary_release "hadoop1" "--with-hive --hadoop 1.0.4"
-make_binary_release "cdh4" "--with-hive --hadoop 2.0.0-mr1-cdh4.2.0"
-make_binary_release "hadoop2" "--with-hive --with-yarn --hadoop 2.2.0"
+make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
+make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
+make_binary_release "hadoop2" \
+  "-Phive -Phive-thriftserver -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
+make_binary_release "hadoop2-without-hive" \
+  "-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
+wait
 
 # Copy data
 echo "Copying release tarballs"
@@ -125,8 +135,10 @@ scp spark-* \
 
 # Docs
 cd spark
+sbt/sbt clean
 cd docs
-PRODUCTION=1 jekyll build
+# Compile docs with Java 7 to use nicer format
+JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 ssh $USER_NAME@people.apache.org \

@@ -21,10 +21,11 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
+import org.apache.spark.shuffle.sort.SortShuffleManager
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -34,29 +35,41 @@ import org.apache.spark.util.Utils
  *
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
-private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootDirs: String)
+private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, rootDirs: String)
   extends PathResolver with Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
+
+  private val subDirsPerLocalDir =
+    shuffleBlockManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
-  private val localDirs: Array[File] = createLocalDirs()
+  val localDirs: Array[File] = createLocalDirs()
+  if (localDirs.isEmpty) {
+    logError("Failed to create any local dir.")
+    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+  }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
 
   addShutdownHook()
 
   /**
-   * Returns the physical file segment in which the given BlockId is located.
-   * If the BlockId has been mapped to a specific FileSegment, that will be returned.
-   * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
+   * Returns the physical file segment in which the given BlockId is located. If the BlockId has
+   * been mapped to a specific FileSegment by the shuffle layer, that will be returned.
+   * Otherwise, we assume the Block is mapped to the whole file identified by the BlockId.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
-      shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
+    val env = SparkEnv.get  // NOTE: can be null in unit tests
+    if (blockId.isShuffle && env != null && env.shuffleManager.isInstanceOf[SortShuffleManager]) {
+      // For sort-based shuffle, let it figure out its blocks
+      val sortShuffleManager = env.shuffleManager.asInstanceOf[SortShuffleManager]
+      sortShuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId], this)
+    } else if (blockId.isShuffle && shuffleBlockManager.consolidateShuffleFiles) {
+      // For hash-based shuffle with consolidated files, ShuffleBlockManager takes care of this
+      shuffleBlockManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val file = getFile(blockId.name)
       new FileSegment(file, 0, file.length())
@@ -95,13 +108,18 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
     getBlockLocation(blockId).file.exists()
   }
 
-  /** List all the blocks currently stored on disk by the disk manager. */
-  def getAllBlocks(): Seq[BlockId] = {
+  /** List all the files currently stored on disk by the disk manager. */
+  def getAllFiles(): Seq[File] = {
     // Get all the files inside the array of array of directories
     subDirs.flatten.filter(_ != null).flatMap { dir =>
-      val files = dir.list()
+      val files = dir.listFiles()
       if (files != null) files else Seq.empty
-    }.map(BlockId.apply)
+    }
+  }
+
+  /** List all the blocks currently stored on disk by the disk manager. */
+  def getAllBlocks(): Seq[BlockId] = {
+    getAllFiles().map(f => BlockId(f.getName))
   }
 
   /** Produces a unique block id and File suitable for intermediate results. */
@@ -116,7 +134,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private def createLocalDirs(): Array[File] = {
     logDebug(s"Creating local directories at root dirs '$rootDirs'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-    rootDirs.split(",").map { rootDir =>
+    rootDirs.split(",").flatMap { rootDir =>
       var foundLocalDir = false
       var localDir: File = null
       var localDirId: String = null
@@ -136,11 +154,13 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
         }
       }
       if (!foundLocalDir) {
-        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir")
-        System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir." +
+                  " Ignoring this directory.")
+        None
+      } else {
+        logInfo(s"Created local directory at $localDir")
+        Some(localDir)
       }
-      logInfo(s"Created local directory at $localDir")
-      localDir
     }
   }
 
