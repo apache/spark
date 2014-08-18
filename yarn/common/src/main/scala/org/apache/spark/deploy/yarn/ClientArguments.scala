@@ -41,6 +41,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var appName: String = "Spark"
   var inputFormatInfo: List[InputFormatInfo] = null
   var priority = 0
+  var ha: Boolean = false
 
   parseArgs(args.toList)
 
@@ -132,6 +133,10 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
         case ("--archives") :: value :: tail =>
           archives = value
+          args = tail
+
+        case ("--ha") :: value :: tail =>
+          ha = true
           args = tail
 
         case Nil =>

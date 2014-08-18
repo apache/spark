@@ -49,6 +49,8 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   val sparkConf = spConf
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
+  val maxAppAttempts = conf.getInt(
+    YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
 
   def runApp(): ApplicationId = {
     validateArgs()
@@ -81,6 +83,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
+    if (args.ha) {
+      appContext.setMaxAppAttempts(maxAppAttempts) // Set to max app attempts
+      appContext.setKeepContainersAcrossApplicationAttempts(true)
+    }
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
