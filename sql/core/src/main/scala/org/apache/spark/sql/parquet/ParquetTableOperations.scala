@@ -353,10 +353,10 @@ private[parquet] class FilteringParquetRowInputFormat
         val newFooters = new mutable.HashMap[FileStatus, Footer]
         if (toFetch.size > 0) {
           val fetched = getFooters(conf, toFetch)
-          for ((footer, i) <- fetched.zipWithIndex) {
-            newFooters(statuses.get(i)) = footer
-            footerCache.putAll(newFooters)
+          for ((status, i) <- toFetch.zipWithIndex) {
+            newFooters(status) = fetched.get(i)
           }
+          footerCache.putAll(newFooters)
         }
         footers = new ArrayList[Footer](statuses.size)
         for (status <- statuses) {
