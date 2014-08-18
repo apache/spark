@@ -300,11 +300,11 @@ trait ClientBase extends Logging {
   }
 
   def userArgsToString(clientArgs: ClientArguments): String = {
-    val prefix = " --args "
+    val prefix = " --arg "
     val args = clientArgs.userArgs
     val retval = new StringBuilder()
     for (arg <- args) {
-      retval.append(prefix).append(" '").append(arg).append("' ")
+      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
     }
     retval.toString
   }
@@ -386,7 +386,7 @@ trait ClientBase extends Logging {
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
     for ((k, v) <- sparkConf.getAll) {
-      javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
+      javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
     if (args.amClass == classOf[ApplicationMaster].getName) {
@@ -400,7 +400,8 @@ trait ClientBase extends Logging {
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
       javaOpts ++
-      Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
+      Seq(args.amClass, "--class", YarnSparkHadoopUtil.escapeForShell(args.userClass),
+        "--jar ", YarnSparkHadoopUtil.escapeForShell(args.userJar),
         userArgsToString(args),
         "--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,

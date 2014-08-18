@@ -148,4 +148,29 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  /**
+   * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
+   * using `bash -c "command arg1 arg2"` and that means plain quoting doesn't really work. The
+   * argument is enclosed in single quotes and some key characters are escaped.
+   *
+   * @param arg A single argument.
+   * @return Argument quoted for execution via Yarn's generated shell script.
+   */
+  def escapeForShell(arg: String): String = {
+    if (arg != null) {
+      val escaped = new StringBuilder("'")
+      for (i <- 0 to arg.length() - 1) {
+        arg.charAt(i) match {
+          case '$' => escaped.append("\\$")
+          case '"' => escaped.append("\\\"")
+          case '\'' => escaped.append("'\\''")
+          case c => escaped.append(c)
+        }
+      }
+      escaped.append("'").toString()
+    } else {
+      arg
+    }
+  }
+
 }

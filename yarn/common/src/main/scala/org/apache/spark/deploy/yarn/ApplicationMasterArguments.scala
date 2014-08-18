@@ -29,7 +29,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
 
   parseArgs(args.toList)
-  
+
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer = new ArrayBuffer[String]()
 
@@ -47,7 +47,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userClass = value
           args = tail
 
-        case ("--args") :: value :: tail =>
+        case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
           args = tail
 
@@ -75,7 +75,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
     userArgs = userArgsBuffer.readOnly
   }
-  
+
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
