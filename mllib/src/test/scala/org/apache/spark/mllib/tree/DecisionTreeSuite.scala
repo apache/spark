@@ -60,12 +60,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
   }
 
-  test("split and bin calculation for continuous features") {
+  test("Binary classification with continuous features: split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Gini, 3, 2, 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
+    assert(!metadata.isUnordered(featureIndex = 0))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     assert(splits.length === 2)
     assert(bins.length === 2)
@@ -73,7 +74,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
   }
 
-  test("split and bin calculation for binary features") {
+  test("Binary classification with binary features: split and bin calculation") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -100,17 +101,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0)(0).threshold === Double.MinValue)
     assert(splits(0)(0).featureType === Categorical)
     assert(splits(0)(0).categories.length === 1)
-    //println(s"splits(0)(0).categories: ${splits(0)(0).categories}")
     assert(splits(0)(0).categories.contains(1.0))
-
-    /*
-    assert(splits(0)(1).feature === 0)
-    assert(splits(0)(1).threshold === Double.MinValue)
-    assert(splits(0)(1).featureType === Categorical)
-    assert(splits(0)(1).categories.length === 2)
-    assert(splits(0)(1).categories.contains(0.0))
-    assert(splits(0)(1).categories.contains(1.0))
-    */
 
     assert(splits(1)(0).feature === 1)
     assert(splits(1)(0).threshold === Double.MinValue)
@@ -118,14 +109,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(1)(0).categories.length === 1)
     assert(splits(1)(0).categories.contains(0.0))
 
-    /*
-    assert(splits(1)(1).feature === 1)
-    assert(splits(1)(1).threshold === Double.MinValue)
-    assert(splits(1)(1).featureType === Categorical)
-    assert(splits(1)(1).categories.length === 2)
-    assert(splits(1)(1).categories.contains(0.0))
-    assert(splits(1)(1).categories.contains(1.0))
-    */
     // Check bins.
 
     assert(bins(0)(0).lowSplit.categories.length === 0)
@@ -185,16 +168,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0)(1).categories.contains(0.0))
     assert(splits(0)(1).categories.contains(1.0))
 
-    /*
-    assert(splits(0)(2).feature === 0)
-    assert(splits(0)(2).threshold === Double.MinValue)
-    assert(splits(0)(2).featureType === Categorical)
-    assert(splits(0)(2).categories.length === 3)
-    assert(splits(0)(2).categories.contains(0.0))
-    assert(splits(0)(2).categories.contains(1.0))
-    assert(splits(0)(2).categories.contains(2.0))
-    */
-
     assert(splits(1)(0).feature === 1)
     assert(splits(1)(0).threshold === Double.MinValue)
     assert(splits(1)(0).featureType === Categorical)
@@ -207,16 +180,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(1)(1).categories.length === 2)
     assert(splits(1)(1).categories.contains(0.0))
     assert(splits(1)(1).categories.contains(1.0))
-
-    /*
-    assert(splits(1)(2).feature === 1)
-    assert(splits(1)(2).threshold === Double.MinValue)
-    assert(splits(1)(2).featureType === Categorical)
-    assert(splits(1)(2).categories.length === 3)
-    assert(splits(1)(2).categories.contains(0.0))
-    assert(splits(1)(2).categories.contains(1.0))
-    assert(splits(1)(2).categories.contains(2.0))
-    */
 
     // Check bins.
 
@@ -260,8 +223,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(List(3.0, 2.0, 0.0).toSeq === l.toSeq)
   }
 
-  test("split and bin calculations for unordered categorical variables with multiclass " +
-    "classification") {
+  test("Multiclass classification with unordered categorical features:" +
+      " split and bin calculations") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -355,8 +318,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   }
 
-  test("split and bin calculations for ordered categorical variables with multiclass " +
-    "classification") {
+  test("Multiclass classification with ordered categorical features: split and bin calculations") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     assert(arr.length === 3000)
     val rdd = sc.parallelize(arr)
@@ -377,7 +339,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 9)
     assert(bins(0).length === 10)
 
-    // 2^10 - 1 > 100, so categorical variables will be ordered
+    // 2^10 - 1 > 100, so categorical features will be ordered
 
     assert(splits(0)(0).feature === 0)
     assert(splits(0)(0).threshold === Double.MinValue)
@@ -413,7 +375,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
 
-  test("classification stump with all ordered categorical variables") {
+  test("Binary classification stump with all ordered categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -450,7 +412,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.impurity > 0.2)
   }
 
-  test("regression stump with all categorical variables") {
+  test("Regression stump with 3-ary categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -482,7 +444,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.impurity > 0.2)
   }
 
-  test("regression stump with categorical variables of arity 2") {
+  test("Regression stump with binary categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -502,7 +464,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(model.depth === 1)
   }
 
-  test("stump with fixed label 0 for Gini") {
+  test("Binary classification stump with fixed label 0 for Gini") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -530,7 +492,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.rightImpurity === 0)
   }
 
-  test("stump with fixed label 1 for Gini") {
+  test("Binary classification stump with fixed label 1 for Gini") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -559,7 +521,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.predict === 1)
   }
 
-  test("stump with fixed label 0 for Entropy") {
+  test("Binary classification stump with fixed label 0 for Entropy") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -588,7 +550,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.predict === 0)
   }
 
-  test("stump with fixed label 1 for Entropy") {
+  test("Binary classification stump with fixed label 1 for Entropy") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -617,7 +579,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.predict === 1)
   }
 
-  test("second level node building with/without groups") {
+  test("Second level node building with vs. without groups") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -669,7 +631,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("stump with categorical variables for multiclass classification") {
+  test("Multiclass classification stump with 3-ary categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
@@ -692,7 +654,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.featureType === Categorical)
   }
 
-  test("stump with 1 continuous variable for binary classification, to check off-by-1 error") {
+  test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
     val arr = new Array[LabeledPoint](4)
     arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0))
     arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0))
@@ -708,7 +670,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(model.depth === 1)
   }
 
-  test("stump with 2 continuous variables for binary classification") {
+  test("Binary classification stump with 2 continuous features") {
     val arr = new Array[LabeledPoint](4)
     arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
     arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
@@ -726,7 +688,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(model.topNode.split.get.feature === 1)
   }
 
-  test("stump with categorical variables for multiclass classification, with just enough bins") {
+  test("Multiclass classification stump with categorical features, with just enough bins") {
     val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
@@ -757,7 +719,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(gain.rightImpurity === 0)
   }
 
-  test("stump with continuous variables for multiclass classification") {
+  test("Multiclass classification stump with continuous features") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
@@ -783,7 +745,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   }
 
-  test("stump with continuous + categorical variables for multiclass classification") {
+  test("Multiclass classification stump with continuous + categorical features") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
@@ -808,7 +770,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.threshold < 2020)
   }
 
-  test("stump with categorical variables for ordered multiclass classification") {
+  test("Multiclass classification stump with 10-ary (ordered) categorical features") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,

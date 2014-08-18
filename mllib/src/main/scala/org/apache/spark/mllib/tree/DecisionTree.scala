@@ -823,6 +823,7 @@ object DecisionTree extends Serializable with Logging {
 
       nodeIndex += 1
     }
+    timer.stop("chooseSplits")
 
     bestSplits
   }

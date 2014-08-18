@@ -112,6 +112,7 @@ private[tree] object DecisionTreeMetadata {
           require(k < maxPossibleBins,
             s"maxBins (= $maxPossibleBins) should be greater than max categories " +
             s"in categorical features (>= $k)")
+          numBins(f) = k
         }
       }
     } else {
