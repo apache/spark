@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.text.{DateFormat, SimpleDateFormat}
+import java.text.{DateFormat, NumberFormat, SimpleDateFormat}
 
 import org.apache.spark.sql.catalyst.types._
+import java.util.Locale
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
@@ -269,6 +270,11 @@ object Cast {
   private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
     override def initialValue() = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    }
+  }
+  private[sql] val threadLocalNumberFormat = new ThreadLocal[NumberFormat] {
+    override def initialValue() = {
+      NumberFormat.getInstance()
     }
   }
 }
