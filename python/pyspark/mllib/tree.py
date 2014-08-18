@@ -88,7 +88,7 @@ class DecisionTree(object):
                   It will probably be modified for Spark v1.2.
 
     Example usage:
-    >>> from numpy import array, ndarray
+    >>> from numpy import array
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> from pyspark.mllib.tree import DecisionTree
     >>> from pyspark.mllib.linalg import SparseVector
@@ -99,8 +99,9 @@ class DecisionTree(object):
     ...     LabeledPoint(1.0, [2.0]),
     ...     LabeledPoint(1.0, [3.0])
     ... ]
-    >>>
-    >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2)
+    >>> categoricalFeaturesInfo = {} # no categorical features
+    >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2,
+    ...                                      categoricalFeaturesInfo=categoricalFeaturesInfo)
     >>> print(model)
     DecisionTreeModel classifier
       If (feature 0 <= 0.5)
@@ -119,7 +120,8 @@ class DecisionTree(object):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>>
-    >>> model = DecisionTree.trainRegressor(sc.parallelize(sparse_data))
+    >>> model = DecisionTree.trainRegressor(sc.parallelize(sparse_data),
+    ...                                     categoricalFeaturesInfo=categoricalFeaturesInfo)
     >>> model.predict(array([0.0, 1.0])) == 1
     True
     >>> model.predict(array([0.0, 0.0])) == 0
