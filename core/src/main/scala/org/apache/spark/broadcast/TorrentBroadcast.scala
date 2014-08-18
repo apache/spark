@@ -17,15 +17,15 @@
 
 package org.apache.spark.broadcast
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, InputStream,
+  ObjectInputStream, ObjectOutputStream, OutputStream}
 
 import scala.reflect.ClassTag
-import scala.math
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.Utils
 
 /**
  *  A [[org.apache.spark.broadcast.Broadcast]] implementation that uses a BitTorrent-like
@@ -49,19 +49,19 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def getValue = value_
+  override protected def getValue() = value_
 
-  val broadcastId = BroadcastBlockId(id)
+  private val broadcastId = BroadcastBlockId(id)
 
   TorrentBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(
       broadcastId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
   }
 
-  @transient var arrayOfBlocks: Array[TorrentBlock] = null
-  @transient var totalBlocks = -1
-  @transient var totalBytes = -1
-  @transient var hasBlocks = 0
+  @transient private var arrayOfBlocks: Array[TorrentBlock] = null
+  @transient private var totalBlocks = -1
+  @transient private var totalBytes = -1
+  @transient private var hasBlocks = 0
 
   if (!isLocal) {
     sendBroadcast()
@@ -70,7 +70,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   /**
    * Remove all persisted state associated with this Torrent broadcast on the executors.
    */
-  def doUnpersist(blocking: Boolean) {
+  override protected def doUnpersist(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
@@ -78,11 +78,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](
    * Remove all persisted state associated with this Torrent broadcast on the executors
    * and driver.
    */
-  def doDestroy(blocking: Boolean) {
+  override protected def doDestroy(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
-  def sendBroadcast() {
+  private def sendBroadcast() {
     val tInfo = TorrentBroadcast.blockifyObject(value_)
     totalBlocks = tInfo.totalBlocks
     totalBytes = tInfo.totalBytes
@@ -159,7 +159,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     hasBlocks = 0
   }
 
-  def receiveBroadcast(): Boolean = {
+  private def receiveBroadcast(): Boolean = {
     // Receive meta-info about the size of broadcast data,
     // the number of chunks it is divided into, etc.
     val metaId = BroadcastBlockId(id, "meta")
@@ -211,15 +211,19 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 
 }
 
-private[spark] object TorrentBroadcast extends Logging {
+private[broadcast] object TorrentBroadcast extends Logging {
   private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
   private var initialized = false
   private var conf: SparkConf = null
+  private var compress: Boolean = false
+  private var compressionCodec: CompressionCodec = null
 
   def initialize(_isDriver: Boolean, conf: SparkConf) {
     TorrentBroadcast.conf = conf // TODO: we might have to fix it in tests
     synchronized {
       if (!initialized) {
+        compress = conf.getBoolean("spark.broadcast.compress", true)
+        compressionCodec = CompressionCodec.createCodec(conf)
         initialized = true
       }
     }
@@ -229,8 +233,13 @@ private[spark] object TorrentBroadcast extends Logging {
     initialized = false
   }
 
-  def blockifyObject[T](obj: T): TorrentInfo = {
-    val byteArray = Utils.serialize[T](obj)
+  def blockifyObject[T: ClassTag](obj: T): TorrentInfo = {
+    val bos = new ByteArrayOutputStream()
+    val out: OutputStream = if (compress) compressionCodec.compressedOutputStream(bos) else bos
+    val ser = SparkEnv.get.serializer.newInstance()
+    val serOut = ser.serializeStream(out)
+    serOut.writeObject[T](obj).close()
+    val byteArray = bos.toByteArray
     val bais = new ByteArrayInputStream(byteArray)
 
     var blockNum = byteArray.length / BLOCK_SIZE
@@ -256,7 +265,7 @@ private[spark] object TorrentBroadcast extends Logging {
     info
   }
 
-  def unBlockifyObject[T](
+  def unBlockifyObject[T: ClassTag](
       arrayOfBlocks: Array[TorrentBlock],
       totalBytes: Int,
       totalBlocks: Int): T = {
@@ -265,24 +274,35 @@ private[spark] object TorrentBroadcast extends Logging {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
         i * BLOCK_SIZE, arrayOfBlocks(i).byteArray.length)
     }
-    Utils.deserialize[T](retByteArray, Thread.currentThread.getContextClassLoader)
+
+    val in: InputStream = {
+      val arrIn = new ByteArrayInputStream(retByteArray)
+      if (compress) compressionCodec.compressedInputStream(arrIn) else arrIn
+    }
+    val ser = SparkEnv.get.serializer.newInstance()
+    val serIn = ser.deserializeStream(in)
+    val obj = serIn.readObject[T]()
+    serIn.close()
+    obj
   }
 
   /**
    * Remove all persisted blocks associated with this torrent broadcast on the executors.
    * If removeFromDriver is true, also remove these persisted blocks on the driver.
    */
-  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = synchronized {
-    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = {
+    synchronized {
+      SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+    }
   }
 }
 
-private[spark] case class TorrentBlock(
+private[broadcast] case class TorrentBlock(
     blockID: Int,
     byteArray: Array[Byte])
   extends Serializable
 
-private[spark] case class TorrentInfo(
+private[broadcast] case class TorrentInfo(
     @transient arrayOfBlocks: Array[TorrentBlock],
     totalBlocks: Int,
     totalBytes: Int)

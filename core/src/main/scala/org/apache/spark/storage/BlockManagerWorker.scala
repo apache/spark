@@ -23,6 +23,10 @@ import org.apache.spark.Logging
 import org.apache.spark.network._
 import org.apache.spark.util.Utils
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.util.{Try, Failure, Success}
+
 /**
  * A network interface for BlockManager. Each slave should have one
  * BlockManagerWorker.
@@ -44,13 +48,19 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
           val responseMessages = blockMessages.map(processBlockMessage).filter(_ != None).map(_.get)
           Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
-          case e: Exception => logError("Exception handling buffer message", e)
-          None
+          case e: Exception => {
+            logError("Exception handling buffer message", e)
+            val errorMessage = Message.createBufferMessage(msg.id)
+            errorMessage.hasError = true
+            Some(errorMessage)
+          }
         }
       }
       case otherMessage: Any => {
         logError("Unknown type message received: " + otherMessage)
-        None
+        val errorMessage = Message.createBufferMessage(msg.id)
+        errorMessage.hasError = true
+        Some(errorMessage)
       }
     }
   }
@@ -109,9 +119,9 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val resultMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage)
-    resultMessage.isDefined
+    val resultMessage = Try(Await.result(connectionManager.sendMessageReliably(
+        toConnManagerId, blockMessageArray.toBufferMessage), Duration.Inf))
+    resultMessage.isSuccess
   }
 
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
@@ -119,10 +129,10 @@ private[spark] object BlockManagerWorker extends Logging {
     val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
-    val responseMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage)
+    val responseMessage = Try(Await.result(connectionManager.sendMessageReliably(
+        toConnManagerId, blockMessageArray.toBufferMessage), Duration.Inf))
     responseMessage match {
-      case Some(message) => {
+      case Success(message) => {
         val bufferMessage = message.asInstanceOf[BufferMessage]
         logDebug("Response message received " + bufferMessage)
         BlockMessageArray.fromBufferMessage(bufferMessage).foreach(blockMessage => {
@@ -130,7 +140,7 @@ private[spark] object BlockManagerWorker extends Logging {
             return blockMessage.getData
           })
       }
-      case None => logDebug("No response message received")
+      case Failure(exception) => logDebug("No response message received")
     }
     null
   }

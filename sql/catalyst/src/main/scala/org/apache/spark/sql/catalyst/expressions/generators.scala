@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.types._
 
@@ -84,28 +86,28 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
   private lazy val elementTypes = child.dataType match {
-    case ArrayType(et) => et :: Nil
-    case MapType(kt,vt) => kt :: vt :: Nil
+    case ArrayType(et, containsNull) => (et, containsNull) :: Nil
+    case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
   }
 
   // TODO: Move this pattern into Generator.
   protected def makeOutput() =
     if (attributeNames.size == elementTypes.size) {
       attributeNames.zip(elementTypes).map {
-        case (n, t) => AttributeReference(n, t, nullable = true)()
+        case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
       }
     } else {
       elementTypes.zipWithIndex.map {
-        case (t, i) => AttributeReference(s"c_$i", t, nullable = true)()
+        case ((t, nullable), i) => AttributeReference(s"c_$i", t, nullable)()
       }
     }
 
   override def eval(input: Row): TraversableOnce[Row] = {
     child.dataType match {
-      case ArrayType(_) =>
+      case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
-      case MapType(_, _) =>
+      case MapType(_, _, _) =>
         val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
         if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }

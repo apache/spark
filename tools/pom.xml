@@ -26,6 +26,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-tools_2.10</artifactId>
+  <properties>
+    <sbt.project.name>tools</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
   <url>http://spark.apache.org/</url>

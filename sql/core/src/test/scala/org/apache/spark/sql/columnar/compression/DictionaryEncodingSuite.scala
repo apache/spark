@@ -71,22 +71,22 @@ class DictionaryEncodingSuite extends FunSuite {
         // 2 bytes for each `Short`
         val compressedSize = 4 + dictionarySize + 2 * inputSeq.length
         // 4 extra bytes for compression scheme type ID
-        expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+        assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
         // Skips column header
         buffer.position(headerSize)
-        expectResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
+        assertResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
         val dictionary = buildDictionary(buffer).toMap
 
         dictValues.foreach { i =>
-          expectResult(i, "Wrong dictionary entry") {
+          assertResult(i, "Wrong dictionary entry") {
             dictionary(values(i))
           }
         }
 
         inputSeq.foreach { i =>
-          expectResult(i.toShort, "Wrong column element value")(buffer.getShort())
+          assertResult(i.toShort, "Wrong column element value")(buffer.getShort())
         }
 
         // -------------
@@ -101,7 +101,7 @@ class DictionaryEncodingSuite extends FunSuite {
         if (inputSeq.nonEmpty) {
           inputSeq.foreach { i =>
             assert(decoder.hasNext)
-            expectResult(values(i), "Wrong decoded value")(decoder.next())
+            assertResult(values(i), "Wrong decoded value")(decoder.next())
           }
         }
 

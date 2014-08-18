@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.{Map => JMap, List => JList}
+
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
@@ -27,10 +32,8 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types.{DataType, StructType, BooleanType}
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
-import java.util.{Map => JMap}
 
 /**
  * :: AlphaComponent ::
@@ -64,7 +67,7 @@ import java.util.{Map => JMap}
  *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
- *  rdd.registerAsTable("records")
+ *  rdd.registerTempTable("records")
  *
  *  val results: SchemaRDD = sql("SELECT * FROM records")
  * }}}
@@ -116,6 +119,11 @@ class SchemaRDD(
   override protected def getDependencies: Seq[Dependency[_]] =
     List(new OneToOneDependency(queryExecution.toRdd))
 
+  /** Returns the schema of this SchemaRDD (represented by a [[StructType]]).
+    *
+    * @group schema
+    */
+  def schema: StructType = queryExecution.analyzed.schema
 
   // =======================================================================
   // Query DSL
@@ -253,6 +261,26 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Union(logicalPlan, otherPlan.logicalPlan))
 
   /**
+   * Performs a relational except on two SchemaRDDs
+   *
+   * @param otherPlan the [[SchemaRDD]] that should be excepted from this one.
+   *
+   * @group Query
+   */
+  def except(otherPlan: SchemaRDD): SchemaRDD =
+    new SchemaRDD(sqlContext, Except(logicalPlan, otherPlan.logicalPlan))
+
+  /**
+   * Performs a relational intersect on two SchemaRDDs
+   *
+   * @param otherPlan the [[SchemaRDD]] that should be intersected with this one.
+   *
+   * @group Query
+   */
+  def intersect(otherPlan: SchemaRDD): SchemaRDD =
+    new SchemaRDD(sqlContext, Intersect(logicalPlan, otherPlan.logicalPlan))
+
+  /**
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
@@ -352,37 +380,41 @@ class SchemaRDD(
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
-      val fields = structType.fields.map(field => (field.name, field.dataType))
-      val map: JMap[String, Any] = new java.util.HashMap
-      row.zip(fields).foreach {
-        case (obj, (name, dataType)) =>
-          dataType match {
-            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
-            case other => map.put(name, obj)
-          }
-      }
+    import scala.collection.Map
 
-      map
+    def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
+      case (null, _) => null
+
+      case (obj: Row, struct: StructType) => rowToArray(obj, struct)
+
+      case (seq: Seq[Any], array: ArrayType) =>
+        seq.map(x => toJava(x, array.elementType)).asJava
+      case (list: JList[_], array: ArrayType) =>
+        list.map(x => toJava(x, array.elementType)).asJava
+      case (arr, array: ArrayType) if arr.getClass.isArray =>
+        arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
+
+      case (obj: Map[_, _], mt: MapType) => obj.map {
+        case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      }.asJava
+
+      // Pyrolite can handle Timestamp
+      case (other, _) => other
     }
 
-    // TODO: Actually, the schema of a row should be represented by a StructType instead of
-    // a Seq[Attribute]. Once we have finished that change, we can just use rowToMap to
-    // construct the Map for python.
-    val fields: Seq[(String, DataType)] = this.queryExecution.analyzed.output.map(
-      field => (field.name, field.dataType))
+    def rowToArray(row: Row, structType: StructType): Array[Any] = {
+      val fields = structType.fields.map(field => field.dataType)
+      row.zip(fields).map {
+        case (obj, dataType) => toJava(obj, dataType)
+      }.toArray
+    }
+
+    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        val map: JMap[String, Any] = new java.util.HashMap
-        row.zip(fields).foreach { case (obj, (name, dataType)) =>
-          dataType match {
-            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
-            case other => map.put(name, obj)
-          }
-        }
-        map
-      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
+        rowToArray(row, rowSchema)
+      }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
   }
 
@@ -395,7 +427,8 @@ class SchemaRDD(
    * @group schema
    */
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
-    new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
+    new SchemaRDD(sqlContext,
+      SparkLogicalPlan(ExistingRdd(queryExecution.analyzed.output, rdd))(sqlContext))
   }
 
   // =======================================================================

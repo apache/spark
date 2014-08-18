@@ -52,7 +52,7 @@ private[spark] class FileLogger(
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
 
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+  private val fileSystem = Utils.getHadoopFileSystem(logDir)
   var fileIndex = 0
 
   // Only used if compression is enabled
@@ -196,6 +196,5 @@ private[spark] class FileLogger(
   def stop() {
     hadoopDataStream.foreach(_.close())
     writer.foreach(_.close())
-    fileSystem.close()
   }
 }

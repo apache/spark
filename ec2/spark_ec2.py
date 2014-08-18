@@ -135,6 +135,10 @@ def parse_args():
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
              "(e.g -Dspark.worker.timeout=180)")
+    parser.add_option(
+        "--user-data", type="string", default="",
+        help="Path to a user-data file (most AMI's interpret this as an initialization script)")
+
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -240,7 +244,10 @@ def get_spark_ami(opts):
         "r3.xlarge":   "hvm",
         "r3.2xlarge":  "hvm",
         "r3.4xlarge":  "hvm",
-        "r3.8xlarge":  "hvm"
+        "r3.8xlarge":  "hvm",
+        "t2.micro":    "hvm",
+        "t2.small":    "hvm",
+        "t2.medium":   "hvm"
     }
     if opts.instance_type in instance_types:
         instance_type = instance_types[opts.instance_type]
@@ -271,6 +278,12 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
+
+    user_data_content = None
+    if opts.user_data:
+        with open(opts.user_data) as user_data_file:
+            user_data_content = user_data_file.read()
+
     print "Setting up security groups..."
     master_group = get_or_make_group(conn, cluster_name + "-master")
     slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -279,6 +292,7 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize(src_group=slave_group)
         master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
         master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+        master_group.authorize('tcp', 18080, 18080, '0.0.0.0/0')
         master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
         master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
         master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
@@ -343,7 +357,8 @@ def launch_cluster(conn, opts, cluster_name):
                 key_name=opts.key_pair,
                 security_groups=[slave_group],
                 instance_type=opts.instance_type,
-                block_device_map=block_map)
+                block_device_map=block_map,
+                user_data=user_data_content)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -394,7 +409,8 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
                                       max_count=num_slaves_this_zone,
-                                      block_device_map=block_map)
+                                      block_device_map=block_map,
+                                      user_data=user_data_content)
                 slave_nodes += slave_res.instances
                 print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
                                                                 zone, slave_res.id)
@@ -427,11 +443,11 @@ def launch_cluster(conn, opts, cluster_name):
     for master in master_nodes:
         master.add_tag(
             key='Name',
-            value='spark-{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
     for slave in slave_nodes:
         slave.add_tag(
             key='Name',
-            value='spark-{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -697,6 +713,7 @@ def ssh(host, opts, command):
                 "Error executing remote command, retrying after 30 seconds: {0}".format(e)
             time.sleep(30)
             tries = tries + 1
+
 
 # Backported from Python 2.7 for compatiblity with 2.6 (See SPARK-1990)
 def _check_output(*popenargs, **kwargs):

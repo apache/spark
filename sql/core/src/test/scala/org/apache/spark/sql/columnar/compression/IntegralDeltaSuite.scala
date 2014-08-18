@@ -69,21 +69,21 @@ class IntegralDeltaSuite extends FunSuite {
       })
 
       // 4 extra bytes for compression scheme type ID
-      expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+      assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
       buffer.position(headerSize)
-      expectResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
+      assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       if (input.nonEmpty) {
-        expectResult(Byte.MinValue, "The first byte should be an escaping mark")(buffer.get())
-        expectResult(input.head, "The first value is wrong")(columnType.extract(buffer))
+        assertResult(Byte.MinValue, "The first byte should be an escaping mark")(buffer.get())
+        assertResult(input.head, "The first value is wrong")(columnType.extract(buffer))
 
         (input.tail, deltas).zipped.foreach { (value, delta) =>
           if (math.abs(delta) <= Byte.MaxValue) {
-            expectResult(delta, "Wrong delta")(buffer.get())
+            assertResult(delta, "Wrong delta")(buffer.get())
           } else {
-            expectResult(Byte.MinValue, "Expecting escaping mark here")(buffer.get())
-            expectResult(value, "Wrong value")(columnType.extract(buffer))
+            assertResult(Byte.MinValue, "Expecting escaping mark here")(buffer.get())
+            assertResult(value, "Wrong value")(columnType.extract(buffer))
           }
         }
       }
@@ -99,7 +99,7 @@ class IntegralDeltaSuite extends FunSuite {
       if (input.nonEmpty) {
         input.foreach{
           assert(decoder.hasNext)
-          expectResult(_, "Wrong decoded value")(decoder.next())
+          assertResult(_, "Wrong decoded value")(decoder.next())
         }
       }
       assert(!decoder.hasNext)

@@ -118,6 +118,10 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
+  protected val INTERSECT = Keyword("INTERSECT")
+  protected val EXCEPT = Keyword("EXCEPT")
+  protected val SUBSTR = Keyword("SUBSTR")
+  protected val SUBSTRING = Keyword("SUBSTRING")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -138,6 +142,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected lazy val query: Parser[LogicalPlan] = (
     select * (
         UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
+        INTERSECT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) } |
+        EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert | cache
@@ -204,21 +210,21 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     } |
     "(" ~> query ~ ")" ~ opt(AS) ~ ident ^^ { case s ~ _ ~ _ ~ a => Subquery(a, s) }
 
-   protected lazy val joinedRelation: Parser[LogicalPlan] =
-     relationFactor ~ opt(joinType) ~ JOIN ~ relationFactor ~ opt(joinConditions) ^^ {
+  protected lazy val joinedRelation: Parser[LogicalPlan] =
+    relationFactor ~ opt(joinType) ~ JOIN ~ relationFactor ~ opt(joinConditions) ^^ {
       case r1 ~ jt ~ _ ~ r2 ~ cond =>
         Join(r1, r2, joinType = jt.getOrElse(Inner), cond)
-     }
+    }
 
-   protected lazy val joinConditions: Parser[Expression] =
-     ON ~> expression
+  protected lazy val joinConditions: Parser[Expression] =
+    ON ~> expression
 
-   protected lazy val joinType: Parser[JoinType] =
-     INNER ^^^ Inner |
-     LEFT ~ SEMI ^^^ LeftSemi |
-     LEFT ~ opt(OUTER) ^^^ LeftOuter |
-     RIGHT ~ opt(OUTER) ^^^ RightOuter |
-     FULL ~ opt(OUTER) ^^^ FullOuter
+  protected lazy val joinType: Parser[JoinType] =
+    INNER ^^^ Inner |
+    LEFT ~ SEMI ^^^ LeftSemi |
+    LEFT ~ opt(OUTER) ^^^ LeftOuter |
+    RIGHT ~ opt(OUTER) ^^^ RightOuter |
+    FULL ~ opt(OUTER) ^^^ FullOuter
 
   protected lazy val filter: Parser[Expression] = WHERE ~ expression ^^ { case _ ~ e => e }
 
@@ -310,6 +316,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
+    } |
+    (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
+      case s ~ "," ~ p => Substring(s,p,Literal(Integer.MAX_VALUE))
+    } |
+    (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
+      case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)

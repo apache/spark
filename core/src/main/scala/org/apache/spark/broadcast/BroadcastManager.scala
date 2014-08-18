@@ -39,7 +39,7 @@ private[spark] class BroadcastManager(
     synchronized {
       if (!initialized) {
         val broadcastFactoryClass =
-          conf.get("spark.broadcast.factory", "org.apache.spark.broadcast.HttpBroadcastFactory")
+          conf.get("spark.broadcast.factory", "org.apache.spark.broadcast.TorrentBroadcastFactory")
 
         broadcastFactory =
           Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]

@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.SparkContext
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * Internal utility for micro-benchmarking shuffle write performance.
@@ -56,15 +57,14 @@ object StoragePerfTester {
 
     def writeOutputBytes(mapId: Int, total: AtomicLong) = {
       val shuffle = blockManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
-        new KryoSerializer(sc.conf))
+        new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
         writers(i % numOutputSplits).write(writeData)
       }
-      writers.map {w =>
-        w.commit()
+      writers.map { w =>
+        w.commitAndClose()
         total.addAndGet(w.fileSegment().length)
-        w.close()
       }
 
       shuffle.releaseWriters(true)

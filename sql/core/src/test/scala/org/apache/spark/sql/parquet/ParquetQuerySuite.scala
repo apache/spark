@@ -21,10 +21,9 @@ import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.MessageTypeParser
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
@@ -65,7 +64,22 @@ case class AllDataTypes(
     doubleField: Double,
     shortField: Short,
     byteField: Byte,
-    booleanField: Boolean)
+    booleanField: Boolean,
+    binaryField: Array[Byte])
+
+case class AllDataTypesWithNonPrimitiveType(
+    stringField: String,
+    intField: Int,
+    longField: Long,
+    floatField: Float,
+    doubleField: Double,
+    shortField: Short,
+    byteField: Byte,
+    booleanField: Boolean,
+    binaryField: Array[Byte],
+    array: Seq[Int],
+    map: Map[Int, String],
+    data: Data)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
@@ -84,9 +98,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeNestedFile3()
     ParquetTestData.writeNestedFile4()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
-    testRDD.registerAsTable("testsource")
+    testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
-      .registerAsTable("testfiltersource")
+      .registerTempTable("testfiltersource")
   }
 
   override def afterAll() {
@@ -103,7 +117,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
     TestSQLContext.sparkContext.parallelize(range)
-      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
+        (0 to x).map(_.toByte).toArray))
       .saveAsParquetFile(tempDir)
     val result = parquetFile(tempDir).collect()
     range.foreach {
@@ -116,6 +131,85 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getShort(5) === i.toShort)
         assert(result(i).getByte(6) === i.toByte)
         assert(result(i).getBoolean(7) === (i % 2 == 0))
+        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
+    }
+  }
+
+  test("Treat binary as string") {
+    val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
+
+    // Create the test file.
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val range = (0 to 255)
+    val rowRDD = TestSQLContext.sparkContext.parallelize(range)
+      .map(i => org.apache.spark.sql.Row(i, s"val_$i".getBytes))
+    // We need to ask Parquet to store the String column as a Binary column.
+    val schema = StructType(
+      StructField("c1", IntegerType, false) ::
+      StructField("c2", BinaryType, false) :: Nil)
+    val schemaRDD1 = applySchema(rowRDD, schema)
+    schemaRDD1.saveAsParquetFile(path)
+    val resultWithBinary = parquetFile(path).collect
+    range.foreach {
+      i =>
+        assert(resultWithBinary(i).getInt(0) === i)
+        assert(resultWithBinary(i)(1) === s"val_$i".getBytes)
+    }
+
+    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
+    // This ParquetRelation always use Parquet types to derive output.
+    val parquetRelation = new ParquetRelation(
+      path.toString,
+      Some(TestSQLContext.sparkContext.hadoopConfiguration),
+      TestSQLContext) {
+      override val output =
+        ParquetTypesConverter.convertToAttributes(
+          ParquetTypesConverter.readMetaData(new Path(path), conf).getFileMetaData.getSchema,
+          TestSQLContext.isParquetBinaryAsString)
+    }
+    val schemaRDD = new SchemaRDD(TestSQLContext, parquetRelation)
+    val resultWithString = schemaRDD.collect
+    range.foreach {
+      i =>
+        assert(resultWithString(i).getInt(0) === i)
+        assert(resultWithString(i)(1) === s"val_$i")
+    }
+
+    schemaRDD.registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT c1, c2 FROM tmp WHERE c2 = 'val_5' OR c2 = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    // Set it back.
+    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
+  }
+
+  test("Read/Write All Types with non-primitive type") {
+    val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+    val range = (0 to 255)
+    TestSQLContext.sparkContext.parallelize(range)
+      .map(x => AllDataTypesWithNonPrimitiveType(
+        s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
+        (0 to x).map(_.toByte).toArray,
+        (0 until x), (0 until x).map(i => i -> s"$i").toMap, Data((0 until x), Nested(x, s"$x"))))
+      .saveAsParquetFile(tempDir)
+    val result = parquetFile(tempDir).collect()
+    range.foreach {
+      i =>
+        assert(result(i).getString(0) == s"$i", s"row $i String field did not match, got ${result(i).getString(0)}")
+        assert(result(i).getInt(1) === i)
+        assert(result(i).getLong(2) === i.toLong)
+        assert(result(i).getFloat(3) === i.toFloat)
+        assert(result(i).getDouble(4) === i.toDouble)
+        assert(result(i).getShort(5) === i.toShort)
+        assert(result(i).getByte(6) === i.toByte)
+        assert(result(i).getBoolean(7) === (i % 2 == 0))
+        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
+        assert(result(i)(9) === (0 until i))
+        assert(result(i)(10) === (0 until i).map(i => i -> s"$i").toMap)
+        assert(result(i)(11) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
     }
   }
 
@@ -163,18 +257,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection of simple Parquet file") {
-    val scanner = new ParquetTableScan(
-      ParquetTestData.testData.output,
-      ParquetTestData.testData,
-      Seq())(TestSQLContext)
-    val projected = scanner.pruneColumns(ParquetTypesConverter
-      .convertToAttributes(MessageTypeParser
-      .parseMessageType(ParquetTestData.subTestSchema)))
-    assert(projected.output.size === 2)
-    val result = projected
-      .execute()
-      .map(_.copy())
-      .collect()
+    val result = ParquetTestData.testData.select('myboolean, 'mylong).collect()
     result.zipWithIndex.foreach {
       case (row, index) => {
           if (index % 3 == 0)
@@ -212,7 +295,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Creating case class RDD table") {
     TestSQLContext.sparkContext.parallelize((1 to 100))
       .map(i => TestRDDEntry(i, s"val_$i"))
-      .registerAsTable("tmp")
+      .registerTempTable("tmp")
     val rdd = sql("SELECT * FROM tmp").collect().sortBy(_.getInt(0))
     var counter = 1
     rdd.foreach {
@@ -231,7 +314,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .map(i => TestRDDEntry(i, s"val_$i"))
     rdd.saveAsParquetFile(path)
     val readFile = parquetFile(path)
-    readFile.registerAsTable("tmpx")
+    readFile.registerTempTable("tmpx")
     val rdd_copy = sql("SELECT * FROM tmpx").collect()
     val rdd_orig = rdd.collect()
     for(i <- 0 to 99) {
@@ -245,9 +328,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val dirname = Utils.createTempDir()
     val source_rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
       .map(i => TestRDDEntry(i, s"val_$i"))
-    source_rdd.registerAsTable("source")
+    source_rdd.registerTempTable("source")
     val dest_rdd = createParquetFile[TestRDDEntry](dirname.toString)
-    dest_rdd.registerAsTable("dest")
+    dest_rdd.registerTempTable("dest")
     sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
     val rdd_copy1 = sql("SELECT * FROM dest").collect()
     assert(rdd_copy1.size === 100)
@@ -298,7 +381,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with Nones as parquet") {
-    val data = OptionalReflectData(null, null, null, null, null)
+    val data = OptionalReflectData(None, None, None, None, None)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
@@ -346,11 +429,14 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val predicate5 = new GreaterThan(attribute1, attribute2)
     val badfilter = ParquetFilters.createFilter(predicate5)
     assert(badfilter.isDefined === false)
+
+    val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
+    val badfilter2 = ParquetFilters.createFilter(predicate6)
+    assert(badfilter2.isDefined === false)
   }
 
   test("test filter by predicate pushdown") {
     for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
-      println(s"testing field $myval")
       val query1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
       assert(
         query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
@@ -512,7 +598,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val data = nestedParserSqlContext
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
-    data.registerAsTable("data")
+    data.registerTempTable("data")
     val query = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM data")
     val tmp = query.collect()
     assert(tmp.size === 2)
@@ -527,7 +613,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val data = nestedParserSqlContext
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
-    data.registerAsTable("data")
+    data.registerTempTable("data")
     val result1 = nestedParserSqlContext.sql("SELECT entries[0].value FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
@@ -554,7 +640,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val data = nestedParserSqlContext
       .parquetFile(ParquetTestData.testNestedDir3.toString)
       .toSchemaRDD
-    data.registerAsTable("data")
+    data.registerTempTable("data")
     val result1 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
@@ -573,7 +659,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
-    data.registerAsTable("mapTable")
+    data.registerTempTable("mapTable")
     val result1 = sql("SELECT data1 FROM mapTable").collect()
     assert(result1.size === 1)
     assert(result1(0)(0)
@@ -590,7 +676,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val data = nestedParserSqlContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
-    data.registerAsTable("mapTable")
+    data.registerTempTable("mapTable")
     val result1 = nestedParserSqlContext.sql("SELECT data2 FROM mapTable").collect()
     assert(result1.size === 1)
     val entry1 = result1(0)(0)
@@ -623,7 +709,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     nestedParserSqlContext
       .parquetFile(tmpdir.toString)
       .toSchemaRDD
-      .registerAsTable("tmpcopy")
+      .registerTempTable("tmpcopy")
     val tmpdata = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
     assert(tmpdata.size === 2)
     assert(tmpdata(0).size === 2)
@@ -644,7 +730,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     nestedParserSqlContext
       .parquetFile(tmpdir.toString)
       .toSchemaRDD
-      .registerAsTable("tmpmapcopy")
+      .registerTempTable("tmpmapcopy")
     val result1 = nestedParserSqlContext.sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
     assert(result1.size === 1)
     assert(result1(0)(0) === 2)
