@@ -29,8 +29,6 @@ import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -44,8 +42,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(content, basePath, appName,
-          "Details for Stage %s".format(stageId), parent.headerTabs, parent)
+        return UIUtils.headerSparkPage("Details for Stage %s".format(stageId), content, parent)
       }
 
       val stageData = stageDataOption.get
@@ -227,8 +224,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
-        parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
   }
 

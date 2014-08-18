@@ -76,6 +76,8 @@ private[spark] class SparkUI(
     }
   }
 
+  def getAppName = appName
+
   /** Set the app name for this UI. */
   def setAppName(name: String) {
     appName = name
@@ -98,6 +100,13 @@ private[spark] class SparkUI(
   private[spark] def appUIHostPort = publicHostName + ":" + boundPort
 
   private[spark] def appUIAddress = s"http://$appUIHostPort"
+}
+
+private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
+  extends WebUITab(parent, prefix) {
+
+  def appName: String = parent.getAppName
+
 }
 
 private[spark] object SparkUI {
