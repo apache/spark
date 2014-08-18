@@ -27,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.util.collection.{AppendOnlyMap, CompactBuffer}
+import org.apache.spark.util.collection.CompactBuffer
 
 @DeveloperApi
 sealed abstract class BuildSide
