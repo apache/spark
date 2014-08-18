@@ -37,6 +37,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>parquet-hive-bundle</artifactId>
+      <version>1.5.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
