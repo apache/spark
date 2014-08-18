@@ -130,6 +130,14 @@ class SparkSink extends AbstractSink with Logging with Configurable {
     blockingLatch.await()
     Status.BACKOFF
   }
+
+  private[flume] def getPort(): Int = {
+    serverOpt
+      .map(_.getPort)
+      .getOrElse(
+        throw new RuntimeException("Server was not started!")
+      )
+  }
 }
 
 /**
