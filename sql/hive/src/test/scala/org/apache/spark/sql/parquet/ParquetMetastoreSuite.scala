@@ -63,7 +63,10 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
       stringField STRING
     )
     PARTITIONED BY (p int)
-    ROW FORMAT SERDE 'org.apache.spark.sql.hive.parquet.FakeParquetSerDe'
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+     STORED AS
+     INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+     OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
     location '${partitionedTableDir.getCanonicalPath}'
     """)
 
@@ -73,7 +76,10 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
       intField INT,
       stringField STRING
     )
-    ROW FORMAT SERDE 'org.apache.spark.sql.hive.parquet.FakeParquetSerDe'
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+     STORED AS
+     INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+     OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
     location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
     """)
 
