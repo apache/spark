@@ -127,7 +127,7 @@ case class GeneratedAggregate(
           set)
 
       case CombineSetsAndCount(inputSet) =>
-        val ArrayType(inputType) = inputSet.dataType
+        val ArrayType(inputType, _) = inputSet.dataType
         val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
         val initialValue = NewSet(inputType)
         val collectSets = CombineSets(set, inputSet)
