@@ -1483,7 +1483,7 @@ private[spark] object Utils extends Logging {
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
   }
-  
+
   /**
    * Return the current system LD_LIBRARY_PATH environment
    */
@@ -1493,6 +1493,14 @@ private[spark] object Utils extends Logging {
     "DYLD_LIBRARY_PATH"
   } else {
     "LD_LIBRARY_PATH"
+  }
+
+  def libraryPathScriptVar: String = {
+    if (Utils.isWindows) {
+      s"%${Utils.libraryPath}%"
+    } else {
+      "$" + Utils.libraryPath
+    }
   }
 
 }

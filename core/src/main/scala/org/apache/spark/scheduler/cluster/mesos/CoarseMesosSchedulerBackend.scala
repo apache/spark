@@ -123,12 +123,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     val libraryPathOption = "spark.executor.extraLibraryPath"
     val extraLibraryPath = conf.getOption(libraryPathOption).map { p =>
-      val lp = if (Utils.isWindows) {
-        s"%${Utils.libraryPath}%"
-      } else {
-        "$" + Utils.libraryPath
-      }
-      s"-Djava.library.path=$p${File.pathSeparator}${lp}"
+      s"-Djava.library.path=$p${File.pathSeparator}${Utils.libraryPathScriptVar}"
     }
     val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
 
