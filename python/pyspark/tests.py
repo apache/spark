@@ -256,6 +256,15 @@ class TestRDDFunctions(PySparkTestCase):
         raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
         self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
 
+    def test_save_as_textfile_with_utf8(self):
+        x = u"\u00A1Hola, mundo!"
+        data = self.sc.parallelize([x.encode("utf-8")])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsTextFile(tempFile.name)
+        raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
+        self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
+
     def test_transforming_cartesian_result(self):
         # Regression test for SPARK-1034
         rdd1 = self.sc.parallelize([1, 2])
