@@ -454,7 +454,14 @@ private[spark] object Utils extends Logging {
    * multiple paths.
    */
   def getLocalDir(conf: SparkConf): String = {
-    conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
+    val localDirs = conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')
+    for (localDir <- localDirs) {
+      if (DiskChecker.checkDir(new File(localDir))) {
+        return localDir
+      }
+    }
+    logWarning("No local dir is good by checked, the first one will be choosed.")
+    localDirs(0)
   }
 
   /**
