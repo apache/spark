@@ -464,14 +464,16 @@ private[spark] object Utils extends Logging {
     getOrCreateLocalRootDirs(conf)(0)
   }
 
+  private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
+    conf.getenv("NM_HOST") != null || conf.getenv("CONTAINER_ID") != null
+  }
+
   /**
    * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
    * and returns only the directories that exist / could be created.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
-    val isYarn = java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", conf.getenv("SPARK_YARN_MODE")))
-    val confValue = if (isYarn) {
+    val confValue = if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available.
       getYarnLocalDirs(conf)
