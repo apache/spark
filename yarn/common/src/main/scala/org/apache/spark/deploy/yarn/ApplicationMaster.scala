@@ -65,7 +65,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private var actor: ActorRef = _
 
   // Fields used in cluster mode.
-  private var userThread: Thread = _
   private val sparkContextRef = new AtomicReference[SparkContext](null)
   private val userResult = new AtomicBoolean(false)
 
@@ -79,7 +78,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // other spark processes running on the same box
       System.setProperty("spark.ui.port", "0")
 
-      // When running the AM, the Spark master is always "yarn-cluster"
+      // Set the master property to match the requested mode.
       System.setProperty("spark.master", "yarn-cluster")
     }
 
@@ -130,11 +129,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // Note that this will unfortunately not properly clean up the staging files because it gets
     // called too late, after the filesystem is already shutdown.
     if (modified) {
-      Runtime.getRuntime().addShutdownHook(new Thread with Logging {
-        // This is not only logs, but also ensures that log system is initialized for this instance
-        // when we are actually 'run'-ing.
-        logInfo("Adding shutdown hook for context " + sc)
-
+      Runtime.getRuntime().addShutdownHook(new Thread {
         override def run() {
           logInfo("Invoking sc stop from shutdown hook")
           sc.stop()
@@ -157,13 +152,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def runDriver(): Boolean = {
     addAmIpFilter()
-    userThread = startUserClass()
+    val userThread = startUserClass()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
     // been set by the Thread executing the user class.
-    waitForSparkContextInitialized()
-
-    val sc = sparkContextRef.get()
+    val sc = waitForSparkContextInitialized()
 
     // If there is no SparkContext at this point, just fail the app.
     if (sc == null) {
@@ -184,7 +177,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def runExecutorLauncher(securityMgr: SecurityManager): Boolean = {
     actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
       conf = sparkConf, securityManager = securityMgr)._1
-    waitForSparkDriver()
+    actor = waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), "")
 
@@ -198,7 +191,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     client.getAttemptId().getAttemptId() >= maxAppAttempts
   }
 
-  /** Get the Yarn approved local directories. */
+  /** Get the Yarn-approved local directories. */
   private def getLocalDirs(): String = {
     // Hadoop 0.23 and 2.x have different Environment variable names for the
     // local dirs, so lets check both. We assume one of the 2 is set.
@@ -220,7 +213,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val schedulerInterval =
       sparkConf.getLong("spark.yarn.scheduler.heartbeat.interval-ms", 5000)
 
-    // must be <= timeoutInterval / 2.
+    // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
 
     val t = new Thread {
@@ -229,7 +222,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           checkNumExecutorsFailed()
           logDebug("Sending progress")
           allocator.allocateResources()
-          Try(Thread.sleep(interval))
+          try {
+            Thread.sleep(interval)
+          } catch {
+            case e: InterruptedException =>
+          }
         }
       }
     }
@@ -265,10 +262,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   // Note: this needs to happen before allocateExecutors.
-  private def waitForSparkContextInitialized() {
+  private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     try {
-      var sparkContext: SparkContext = null
       sparkContextRef.synchronized {
         var count = 0
         val waitTime = 10000L
@@ -278,19 +274,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           count = count + 1
           sparkContextRef.wait(waitTime)
         }
-        sparkContext = sparkContextRef.get()
-        assert(sparkContext != null || count >= numTries)
 
+        val sparkContext = sparkContextRef.get()
+        assert(sparkContext != null || count >= numTries)
         if (sparkContext == null) {
-          throw new IllegalStateException(
+          logError(
             "Unable to retrieve sparkContext inspite of waiting for %d, numTries = %d".format(
               count * waitTime, numTries))
         }
+        sparkContext
       }
     }
   }
 
-  private def waitForSparkDriver() {
+  private def waitForSparkDriver(): ActorRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -313,7 +310,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
+    actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
   }
 
   private def allocateExecutors() = {
@@ -334,7 +331,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  // add the yarn amIpFilter that Yarn requires for properly securing the UI
+  /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter() = {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val proxy = client.getProxyHostAndPort(yarnConf)
@@ -354,9 +351,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
-    val mainMethod = Class.forName(
-      args.userClass,
-      false,
+    val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
     val t = new Thread {
