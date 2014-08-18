@@ -98,4 +98,6 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
   override def dataType = left.dataType
 
   override def eval(input: Row): Any = ???
+
+  override def toString = s"MaxOf($left, $right)"
 }
