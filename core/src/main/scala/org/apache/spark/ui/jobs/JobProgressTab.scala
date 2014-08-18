@@ -21,12 +21,10 @@ import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, WebUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stages") {
-  val appName = parent.appName
-  val basePath = parent.basePath
+private[ui] class JobProgressTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
   val live = parent.live
   val sc = parent.sc
   val conf = if (live) sc.conf else new SparkConf
@@ -53,4 +51,5 @@ private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stag
       Thread.sleep(100)
     }
   }
+
 }

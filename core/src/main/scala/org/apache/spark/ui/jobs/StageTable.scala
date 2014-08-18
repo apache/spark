@@ -32,7 +32,6 @@ private[ui] class StageTableBase(
     parent: JobProgressTab,
     killEnabled: Boolean = false) {
 
-  private val basePath = parent.basePath
   private val listener = parent.listener
   protected def isFairScheduler = parent.isFairScheduler
 
@@ -88,17 +87,19 @@ private[ui] class StageTableBase(
   private def makeDescription(s: StageInfo): Seq[Node] = {
     // scalastyle:off
     val killLink = if (killEnabled) {
+      val killLinkUri = "%s/stages/stage/kill?id=%s&terminate=true"
+        .format(UIUtils.prependBaseUri(parent.basePath), s.stageId)
+      val confirm = "return window.confirm('Are you sure you want to kill stage %s ?');"
+        .format(s.stageId)
       <span class="kill-link">
-        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}
-            onclick={"return window.confirm('Are you sure you want to kill stage %s ?');".format(s.stageId)}>kill</a>)
+        (<a href={killLinkUri} onclick={confirm}>kill</a>)
       </span>
     }
     // scalastyle:on
 
-    val nameLink =
-      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
-        {s.name}
-      </a>
+    val nameLinkUri ="%s/stages/stage?id=%s"
+      .format(UIUtils.prependBaseUri(parent.basePath), s.stageId)
+    val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
     val details = if (s.details.nonEmpty) {
@@ -111,7 +112,7 @@ private[ui] class StageTableBase(
           Text("RDD: ") ++
           // scalastyle:off
           cachedRddInfos.map { i =>
-            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(basePath), i.id)}>{i.name}</a>
+            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(parent.basePath), i.id)}>{i.name}</a>
           }
           // scalastyle:on
         }}
@@ -157,7 +158,7 @@ private[ui] class StageTableBase(
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(basePath), stageData.schedulingPool)}>
+          .format(UIUtils.prependBaseUri(parent.basePath), stageData.schedulingPool)}>
           {stageData.schedulingPool}
         </a>
       </td>
