@@ -71,11 +71,8 @@ object CommandUtils extends Logging {
       extraEnvironment = command.environment)
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
-    val jvmversion = Utils.executeAndGetOutput(Seq(runner + " -version "),
-      extraEnvironment = command.environment)
-    val version = jvmversion.substring(jvmversion.indexOf("\"") + 1, jvmversion.indexOf("_"))
-    val permGenOpt = if (version.compareTo("1.8.0") < 0) Some("-XX:MaxPermSize=128m") else None
+    val javaVersion = System.getProperty("java.version")
+    val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
       permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }
