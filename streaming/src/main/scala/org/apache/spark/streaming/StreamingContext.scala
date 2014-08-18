@@ -38,7 +38,6 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.ui.StreamingTab
-import org.apache.spark.util.{Utils, MetadataCleaner}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create

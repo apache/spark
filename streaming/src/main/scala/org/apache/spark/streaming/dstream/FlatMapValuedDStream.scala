@@ -33,10 +33,6 @@ class FlatMapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
-    val rdd: Option[RDD[(K, U)]] = parent.getOrCompute(validTime).map(_.flatMapValues[U](flatMapValueFunc))
-    setCallSite(prevCallSite)
-    return rdd
+    parent.getOrCompute(validTime).map(_.flatMapValues[U](flatMapValueFunc))
   }
 }

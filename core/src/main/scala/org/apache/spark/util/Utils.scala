@@ -818,8 +818,6 @@ private[spark] object Utils extends Logging {
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.streaming)?(\.streaming\.dstream)?(\.streaming\.scheduler)?(\.streaming\.twitter)?(\.streaming\.kafka)?(\.streaming\.flume)?(\.streaming\.mqtt)?(\.streaming\.zeromq)?\.[A-Z]""".r
   private val SCALA_CLASS_REGEX = """^scala(\.util)?(\.collection)?(\.collection\.mutable)?(\.collection\.immutable)?(\.concurrent\.forkjoin)?\.[A-Z]""".r
-  private val AKKA_CLASS_REGEX = """^akka(\.actor)?(\.dispatch)?\.[A-Z]""".r
-  private val JAVA_CLASS_REGEX = """^java(\.util\.concurrent)?(\.lang)?\.[A-Z]""".r
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
@@ -848,9 +846,7 @@ private[spark] object Utils extends Logging {
     for (el <- trace) {
       if (insideSpark) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined ||
-            SCALA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined ||
-            AKKA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined ||
-            JAVA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
+            SCALA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
             lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)

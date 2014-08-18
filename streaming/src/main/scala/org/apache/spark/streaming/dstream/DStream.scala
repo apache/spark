@@ -122,7 +122,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   /* Return the current callSite */
-  private[streaming] def getCallSite() = {
+  private[streaming] def getCallSite(): CallSite = {
     CallSite(ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_SHORT),
              ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_LONG))
   }
@@ -309,6 +309,8 @@ abstract class DStream[T: ClassTag] (
       // (based on sliding time of this DStream), then generate the RDD
       case None => {
         if (isTimeValid(time)) {
+          val prevCallSite = getCallSite
+          setCreationCallSite
           compute(time) match {
             case Some(newRDD) =>
               if (storageLevel != StorageLevel.NONE) {
@@ -323,8 +325,10 @@ abstract class DStream[T: ClassTag] (
                   " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
+              setCallSite(prevCallSite)
               Some(newRDD)
             case None =>
+              setCallSite(prevCallSite)
               None
           }
         } else {

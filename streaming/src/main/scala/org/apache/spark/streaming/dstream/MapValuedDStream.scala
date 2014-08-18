@@ -33,11 +33,7 @@ class MapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
-    val rdd: Option[RDD[(K, U)]] = parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))
-    setCallSite(prevCallSite)
-    return rdd
+    parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))
   }
 }
 

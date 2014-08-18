@@ -59,22 +59,17 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   /** Ask ReceiverInputTracker for received data blocks and generates RDDs with them. */
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
     // If this is called for any time before the start time of the context,
     // then this returns an empty RDD. This may happen when recovering from a
     // master failure
-    var blockRDD: Option[RDD[T]] = None
     if (validTime >= graph.startTime) {
       val blockInfo = ssc.scheduler.receiverTracker.getReceivedBlockInfo(id)
       receivedBlockInfo(validTime) = blockInfo
       val blockIds = blockInfo.map(_.blockId.asInstanceOf[BlockId])
-      blockRDD = Some(new BlockRDD[T](ssc.sc, blockIds))
+      Some(new BlockRDD[T](ssc.sc, blockIds))
     } else {
-      blockRDD = Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
+      Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
     }
-    setCallSite(prevCallSite)
-    blockRDD
   }
 
   /** Get information on received blocks. */

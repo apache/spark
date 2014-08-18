@@ -70,8 +70,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     assert(validTime.milliseconds >= ignoreTime,
       "Trying to get new files for a really old time [" + validTime + " < " + ignoreTime + "]")
-    val prevCallSite = getCallSite
-    setCreationCallSite
+
     // Find new files
     val (newFiles, minNewFileModTime) = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
@@ -81,7 +80,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       ignoreTime = minNewFileModTime
     }
     files += ((validTime, newFiles.toArray))
-    setCallSite(prevCallSite)
     Some(filesToRDD(newFiles))
   }
 

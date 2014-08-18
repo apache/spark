@@ -32,11 +32,7 @@ class FilteredDStream[T: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
-    val rdd: Option[RDD[T]] = parent.getOrCompute(validTime).map(_.filter(filterFunc))
-    setCallSite(prevCallSite)
-    return rdd
+    parent.getOrCompute(validTime).map(_.filter(filterFunc))
   }
 }
 

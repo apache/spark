@@ -61,8 +61,6 @@ class WindowedDStream[T: ClassTag](
   }
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
     val rddsInWindow = parent.slice(currentWindow)
     val windowRDD = if (rddsInWindow.flatMap(_.partitioner).distinct.length == 1) {
@@ -72,7 +70,6 @@ class WindowedDStream[T: ClassTag](
       logDebug("Using normal union for windowing at " + validTime)
       new UnionRDD(ssc.sc,rddsInWindow)
     }
-    setCallSite(prevCallSite)
     Some(windowRDD)
   }
 }

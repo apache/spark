@@ -30,10 +30,6 @@ class GlommedDStream[T: ClassTag](parent: DStream[T])
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Array[T]]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
-    val rdd: Option[RDD[Array[T]]] = parent.getOrCompute(validTime).map(_.glom())
-    setCallSite(prevCallSite)
-    return rdd
+    parent.getOrCompute(validTime).map(_.glom())
   }
 }

@@ -37,15 +37,12 @@ class QueueInputDStream[T: ClassTag](
   override def stop() { }
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
     val buffer = new ArrayBuffer[RDD[T]]()
     if (oneAtATime && queue.size > 0) {
       buffer += queue.dequeue()
     } else {
       buffer ++= queue.dequeueAll(_ => true)
     }
-    setCallSite(prevCallSite)
     if (buffer.size > 0) {
       if (oneAtATime) {
         Some(buffer.head)

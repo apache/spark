@@ -45,8 +45,6 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
     val rdds = new ArrayBuffer[RDD[T]]()
     parents.map(_.getOrCompute(validTime)).foreach(_ match {
       case Some(rdd) => rdds += rdd
@@ -54,10 +52,8 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
         + validTime)
     })
     if (rdds.size > 0) {
-      setCallSite(prevCallSite)
       Some(new UnionRDD(ssc.sc, rdds))
     } else {
-      setCallSite(prevCallSite)
       None
     }
   }

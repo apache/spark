@@ -52,8 +52,6 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-
-
   // Reduce each batch of data using reduceByKey which will be further reduced by window
   // by ReducedWindowedDStream
   val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
@@ -85,8 +83,6 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
   }
 
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
     val reduceF = reduceFunc
     val invReduceF = invReduceFunc
 
@@ -170,16 +166,13 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
       }
     }
 
-    var returnRDD: Option[RDD[(K, V)]] = None
     val mergedValuesRDD = cogroupedRDD.asInstanceOf[RDD[(K, Array[Iterable[V]])]]
       .mapValues(mergeValues)
 
     if (filterFunc.isDefined) {
-      returnRDD = Some(mergedValuesRDD.filter(filterFunc.get))
+      Some(mergedValuesRDD.filter(filterFunc.get))
     } else {
-      returnRDD = Some(mergedValuesRDD)
+      Some(mergedValuesRDD)
     }
-    setCallSite(prevCallSite)
-    returnRDD
   }
 }

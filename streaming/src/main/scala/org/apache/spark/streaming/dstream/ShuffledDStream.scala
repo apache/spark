@@ -38,14 +38,10 @@ class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
-    val rdd: Option[RDD[(K,C)]] = parent.getOrCompute(validTime) match {
+    parent.getOrCompute(validTime) match {
       case Some(rdd) => Some(rdd.combineByKey[C](
           createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine))
       case None => None
     }
-    setCallSite(prevCallSite)
-    return rdd
   }
 }

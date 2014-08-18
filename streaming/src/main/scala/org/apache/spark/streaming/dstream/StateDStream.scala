@@ -34,6 +34,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
+
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
@@ -41,8 +42,6 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
-    val prevCallSite = getCallSite
-    setCreationCallSite
 
     // Try to get the previous state RDD
     getOrCompute(validTime - slideDuration) match {
@@ -70,7 +69,6 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             }
             val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
             val stateRDD = cogroupedRDD.mapPartitions(finalFunc, preservePartitioning)
-            setCallSite(prevCallSite)
             Some(stateRDD)
           }
           case None => {    // If parent RDD does not exist
@@ -82,7 +80,6 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
               updateFuncLocal(i)
             }
             val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)
-            setCallSite(prevCallSite)
             Some(stateRDD)
           }
         }
@@ -105,12 +102,10 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             val groupedRDD = parentRDD.groupByKey(partitioner)
             val sessionRDD = groupedRDD.mapPartitions(finalFunc, preservePartitioning)
             // logDebug("Generating state RDD for time " + validTime + " (first)")
-            setCallSite(prevCallSite)
             Some(sessionRDD)
           }
           case None => { // If parent RDD does not exist, then nothing to do!
             // logDebug("Not generating state RDD (no previous state, no parent)")
-            setCallSite(prevCallSite)
             None
           }
         }
