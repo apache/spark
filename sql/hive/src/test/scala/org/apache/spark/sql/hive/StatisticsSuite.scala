@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.scalatest.BeforeAndAfterAll
+
 import scala.reflect.ClassTag
 
 
@@ -26,7 +28,16 @@ import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
-class StatisticsSuite extends QueryTest {
+class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
+
+  override def beforeAll() = {
+    // HACK: Cached tables do not currently preserve statistics...
+    TestHive.cacheTables = false
+  }
+
+  override def afterAll() = {
+    TestHive.cacheTables = true
+  }
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
@@ -126,7 +137,7 @@ class StatisticsSuite extends QueryTest {
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
-    assert(sizes.size === 1)
+    assert(sizes.size === 1, s"Size wrong for:\n ${rdd.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
       s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
   }
@@ -147,7 +158,7 @@ class StatisticsSuite extends QueryTest {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
-        s"query should contain two relations, each of which has size smaller than autoConvertSize")
+        s"query should contain two relations, each of which has size smaller than autoConvertSize instead ${rdd.queryExecution}")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.
