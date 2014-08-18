@@ -87,6 +87,12 @@ object YarnSparkHadoopUtil {
   // Additional memory overhead - in mb.
   val DEFAULT_MEMORY_OVERHEAD = 384
 
+  val ANY_HOST = "*"
+
+  // All RM requests are issued with same priority : we do not (yet) have any distinction between
+  // request types (like map/reduce in hadoop for example)
+  val RM_REQUEST_PRIORITY = 1
+
   // Host to rack map - saved from allocation requests. We are expecting this not to change.
   // Note that it is possible for this to change : and ResurceManager will indicate that to us via
   // update response to allocate. But we are punting on handling that for now.

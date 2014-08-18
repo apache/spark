@@ -59,11 +59,6 @@ private[yarn] class YarnAllocationHandler(
     map: collection.Map[String, collection.Set[SplitInfo]])
   extends YarnAllocator with Logging {
 
-  private val ANY_HOST = "*"
-  // All requests are issued with same priority : we do not (yet) have any distinction between
-  // request types (like map/reduce in hadoop for example)
-  private val PRIORITY = 1
-
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
   // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
   // allocatedContainerToHostMap: container to host mapping.
@@ -390,7 +385,7 @@ private[yarn] class YarnAllocationHandler(
 
     for (container <- hostContainers) {
       val candidateHost = container.getNodes.last
-      assert(ANY_HOST != candidateHost)
+      assert(YarnSparkHadoopUtil.ANY_HOST != candidateHost)
 
       val rack = YarnSparkHadoopUtil.lookupRack(conf, candidateHost)
       if (rack != null) {
@@ -406,7 +401,7 @@ private[yarn] class YarnAllocationHandler(
         AllocationType.RACK,
         rack,
         count,
-        PRIORITY)
+        YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
     }
 
     requestedContainers
@@ -437,7 +432,7 @@ private[yarn] class YarnAllocationHandler(
           AllocationType.ANY,
           resource = null,
           numExecutors,
-          PRIORITY).toList
+          YarnSparkHadoopUtil.RM_REQUEST_PRIORITY).toList
       } else {
         // Request for all hosts in preferred nodes and for numExecutors -
         // candidates.size, request by default allocation policy.
@@ -450,7 +445,7 @@ private[yarn] class YarnAllocationHandler(
               AllocationType.HOST,
               candidateHost,
               requiredCount,
-              PRIORITY)
+              YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
           }
         }
         val rackContainerRequests: List[ContainerRequest] = createRackResourceRequests(
@@ -460,7 +455,7 @@ private[yarn] class YarnAllocationHandler(
           AllocationType.ANY,
           resource = null,
           numExecutors,
-          PRIORITY)
+          YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
 
         val containerRequestBuffer = new ArrayBuffer[ContainerRequest](
           hostContainerRequests.size + rackContainerRequests.size() + anyContainerRequests.size)
@@ -509,7 +504,7 @@ private[yarn] class YarnAllocationHandler(
     // There must be a third request, which is ANY. That will be specially handled.
     requestType match {
       case AllocationType.HOST => {
-        assert(ANY_HOST != resource)
+        assert(YarnSparkHadoopUtil.ANY_HOST != resource)
         val hostname = resource
         val nodeLocal = constructContainerRequests(
           Array(hostname),
