@@ -25,6 +25,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
@@ -62,7 +63,8 @@ private[spark] trait ShuffleWriterGroup {
  */
 // TODO: Factor this into a separate class for each ShuffleManager implementation
 private[spark]
-class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
+class ShuffleBlockManager(blockManager: BlockManager,
+                          shuffleManager: ShuffleManager) extends Logging {
   def conf = blockManager.conf
 
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
@@ -71,8 +73,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
   // Are we using sort-based shuffle?
-  val sortBasedShuffle =
-    conf.get("spark.shuffle.manager", "") == classOf[SortShuffleManager].getName
+  val sortBasedShuffle = shuffleManager.isInstanceOf[SortShuffleManager]
 
   private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 

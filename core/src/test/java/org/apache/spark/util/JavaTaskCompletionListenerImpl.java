@@ -15,14 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.util;
+
+import org.apache.spark.TaskContext;
+
 
 /**
- * Filter specifying a split and type of comparison to be applied on features
- * @param split split specifying the feature index, type and threshold
- * @param comparison integer specifying <,=,>
+ * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+ * TaskContext is Java friendly.
  */
-private[tree] case class Filter(split: Split, comparison: Int) {
-  // Comparison -1,0,1 signifies <.=,>
-  override def toString = " split = " + split + "comparison = " + comparison
+public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+
+  @Override
+  public void onTaskCompletion(TaskContext context) {
+    context.isCompleted();
+    context.isInterrupted();
+    context.stageId();
+    context.partitionId();
+    context.runningLocally();
+    context.taskMetrics();
+    context.addTaskCompletionListener(this);
+  }
 }
