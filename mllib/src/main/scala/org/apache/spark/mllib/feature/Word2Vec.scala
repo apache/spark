@@ -435,15 +435,6 @@ class Word2VecModel private[mllib] (
   }
   
   /**
-   * Transforms an RDD to its vector representation
-   * @param dataset a an RDD of words 
-   * @return RDD of vector representation 
-   */
-  def transform(dataset: RDD[String]): RDD[Vector] = {
-    dataset.map(word => transform(word))
-  }
-  
-  /**
    * Find synonyms of a word
    * @param word a word
    * @param num number of synonyms to find  
