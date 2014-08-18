@@ -5,6 +5,8 @@
 *.ear
 .RData
 .Rhistory
+unit-tests.log
+checkpoints/
 target/
 lib/
 work/
