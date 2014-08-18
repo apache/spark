@@ -95,7 +95,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
-    // Compute the minimum and the maxium
+    // Scala's built-in range has issues. See #SI-8782
+    def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
+      val span = max - min
+      Range.Int(0, steps, 1).map(s => min + (s * span) / steps) :+ max
+    }
+    // Compute the minimum and the maximum
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
         Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
@@ -107,9 +112,11 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }
-    val increment = (max-min)/bucketCount.toDouble
-    val range = if (increment != 0) {
-      Range.Double.inclusive(min, max, increment)
+    val range = if (min != max) {
+      // Range.Double.inclusive(min, max, increment)
+      // The above code doesn't always work. See Scala bug #SI-8782.
+      // https://issues.scala-lang.org/browse/SI-8782
+      customRange(min, max, bucketCount)
     } else {
       List(min, min)
     }
