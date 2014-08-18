@@ -20,6 +20,7 @@ package org.apache.spark.mllib.regression
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.DStream
 
 /**
@@ -117,6 +118,6 @@ abstract class StreamingLinearAlgorithm[
       logError(msg)
       throw new IllegalArgumentException(msg)
     }
-    data.mapPartitions(_.map(x => (x._1, model.predict(x._2))), preservePartitioning = true)
+    data.mapValues(model.predict)
   }
 }
