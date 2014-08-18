@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+
 import parquet.hadoop._
 import parquet.hadoop.api.{InitContext, ReadSupport}
 import parquet.hadoop.metadata.GlobalMetaData
@@ -42,6 +43,7 @@ import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
@@ -60,11 +62,18 @@ case class ParquetTableScan(
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
   // by exprId. note: output cannot be transient, see
   // https://issues.apache.org/jira/browse/SPARK-1367
-  val output = attributes.map { a =>
-    relation.output
-      .find(o => o.exprId == a.exprId)
-      .getOrElse(sys.error(s"Invalid parquet attribute $a in ${relation.output.mkString(",")}"))
-  }
+  val normalOutput =
+    attributes
+      .filterNot(a => relation.partitioningAttributes.map(_.exprId).contains(a.exprId))
+      .flatMap(a => relation.output.find(o => o.exprId == a.exprId))
+
+  val partOutput =
+    attributes.flatMap(a => relation.partitioningAttributes.find(o => o.exprId == a.exprId))
+
+  def output = partOutput ++ normalOutput
+
+  assert(normalOutput.size + partOutput.size == attributes.size,
+    s"$normalOutput + $partOutput != $attributes, ${relation.output}")
 
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
@@ -72,16 +81,19 @@ case class ParquetTableScan(
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
 
     val conf: Configuration = ContextUtil.getConfiguration(job)
-    val qualifiedPath = {
-      val path = new Path(relation.path)
-      path.getFileSystem(conf).makeQualified(path)
+
+    relation.path.split(",").foreach { curPath =>
+      val qualifiedPath = {
+        val path = new Path(curPath)
+        path.getFileSystem(conf).makeQualified(path)
+      }
+      NewFileInputFormat.addInputPath(job, qualifiedPath)
     }
-    NewFileInputFormat.addInputPath(job, qualifiedPath)
 
     // Store both requested and original schema in `Configuration`
     conf.set(
       RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      ParquetTypesConverter.convertToString(output))
+      ParquetTypesConverter.convertToString(normalOutput))
     conf.set(
       RowWriteSupport.SPARK_ROW_SCHEMA,
       ParquetTypesConverter.convertToString(relation.output))
@@ -102,13 +114,41 @@ case class ParquetTableScan(
       SQLConf.PARQUET_CACHE_METADATA,
       sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "false"))
 
-    sc.newAPIHadoopRDD(
-      conf,
-      classOf[FilteringParquetRowInputFormat],
-      classOf[Void],
-      classOf[Row])
-      .map(_._2)
-      .filter(_ != null) // Parquet's record filters may produce null values
+    val baseRDD =
+      new org.apache.spark.rdd.NewHadoopRDD(
+        sc,
+        classOf[FilteringParquetRowInputFormat],
+        classOf[Void],
+        classOf[Row],
+        conf)
+
+    if (partOutput.nonEmpty) {
+      baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
+        val partValue = "([^=]+)=([^=]+)".r
+        val partValues =
+          split.asInstanceOf[parquet.hadoop.ParquetInputSplit]
+            .getPath
+            .toString
+            .split("/")
+            .flatMap {
+              case partValue(key, value) => Some(key -> value)
+              case _ => None
+            }.toMap
+
+        val partitionRowValues =
+          partOutput.map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
+
+        new Iterator[Row] {
+          private[this] val joinedRow = new JoinedRow(Row(partitionRowValues:_*), null)
+
+          def hasNext = iter.hasNext
+
+          def next() = joinedRow.withRight(iter.next()._2)
+        }
+      }
+    } else {
+      baseRDD.map(_._2)
+    }.filter(_ != null) // Parquet's record filters may produce null values
   }
 
   /**

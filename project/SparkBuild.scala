@@ -228,7 +228,6 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-
     javaOptions += "-XX:MaxPermSize=1g",
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
     parallelExecution in Test := false,

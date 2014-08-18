@@ -79,6 +79,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Change the default SQL dialect to HiveQL
   override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  private[spark] def convertMetastoreParquet: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet", "false") == "true"
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
@@ -326,6 +334,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
+      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,

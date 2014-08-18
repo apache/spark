@@ -47,7 +47,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
-    @transient sqlContext: SQLContext)
+    @transient sqlContext: SQLContext,
+    partitioningAttributes: Seq[Attribute] = Nil)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -61,12 +62,13 @@ private[sql] case class ParquetRelation(
 
   /** Attributes */
   override val output =
+    partitioningAttributes ++
     ParquetTypesConverter.readSchemaFromFile(
-      new Path(path),
+      new Path(path.split(",").head),
       conf,
       sqlContext.isParquetBinaryAsString)
 
-  override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
