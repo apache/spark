@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.parquet._
 
@@ -149,7 +150,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
       case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
-      case CollectHashSet(exprs) if exprs.size == 1 => false
+      // The generated set implementation is pretty limited ATM.
+      case CollectHashSet(exprs) if exprs.size == 1  &&
+           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
       case _ => true
     }
 

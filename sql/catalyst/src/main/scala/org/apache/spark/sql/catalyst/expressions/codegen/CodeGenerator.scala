@@ -435,15 +435,18 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
         leftEval.code ++ rightEval.code ++
         q"""
-          val leftSet = ${leftEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
-          val rightSet = ${rightEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
-          val iterator = rightSet.iterator
-          while (iterator.hasNext) {
-            leftSet.add(iterator.next())
-          }
-
           val $nullTerm = false
-          val $primitiveTerm = leftSet
+          var $primitiveTerm: ${hashSetForType(elementType)} = null
+
+          {
+            val leftSet = ${leftEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
+            val rightSet = ${rightEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
+            val iterator = rightSet.iterator
+            while (iterator.hasNext) {
+              leftSet.add(iterator.next())
+            }
+            $primitiveTerm = leftSet
+          }
         """.children
 
       case MaxOf(e1, e2) =>

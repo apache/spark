@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.util.collection.OpenHashSet
 
 import scala.reflect.ClassTag
@@ -123,23 +124,22 @@ private[sql] class HyperLogLogSerializer extends Serializer[HyperLogLog] {
 
 private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
   def write(kryo: Kryo, output: Output, hs: OpenHashSet[_]) {
+    val rowSerializer = kryo.getDefaultSerializer(classOf[Array[Any]]).asInstanceOf[Serializer[Any]]
     output.writeInt(hs.size)
-    val rowSerializer = kryo.getSerializer(classOf[Any]).asInstanceOf[Serializer[Any]]
     val iterator = hs.iterator
     while(iterator.hasNext) {
       val row = iterator.next()
-      rowSerializer.write(kryo, output, row)
+      rowSerializer.write(kryo, output, row.asInstanceOf[GenericRow].values)
     }
   }
 
   def read(kryo: Kryo, input: Input, tpe: Class[OpenHashSet[_]]): OpenHashSet[_] = {
-    val rowSerializer = kryo.getSerializer(classOf[Any]).asInstanceOf[Serializer[Any]]
-
+    val rowSerializer = kryo.getDefaultSerializer(classOf[Array[Any]]).asInstanceOf[Serializer[Any]]
     val numItems = input.readInt()
     val set = new OpenHashSet[Any](numItems + 1)
     var i = 0
     while (i < numItems) {
-      val row = rowSerializer.read(kryo, input, classOf[Any].asInstanceOf[Class[Any]])
+      val row = new GenericRow(rowSerializer.read(kryo, input, classOf[Array[Any]].asInstanceOf[Class[Any]]).asInstanceOf[Array[Any]])
       set.add(row)
       i += 1
     }

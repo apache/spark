@@ -58,8 +58,9 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 
   def eval(input: Row): Any = {
     val itemEval = item.eval(input)
+    val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
+
     if (itemEval != null) {
-      val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
       if (setEval != null) {
         setEval.add(itemEval)
         setEval
@@ -67,7 +68,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
         null
       }
     } else {
-      null
+      setEval
     }
   }
 
