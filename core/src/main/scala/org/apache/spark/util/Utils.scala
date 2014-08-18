@@ -449,10 +449,16 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
-   * return a single directory, even though the spark.local.dir property might be a list of
-   * multiple paths.  If the SPARK_LOCAL_DIRS environment variable is set, then this will return
-   * a directory from that variable.
+   * Get the path of temporary directory.  Spark's local directories can be configured through
+   * multiple settings, which are used with the following precedence:
+   *
+   *   - If called from inside of a YARN container, this will return a directory chosen by YARN.
+   *   - If the SPARK_LOCAL_DIRS environment variable is set, this will return a directory from it.
+   *   - Otherwise, if the spark.local.dir is set, this will return a directory from it.
+   *   - Otherwise, this will return java.io.tmpdir.
+   *
+   * Some of these configuration options might be lists of multiple paths, but this method will
+   * always return a single directory.
    */
   def getLocalDir(conf: SparkConf): String = {
     getOrCreateLocalRootDirs(conf)(0)

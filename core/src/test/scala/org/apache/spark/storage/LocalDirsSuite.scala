@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 
 
 /**
- * Tests for the spark.local.dirs and SPARK_LOCAL_DIRS configuration options.
+ * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.
  */
 class LocalDirsSuite extends FunSuite {
 
