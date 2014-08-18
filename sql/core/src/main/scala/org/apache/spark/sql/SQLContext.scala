@@ -316,12 +316,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
       TakeOrdered ::
-      HashAggregation(self) ::
+      HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
       InMemoryScans ::
       ParquetOperations ::
-      BasicOperators(self) ::
+      BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil
 

@@ -102,7 +102,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case class HashAggregation(context: SQLContext) extends Strategy {
+  object HashAggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
 
@@ -141,7 +141,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           partialComputation,
           planLater(child))
 
-        if (context.externalAggregate) {
+        if (self.sqlContext.externalAggregate) {
           execution.ExternalAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -257,7 +257,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   // Can we automate these 'pass through' operations?
-  case class BasicOperators(context: SQLContext) extends Strategy {
+  object BasicOperators extends Strategy {
     def numPartitions = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -276,7 +276,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        if (context.externalAggregate) {
+        if (self.sqlContext.externalAggregate) {
           execution.ExternalAggregate(partial = false, group, agg, planLater(child)) :: Nil
         } else {
           execution.OnHeapAggregate(partial = false, group, agg, planLater(child)) :: Nil

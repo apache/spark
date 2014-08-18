@@ -22,19 +22,14 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.planner._
-import org.apache.spark.sql.test.TestSQLContext
 
 class PlannerSuite extends FunSuite {
-
-  val conf: SQLContext = TestSQLContext
-
   test("unions are collapsed") {
-
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
-    val planned = BasicOperators(conf).apply(query).head
+    val planned = BasicOperators(query).head
     val logicalUnions = query collect { case u: logical.Union => u }
     val physicalUnions = planned collect { case u: execution.Union => u }
 
@@ -44,7 +39,7 @@ class PlannerSuite extends FunSuite {
 
   test("count is partially aggregated") {
     val query = testData.groupBy('value)(Count('key)).queryExecution.analyzed
-    val planned = HashAggregation(conf).apply(query).head
+    val planned = HashAggregation(query).head
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
     assert(aggregations.size === 2)
@@ -52,14 +47,14 @@ class PlannerSuite extends FunSuite {
 
   test("count distinct is not partially aggregated") {
     val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = HashAggregation(conf).apply(query)
+    val planned = HashAggregation(query)
     assert(planned.isEmpty)
   }
 
   test("mixed aggregates are not partially aggregated") {
     val query =
       testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = HashAggregation(conf).apply(query)
+    val planned = HashAggregation(query)
     assert(planned.isEmpty)
   }
 }
