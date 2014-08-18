@@ -19,6 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -115,10 +116,43 @@ private[sql] case class InMemoryColumnarTableScan(
   val buildFilter: PartialFunction[Expression, Expression] = {
     case EqualTo(a: AttributeReference, l: Literal) =>
       val aStats = relation.partitionStatistics.forAttribute(a)
-      l >= aStats.lowerBound && l <= aStats.upperBound
+      aStats.lowerBound <= l && l <= aStats.upperBound
+
     case EqualTo(l: Literal, a: AttributeReference) =>
       val aStats = relation.partitionStatistics.forAttribute(a)
-      l >= aStats.lowerBound && l <= aStats.upperBound
+      aStats.lowerBound <= l && l <= aStats.upperBound
+
+    case LessThan(a: AttributeReference, l: Literal) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      aStats.lowerBound < l
+
+    case LessThan(l: Literal, a: AttributeReference) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l < aStats.upperBound
+
+    case LessThanOrEqual(a: AttributeReference, l: Literal) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      aStats.lowerBound <= l
+
+    case LessThanOrEqual(l: Literal, a: AttributeReference) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l <= aStats.upperBound
+
+    case GreaterThan(a: AttributeReference, l: Literal) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l < aStats.upperBound
+
+    case GreaterThan(l: Literal, a: AttributeReference) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      aStats.lowerBound < l
+
+    case GreaterThanOrEqual(a: AttributeReference, l: Literal) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      l <= aStats.upperBound
+
+    case GreaterThanOrEqual(l: Literal, a: AttributeReference) =>
+      val aStats = relation.partitionStatistics.forAttribute(a)
+      aStats.lowerBound <= l
   }
 
   val partitionFilters = {
@@ -132,7 +166,7 @@ private[sql] case class InMemoryColumnarTableScan(
             allowFailures = true))
 
       boundFilter.foreach(_ =>
-        filter.foreach(f => logWarning(s"Predicate $p generates partition filter: $f")))
+        filter.foreach(f => logInfo(s"Predicate $p generates partition filter: $f")))
 
       // If the filter can't be resolved then we are missing required statistics.
       boundFilter.filter(_.resolved)
@@ -144,6 +178,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
   override def execute() = {
     readPartitions.setValue(0)
+    readBatches.setValue(0)
 
     relation.cachedColumnBuffers.mapPartitions { iterator =>
       val partitionFilter = newPredicate(
@@ -157,28 +192,28 @@ private[sql] case class InMemoryColumnarTableScan(
         attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
       }
 
-      iterator
+      val rows = iterator
         // Skip pruned batches
         .filter { cachedBatch =>
-          val stats = cachedBatch.stats
-          val chosen = partitionFilter(stats)
-
-          if (!chosen) {
+          if (!partitionFilter(cachedBatch.stats)) {
             def statsString = relation.partitionStatistics.schema
-              .zip(stats)
+              .zip(cachedBatch.stats)
               .map { case (a, s) => s"${a.name}: $s" }
               .mkString(", ")
             logInfo(s"Skipping partition based on stats $statsString")
+            false
+          } else {
+            readBatches += 1
+            true
           }
-
-          chosen
         }
-        .map(_.buffers)
-        .flatMap { buffers =>
-          val columnAccessors = requestedColumns.map(buffers(_)).map(ColumnAccessor(_))
+        // Build column accessors
+        .map { cachedBatch =>
+          requestedColumns.map(cachedBatch.buffers(_)).map(ColumnAccessor(_))
+        }
+        // Extract rows via column accessors
+        .flatMap { columnAccessors =>
           val nextRow = new GenericMutableRow(columnAccessors.length)
-
-          // Return an iterator that leverages ColumnAccessors to extract rows
           new Iterator[Row] {
             override def next() = {
               var i = 0
@@ -192,6 +227,12 @@ private[sql] case class InMemoryColumnarTableScan(
             override def hasNext = columnAccessors.head.hasNext
           }
         }
+
+      if (rows.nonEmpty) {
+        readPartitions += 1
+      }
+
+      rows
     }
   }
 }
