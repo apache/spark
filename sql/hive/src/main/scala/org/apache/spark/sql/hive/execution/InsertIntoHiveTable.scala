@@ -270,7 +270,7 @@ case class InsertIntoHiveTable(
       }
     }
 
-    if (dynamicPartNum>0) {
+    if (dynamicPartNum > 0) {
       if (outputClass == null) {
         throw new SparkException("Output value class not set")
       }
@@ -343,7 +343,6 @@ case class InsertIntoHiveTable(
         sc.hiveconf.getBoolean("hive.exec.compress.output", false))
     }
 
-    // TODO: Handle dynamic partitioning.
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.
     val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
@@ -359,7 +358,7 @@ case class InsertIntoHiveTable(
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
-      if (dynamicPartNum>0) {
+      if (dynamicPartNum > 0) {
         db.loadDynamicPartitions(
           outputPath,
           qualifiedTableName,
