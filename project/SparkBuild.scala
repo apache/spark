@@ -30,12 +30,10 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val coreProject@Seq(core) = Seq("core").map(ProjectRef(buildLocation, _))
-
-  val allProjects@Seq(bagel, catalyst, graphx, hive, hiveThriftServer, mllib, repl,
+  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
   sql, streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt,
   streamingTwitter, streamingZeromq) =
-    Seq("bagel", "catalyst", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+    Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
       "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
@@ -63,7 +61,7 @@ object SparkBuild extends PomBuild {
   def backwardCompatibility = {
     import scala.collection.mutable
     var isAlphaYarn = false
-    var profiles: mutable.Seq[String] = mutable.Seq.empty
+    var profiles: mutable.Seq[String] = mutable.Seq("sbt")
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
       println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
@@ -136,18 +134,14 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (coreProject ++ allProjects ++ optionallyEnabledProjects ++ assemblyProjects)
-    .foreach(enable(sharedSettings))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
-  (coreProject ++ allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
+  (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   // TODO: Add Sql to mima checks
-  (coreProject ++ allProjects).filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
+  allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
     streamingFlumeSink).contains(x)).foreach(x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
-
-  /* Set up assembly settings for the core project. */
-  coreProject.foreach(enable(CoreAssembly.settings))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -234,7 +228,6 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-
     javaOptions += "-XX:MaxPermSize=1g",
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
     parallelExecution in Test := false,
@@ -265,19 +258,12 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
-  private val relocators = List(
-    new Relocator("com.google", "org.spark-project.guava", Seq("com\\.google\\.common\\..*".r),
-      Seq("com\\.google\\.common\\.base\\.Optional.*".r)))
-  private val shade = new ShadeStrategy(relocators)
-
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
       Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
-      case PathList("org", "objectweb", "asm", xs @ _*)        => MergeStrategy.discard
-      case m if m.endsWith(".class")                           => shade
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
@@ -286,41 +272,6 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
-
-}
-
-/**
- * Settings for the spark-core artifact. We don't want to expose Guava as a compile-time dependency,
- * but at the same time the Java API exposes a Guava type (Optional). So we package it with the
- * spark-core jar using the assembly plugin, and use the assembly deliverable as the main artifact
- * for that project, disabling the non-assembly jar.
- */
-object CoreAssembly {
-  import sbtassembly.Plugin._
-  import AssemblyKeys._
-
-  lazy val settings = assemblySettings ++ Seq(
-    publishArtifact in (Compile, packageBin) := false,
-    test in assembly := {},
-    jarName in assembly <<= (name, scalaVersion, version) map {
-      _ + "_" + _ + "-" + _ + "-assembly.jar"
-    },
-    excludedJars in assembly := {
-      val cp = (fullClasspath in assembly).value
-      cp filter {!_.data.getName.startsWith("guava")}
-    },
-    mergeStrategy in assembly := {
-      case PathList("com", "google", "common", "base", xs @ _*) =>
-        if (xs.size == 1 && xs(0).startsWith("Optional")) {
-          MergeStrategy.first
-        } else {
-          MergeStrategy.discard
-        }
-      case PathList("META-INF", "maven", "com.google.guava", xs @ _*) => MergeStrategy.discard
-      case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
-      case _                                                   => MergeStrategy.first
-    }
-  ) ++ addArtifact(Artifact("spark-core"), assembly).settings
 
 }
 
