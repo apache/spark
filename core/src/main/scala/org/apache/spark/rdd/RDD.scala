@@ -1299,6 +1299,19 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
+    // Get a debug description of an rdd without its children
+    def debugSelf (rdd: RDD[_]): Seq[String] = {
+      import Utils.bytesToString
+
+      val persistence = storageLevel.description
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize),
+          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+
+      s"$rdd [$persistence]" +: storageInfo
+    }
+
     // Apply a different rule to the last child
     def debugChildren(rdd: RDD[_], prefix: String): Seq[String] = {
       val len = rdd.dependencies.length
@@ -1324,7 +1337,11 @@ abstract class RDD[T: ClassTag](
       val partitionStr = "(" + rdd.partitions.size + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
-      Seq(partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix $desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.size + ")"
@@ -1334,7 +1351,11 @@ abstract class RDD[T: ClassTag](
         thisPrefix
         + (if (isLastChild) "  " else "| ")
         + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
-      Seq(thisPrefix + "+-" + partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix$desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def debugString(rdd: RDD[_],
                     prefix: String = "",
@@ -1342,9 +1363,8 @@ abstract class RDD[T: ClassTag](
                     isLastChild: Boolean = false): Seq[String] = {
       if (isShuffle) {
         shuffleDebugString(rdd, prefix, isLastChild)
-      }
-      else {
-        Seq(prefix + rdd) ++ debugChildren(rdd, prefix)
+      } else {
+        debugSelf(rdd).map(prefix + _) ++ debugChildren(rdd, prefix)
       }
     }
     firstDebugString(this).mkString("\n")

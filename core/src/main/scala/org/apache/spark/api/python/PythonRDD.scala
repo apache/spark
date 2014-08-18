@@ -68,7 +68,7 @@ private[spark] class PythonRDD(
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
-    context.addOnCompleteCallback { () =>
+    context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
 
       // Cleanup the worker socket. This will also cause the Python worker to exit.
@@ -137,7 +137,7 @@ private[spark] class PythonRDD(
           }
         } catch {
 
-          case e: Exception if context.interrupted =>
+          case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
             throw new TaskKilledException
 
@@ -176,7 +176,7 @@ private[spark] class PythonRDD(
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
     def shutdownOnTaskCompletion() {
-      assert(context.completed)
+      assert(context.isCompleted)
       this.interrupt()
     }
 
@@ -209,7 +209,7 @@ private[spark] class PythonRDD(
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
         dataOut.flush()
       } catch {
-        case e: Exception if context.completed || context.interrupted =>
+        case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
 
         case e: Exception =>
@@ -235,10 +235,10 @@ private[spark] class PythonRDD(
     override def run() {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
-      while (!context.interrupted && !context.completed) {
+      while (!context.isInterrupted && !context.isCompleted) {
         Thread.sleep(2000)
       }
-      if (!context.completed) {
+      if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
           env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
@@ -315,6 +315,14 @@ private[spark] object PythonRDD extends Logging {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
+  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
+    val file = new DataInputStream(new FileInputStream(filename))
+    val length = file.readInt()
+    val obj = new Array[Byte](length)
+    file.readFully(obj)
+    sc.broadcast(obj)
+  }
+
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
     // The right way to implement this would be to use TypeTags to get the full
     // type of T.  Since I don't want to introduce breaking changes throughout the
@@ -372,8 +380,8 @@ private[spark] object PythonRDD extends Logging {
       batchSize: Int) = {
     val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
     val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
-    val kc = Class.forName(keyClass).asInstanceOf[Class[K]]
-    val vc = Class.forName(valueClass).asInstanceOf[Class[V]]
+    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
+    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
@@ -440,9 +448,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration) = {
-    val kc = Class.forName(keyClass).asInstanceOf[Class[K]]
-    val vc = Class.forName(valueClass).asInstanceOf[Class[V]]
-    val fc = Class.forName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
+    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
+    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
     if (path.isDefined) {
       sc.sc.newAPIHadoopFile[K, V, F](path.get, fc, kc, vc, conf)
     } else {
@@ -509,9 +517,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration) = {
-    val kc = Class.forName(keyClass).asInstanceOf[Class[K]]
-    val vc = Class.forName(valueClass).asInstanceOf[Class[V]]
-    val fc = Class.forName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
+    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
+    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
     if (path.isDefined) {
       sc.sc.hadoopFile(path.get, fc, kc, vc)
     } else {
@@ -558,7 +566,7 @@ private[spark] object PythonRDD extends Logging {
     for {
       k <- Option(keyClass)
       v <- Option(valueClass)
-    } yield (Class.forName(k), Class.forName(v))
+    } yield (Utils.classForName(k), Utils.classForName(v))
   }
 
   private def getKeyValueConverters(keyConverterClass: String, valueConverterClass: String,
@@ -621,10 +629,10 @@ private[spark] object PythonRDD extends Logging {
     val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
       inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
     val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
-    val codec = Option(compressionCodecClass).map(Class.forName(_).asInstanceOf[Class[C]])
+    val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
-    val fc = Class.forName(outputFormatClass).asInstanceOf[Class[F]]
+    val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
     converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec=codec)
   }
 
@@ -653,7 +661,7 @@ private[spark] object PythonRDD extends Logging {
     val mergedConf = getMergedConf(confAsMap, pyRDD.context.hadoopConfiguration)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
-    val fc = Class.forName(outputFormatClass).asInstanceOf[Class[F]]
+    val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
     converted.saveAsNewAPIHadoopFile(path, kc, vc, fc, mergedConf)
   }
 
