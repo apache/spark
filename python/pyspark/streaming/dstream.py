@@ -425,6 +425,7 @@ class DStream(object):
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
 
+
 class PipelinedDStream(DStream):
     def __init__(self, prev, func, preservesPartitioning=False):
         if not isinstance(prev, PipelinedDStream) or not prev._is_pipelinable():

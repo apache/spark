@@ -152,9 +152,6 @@ class StreamingContext(object):
             test_rdds.append(test_rdd._jrdd)
             test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
 
-#        if len(set(test_rdd_deserializers)) > 1:
-#            raise IOError("Deserializer should be one type to run test case. "
-#                          "See the SparkContext.parallelize to understand how to decide deserializer")
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
 
