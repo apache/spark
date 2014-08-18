@@ -37,7 +37,7 @@ class SparkSinkSuite extends TestSuiteBase {
   val eventsPerBatch = 1000
   val channelCapacity = 5000
 
-  test("Success test") {
+  test("Success") {
     val (channel, sink) = initializeChannelAndSink(None)
     channel.start()
     sink.start()
@@ -150,8 +150,8 @@ class SparkSinkSuite extends TestSuiteBase {
     transAndClient.foreach(x => x._1.close())
   }
 
-  def initializeChannelAndSink(overrides: Option[Map[String, String]]):
-  (MemoryChannel, SparkSink) = {
+  def initializeChannelAndSink(overrides: Option[Map[String, String]]): (MemoryChannel,
+    SparkSink) = {
     val channel = new MemoryChannel()
     val channelContext = new Context()
 
@@ -178,8 +178,8 @@ class SparkSinkSuite extends TestSuiteBase {
     tx.close()
   }
 
-  private def getTransceiverAndClient(address: InetSocketAddress, count: Int):
-  Seq[(NettyTransceiver, SparkFlumeProtocol.Callback)] = {
+  private def getTransceiverAndClient(address: InetSocketAddress,
+    count: Int): Seq[(NettyTransceiver, SparkFlumeProtocol.Callback)] = {
 
     (1 to count).map(_ => {
       lazy val channelFactoryExecutor =
@@ -203,5 +203,4 @@ class SparkSinkSuite extends TestSuiteBase {
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
     m.invoke(queueRemaining.get(channel)).asInstanceOf[Int]
   }
-
 }
