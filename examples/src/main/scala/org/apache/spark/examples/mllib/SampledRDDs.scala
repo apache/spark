@@ -66,6 +66,9 @@ object SampledRDDs {
 
     val examples = MLUtils.loadLibSVMFile(sc, params.input)
     val numExamples = examples.count()
+    if (numExamples == 0) {
+      throw new RuntimeException("Error: Data file had no samples to load.")
+    }
     println(s"Loaded data with $numExamples examples from file: ${params.input}")
 
     // Example: RDD.sample() and RDD.takeSample()
@@ -105,8 +108,16 @@ object SampledRDDs {
     println(s"Key\tOrig\tApprox Sample\tExact Sample")
     keyCounts.keys.toSeq.sorted.foreach { key =>
       val origFrac = keyCounts(key) / numExamples.toDouble
-      val approxFrac = keyCountsB(key) / sizeB.toDouble
-      val exactFrac = keyCountsBExact(key) / sizeBExact.toDouble
+      val approxFrac = if (sizeB != 0) {
+        keyCountsB.getOrElse(key, 0L) / sizeB.toDouble
+      } else {
+        0
+      }
+      val exactFrac = if (sizeBExact != 0) {
+        keyCountsBExact.getOrElse(key, 0L) / sizeBExact.toDouble
+      } else {
+        0
+      }
       println(s"$key\t$origFrac\t$approxFrac\t$exactFrac")
     }
 

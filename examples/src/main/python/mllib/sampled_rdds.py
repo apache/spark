@@ -40,6 +40,9 @@ if __name__ == "__main__":
 
     examples = MLUtils.loadLibSVMFile(sc, datapath)
     numExamples = examples.count()
+    if numExamples == 0:
+        print >> sys.stderr, "Error: Data file had no samples to load."
+        exit(1)
     print 'Loaded data with %d examples from file: %s' % (numExamples, datapath)
 
     # Example: RDD.sample() and RDD.takeSample()
@@ -73,6 +76,11 @@ if __name__ == "__main__":
     print '   \tFractions of examples with key'
     print 'Key\tOrig\tSample'
     for k in sorted(keyCountsA.keys()):
-        print '%d\t%g\t%g' % (k, keyCountsA[k] / float(numExamples), keyCountsB[k] / float(sizeB))
+        fracA = keyCountsA[k] / float(numExamples)
+        if sizeB != 0:
+            fracB = keyCountsB.get(k, 0) / float(sizeB)
+        else:
+            fracB = 0
+        print '%d\t%g\t%g' % (k, fracA, fracB)
 
     sc.stop()
