@@ -64,7 +64,9 @@ class StreamingContext(object):
                         pyFiles=pyFiles, environment=environment, batchSize=batchSize,
                         serializer=serializer, conf=conf, gateway=gateway)
 
-        # Start py4j callback server
+        # Start py4j callback server.
+        # Callback sever is need only by SparkStreming; therefore the callback sever
+        # is started in StreamingContext.
         SparkContext._gateway.restart_callback_server()
         self._clean_up_trigger()
         self._jvm = self._sc._jvm
@@ -78,6 +80,8 @@ class StreamingContext(object):
         """Kill py4j callback server properly using signal lib"""
 
         def clean_up_handler(*args):
+            # Make sure stop callback server.
+            # This need improvement how to terminate callback sever properly.
             SparkContext._gateway._shutdown_callback_server()
             SparkContext._gateway.shutdown()
             sys.exit(0)
@@ -100,7 +104,7 @@ class StreamingContext(object):
         else:
             self._jssc.awaitTermination(timeout)
 
-    # start from simple one. storageLevel is not passed for now.
+    #TODO: add storageLevel
     def socketTextStream(self, hostname, port):
         """
         Create an input from TCP source hostname:port. Data is received using
@@ -134,7 +138,7 @@ class StreamingContext(object):
     def _testInputStream(self, test_inputs, numSlices=None):
         """
         This function is only for test.
-        This implementation is inpired by QueStream implementation. 
+        This implementation is inspired by QueStream implementation.
         Give list of RDD to generate DStream which contains the RDD.
         """
         test_rdds = list()
@@ -144,9 +148,6 @@ class StreamingContext(object):
             test_rdds.append(test_rdd._jrdd)
             test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
 
-#        if len(set(test_rdd_deserializers)) > 1:
-#            raise IOError("Deserializer should be one type to run test case. "
-#                          "See the SparkContext.parallelize to understand how to decide deserializer")
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
 
