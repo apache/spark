@@ -155,7 +155,7 @@ object Statistics {
    * :: Experimental ::
    * Conduct Pearson's independence test for every feature against the label across the input RDD.
    * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
-   * the chi-squared statistic is computed.
+   * the chi-squared statistic is computed. All label and feature values must be categorical.
    *
    * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
    *             Real-valued features will be treated as categorical for each distinct value.
