@@ -64,8 +64,6 @@ object CommandUtils extends Logging {
         Seq()
       }
 
-    val permGenOpt = Seq("-XX:MaxPermSize=128m")
-
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
@@ -77,13 +75,9 @@ object CommandUtils extends Logging {
     val jvmversion = Utils.executeAndGetOutput(Seq(runner + " -version "),
       extraEnvironment = command.environment)
     val version = jvmversion.substring(jvmversion.indexOf("\"") + 1, jvmversion.indexOf("_"))
-    if (version.compareTo("1.8.0") < 0) {
-      Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-        permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
-    } else {
-      Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-        libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
-    }
+    val permGenOpt = if (version.compareTo("1.8.0") < 0) Some("-XX:MaxPermSize=128m") else None
+    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+      permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
