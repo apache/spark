@@ -28,6 +28,7 @@ import akka.actor._
 import akka.remote._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -83,6 +84,21 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
 
     logInfo("ApplicationAttemptId: " + client.getAttemptId())
+
+    // If this is the last attempt, register a shutdown hook to cleanup the staging dir
+    // after the app is finished, in case it does not exit through the expected means.
+    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
+    if (isLastAttempt()) {
+      val cleanupHook = new Runnable {
+        override def run() {
+          logInfo("AppMaster received a signal.")
+          if (!finished) {
+            cleanupStagingDir()
+          }
+        }
+      }
+      ShutdownHookManager.get().addShutdownHook(cleanupHook, 30)
+    }
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
