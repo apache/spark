@@ -81,7 +81,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
-    sparkConf.getOption("spark.maxappattempts").map(_.toInt) match {
+    sparkConf.getOption("spark.yarn.maxappattempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("Not setting max app attempts.")
     }

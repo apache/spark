@@ -106,6 +106,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     set this configuration to "hdfs:///some/path".
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.maxappattempts</code></td>
+  <td>YARN Default</td>
+  <td>
+  The maximum number of attempts that will be made to submit the application.
+  See <a href="https://hadoop.apache.org/docs/current/api/org/apache/hadoop/yarn/api/records/ApplicationSubmissionContext.html#setMaxAppAttempts%28int%29">this YARN Doc.</a>
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
