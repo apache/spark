@@ -21,7 +21,7 @@ import java.io.IOException
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
 import java.util.concurrent.{Callable, TimeUnit}
-import java.util.{ArrayList, Date, List => JList}
+import java.util.{ArrayList, Collections, Date, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -336,7 +336,9 @@ private[parquet] class FilteringParquetRowInputFormat
       val cacheMetadata = conf.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
       val statuses = listStatus(jobContext)
       fileStatuses = statuses.map(file => file.getPath -> file).toMap
-      if (!cacheMetadata) {
+      if (statuses.isEmpty) {
+        footers = Collections.emptyList[Footer]
+      } else if (!cacheMetadata) {
         // Read the footers from HDFS
         footers = getFooters(conf, statuses)
       } else {
@@ -439,7 +441,7 @@ private[parquet] object FilteringParquetRowInputFormat {
 
   private val blockLocationCache = CacheBuilder.newBuilder()
     .maximumSize(20000)
-    .expireAfterWrite(15, TimeUnit.MINUTES)  // Expire locations since HDFS nodes might fail
+    .expireAfterWrite(15, TimeUnit.MINUTES)  // Expire locations since HDFS files might move
     .build[FileStatus, Array[BlockLocation]]()
 }
 
