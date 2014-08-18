@@ -30,6 +30,10 @@ private[spark] object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val EXTERNAL_AGGREGATE = "spark.sql.aggregate.external"
+<<<<<<< HEAD
+=======
+  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
+>>>>>>> 34abbab6f925be4256a8283bf8b5daa32e1eb782
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
@@ -86,6 +90,13 @@ trait SQLConf {
    */
   private[spark] def externalAggregate: Boolean =
     if (getConf(EXTERNAL_AGGREGATE, "false") == "true") true else false
+
+  /**
+   * When set to true, Spark SQL will use ExternalAggregation.
+   * Defaults to false will use OnHeapAggregation
+   */
+  private[spark] def externalAggregate: Boolean =
+    if (get(EXTERNAL_AGGREGATE, "false") == "true") true else false
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
