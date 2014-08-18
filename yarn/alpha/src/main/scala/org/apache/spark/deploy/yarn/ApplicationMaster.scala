@@ -63,7 +63,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private var uiHistoryAddress: String = _
   private val maxAppAttempts: Int = conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES,
     YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)
-  private var isLastAMRetry: Boolean = true
+  @volatile private var isLastAMRetry: Boolean = true
 
   // Default to numExecutors * 2, with minimum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",

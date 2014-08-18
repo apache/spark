@@ -62,7 +62,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private var uiHistoryAddress: String = _
   private val maxAppAttempts: Int = conf.getInt(
     YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
-  private var isLastAMRetry: Boolean = true
+  @volatile private var isLastAMRetry: Boolean = true
   private var amClient: AMRMClient[ContainerRequest] = _
 
   // Default to numExecutors * 2, with minimum of 3
