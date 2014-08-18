@@ -326,6 +326,18 @@ class TestRDDFunctions(PySparkTestCase):
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
 
+    def test_zip_with_different_number_of_items(self):
+        a = self.sc.parallelize(range(5), 2)
+        # different number of partitions
+        b = self.sc.parallelize(range(100, 106), 3)
+        self.assertRaises(ValueError, lambda: a.zip(b))
+        # different number of batched items in JVM
+        b = self.sc.parallelize(range(100, 104), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+        # different number of items in one pair
+        b = self.sc.parallelize(range(100, 106), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+
 
 class TestIO(PySparkTestCase):
 
