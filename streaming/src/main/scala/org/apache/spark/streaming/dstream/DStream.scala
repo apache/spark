@@ -311,7 +311,7 @@ abstract class DStream[T: ClassTag] (
         if (isTimeValid(time)) {
           val prevCallSite = getCallSite
           setCreationCallSite
-          compute(time) match {
+          val rddOption = compute(time) match {
             case Some(newRDD) =>
               if (storageLevel != StorageLevel.NONE) {
                 newRDD.persist(storageLevel)
@@ -325,14 +325,14 @@ abstract class DStream[T: ClassTag] (
                   " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
-              setCallSite(prevCallSite)
               Some(newRDD)
             case None =>
-              setCallSite(prevCallSite)
-              None
+              return None
           }
+          setCallSite(prevCallSite)
+          return rddOption
         } else {
-          None
+          return None
         }
       }
     }
