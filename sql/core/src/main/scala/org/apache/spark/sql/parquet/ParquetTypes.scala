@@ -376,6 +376,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     ParquetRelation.enableLogForwarding()
 
+    println(fs.listStatus(path).toSeq)
+
     val children = fs.listStatus(path).filterNot { status =>
       val name = status.getPath.getName
       name(0) == '.' || name == FileOutputCommitter.SUCCEEDED_FILE_NAME
@@ -393,7 +395,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
       .map(ParquetFileReader.readFooter(conf, _))
       .getOrElse(
-        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path in ${children.map(_.getPath.getName).toSeq}"))
   }
 
   /**
