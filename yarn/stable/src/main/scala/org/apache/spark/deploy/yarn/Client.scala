@@ -83,7 +83,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setApplicationType("SPARK")
     sparkConf.getOption("spark.yarn.maxappattempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
-      case None => logDebug("Not setting max app attempts.")
+      case None => logDebug("Not setting maxappattemtps. Cluster default will be used.")
     }
 
     // Memory for the ApplicationMaster.
