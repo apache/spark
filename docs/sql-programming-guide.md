@@ -152,6 +152,54 @@ val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age 
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
+In cases that case classes cannot be defined ahead of time (for example,
+the structure of records is encoded in a string or a text dataset will be parsed
+and fields will be projected differently for different users),
+a `SchemaRDD` can be created programmatically with three steps.
+
+1. Create an RDD of `Row`s from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+`Row`s in the RDD created in the step 1.
+3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+by `SQLContext`.
+
+For example:
+{% highlight scala %}
+// sc is an existing SparkContext.
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+
+// Create an RDD
+val people = sc.textFile("examples/src/main/resources/people.txt")
+
+// The schema is encoded in a string
+val schemaString = "name age"
+
+// Import Spark SQL data types and Row.
+import org.apache.spark.sql._
+
+// Generate the schema based on the string of schema
+val schema =
+  StructType(
+    schemaString.split(" ").map(fieldName => StructField(fieldName, StringType, true)))
+
+// Convert records of the RDD (people) to Rows.
+val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
+
+// Apply the schema to the RDD.
+val peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema)
+
+// Register the SchemaRDD as a table.
+peopleSchemaRDD.registerTempTable("people")
+
+// SQL statements can be run by using the sql methods provided by sqlContext.
+val results = sqlContext.sql("SELECT name FROM people")
+
+// The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
+// The columns of a row in the result can be accessed by ordinal.
+results.map(t => "Name: " + t(0)).collect().foreach(println)
+{% endhighlight %}
+
+
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -192,7 +240,7 @@ for the JavaBean.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
+JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").map(
@@ -218,6 +266,71 @@ JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 1
 // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
 List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+  public String call(Row row) {
+    return "Name: " + row.getString(0);
+  }
+}).collect();
+
+{% endhighlight %}
+
+In cases that JavaBean classes cannot be defined ahead of time (for example,
+the structure of records is encoded in a string or a text dataset will be parsed and
+fields will be projected differently for different users),
+a `SchemaRDD` can be created programmatically with three steps.
+
+1. Create an RDD of `Row`s from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+`Row`s in the RDD created in the step 1.
+3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+by `JavaSQLContext`.
+
+For example:
+{% highlight java %}
+// Import factory methods provided by DataType.
+import org.apache.spark.sql.api.java.DataType
+// Import StructType and StructField
+import org.apache.spark.sql.api.java.StructType
+import org.apache.spark.sql.api.java.StructField
+// Import Row.
+import org.apache.spark.sql.api.java.Row
+
+// sc is an existing JavaSparkContext.
+JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
+
+// Load a text file and convert each line to a JavaBean.
+JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
+
+// The schema is encoded in a string
+String schemaString = "name age";
+
+// Generate the schema based on the string of schema
+List<StructField> fields = new ArrayList<StructField>();
+for (String fieldName: schemaString.split(" ")) {
+  fields.add(DataType.createStructField(fieldName, DataType.StringType, true));
+}
+StructType schema = DataType.createStructType(fields);
+
+// Convert records of the RDD (people) to Rows.
+JavaRDD<Row> rowRDD = people.map(
+  new Function<String, Row>() {
+    public Row call(String record) throws Exception {
+      String[] fields = record.split(",");
+      return Row.create(fields[0], fields[1].trim());
+    }
+  });
+
+// Apply the schema to the RDD.
+JavaSchemaRDD peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema);
+
+// Register the SchemaRDD as a table.
+peopleSchemaRDD.registerTempTable("people");
+
+// SQL can be run over RDDs that have been registered as tables.
+JavaSchemaRDD results = sqlContext.sql("SELECT name FROM people");
+
+// The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
+// The columns of a row in the result can be accessed by ordinal.
+List<String> names = results.map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
   }
@@ -258,6 +371,56 @@ teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
   print teenName
 {% endhighlight %}
+
+
+For some cases (for example, the structure of records is encoded in a string or
+a text dataset will be parsed and fields will be projected differently for
+different users), it is desired to create `SchemaRDD` with a programmatically way.
+It can be done with three steps.
+
+1. Create an RDD of tuples or lists from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+tuples or lists in the RDD created in the step 1.
+3. Apply the schema to the RDD via `applySchema` method provided by `SQLContext`.
+
+For example:
+{% highlight python %}
+# Import SQLContext and data types
+from pyspark.sql import *
+
+# sc is an existing SparkContext.
+sqlContext = SQLContext(sc)
+
+# Load a text file and convert each line to a tuple.
+lines = sc.textFile("examples/src/main/resources/people.txt")
+parts = lines.map(lambda l: l.split(","))
+people = parts.map(lambda p: (p[0], p[1].strip()))
+
+# The schema is encoded in a string.
+schemaString = "name age"
+
+# Generate the schema based on the string of schema.
+fields = []
+for field_name in schemaString.split():
+  fields.append(StructField(field_name, StringType(), True))
+
+schema = StructType(fields)
+
+# Apply the schema to the RDD.
+schemaPeople = sqlContext.applySchema(people, schema)
+
+# Register the SchemaRDD as a table.
+schemaPeople.registerTempTable("people")
+
+# SQL can be run over SchemaRDDs that have been registered as a table.
+results = sqlContext.sql("SELECT name FROM people")
+
+# The results of SQL queries are RDDs and support all the normal RDD operations.
+names = results.map(lambda p: "Name: " + p.name)
+for name in names.collect():
+  print name
+{% endhighlight %}
+
 
 </div>
 
@@ -574,7 +737,451 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 <!-- TODO: Include the table of operations here. -->
 
-## Running the Thrift JDBC server
+# Spark SQL Data Types
+
+* Numeric types
+    - `ByteType`: Represents 1-byte signed integer numbers.
+    The range of numbers is from `-128` to `127`.
+    - `ShortType`: Represents 2-byte signed integer numbers.
+    The range of numbers is from `-32768` to `32767`.
+    - `IntegerType`: Represents 4-byte signed integer numbers.
+    The range of numbers is from `-2147483648` to `2147483647`.
+    - `LongType`: Represents 8-byte signed integer numbers.
+    The range of numbers is from `-9223372036854775808` to `9223372036854775807`.
+    - `FloatType`: Represents 4-byte single-precision floating point numbers.
+    - `DoubleType`: Represents 8-byte double-precision floating point numbers.
+    - `DecimalType`: 
+* String type
+    - `StringType`: Represents character string values.
+* Binary type
+    - `BinaryType`: Represents byte sequence values.
+* Boolean type
+    - `BooleanType`: Represents boolean values.
+* Datetime type
+    - `TimestampType`: Represents values comprising values of fields year, month, day,
+    hour, minute, and second.
+* Complex types
+    - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
+    elements with the type of `elementType`. `containsNull` is used to indicate if
+    elements in a `ArrayType` value can have `null` values.
+    - `MapType(keyType, valueType, valueContainsNull)`:
+    Represents values comprising a set of key-value pairs. The data type of keys are
+    described by `keyType` and the data type of values are described by `valueType`.
+    For a `MapType` value, keys are not allowed to have `null` values. `valueContainsNull`
+    is used to indicate if values of a `MapType` value can have `null` values.
+    - `StructType(fields)`: Represents values with the structure described by
+    a sequence of `StructField`s (`fields`).
+        * `StructField(name, dataType, nullable)`: Represents a field in a `StructType`.
+        The name of a field is indicated by `name`. The data type of a field is indicated
+        by `dataType`. `nullable` is used to indicate if values of this fields can have
+        `null` values.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+All data types of Spark SQL are located in the package `org.apache.spark.sql`.
+You can access them by doing 
+{% highlight scala %}
+import  org.apache.spark.sql._
+{% endhighlight %}
+
+<table class="table">
+<tr>
+  <th style="width:20%">Data type</th>
+  <th style="width:40%">Value type in Scala</th>
+  <th>API to access or create a data type</th></tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td> Byte </td>
+  <td>
+  ByteType
+  </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td> Short </td>
+  <td>
+  ShortType
+  </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> Int </td>
+  <td>
+  IntegerType
+  </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td> Long </td>
+  <td>
+  LongType
+  </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td> Float </td>
+  <td>
+  FloatType
+  </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> Double </td>
+  <td>
+  DoubleType
+  </td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> scala.math.sql.BigDecimal </td>
+  <td>
+  DecimalType
+  </td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> String </td>
+  <td>
+  StringType
+  </td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> Array[Byte] </td>
+  <td>
+  BinaryType
+  </td>
+</tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> Boolean </td>
+  <td>
+  BooleanType
+  </td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> java.sql.Timestamp </td>
+  <td>
+  TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> scala.collection.Seq </td>
+  <td>
+  ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>false</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> scala.collection.Map </td>
+  <td>
+  MapType(<i>keyType</i>, <i>valueType</i>, [<i>valueContainsNull</i>])<br />
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>true</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> org.apache.spark.sql.Row </td>
+  <td> 
+  StructType(<i>fields</i>)<br />
+  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
+  name are not allowed.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructField</b> </td>
+  <td> The value type in Scala of the data type of this field
+  (For example, Int for a StructField with the data type IntegerType) </td>
+  <td>
+  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  </td>
+</tr>
+</table>
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+All data types of Spark SQL are located in the package of
+`org.apache.spark.sql.api.java`. To access or create a data type,
+please use factory methods provided in 
+`org.apache.spark.sql.api.java.DataType`.
+
+<table class="table">
+<tr>
+  <th style="width:20%">Data type</th>
+  <th style="width:40%">Value type in Java</th>
+  <th>API to access or create a data type</th></tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td> byte or Byte </td>
+  <td>
+  DataType.ByteType
+  </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td> short or Short </td>
+  <td>
+  DataType.ShortType
+  </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> int or Integer </td>
+  <td>
+  DataType.IntegerType
+  </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td> long or Long </td>
+  <td>
+  DataType.LongType
+  </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td> float or Float </td>
+  <td>
+  DataType.FloatType
+  </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> double or Double </td>
+  <td>
+  DataType.DoubleType
+  </td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> java.math.BigDecimal </td>
+  <td>
+  DataType.DecimalType
+  </td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> String </td>
+  <td>
+  DataType.StringType
+  </td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> byte[] </td>
+  <td>
+  DataType.BinaryType
+  </td>
+</tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> boolean or Boolean </td>
+  <td>
+  DataType.BooleanType
+  </td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> java.sql.Timestamp </td>
+  <td>
+  DataType.TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> java.util.List </td>
+  <td>
+  DataType.createArrayType(<i>elementType</i>)<br />
+  <b>Note:</b> The value of <i>containsNull</i> will be <i>false</i><br />
+  DataType.createArrayType(<i>elementType</i>, <i>containsNull</i>).
+  </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> java.util.Map </td>
+  <td>
+  DataType.createMapType(<i>keyType</i>, <i>valueType</i>)<br />
+  <b>Note:</b> The value of <i>valueContainsNull</i> will be <i>true</i>.<br />
+  DataType.createMapType(<i>keyType</i>, <i>valueType</i>, <i>valueContainsNull</i>)<br />
+  </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> org.apache.spark.sql.api.java </td>
+  <td> 
+  DataType.createStructType(<i>fields</i>)<br />
+  <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
+  Also, two fields with the same name are not allowed.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructField</b> </td>
+  <td> The value type in Java of the data type of this field
+  (For example, int for a StructField with the data type IntegerType) </td>
+  <td>
+  DataType.createStructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  </td>
+</tr>
+</table>
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+All data types of Spark SQL are located in the package of `pyspark.sql`.
+You can access them by doing 
+{% highlight python %}
+from pyspark.sql import *
+{% endhighlight %}
+
+<table class="table">
+<tr>
+  <th style="width:20%">Data type</th>
+  <th style="width:40%">Value type in Python</th>
+  <th>API to access or create a data type</th></tr>
+<tr>
+  <td> <b>ByteType</b> </td>
+  <td>
+  int or long <br />
+  <b>Note:</b> Numbers will be converted to 1-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of -128 to 127.
+  </td>
+  <td>
+  ByteType()
+  </td>
+</tr>
+<tr>
+  <td> <b>ShortType</b> </td>
+  <td>
+  int or long <br />
+  <b>Note:</b> Numbers will be converted to 2-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of -32768 to 32767.
+  </td>
+  <td>
+  ShortType()
+  </td>
+</tr>
+<tr>
+  <td> <b>IntegerType</b> </td>
+  <td> int or long </td>
+  <td>
+  IntegerType()
+  </td>
+</tr>
+<tr>
+  <td> <b>LongType</b> </td>
+  <td>
+  long <br />
+  <b>Note:</b> Numbers will be converted to 8-byte signed integer numbers at runtime.
+  Please make sure that numbers are within the range of
+  -9223372036854775808 to 9223372036854775807.
+  Otherwise, please convert data to decimal.Decimal and use DecimalType.
+  </td>
+  <td>
+  LongType()
+  </td>
+</tr>
+<tr>
+  <td> <b>FloatType</b> </td>
+  <td>
+  float <br />
+  <b>Note:</b> Numbers will be converted to 4-byte single-precision floating
+  point numbers at runtime.
+  </td>
+  <td>
+  FloatType()
+  </td>
+</tr>
+<tr>
+  <td> <b>DoubleType</b> </td>
+  <td> float </td>
+  <td>
+  DoubleType()
+  </td>
+</tr>
+<tr>
+  <td> <b>DecimalType</b> </td>
+  <td> decimal.Decimal </td>
+  <td>
+  DecimalType()
+  </td>
+</tr>
+<tr>
+  <td> <b>StringType</b> </td>
+  <td> string </td>
+  <td>
+  StringType()
+  </td>
+</tr>
+<tr>
+  <td> <b>BinaryType</b> </td>
+  <td> bytearray </td>
+  <td>
+  BinaryType()
+  </td>
+</tr>
+<tr>
+  <td> <b>BooleanType</b> </td>
+  <td> bool </td>
+  <td>
+  BooleanType()
+  </td>
+</tr>
+<tr>
+  <td> <b>TimestampType</b> </td>
+  <td> datetime.datetime </td>
+  <td>
+  TimestampType()
+  </td>
+</tr>
+<tr>
+  <td> <b>ArrayType</b> </td>
+  <td> list, tuple, or array </td>
+  <td>
+  ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>False</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>MapType</b> </td>
+  <td> dict </td>
+  <td>
+  MapType(<i>keyType</i>, <i>valueType</i>, [<i>valueContainsNull</i>])<br />
+  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructType</b> </td>
+  <td> list or tuple </td>
+  <td> 
+  StructType(<i>fields</i>)<br />
+  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
+  name are not allowed.
+  </td>
+</tr>
+<tr>
+  <td> <b>StructField</b> </td>
+  <td> The value type in Python of the data type of this field
+  (For example, Int for a StructField with the data type IntegerType) </td>
+  <td>
+  StructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  </td>
+</tr>
+</table>
+
+</div>
+
+</div>
+
+
+
+# Running the Thrift JDBC server
 
 The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
 (https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
@@ -605,9 +1212,9 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script comes with Hive.
 
-### Migration Guide for Shark Users
+## Migration Guide for Shark Users
 
-#### Reducer number
+### Reducer number
 
 In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark
 SQL deprecates this property by a new property `spark.sql.shuffle.partitions`, whose default value
@@ -624,7 +1231,7 @@ You may also put this property in `hive-site.xml` to override the default value.
 For now, the `mapred.reduce.tasks` property is still recognized, and is converted to
 `spark.sql.shuffle.partitions` automatically.
 
-#### Caching
+### Caching
 
 The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no
 longer automcatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
@@ -650,15 +1257,15 @@ Several caching related features are not supported yet:
 * RDD reloading
 * In-memory cache write through policy
 
-### Compatibility with Apache Hive
+## Compatibility with Apache Hive
 
-#### Deploying in Exising Hive Warehouses
+### Deploying in Exising Hive Warehouses
 
 Spark SQL Thrift JDBC server is designed to be "out of the box" compatible with existing Hive
 installations. You do not need to modify your existing Hive Metastore or change the data placement
 or partitioning of your tables.
 
-#### Supported Hive Features
+### Supported Hive Features
 
 Spark SQL supports the vast majority of Hive features, such as:
 
@@ -708,7 +1315,7 @@ Spark SQL supports the vast majority of Hive features, such as:
  * `MAP<>`
  * `STRUCT<>`
 
-#### Unsupported Hive Functionality
+### Unsupported Hive Functionality
 
 Below is a list of Hive features that we don't support yet. Most of these features are rarely used
 in Hive deployments.
@@ -757,7 +1364,7 @@ releases of Spark SQL.
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
 
-## Running the Spark SQL CLI
+# Running the Spark SQL CLI
 
 The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
 queries input from command line. Note: the Spark SQL CLI cannot talk to the Thrift JDBC server.
