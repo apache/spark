@@ -605,6 +605,11 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script comes with Hive.
 
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+    SET spark.sql.thriftserver.scheduler.pool=accounting;
+
 ### Migration Guide for Shark Users
 
 #### Reducer number

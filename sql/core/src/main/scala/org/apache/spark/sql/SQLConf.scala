@@ -33,6 +33,9 @@ private[spark] object SQLConf {
   val DIALECT = "spark.sql.dialect"
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
 
+  // This is only used for the thriftserver
+  val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
