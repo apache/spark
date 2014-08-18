@@ -18,10 +18,6 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.regression.LabeledPoint
-<<<<<<< HEAD
-import org.apache.spark.mllib.tree.LearningMetadata
-=======
->>>>>>> upstream/master
 import org.apache.spark.mllib.tree.model.Bin
 import org.apache.spark.rdd.RDD
 
@@ -38,15 +34,6 @@ import org.apache.spark.rdd.RDD
  *      or any categorical feature used in regression or binary classification.
  *
  * @param label  Label from LabeledPoint
-<<<<<<< HEAD
- * @param features  Binned feature values.
- *                  Same length as LabeledPoint.features, but values are bin indices.
- */
-private[tree] class TreePoint(val label: Double, val features: Array[Int]) extends Serializable {
-}
-
-
-=======
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
@@ -54,7 +41,6 @@ private[tree] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
   extends Serializable {
 }
 
->>>>>>> upstream/master
 private[tree] object TreePoint {
 
   /**
@@ -62,21 +48,13 @@ private[tree] object TreePoint {
    * binning feature values in preparation for DecisionTree training.
    * @param input     Input dataset.
    * @param bins      Bins for features, of size (numFeatures, numBins).
-<<<<<<< HEAD
-   * @param metadata  DecisionTree training info, used for dataset metadata.
-=======
-   * @param metadata Learning and dataset metadata
->>>>>>> upstream/master
+   * @param metadata  Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
       bins: Array[Array[Bin]],
-<<<<<<< HEAD
-      metadata: LearningMetadata): RDD[TreePoint] = {
-=======
       metadata: DecisionTreeMetadata): RDD[TreePoint] = {
->>>>>>> upstream/master
     input.map { x =>
       TreePoint.labeledPointToTreePoint(x, bins, metadata)
     }
@@ -85,24 +63,13 @@ private[tree] object TreePoint {
   /**
    * Convert one LabeledPoint into its TreePoint representation.
    * @param bins      Bins for features, of size (numFeatures, numBins).
-<<<<<<< HEAD
    * @param metadata  DecisionTree training info, used for dataset metadata.
-=======
->>>>>>> upstream/master
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
       bins: Array[Array[Bin]],
-<<<<<<< HEAD
-      metadata: LearningMetadata): TreePoint = {
-
-    val numFeatures = labeledPoint.features.size
-=======
       metadata: DecisionTreeMetadata): TreePoint = {
-
     val numFeatures = labeledPoint.features.size
-    val numBins = bins(0).size
->>>>>>> upstream/master
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
@@ -114,10 +81,6 @@ private[tree] object TreePoint {
     new TreePoint(labeledPoint.label, arr)
   }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream/master
   /**
    * Find bin for one (labeledPoint, feature).
    *
@@ -148,17 +111,9 @@ private[tree] object TreePoint {
         val highThreshold = bin.highSplit.threshold
         if ((lowThreshold < feature) && (highThreshold >= feature)) {
           return mid
-<<<<<<< HEAD
-        }
-        else if (lowThreshold >= feature) {
-          right = mid - 1
-        }
-        else {
-=======
         } else if (lowThreshold >= feature) {
           right = mid - 1
         } else {
->>>>>>> upstream/master
           left = mid + 1
         }
       }
@@ -206,12 +161,8 @@ private[tree] object TreePoint {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {
-<<<<<<< HEAD
-        throw new UnknownError("No bin was found for continuous feature." +
-=======
         throw new RuntimeException("No bin was found for continuous feature." +
           " This error can occur when given invalid data values (such as NaN)." +
->>>>>>> upstream/master
           s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex
@@ -223,15 +174,10 @@ private[tree] object TreePoint {
           sequentialBinSearchForOrderedCategoricalFeature()
         }
       if (binIndex == -1) {
-<<<<<<< HEAD
-        throw new UnknownError("No bin was found for categorical feature." +
-          s"  Feature index: $featureIndex.  isUnorderedFeature = $isUnorderedFeature." +
-          s"  Feature value: ${labeledPoint.features(featureIndex)}")
-=======
         throw new RuntimeException("No bin was found for categorical feature." +
           " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
->>>>>>> upstream/master
+          s" Feature index: $featureIndex. isUnorderedFeature = $isUnorderedFeature." +
+          s" Feature value: ${labeledPoint.features(featureIndex)}")
       }
       binIndex
     }

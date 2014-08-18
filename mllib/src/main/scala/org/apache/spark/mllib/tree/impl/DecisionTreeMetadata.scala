@@ -29,7 +29,6 @@ import org.apache.spark.rdd.RDD
 
 
 /*
-TODO: MERGE DOC:
  * TODO: Add doc about ordered vs. unordered features.
  * Ensure numBins is always greater than the categories. For multiclass classification,
  * numBins should be greater than math.pow(2, maxCategories - 1) - 1.
@@ -38,8 +37,8 @@ TODO: MERGE DOC:
  *
  * This needs to be checked here instead of in Strategy since numBins can be determined
  * by the number of training examples.
- * TODO: Allow this case, where we simply will know nothing about some categories.
  */
+
 
 /**
  * Learning and dataset metadata for DecisionTree.
@@ -80,7 +79,6 @@ private[tree] class DecisionTreeMetadata(
   }
 
 }
-
 
 private[tree] object DecisionTreeMetadata {
 

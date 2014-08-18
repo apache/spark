@@ -62,16 +62,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     timer.start("total")
 
     timer.start("init")
-<<<<<<< HEAD
-    val retaggedInput = input.retag(classOf[LabeledPoint])
-    val metadata = LearningMetadata.buildMetadata(retaggedInput, strategy)
-    timer.stop("init")
-
-=======
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata = DecisionTreeMetadata.buildMetadata(retaggedInput, strategy)
->>>>>>> upstream/master
     logDebug("algo = " + strategy.algo)
     logDebug("maxBins = " + metadata.maxBins)
 
@@ -83,7 +76,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     timer.stop("findSplitsBins")
     logDebug("numBins = " + numBins)
 
-<<<<<<< HEAD
     /*
     println(s"splits:")
     for (f <- Range(0, splits.size)) {
@@ -99,50 +91,32 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     }
     */
 
-    timer.start("init")
-    // Bin feature values (TreePoint representation).
-    // Cache input RDD for speedup during multiple passes.
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata).cache()
-    timer.stop("init")
-=======
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
       .persist(StorageLevel.MEMORY_AND_DISK)
->>>>>>> upstream/master
 
     val numFeatures = metadata.numFeatures
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     // the max number of nodes possible given the depth of the tree
-<<<<<<< HEAD
     val maxNumNodes = DecisionTree.maxNodesInLevel(maxDepth + 1) - 1
-=======
-    val maxNumNodes = (2 << maxDepth) - 1
->>>>>>> upstream/master
+    // TODO: CHECK val maxNumNodes = (2 << maxDepth) - 1
     // Initialize an array to hold parent impurity calculations for each node.
     val parentImpurities = new Array[Double](maxNumNodes)
     // dummy value for top node (updated during first split calculation)
     val nodes = new Array[Node](maxNumNodes)
-<<<<<<< HEAD
-    val nodesInTree = Array.fill[Boolean](maxNumNodes)(false) // put into nodes array later?
-    nodesInTree(0) = true
-=======
->>>>>>> upstream/master
+    // TODO: DO THIS OPTIMIZATION:
+    // val nodesInTree = Array.fill[Boolean](maxNumNodes)(false) // put into nodes array later?
+    // nodesInTree(0) = true
 
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
     val maxMemoryUsage = strategy.maxMemoryInMB * 1024 * 1024
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
-<<<<<<< HEAD
     // TODO: Calculate numElementsPerNode in metadata (more precisely)
-    val numElementsPerNode = DecisionTree.getElementsPerNode(numFeatures, numBins,
-      strategy.numClassesForClassification, strategy.isMulticlassWithCategoricalFeatures,
-      strategy.algo)
-=======
     val numElementsPerNode = DecisionTree.getElementsPerNode(metadata, numBins)
->>>>>>> upstream/master
 
     logDebug("numElementsPerNode = " + numElementsPerNode)
     val arraySizePerNode = 8 * numElementsPerNode // approx. memory usage for bin aggregate array
@@ -174,7 +148,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
       // Find best split for all nodes at a level.
       timer.start("findBestSplits")
-<<<<<<< HEAD
       val splitsStatsForLevel: Array[(Split, InformationGainStats)] =
         DecisionTree.findBestSplits(treeInput, parentImpurities,
           metadata, level, nodes, splits, bins, maxLevelForSingleGroup, timer)
@@ -185,14 +158,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         /*println(s"splitsStatsForLevel: index=$index")
         println(s"\t split: ${nodeSplitStats._1}")
         println(s"\t gain stats: ${nodeSplitStats._2}")*/
-=======
-      val splitsStatsForLevel = DecisionTree.findBestSplits(treeInput, parentImpurities,
-        metadata, level, nodes, splits, bins, maxLevelForSingleGroup, timer)
-      timer.stop("findBestSplits")
-
-      val levelNodeIndexOffset = (1 << level) - 1
-      for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
->>>>>>> upstream/master
         val nodeIndex = levelNodeIndexOffset + index
         val isLeftChild = level != 0 && nodeIndex % 2 == 1
         val parentNodeIndex = if (isLeftChild) { // -1 for root node
@@ -200,9 +165,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           } else {
             (nodeIndex - 2) / 2
           }
-<<<<<<< HEAD
         // if (level == 0 || (nodesInTree(parentNodeIndex) && !nodes(parentNodeIndex).isLeaf))
         // TODO: Use above check to skip unused branch of tree
+
         // Extract info for this node (index) at the current level.
         timer.start("extractNodeInfo")
         val split = nodeSplitStats._1
@@ -213,12 +178,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         nodes(nodeIndex) = node
         timer.stop("extractNodeInfo")
 
-=======
-        // Extract info for this node (index) at the current level.
-        timer.start("extractNodeInfo")
-        extractNodeInfo(nodeSplitStats, level, index, nodes)
-        timer.stop("extractNodeInfo")
->>>>>>> upstream/master
         if (level != 0) {
           // Set parent.
           if (isLeftChild) {
@@ -233,11 +192,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         timer.stop("extractInfoForLowerLevels")
         logDebug("final best split = " + nodeSplitStats._1)
       }
-<<<<<<< HEAD
       require(DecisionTree.maxNodesInLevel(level) == splitsStatsForLevel.length)
-=======
-      require((1 << level) == splitsStatsForLevel.length)
->>>>>>> upstream/master
       // Check whether all the nodes at the current level at leaves.
       val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
       logDebug("all leaf = " + allLeaf)
@@ -258,36 +213,11 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     topNode.build(nodes)
 
     timer.stop("total")
-<<<<<<< HEAD
-
-    logDebug("Internal timing for DecisionTree:")
-    logDebug(s"$timer")
-
-    new DecisionTreeModel(topNode, strategy.algo)
-=======
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
     new DecisionTreeModel(topNode, strategy.algo)
-  }
-
-  /**
-   * Extract the decision tree node information for the given tree level and node index
-   */
-  private def extractNodeInfo(
-      nodeSplitStats: (Split, InformationGainStats),
-      level: Int,
-      index: Int,
-      nodes: Array[Node]): Unit = {
-    val split = nodeSplitStats._1
-    val stats = nodeSplitStats._2
-    val nodeIndex = (1 << level) - 1 + index
-    val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth)
-    val node = new Node(nodeIndex, stats.predict, isLeaf, Some(split), None, None, Some(stats))
-    logDebug("Node = " + node)
-    nodes(nodeIndex) = node
->>>>>>> upstream/master
   }
 
   /**
@@ -299,32 +229,10 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       maxDepth: Int,
       nodeSplitStats: (Split, InformationGainStats),
       parentImpurities: Array[Double]): Unit = {
-<<<<<<< HEAD
-    if (level >= maxDepth)
-      return
-    // TODO: Move nodeIndexOffset calc out of function?
-    val nodeIndexOffset = DecisionTree.maxNodesInLevel(level + 1) - 1
-    // 0 corresponds to the left child node and 1 corresponds to the right child node.
-    var i = 0
-    while (i <= 1) {
-      // Calculate the index of the node from the node level and the index at the current level.
-      val nodeIndex = nodeIndexOffset + 2 * index + i
-      val impurity = if (i == 0) {
-        nodeSplitStats._2.leftImpurity
-      } else {
-        nodeSplitStats._2.rightImpurity
-      }
-      logDebug("nodeIndex = " + nodeIndex + ", impurity = " + impurity)
-      // noting the parent impurities
-      parentImpurities(nodeIndex) = impurity
-      i += 1
-=======
-
     if (level >= maxDepth) {
       return
->>>>>>> upstream/master
     }
-
+    // TODO: Move nodeIndexOffset calc out of function?
     val leftNodeIndex = (2 << level) - 1 + 2 * index
     val leftImpurity = nodeSplitStats._2.leftImpurity
     logDebug("leftNodeIndex = " + leftNodeIndex + ", impurity = " + leftImpurity)
@@ -548,26 +456,15 @@ object DecisionTree extends Serializable with Logging {
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
-<<<<<<< HEAD
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param maxLevelForSingleGroup the deepest level for single-group level-wise computation.
-   * @param unorderedFeatures  Set of unordered (categorical) features.
-=======
-   * @param splits possible splits for all features
-   * @param bins possible bins for all features
-   * @param maxLevelForSingleGroup the deepest level for single-group level-wise computation.
->>>>>>> upstream/master
    * @return array (over nodes) of splits with best split for each node at a given level.
    */
   protected[tree] def findBestSplits(
       input: RDD[TreePoint],
       parentImpurities: Array[Double],
-<<<<<<< HEAD
-      metadata: LearningMetadata,
-=======
       metadata: DecisionTreeMetadata,
->>>>>>> upstream/master
       level: Int,
       nodes: Array[Node],
       splits: Array[Array[Split]],
@@ -580,11 +477,7 @@ object DecisionTree extends Serializable with Logging {
       // the nodes are divided into multiple groups at each level with the number of groups
       // increasing exponentially per level. For example, if maxLevelForSingleGroup is 10,
       // numGroups is equal to 2 at level 11 and 4 at level 12, respectively.
-<<<<<<< HEAD
-      val numGroups = math.pow(2, level - maxLevelForSingleGroup).toInt
-=======
       val numGroups = 1 << level - maxLevelForSingleGroup
->>>>>>> upstream/master
       logDebug("numGroups = " + numGroups)
       var bestSplits = new Array[(Split, InformationGainStats)](0)
       // Iterate over each group of nodes at a level.
@@ -608,14 +501,8 @@ object DecisionTree extends Serializable with Logging {
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
-<<<<<<< HEAD
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
-   * @param unorderedFeatures  Set of unordered (categorical) features.
-=======
-   * @param splits possible splits for all features
-   * @param bins possible bins for all features, indexed as (numFeatures)(numBins)
->>>>>>> upstream/master
    * @param numGroups total number of node groups at the current level. Default value is set to 1.
    * @param groupIndex index of the node group being processed. Default value is set to 0.
    * @return array of splits with best splits for all nodes at a given level.
@@ -623,11 +510,7 @@ object DecisionTree extends Serializable with Logging {
   private def findBestSplitsPerGroup(
       input: RDD[TreePoint],
       parentImpurities: Array[Double],
-<<<<<<< HEAD
-      metadata: LearningMetadata,
-=======
       metadata: DecisionTreeMetadata,
->>>>>>> upstream/master
       level: Int,
       nodes: Array[Node],
       splits: Array[Array[Split]],
@@ -664,11 +547,7 @@ object DecisionTree extends Serializable with Logging {
 
     // numNodes:  Number of nodes in this (level of tree, group),
     //            where nodes at deeper (larger) levels may be divided into groups.
-<<<<<<< HEAD
     val numNodes = DecisionTree.maxNodesInLevel(level) / numGroups
-=======
-    val numNodes = (1 << level) / numGroups
->>>>>>> upstream/master
     logDebug("numNodes = " + numNodes)
 
     // Find the number of features by looking at the first sample.
@@ -686,24 +565,13 @@ object DecisionTree extends Serializable with Logging {
     logDebug("isMulticlass = " + isMulticlass)
 
     val isMulticlassWithCategoricalFeatures = metadata.isMulticlassWithCategoricalFeatures
-<<<<<<< HEAD
     logDebug("isMulticlassWithCategoricalFeatures = " + isMulticlassWithCategoricalFeatures)
-=======
-    logDebug("isMultiClassWithCategoricalFeatures = " + isMulticlassWithCategoricalFeatures)
->>>>>>> upstream/master
 
     // shift when more than one group is used at deep tree level
     val groupShift = numNodes * groupIndex
 
     /**
      * Get the node index corresponding to this data point.
-<<<<<<< HEAD
-     * This is used during training, mimicking prediction.
-     * @return  Leaf index if the data point reaches a leaf.
-     *          Otherwise, last node reachable in tree matching this example.
-     */
-    def predictNodeIndex(node: Node, features: Array[Int]): Int = {
-=======
      * This function mimics prediction, passing an example from the root node down to a node
      * at the current level being trained; that node's index is returned.
      *
@@ -711,18 +579,13 @@ object DecisionTree extends Serializable with Logging {
      *          Otherwise, last node reachable in tree matching this example.
      */
     def predictNodeIndex(node: Node, binnedFeatures: Array[Int]): Int = {
->>>>>>> upstream/master
       if (node.isLeaf) {
         node.id
       } else {
         val featureIndex = node.split.get.feature
         val splitLeft = node.split.get.featureType match {
           case Continuous => {
-<<<<<<< HEAD
-            val binIndex = features(featureIndex)
-=======
             val binIndex = binnedFeatures(featureIndex)
->>>>>>> upstream/master
             val featureValueUpperBound = bins(featureIndex)(binIndex).highSplit.threshold
             // bin binIndex has range (bin.lowSplit.threshold, bin.highSplit.threshold]
             // We do not need to check lowSplit since bins are separated by splits.
@@ -730,65 +593,11 @@ object DecisionTree extends Serializable with Logging {
           }
           case Categorical => {
             val featureValue = if (metadata.isUnordered(featureIndex)) {
-<<<<<<< HEAD
-                features(featureIndex)
-              } else {
-                val binIndex = features(featureIndex)
-                bins(featureIndex)(binIndex).category
-              }
-            node.split.get.categories.contains(featureValue)
-          }
-          case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown reason.")
-        }
-        if (node.leftNode.isEmpty || node.rightNode.isEmpty) {
-          // Return index from next layer of nodes to train
-          if (splitLeft) {
-            node.id * 2 + 1 // left
-          } else {
-            node.id * 2 + 2 // right
-          }
-        } else {
-          if (splitLeft) {
-            predictNodeIndex(node.leftNode.get, features)
-          } else {
-            predictNodeIndex(node.rightNode.get, features)
-          }
-        }
-      }
-    }
-
-    def nodeIndexToLevel(idx: Int): Int = {
-      if (idx == 0) {
-        0
-      } else {
-        math.floor(math.log(idx) / math.log(2)).toInt
-      }
-    }
-
-    // Used for treePointToNodeIndex
-    val levelOffset = DecisionTree.maxNodesInLevel(level) - 1
-
-    /**
-     * Find the node (indexed from 0 at the start of this level) for the given example.
-     * If the example does not reach this level, returns a value < 0.
-     */
-    def treePointToNodeIndex(treePoint: TreePoint): Int = {
-      if (level == 0) {
-        0
-      } else {
-        val globalNodeIndex = predictNodeIndex(nodes(0), treePoint.features)
-        // Get index for this level.
-        globalNodeIndex - levelOffset
-      }
-    }
-
-    val rightChildShift = numClasses * numBins * numFeatures * numNodes
-=======
-                binnedFeatures(featureIndex)
-              } else {
-                val binIndex = binnedFeatures(featureIndex)
-                bins(featureIndex)(binIndex).category
-              }
+              binnedFeatures(featureIndex)
+            } else {
+              val binIndex = binnedFeatures(featureIndex)
+              bins(featureIndex)(binIndex).category
+            }
             node.split.get.categories.contains(featureValue)
           }
           case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown reason.")
@@ -819,7 +628,7 @@ object DecisionTree extends Serializable with Logging {
     }
 
     // Used for treePointToNodeIndex
-    val levelOffset = (1 << level) - 1
+    val levelOffset = DecisionTree.maxNodesInLevel(level) - 1
 
     /**
      * Find the node index for the given example.
@@ -836,89 +645,6 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    /**
-     * Increment aggregate in location for (node, feature, bin, label).
-     *
-     * @param treePoint  Data point being aggregated.
-     * @param agg  Array storing aggregate calculation, of size:
-     *             numClasses * numBins * numFeatures * numNodes.
-     *             Indexed by (node, feature, bin, label) where label is the least significant bit.
-     * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
-     */
-    def updateBinForOrderedFeature(
-        treePoint: TreePoint,
-        agg: Array[Double],
-        nodeIndex: Int,
-        featureIndex: Int): Unit = {
-      // Update the left or right count for one bin.
-      val aggIndex =
-        numClasses * numBins * numFeatures * nodeIndex +
-        numClasses * numBins * featureIndex +
-        numClasses * treePoint.binnedFeatures(featureIndex) +
-        treePoint.label.toInt
-      agg(aggIndex) += 1
-    }
-
-    /**
-     * Increment aggregate in location for (nodeIndex, featureIndex, [bins], label),
-     * where [bins] ranges over all bins.
-     * Updates left or right side of aggregate depending on split.
-     *
-     * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
-     * @param treePoint  Data point being aggregated.
-     * @param agg  Indexed by (left/right, node, feature, bin, label)
-     *             where label is the least significant bit.
-     *             The left/right specifier is a 0/1 index indicating left/right child info.
-     * @param rightChildShift Offset for right side of agg.
-     */
-    def updateBinForUnorderedFeature(
-        nodeIndex: Int,
-        featureIndex: Int,
-        treePoint: TreePoint,
-        agg: Array[Double],
-        rightChildShift: Int): Unit = {
-      val featureValue = treePoint.binnedFeatures(featureIndex)
-      // Update the left or right count for one bin.
-      val aggShift =
-        numClasses * numBins * numFeatures * nodeIndex +
-        numClasses * numBins * featureIndex +
-        treePoint.label.toInt
-      // Find all matching bins and increment their values
-      val featureCategories = metadata.featureArity(featureIndex)
-      val numCategoricalBins = (1 << featureCategories - 1) - 1
-      var binIndex = 0
-      while (binIndex < numCategoricalBins) {
-        val aggIndex = aggShift + binIndex * numClasses
-        if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
-          agg(aggIndex) += 1
-        } else {
-          agg(rightChildShift + aggIndex) += 1
-        }
-        binIndex += 1
-      }
-    }
-
-    /**
-     * Helper for binSeqOp.
-     *
-     * @param agg  Array storing aggregate calculation, of size:
-     *             numClasses * numBins * numFeatures * numNodes.
-     *             Indexed by (node, feature, bin, label) where label is the least significant bit.
-     * @param treePoint  Data point being aggregated.
-     * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
-     */
-    def binaryOrNotCategoricalBinSeqOp(
-        agg: Array[Double],
-        treePoint: TreePoint,
-        nodeIndex: Int): Unit = {
-      // Iterate over all features.
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
-        updateBinForOrderedFeature(treePoint, agg, nodeIndex, featureIndex)
-        featureIndex += 1
-      }
-    }
->>>>>>> upstream/master
 
     val rightChildShift = numClasses * numBins * numFeatures * numNodes
 
@@ -933,23 +659,17 @@ object DecisionTree extends Serializable with Logging {
      * @param treePoint   Data point being aggregated.
      * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
      */
-<<<<<<< HEAD
     def someUnorderedBinSeqOp(
-        agg: Array[Array[Array[ImpurityAggregator]]],
-=======
-    def multiclassWithCategoricalBinSeqOp(
-        agg: Array[Double],
->>>>>>> upstream/master
-        treePoint: TreePoint,
-        nodeIndex: Int): Unit = {
+                               agg: Array[Array[Array[ImpurityAggregator]]],
+                               treePoint: TreePoint,
+                               nodeIndex: Int): Unit = {
       val label = treePoint.label
       // Iterate over all features.
       var featureIndex = 0
       while (featureIndex < numFeatures) {
         if (metadata.isUnordered(featureIndex)) {
-<<<<<<< HEAD
           // Unordered feature
-          val featureValue = treePoint.features(featureIndex)
+          val featureValue = treePoint.binnedFeatures(featureIndex)
           // Update the left or right count for one bin.
           // Find all matching bins and increment their values.
           val numCategoricalBins = metadata.numBins(featureIndex)
@@ -964,13 +684,8 @@ object DecisionTree extends Serializable with Logging {
           }
         } else {
           // Ordered feature
-          val binIndex = treePoint.features(featureIndex)
+          val binIndex = treePoint.binnedFeatures(featureIndex)
           agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
-=======
-          updateBinForUnorderedFeature(nodeIndex, featureIndex, treePoint, agg, rightChildShift)
-        } else {
-          updateBinForOrderedFeature(treePoint, agg, nodeIndex, featureIndex)
->>>>>>> upstream/master
         }
         featureIndex += 1
       }
@@ -989,36 +704,21 @@ object DecisionTree extends Serializable with Logging {
      * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
      * @return agg
      */
-<<<<<<< HEAD
     def orderedBinSeqOp(
-        agg: Array[Array[Array[ImpurityAggregator]]],
-        treePoint: TreePoint,
-        nodeIndex: Int): Unit = {
-=======
-    def regressionBinSeqOp(agg: Array[Double], treePoint: TreePoint, nodeIndex: Int): Unit = {
->>>>>>> upstream/master
+                         agg: Array[Array[Array[ImpurityAggregator]]],
+                         treePoint: TreePoint,
+                         nodeIndex: Int): Unit = {
       val label = treePoint.label
       // Iterate over all features.
       var featureIndex = 0
       while (featureIndex < numFeatures) {
         // Update count, sum, and sum^2 for one bin.
-<<<<<<< HEAD
-        val binIndex = treePoint.features(featureIndex)
+        val binIndex = treePoint.binnedFeatures(featureIndex)
         if (binIndex >= agg(nodeIndex)(featureIndex).size) {
           throw new RuntimeException(
             s"binIndex: $binIndex, agg(nodeIndex)(featureIndex).size = ${agg(nodeIndex)(featureIndex).size}")
         }
         agg(nodeIndex)(featureIndex)(binIndex).add(label)
-=======
-        val binIndex = treePoint.binnedFeatures(featureIndex)
-        val aggIndex =
-          3 * numBins * numFeatures * nodeIndex +
-          3 * numBins * featureIndex +
-          3 * binIndex
-        agg(aggIndex) += 1
-        agg(aggIndex + 1) += label
-        agg(aggIndex + 2) += label * label
->>>>>>> upstream/master
         featureIndex += 1
       }
     }
@@ -1037,52 +737,27 @@ object DecisionTree extends Serializable with Logging {
      *              Ordered features: numNodes * numFeatures * numBins.
      *              Unordered features: (2 * numNodes) * numFeatures * numBins.
      *            Size for regression:
-<<<<<<< HEAD
      *              numNodes * numFeatures * numBins.
      * @param treePoint   Data point being aggregated.
      * @return  agg
      */
     def binSeqOp(
-        agg: Array[Array[Array[ImpurityAggregator]]],
-        treePoint: TreePoint): Array[Array[Array[ImpurityAggregator]]] = {
-      val nodeIndex = treePointToNodeIndex(treePoint)
-      if (nodeIndex >= 0) { // Otherwise, example does not reach this level.
-        if (metadata.unorderedFeatures.isEmpty) {
-          orderedBinSeqOp(agg, treePoint, nodeIndex)
-        } else {
-          someUnorderedBinSeqOp(agg, treePoint, nodeIndex)
-=======
-     *              3 * numBins * numFeatures * numNodes.
-     * @param treePoint   Data point being aggregated.
-     * @return  agg
-     */
-    def binSeqOp(agg: Array[Double], treePoint: TreePoint): Array[Double] = {
+                  agg: Array[Array[Array[ImpurityAggregator]]],
+                  treePoint: TreePoint): Array[Array[Array[ImpurityAggregator]]] = {
       val nodeIndex = treePointToNodeIndex(treePoint)
       // If the example does not reach this level, then nodeIndex < 0.
       // If the example reaches this level but is handled in a different group,
       //  then either nodeIndex < 0 (previous group) or nodeIndex >= numNodes (later group).
       if (nodeIndex >= 0 && nodeIndex < numNodes) {
-        if (metadata.isClassification) {
-          if (isMulticlassWithCategoricalFeatures) {
-            multiclassWithCategoricalBinSeqOp(agg, treePoint, nodeIndex)
-          } else {
-            binaryOrNotCategoricalBinSeqOp(agg, treePoint, nodeIndex)
-          }
+        if (metadata.unorderedFeatures.isEmpty) {
+          orderedBinSeqOp(agg, treePoint, nodeIndex)
         } else {
-          regressionBinSeqOp(agg, treePoint, nodeIndex)
->>>>>>> upstream/master
+          someUnorderedBinSeqOp(agg, treePoint, nodeIndex)
         }
       }
       agg
     }
 
-<<<<<<< HEAD
-=======
-    // Calculate bin aggregate length for classification or regression.
-    val binAggregateLength = numNodes * getElementsPerNode(metadata, numBins)
-    logDebug("binAggregateLength = " + binAggregateLength)
-
->>>>>>> upstream/master
     /**
      * Combines the aggregates from partitions.
      * @param agg1 Array containing aggregates from one or more partitions
@@ -1109,16 +784,12 @@ object DecisionTree extends Serializable with Logging {
     }
 
     // Calculate bin aggregates.
-<<<<<<< HEAD
-    timer.start("binAggregates")
+    timer.start("aggregation")
     val binAggregates = {
       val initAgg = getEmptyBinAggregates(metadata, numNodes)
       input.aggregate(initAgg)(binSeqOp, binCombOp)
     }
-    timer.stop("binAggregates")
-
-    logDebug("binAggregates.length = " + binAggregates.length)
-
+    timer.stop("aggregation")
     /*
     println("binAggregates:")
     for (n <- Range(0, binAggregates.size)) {
@@ -1131,6 +802,7 @@ object DecisionTree extends Serializable with Logging {
     */
 
     // Calculate best splits for all nodes at a given level
+    timer.start("chooseSplits")
     val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
     val nodeIndexOffset = DecisionTree.maxNodesInLevel(level) - 1
     // Iterating over all nodes at this level
@@ -1142,7 +814,6 @@ object DecisionTree extends Serializable with Logging {
       //logDebug("nodeImpurityIndex = " + nodeImpurityIndex)
       val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
       logDebug("parent node impurity = " + parentNodeImpurity)
-
       val (bestFeatureIndex, bestSplitIndex, bestGain) =
         binsToBestSplit(binAggregates(nodeIndex), parentNodeImpurity, level, metadata)
       bestSplits(nodeIndex) = (splits(bestFeatureIndex)(bestSplitIndex), bestGain)
@@ -1164,11 +835,11 @@ object DecisionTree extends Serializable with Logging {
    * @return information gain and statistics for all splits
    */
   def calculateGainForSplit(
-      leftNodeAgg: ImpurityAggregator,
-      rightNodeAgg: ImpurityAggregator,
-      topImpurity: Double,
-      level: Int,
-      metadata: LearningMetadata): InformationGainStats = {
+                             leftNodeAgg: ImpurityAggregator,
+                             rightNodeAgg: ImpurityAggregator,
+                             topImpurity: Double,
+                             level: Int,
+                             metadata: DecisionTreeMetadata): InformationGainStats = {
 
     val leftCount = leftNodeAgg.count
     val rightCount = rightNodeAgg.count
@@ -1221,147 +892,21 @@ object DecisionTree extends Serializable with Logging {
       rightNodeAgg: Array[Array[ImpurityAggregator]],
       nodeImpurity: Double,
       level: Int,
-      metadata: LearningMetadata): Array[Array[InformationGainStats]] = {
+      metadata: DecisionTreeMetadata): Array[Array[InformationGainStats]] = {
     val gains = new Array[Array[InformationGainStats]](metadata.numFeatures)
 
-    for (featureIndex <- 0 until metadata.numFeatures) {
+    var featureIndex = 0
+    while (featureIndex < metadata.numFeatures) {
       val numSplitsForFeature = metadata.numSplits(featureIndex)
       gains(featureIndex) = new Array[InformationGainStats](numSplitsForFeature)
-      for (splitIndex <- 0 until numSplitsForFeature) {
+      var splitIndex = 0
+      while (splitIndex < numSplitsForFeature) {
         gains(featureIndex)(splitIndex) =
           calculateGainForSplit(leftNodeAgg(featureIndex)(splitIndex),
             rightNodeAgg(featureIndex)(splitIndex), nodeImpurity, level, metadata)
-=======
-    timer.start("aggregation")
-    val binAggregates = {
-      input.aggregate(Array.fill[Double](binAggregateLength)(0))(binSeqOp, binCombOp)
-    }
-    timer.stop("aggregation")
-    logDebug("binAggregates.length = " + binAggregates.length)
-
-    /**
-     * Calculate the information gain for a given (feature, split) based upon left/right aggregates.
-     * @param leftNodeAgg left node aggregates for this (feature, split)
-     * @param rightNodeAgg right node aggregate for this (feature, split)
-     * @param topImpurity impurity of the parent node
-     * @return information gain and statistics for all splits
-     */
-    def calculateGainForSplit(
-        leftNodeAgg: Array[Double],
-        rightNodeAgg: Array[Double],
-        topImpurity: Double): InformationGainStats = {
-      if (metadata.isClassification) {
-        val leftTotalCount = leftNodeAgg.sum
-        val rightTotalCount = rightNodeAgg.sum
-
-        val impurity = {
-          if (level > 0) {
-            topImpurity
-          } else {
-            // Calculate impurity for root node.
-            val rootNodeCounts = new Array[Double](numClasses)
-            var classIndex = 0
-            while (classIndex < numClasses) {
-              rootNodeCounts(classIndex) = leftNodeAgg(classIndex) + rightNodeAgg(classIndex)
-              classIndex += 1
-            }
-            metadata.impurity.calculate(rootNodeCounts, leftTotalCount + rightTotalCount)
-          }
-        }
-
-        val totalCount = leftTotalCount + rightTotalCount
-        if (totalCount == 0) {
-          // Return arbitrary prediction.
-          return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
-        }
-
-        // Sum of count for each label
-        val leftrightNodeAgg: Array[Double] =
-          leftNodeAgg.zip(rightNodeAgg).map { case (leftCount, rightCount) =>
-            leftCount + rightCount
-          }
-
-        def indexOfLargestArrayElement(array: Array[Double]): Int = {
-          val result = array.foldLeft(-1, Double.MinValue, 0) {
-            case ((maxIndex, maxValue, currentIndex), currentValue) =>
-              if (currentValue > maxValue) {
-                (currentIndex, currentValue, currentIndex + 1)
-              } else {
-                (maxIndex, maxValue, currentIndex + 1)
-              }
-          }
-          if (result._1 < 0) {
-            throw new RuntimeException("DecisionTree internal error:" +
-              " calculateGainForSplit failed in indexOfLargestArrayElement")
-          }
-          result._1
-        }
-
-        val predict = indexOfLargestArrayElement(leftrightNodeAgg)
-        val prob = leftrightNodeAgg(predict) / totalCount
-
-        val leftImpurity = if (leftTotalCount == 0) {
-          topImpurity
-        } else {
-          metadata.impurity.calculate(leftNodeAgg, leftTotalCount)
-        }
-        val rightImpurity = if (rightTotalCount == 0) {
-          topImpurity
-        } else {
-          metadata.impurity.calculate(rightNodeAgg, rightTotalCount)
-        }
-
-        val leftWeight = leftTotalCount / totalCount
-        val rightWeight = rightTotalCount / totalCount
-
-        val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-
-        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict, prob)
-
-      } else {
-        // Regression
-
-        val leftCount = leftNodeAgg(0)
-        val leftSum = leftNodeAgg(1)
-        val leftSumSquares = leftNodeAgg(2)
-
-        val rightCount = rightNodeAgg(0)
-        val rightSum = rightNodeAgg(1)
-        val rightSumSquares = rightNodeAgg(2)
-
-        val impurity = {
-          if (level > 0) {
-            topImpurity
-          } else {
-            // Calculate impurity for root node.
-            val count = leftCount + rightCount
-            val sum = leftSum + rightSum
-            val sumSquares = leftSumSquares + rightSumSquares
-            metadata.impurity.calculate(count, sum, sumSquares)
-          }
-        }
-
-        if (leftCount == 0) {
-          return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity,
-            rightSum / rightCount)
-        }
-        if (rightCount == 0) {
-          return new InformationGainStats(0, topImpurity, topImpurity,
-            Double.MinValue, leftSum / leftCount)
-        }
-
-        val leftImpurity = metadata.impurity.calculate(leftCount, leftSum, leftSumSquares)
-        val rightImpurity = metadata.impurity.calculate(rightCount, rightSum, rightSumSquares)
-
-        val leftWeight = leftCount.toDouble / (leftCount + rightCount)
-        val rightWeight = rightCount.toDouble / (leftCount + rightCount)
-
-        val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-
-        val predict = (leftSum + rightSum) / (leftCount + rightCount)
-        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
->>>>>>> upstream/master
+        splitIndex += 1
       }
+      featureIndex += 1
     }
     gains
   }
@@ -1381,8 +926,8 @@ object DecisionTree extends Serializable with Logging {
    * TODO: Extract in-place.
    */
   def extractLeftRightNodeAggregates(
-      nodeAggregates: Array[Array[ImpurityAggregator]],
-      metadata: LearningMetadata): (Array[Array[ImpurityAggregator]], Array[Array[ImpurityAggregator]]) = {
+                                      nodeAggregates: Array[Array[ImpurityAggregator]],
+                                      metadata: DecisionTreeMetadata): (Array[Array[ImpurityAggregator]], Array[Array[ImpurityAggregator]]) = {
 
     val numClasses = metadata.numClasses
     val numFeatures = metadata.numFeatures
@@ -1392,61 +937,24 @@ object DecisionTree extends Serializable with Logging {
      * Indexes binData as (feature, split, class) with class as the least significant bit.
      * @param leftNodeAgg   leftNodeAgg(featureIndex)(splitIndex)(classIndex) = aggregate value
      */
-<<<<<<< HEAD
     def findAggForUnorderedFeature(
-        binData: Array[Array[ImpurityAggregator]],
-        leftNodeAgg: Array[Array[ImpurityAggregator]],
-        rightNodeAgg: Array[Array[ImpurityAggregator]],
-        featureIndex: Int) {
+                                    binData: Array[Array[ImpurityAggregator]],
+                                    leftNodeAgg: Array[Array[ImpurityAggregator]],
+                                    rightNodeAgg: Array[Array[ImpurityAggregator]],
+                                    featureIndex: Int) {
       // TODO: Don't pass in featureIndex; use index before call.
       // Note: numBins = numSplits for unordered features.
       val numBins = metadata.numBins(featureIndex)
       leftNodeAgg(featureIndex) = binData(featureIndex).slice(0, numBins)
       rightNodeAgg(featureIndex) = binData(featureIndex).slice(numBins, 2 * numBins)
     }
-=======
-    def extractLeftRightNodeAggregates(
-        binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
-
-
-      /**
-       * The input binData is indexed as (feature, bin, class).
-       * This computes cumulative sums over splits.
-       * Each (feature, class) pair is handled separately.
-       * Note: numSplits = numBins - 1.
-       * @param leftNodeAgg  Each (feature, class) slice is an array over splits.
-       *                     Element i (i = 0, ..., numSplits - 2) is set to be
-       *                     the cumulative sum (from left) over binData for bins 0, ..., i.
-       * @param rightNodeAgg Each (feature, class) slice is an array over splits.
-       *                     Element i (i = 1, ..., numSplits - 1) is set to be
-       *                     the cumulative sum (from right) over binData for bins
-       *                     numBins - 1, ..., numBins - 1 - i.
-       */
-      def findAggForOrderedFeatureClassification(
-          leftNodeAgg: Array[Array[Array[Double]]],
-          rightNodeAgg: Array[Array[Array[Double]]],
-          featureIndex: Int) {
-
-        // shift for this featureIndex
-        val shift = numClasses * featureIndex * numBins
-
-        var classIndex = 0
-        while (classIndex < numClasses) {
-          // left node aggregate for the lowest split
-          leftNodeAgg(featureIndex)(0)(classIndex) = binData(shift + classIndex)
-          // right node aggregate for the highest split
-          rightNodeAgg(featureIndex)(numBins - 2)(classIndex)
-            = binData(shift + (numClasses * (numBins - 1)) + classIndex)
-          classIndex += 1
-        }
->>>>>>> upstream/master
 
     /**
      * For ordered features (regression and classification with ordered features).
      * The input binData is indexed as (feature, bin, class).
      * This computes cumulative sums over splits.
      * Each (feature, class) pair is handled separately.
-     * Note: numSplits = numBins - 1.
+     * TODO: UPDATE DOC: Note: numSplits = numBins - 1.
      * @param leftNodeAgg  Each (feature, class) slice is an array over splits.
      *                     Element i (i = 0, ..., numSplits - 2) is set to be
      *                     the cumulative sum (from left) over binData for bins 0, ..., i.
@@ -1457,13 +965,12 @@ object DecisionTree extends Serializable with Logging {
      * TODO: We could avoid doing one of these cumulative sums.
      */
     def findAggForOrderedFeature(
-        binData: Array[Array[ImpurityAggregator]],
-        leftNodeAgg: Array[Array[ImpurityAggregator]],
-        rightNodeAgg: Array[Array[ImpurityAggregator]],
-        featureIndex: Int) {
+                                  binData: Array[Array[ImpurityAggregator]],
+                                  leftNodeAgg: Array[Array[ImpurityAggregator]],
+                                  rightNodeAgg: Array[Array[ImpurityAggregator]],
+                                  featureIndex: Int) {
 
       // TODO: Don't pass in featureIndex; use index before call.
-
       val numSplits = metadata.numSplits(featureIndex)
       leftNodeAgg(featureIndex) = new Array[ImpurityAggregator](numSplits)
       rightNodeAgg(featureIndex) = new Array[ImpurityAggregator](numSplits)
@@ -1488,20 +995,19 @@ object DecisionTree extends Serializable with Logging {
           splitIndex += 1
         }
       } else { // ordered categorical feature
-        /* TODO: This is a temp fix.
-         *       Eventually, for ordered categorical features, change splits and bins to be
-         *       for individual categories instead of running totals over a pre-defined category
-         *       ordering.  Then, we could choose the ordering in this function, tailoring it
-         *       to this particular node.
-         */
-        var splitIndex = 0
+      /* TODO: This is a temp fix.
+       *       Eventually, for ordered categorical features, change splits and bins to be
+       *       for individual categories instead of running totals over a pre-defined category
+       *       ordering.  Then, we could choose the ordering in this function, tailoring it
+       *       to this particular node.
+       */
+      var splitIndex = 0
         while (splitIndex < numSplits) {
           // no need to clone since no cumulative sum is needed
           leftNodeAgg(featureIndex)(splitIndex) = binData(featureIndex)(splitIndex)
           rightNodeAgg(featureIndex)(splitIndex) = binData(featureIndex)(splitIndex + 1)
           splitIndex += 1
         }
-<<<<<<< HEAD
       }
     }
 
@@ -1518,69 +1024,15 @@ object DecisionTree extends Serializable with Logging {
         featureIndex += 1
       }
     } else { // Regression
-      var featureIndex = 0
+    var featureIndex = 0
       while (featureIndex < numFeatures) {
         findAggForOrderedFeature(nodeAggregates, leftNodeAgg, rightNodeAgg, featureIndex)
         featureIndex += 1
-=======
-      }
-
-      if (metadata.isClassification) {
-        // Initialize left and right split aggregates.
-        val leftNodeAgg = Array.ofDim[Double](numFeatures, numBins - 1, numClasses)
-        val rightNodeAgg = Array.ofDim[Double](numFeatures, numBins - 1, numClasses)
-        var featureIndex = 0
-        while (featureIndex < numFeatures) {
-          if (metadata.isUnordered(featureIndex)) {
-            findAggForUnorderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
-          } else {
-            findAggForOrderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
-          }
-          featureIndex += 1
-        }
-        (leftNodeAgg, rightNodeAgg)
-      } else {
-        // Regression
-        // Initialize left and right split aggregates.
-        val leftNodeAgg = Array.ofDim[Double](numFeatures, numBins - 1, 3)
-        val rightNodeAgg = Array.ofDim[Double](numFeatures, numBins - 1, 3)
-        // Iterate over all features.
-        var featureIndex = 0
-        while (featureIndex < numFeatures) {
-          findAggForRegression(leftNodeAgg, rightNodeAgg, featureIndex)
-          featureIndex += 1
-        }
-        (leftNodeAgg, rightNodeAgg)
-      }
-    }
-
-    /**
-     * Calculates information gain for all nodes splits.
-     */
-    def calculateGainsForAllNodeSplits(
-        leftNodeAgg: Array[Array[Array[Double]]],
-        rightNodeAgg: Array[Array[Array[Double]]],
-        nodeImpurity: Double): Array[Array[InformationGainStats]] = {
-      val gains = Array.ofDim[InformationGainStats](numFeatures, numBins - 1)
-
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
-        val numSplitsForFeature = getNumSplitsForFeature(featureIndex)
-        var splitIndex = 0
-        while (splitIndex < numSplitsForFeature) {
-          gains(featureIndex)(splitIndex) =
-            calculateGainForSplit(leftNodeAgg(featureIndex)(splitIndex),
-              rightNodeAgg(featureIndex)(splitIndex), nodeImpurity)
-          splitIndex += 1
-        }
-        featureIndex += 1
->>>>>>> upstream/master
       }
     }
     (leftNodeAgg, rightNodeAgg)
   }
 
-<<<<<<< HEAD
   /**
    * Find the best split for a node.
    * @param binData Bin data slice for this node, given by getBinDataForNode.
@@ -1588,10 +1040,10 @@ object DecisionTree extends Serializable with Logging {
    * @return tuple (best feature index, best split index, information gain)
    */
   def binsToBestSplit(
-      nodeAggregates: Array[Array[ImpurityAggregator]],
-      nodeImpurity: Double,
-      level: Int,
-      metadata: LearningMetadata): (Int, Int, InformationGainStats) = {
+                       nodeAggregates: Array[Array[ImpurityAggregator]],
+                       nodeImpurity: Double,
+                       level: Int,
+                       metadata: DecisionTreeMetadata): (Int, Int, InformationGainStats) = {
 
     logDebug("node impurity = " + nodeImpurity)
     /*
@@ -1599,70 +1051,10 @@ object DecisionTree extends Serializable with Logging {
     for (f <- Range(0, nodeAggregates.size)) {
       for (b <- Range(0, nodeAggregates(f).size)) {
         println(s"nodeAggregates($f)($b): ${nodeAggregates(f)(b)}")
-=======
-    /**
-     * Get the number of splits for a feature.
-     */
-    def getNumSplitsForFeature(featureIndex: Int): Int = {
-      if (metadata.isContinuous(featureIndex)) {
-        numBins - 1
-      } else {
-        // Categorical feature
-        val featureCategories = metadata.featureArity(featureIndex)
-        if (metadata.isUnordered(featureIndex)) {
-          (1 << featureCategories - 1) - 1
-        } else {
-          featureCategories
-        }
       }
     }
-
-    /**
-     * Find the best split for a node.
-     * @param binData Bin data slice for this node, given by getBinDataForNode.
-     * @param nodeImpurity impurity of the top node
-     * @return tuple of split and information gain
-     */
-    def binsToBestSplit(
-        binData: Array[Double],
-        nodeImpurity: Double): (Split, InformationGainStats) = {
-
-      logDebug("node impurity = " + nodeImpurity)
-
-      // Extract left right node aggregates.
-      val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData)
-
-      // Calculate gains for all splits.
-      val gains = calculateGainsForAllNodeSplits(leftNodeAgg, rightNodeAgg, nodeImpurity)
-
-      val (bestFeatureIndex, bestSplitIndex, gainStats) = {
-        // Initialize with infeasible values.
-        var bestFeatureIndex = Int.MinValue
-        var bestSplitIndex = Int.MinValue
-        var bestGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, -1.0)
-        // Iterate over features.
-        var featureIndex = 0
-        while (featureIndex < numFeatures) {
-          // Iterate over all splits.
-          var splitIndex = 0
-          val numSplitsForFeature = getNumSplitsForFeature(featureIndex)
-          while (splitIndex < numSplitsForFeature) {
-            val gainStats = gains(featureIndex)(splitIndex)
-            if (gainStats.gain > bestGainStats.gain) {
-              bestGainStats = gainStats
-              bestFeatureIndex = featureIndex
-              bestSplitIndex = splitIndex
-            }
-            splitIndex += 1
-          }
-          featureIndex += 1
-        }
-        (bestFeatureIndex, bestSplitIndex, bestGainStats)
->>>>>>> upstream/master
-      }
-    }
-<<<<<<< HEAD
     */
+
     // Extract left right node aggregates.
     val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(nodeAggregates, metadata)
 
@@ -1692,61 +1084,10 @@ object DecisionTree extends Serializable with Logging {
           splitIndex += 1
         }
         featureIndex += 1
-=======
-
-    /**
-     * Get bin data for one node.
-     */
-    def getBinDataForNode(node: Int): Array[Double] = {
-      if (metadata.isClassification) {
-        if (isMulticlassWithCategoricalFeatures) {
-          val shift = numClasses * node * numBins * numFeatures
-          val rightChildShift = numClasses * numBins * numFeatures * numNodes
-          val binsForNode = {
-            val leftChildData
-            = binAggregates.slice(shift, shift + numClasses * numBins * numFeatures)
-            val rightChildData
-            = binAggregates.slice(rightChildShift + shift,
-              rightChildShift + shift + numClasses * numBins * numFeatures)
-            leftChildData ++ rightChildData
-          }
-          binsForNode
-        } else {
-          val shift = numClasses * node * numBins * numFeatures
-          val binsForNode = binAggregates.slice(shift, shift + numClasses * numBins * numFeatures)
-          binsForNode
-        }
-      } else {
-        // Regression
-        val shift = 3 * node * numBins * numFeatures
-        val binsForNode = binAggregates.slice(shift, shift + 3 * numBins * numFeatures)
-        binsForNode
->>>>>>> upstream/master
       }
       (bestFeatureIndex, bestSplitIndex, bestGainStats)
     }
-
-<<<<<<< HEAD
     (bestFeatureIndex, bestSplitIndex, gainStats)
-=======
-    // Calculate best splits for all nodes at a given level
-    timer.start("chooseSplits")
-    val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
-    // Iterating over all nodes at this level
-    var node = 0
-    while (node < numNodes) {
-      val nodeImpurityIndex = (1 << level) - 1 + node + groupShift
-      val binsForNode: Array[Double] = getBinDataForNode(node)
-      logDebug("nodeImpurityIndex = " + nodeImpurityIndex)
-      val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
-      logDebug("parent node impurity = " + parentNodeImpurity)
-      bestSplits(node) = binsToBestSplit(binsForNode, parentNodeImpurity)
-      node += 1
-    }
-    timer.stop("chooseSplits")
-
-    bestSplits
->>>>>>> upstream/master
   }
 
   /**
@@ -1773,7 +1114,7 @@ object DecisionTree extends Serializable with Logging {
    *  where the bins are ordered as (numBins left bins, numBins right bins).
    */
   private def getEmptyBinAggregates(
-      metadata: LearningMetadata,
+      metadata: DecisionTreeMetadata,
       numNodes: Int): Array[Array[Array[ImpurityAggregator]]] = {
     val impurityAggregator: ImpurityAggregator = metadata.impurity match {
       case Gini => new GiniAggregator(metadata.numClasses)
@@ -1825,12 +1166,7 @@ object DecisionTree extends Serializable with Logging {
    *       there is one bin per category.
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-<<<<<<< HEAD
-   * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-   *                 parameters for construction the DecisionTree
-=======
    * @param metadata Learning and dataset metadata
->>>>>>> upstream/master
    * @return A tuple of (splits, bins).
    *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
    *          of size (numFeatures, numSplits).
@@ -1839,45 +1175,13 @@ object DecisionTree extends Serializable with Logging {
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-<<<<<<< HEAD
-      metadata: LearningMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
-
-    val isMulticlassClassification = metadata.isMulticlass
-    logDebug("isMulticlass = " + isMulticlassClassification)
-
-    val numFeatures = metadata.numFeatures
-
-=======
       metadata: DecisionTreeMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
 
-    val count = input.count()
-
-    // Find the number of features by looking at the first sample
-    val numFeatures = input.take(1)(0).features.size
-
-    val maxBins = metadata.maxBins
-    val numBins = if (maxBins <= count) maxBins else count.toInt
-    logDebug("numBins = " + numBins)
     val isMulticlass = metadata.isMulticlass
     logDebug("isMulticlass = " + isMulticlass)
 
-    /*
-     * Ensure numBins is always greater than the categories. For multiclass classification,
-     * numBins should be greater than 2^(maxCategories - 1) - 1.
-     * It's a limitation of the current implementation but a reasonable trade-off since features
-     * with large number of categories get favored over continuous features.
-     *
-     * This needs to be checked here instead of in Strategy since numBins can be determined
-     * by the number of training examples.
-     * TODO: Allow this case, where we simply will know nothing about some categories.
-     */
-    if (metadata.featureArity.size > 0) {
-      val maxCategoriesForFeatures = metadata.featureArity.maxBy(_._2)._2
-      require(numBins > maxCategoriesForFeatures, "numBins should be greater than max categories " +
-        "in categorical features")
-    }
+    val numFeatures = metadata.numFeatures
 
->>>>>>> upstream/master
     // Calculate the number of sample for approximate quantile calculation.
     val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
     val fraction = if (requiredSamples < metadata.numExamples) {
@@ -1892,12 +1196,6 @@ object DecisionTree extends Serializable with Logging {
       input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
     val numSamples = sampledInput.length
 
-<<<<<<< HEAD
-=======
-    val stride: Double = numSamples.toDouble / numBins
-    logDebug("stride = " + stride)
-
->>>>>>> upstream/master
     metadata.quantileStrategy match {
       case Sort =>
         val splits = new Array[Array[Split]](numFeatures)
@@ -1914,14 +1212,8 @@ object DecisionTree extends Serializable with Logging {
         // Iterate over all features.
         var featureIndex = 0
         while (featureIndex < numFeatures) {
-<<<<<<< HEAD
           val numSplits = metadata.numSplits(featureIndex)
           if (metadata.isContinuous(featureIndex)) {
-=======
-          // Check whether the feature is continuous.
-          val isFeatureContinuous = metadata.isContinuous(featureIndex)
-          if (isFeatureContinuous) {
->>>>>>> upstream/master
             val featureSamples = sampledInput.map(lp => lp.features(featureIndex)).sorted
             val stride: Double = numSamples.toDouble / metadata.numBins(featureIndex)
             logDebug("stride = " + stride)
@@ -1932,7 +1224,6 @@ object DecisionTree extends Serializable with Logging {
               splits(featureIndex)(splitIndex) =
                 new Split(featureIndex, threshold, Continuous, List())
             }
-<<<<<<< HEAD
             bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
               splits(featureIndex)(0), Continuous, Double.MinValue)
             for (splitIndex <- 1 until numSplits) {
@@ -1956,23 +1247,6 @@ object DecisionTree extends Serializable with Logging {
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
                 bins(featureIndex)(splitIndex) = {
                   if (splitIndex == 0) {
-=======
-          } else { // Categorical feature
-            val featureCategories = metadata.featureArity(featureIndex)
-
-            // Use different bin/split calculation strategy for categorical features in multiclass
-            // classification that satisfy the space constraint.
-            if (metadata.isUnordered(featureIndex)) {
-              // 2^(maxFeatureValue- 1) - 1 combinations
-              var index = 0
-              while (index < (1 << featureCategories - 1) - 1) {
-                val categories: List[Double]
-                  = extractMultiClassCategories(index + 1, featureCategories)
-                splits(featureIndex)(index)
-                  = new Split(featureIndex, Double.MinValue, Categorical, categories)
-                bins(featureIndex)(index) = {
-                  if (index == 0) {
->>>>>>> upstream/master
                     new Bin(
                       new DummyCategoricalSplit(featureIndex, Categorical),
                       splits(featureIndex)(0),
@@ -2059,27 +1333,6 @@ object DecisionTree extends Serializable with Logging {
           }
           featureIndex += 1
         }
-
-<<<<<<< HEAD
-=======
-        // Find all bins.
-        featureIndex = 0
-        while (featureIndex < numFeatures) {
-          val isFeatureContinuous = metadata.isContinuous(featureIndex)
-          if (isFeatureContinuous) { // Bins for categorical variables are already assigned.
-            bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
-              splits(featureIndex)(0), Continuous, Double.MinValue)
-            for (index <- 1 until numBins - 1) {
-              val bin = new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index),
-                Continuous, Double.MinValue)
-              bins(featureIndex)(index) = bin
-            }
-            bins(featureIndex)(numBins-1) = new Bin(splits(featureIndex)(numBins-2),
-              new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
-          }
-          featureIndex += 1
-        }
->>>>>>> upstream/master
         (splits, bins)
       case MinMax =>
         throw new UnsupportedOperationException("minmax not supported yet.")
