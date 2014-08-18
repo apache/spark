@@ -111,9 +111,10 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
-make_binary_release "hadoop1" "--with-hive --hadoop 1.0.4"
-make_binary_release "cdh4" "--with-hive --hadoop 2.0.0-mr1-cdh4.2.0"
-make_binary_release "hadoop2" "--with-hive --with-yarn --hadoop 2.2.0"
+make_binary_release "hadoop1" "--with-hive --hadoop 1.0.4" &
+make_binary_release "cdh4" "--with-hive --hadoop 2.0.0-mr1-cdh4.2.0" &
+make_binary_release "hadoop2" "--with-hive --with-yarn --hadoop 2.2.0" &
+wait
 
 # Copy data
 echo "Copying release tarballs"
