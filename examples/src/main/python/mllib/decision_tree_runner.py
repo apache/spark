@@ -124,7 +124,9 @@ if __name__ == "__main__":
     (reindexedData, origToNewLabels) = reindexClassLabels(points)
 
     # Train a classifier.
-    model = DecisionTree.trainClassifier(reindexedData, numClasses=2)
+    categoricalFeaturesInfo={} # no categorical features
+    model = DecisionTree.trainClassifier(reindexedData, numClasses=2,
+                                         categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"
     print "  Model numNodes: %d\n" % model.numNodes()

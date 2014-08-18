@@ -79,6 +79,7 @@ run_test "pyspark/mllib/random.py"
 run_test "pyspark/mllib/recommendation.py"
 run_test "pyspark/mllib/regression.py"
 run_test "pyspark/mllib/tests.py"
+run_test "pyspark/mllib/tree.py"
 run_test "pyspark/mllib/util.py"
 
 if [[ $FAILED == 0 ]]; then

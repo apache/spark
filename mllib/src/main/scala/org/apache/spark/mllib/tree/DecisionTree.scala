@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.Logging
+import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -826,7 +827,7 @@ object DecisionTree extends Serializable with Logging {
     // Calculate bin aggregates.
     timer.start("aggregation")
     val binAggregates = {
-      input.aggregate(Array.fill[Double](binAggregateLength)(0))(binSeqOp, binCombOp)
+      input.treeAggregate(Array.fill[Double](binAggregateLength)(0))(binSeqOp, binCombOp)
     }
     timer.stop("aggregation")
     logDebug("binAggregates.length = " + binAggregates.length)
