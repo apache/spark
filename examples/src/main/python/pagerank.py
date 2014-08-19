@@ -68,3 +68,5 @@ if __name__ == "__main__":
     # Collects all URL ranks and dump them to console.
     for (link, rank) in ranks.collect():
         print "%s has rank: %s." % (link, rank)
+
+    sc.stop()

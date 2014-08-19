@@ -118,16 +118,18 @@ class Statistics(object):
         >>> from linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]),
         ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
-        >>> Statistics.corr(rdd)
-        array([[ 1.        ,  0.05564149,         nan,  0.40047142],
-               [ 0.05564149,  1.        ,         nan,  0.91359586],
-               [        nan,         nan,  1.        ,         nan],
-               [ 0.40047142,  0.91359586,         nan,  1.        ]])
-        >>> Statistics.corr(rdd, method="spearman")
-        array([[ 1.        ,  0.10540926,         nan,  0.4       ],
-               [ 0.10540926,  1.        ,         nan,  0.9486833 ],
-               [        nan,         nan,  1.        ,         nan],
-               [ 0.4       ,  0.9486833 ,         nan,  1.        ]])
+        >>> pearsonCorr = Statistics.corr(rdd)
+        >>> print str(pearsonCorr).replace('nan', 'NaN')
+        [[ 1.          0.05564149         NaN  0.40047142]
+         [ 0.05564149  1.                 NaN  0.91359586]
+         [        NaN         NaN  1.                 NaN]
+         [ 0.40047142  0.91359586         NaN  1.        ]]
+        >>> spearmanCorr = Statistics.corr(rdd, method="spearman")
+        >>> print str(spearmanCorr).replace('nan', 'NaN')
+        [[ 1.          0.10540926         NaN  0.4       ]
+         [ 0.10540926  1.                 NaN  0.9486833 ]
+         [        NaN         NaN  1.                 NaN]
+         [ 0.4         0.9486833          NaN  1.        ]]
         >>> try:
         ...     Statistics.corr(rdd, "spearman")
         ...     print "Method name as second argument without 'method=' shouldn't be allowed."

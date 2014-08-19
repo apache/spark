@@ -37,3 +37,5 @@ if __name__ == "__main__":
 
     count = sc.parallelize(xrange(1, n+1), slices).map(f).reduce(add)
     print "Pi is roughly %f" % (4.0 * count / n)
+
+    sc.stop()

@@ -53,8 +53,14 @@ class RowMatrix(
   /** Gets or computes the number of columns. */
   override def numCols(): Long = {
     if (nCols <= 0) {
-      // Calling `first` will throw an exception if `rows` is empty.
-      nCols = rows.first().size
+      try {
+        // Calling `first` will throw an exception if `rows` is empty.
+        nCols = rows.first().size
+      } catch {
+        case err: UnsupportedOperationException =>
+          sys.error("Cannot determine the number of cols because it is not specified in the " +
+            "constructor and the rows RDD is empty.")
+      }
     }
     nCols
   }
@@ -293,6 +299,10 @@ class RowMatrix(
         (s1._1 + s2._1, s1._2 += s2._2)
     )
 
+    if (m <= 1) {
+      sys.error(s"RowMatrix.computeCovariance called on matrix with only $m rows." +
+        "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
+    }
     updateNumRows(m)
 
     mean :/= m.toDouble

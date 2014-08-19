@@ -81,3 +81,5 @@ if __name__ == "__main__":
         conf=conf,
         keyConverter="org.apache.spark.examples.pythonconverters.ToCassandraCQLKeyConverter",
         valueConverter="org.apache.spark.examples.pythonconverters.ToCassandraCQLValueConverter")
+
+    sc.stop()
