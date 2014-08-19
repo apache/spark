@@ -64,3 +64,5 @@ if __name__ == "__main__":
             break
 
     print "TC has %i edges" % tc.count()
+
+    sc.stop()

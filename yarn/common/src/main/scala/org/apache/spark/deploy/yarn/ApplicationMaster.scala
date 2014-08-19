@@ -333,6 +333,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def checkNumExecutorsFailed() = {
     if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
       finish(FinalApplicationStatus.FAILED, "Max number of executor failures reached.")
+
+      val sc = sparkContextRef.get()
+      if (sc != null) {
+        logInfo("Invoking sc stop from checkNumExecutorsFailed")
+        sc.stop()
+      }
     }
   }
 
