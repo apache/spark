@@ -114,6 +114,14 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
     intercept[SparkException] {
       NaiveBayes.train(sc.makeRDD(sparse, 2))
     }
+    val nan = Seq(
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty)))
+    intercept[SparkException] {
+      NaiveBayes.train(sc.makeRDD(nan, 2))
+    }
   }
 }
 

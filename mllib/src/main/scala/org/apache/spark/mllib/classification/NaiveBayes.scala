@@ -98,7 +98,7 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
         case dv: DenseVector =>
           dv.values
       }
-      if (!values.forall(x => x >= 0.0)) {
+      if (!values.forall(_ >= 0.0)) {
         throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
       }
     }
