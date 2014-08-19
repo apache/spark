@@ -58,39 +58,45 @@ private[spark] object SparkSubmitDriverBootstrapper {
     assume(defaultDriverMemory != null, "OUR_JAVA_MEM must be set")
     assume(deployMode == "client", "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
     assume(propertiesFile != null, "SPARK_SUBMIT_PROPERTIES_FILE must be set")
-    assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set!")
+    assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
     // Parse the properties file for the equivalent spark.driver.* configs
     val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
-    val confDriverMemory = properties.get("spark.driver.memory").getOrElse(defaultDriverMemory)
-    val confLibraryPath = properties.get("spark.driver.extraLibraryPath").getOrElse("")
-    val confClasspath = properties.get("spark.driver.extraClassPath").getOrElse("")
-    val confJavaOpts = properties.get("spark.driver.extraJavaOptions").getOrElse("")
+    val confDriverMemory = properties.get("spark.driver.memory")
+    val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
+    val confClasspath = properties.get("spark.driver.extraClassPath")
+    val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
 
     // Favor Spark submit arguments over the equivalent configs in the properties file.
     // Note that we do not actually use the Spark submit values for library path, classpath,
     // and Java opts here, because we have already captured them in Bash.
-    val newDriverMemory = submitDriverMemory.getOrElse(confDriverMemory)
+
+    val newDriverMemory = submitDriverMemory
+      .orElse(confDriverMemory)
+      .getOrElse(defaultDriverMemory)
+
     val newLibraryPath =
       if (submitLibraryPath.isDefined) {
         // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
         ""
       } else {
-        "-Djava.library.path=" + confLibraryPath
+        confLibraryPath.map("-Djava.library.path=" + _).getOrElse("")
       }
+
     val newClasspath =
       if (submitClasspath.isDefined) {
         // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
         classpath
       } else {
-        classpath + sys.props("path.separator") + confClasspath
+        classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
       }
+
     val newJavaOpts =
       if (submitJavaOpts.isDefined) {
         // SPARK_SUBMIT_OPTS is already captured in JAVA_OPTS
         javaOpts
       } else {
-        javaOpts + " " + confJavaOpts
+        javaOpts + confJavaOpts.map(" " + _).getOrElse("")
       }
 
     // Build up command
