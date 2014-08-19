@@ -34,7 +34,7 @@ while (($#)); do
   elif [ "$1" = "--driver-class-path" ]; then
     export SPARK_SUBMIT_CLASSPATH=$2
   elif [ "$1" = "--driver-java-options" ]; then
-    export SPARK_SUBMIT_JAVA_OPTS=$2
+    export SPARK_SUBMIT_OPTS=$2
   fi
   shift
 done

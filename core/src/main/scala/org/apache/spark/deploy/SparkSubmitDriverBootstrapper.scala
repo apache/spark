@@ -50,7 +50,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val submitDriverMemory = sys.env.get("SPARK_SUBMIT_DRIVER_MEMORY")
     val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
     val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
-    val submitJavaOpts = sys.env.get("SPARK_SUBMIT_JAVA_OPTS")
+    val submitJavaOpts = sys.env.get("SPARK_SUBMIT_OPTS")
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
@@ -87,7 +87,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       }
     val newJavaOpts =
       if (submitJavaOpts.isDefined) {
-        // SPARK_SUBMIT_JAVA_OPTS is already captured in JAVA_OPTS
+        // SPARK_SUBMIT_OPTS is already captured in JAVA_OPTS
         javaOpts
       } else {
         javaOpts + " " + confJavaOpts
