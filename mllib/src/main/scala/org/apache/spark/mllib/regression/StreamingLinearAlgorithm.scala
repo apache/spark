@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
@@ -112,7 +114,7 @@ abstract class StreamingLinearAlgorithm[
    * @tparam K key type
    * @return DStream containing the input keys and the predictions as values
    */
-  def predictOnValues[K](data: DStream[(K, Vector)]): DStream[(K, Double)] = {
+  def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Double)] = {
     if (Option(model.weights) == None) {
       val msg = "Initial weights must be set before starting prediction"
       logError(msg)
