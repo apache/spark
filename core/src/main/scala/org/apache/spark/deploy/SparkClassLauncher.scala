@@ -24,76 +24,94 @@ import scala.collection.JavaConversions._
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
- * Wrapper of `bin/spark-class` that prepares the launch environment of the child JVM properly.
+ * Launch an application through Spark submit in client mode with the appropriate classpath,
+ * library paths, java options and memory. These properties of the JVM must be set before the
+ * driver JVM is launched. The sole purpose of this class is to avoid handling the complexity
+ * of parsing the properties file for such relevant configs in BASH.
+ *
+ * Usage: org.apache.spark.deploy.SparkClassLauncher <application args>
  */
 private[spark] object SparkClassLauncher {
 
-  // TODO: This is currently only used for running Spark submit in client mode.
-  // The goal moving forward is to use this class for all use cases of `bin/spark-class`.
+  // Note: This class depends on the behavior of `bin/spark-class` and `bin/spark-submit`.
+  // Any changes made there must be reflected in this file.
 
-  /**
-   * Launch a Spark class with the given class paths, library paths, java options and memory,
-   * taking into account special `spark.driver.*` properties needed to start the driver JVM.
-   */
   def main(args: Array[String]): Unit = {
-    if (args.size < 7) {
-      System.err.println(
-        """
-          |Usage: org.apache.spark.deploy.SparkClassLauncher
-          |
-          |  [properties file]    - path to your Spark properties file
-          |  [java runner]        - command to launch the child JVM
-          |  [java class paths]   - class paths to pass to the child JVM
-          |  [java library paths] - library paths to pass to the child JVM
-          |  [java opts]          - java options to pass to the child JVM
-          |  [java memory]        - memory used to launch the child JVM
-          |  [main class]         - main class to run in the child JVM
-          |  <main args>          - arguments passed to this main class
-          |
-          |Example:
-          |  org.apache.spark.deploy.SparkClassLauncher.SparkClassLauncher
-          |    conf/spark-defaults.conf java /classpath1:/classpath2 /librarypath1:/librarypath2
-          |    "-XX:-UseParallelGC -Dsome=property" 5g org.apache.spark.deploy.SparkSubmit
-          |    --master local --class org.apache.spark.examples.SparkPi 10
-        """.stripMargin)
-      System.exit(1)
-    }
-    val propertiesFile = args(0)
-    val javaRunner = args(1)
-    val clClassPaths = args(2)
-    val clLibraryPaths = args(3)
-    val clJavaOpts = Utils.splitCommandString(args(4))
-    val clJavaMemory = args(5)
-    val mainClass = args(6)
+    val submitArgs = args
+    val runner = sys.env("RUNNER")
+    val classpath = sys.env("CLASSPATH")
+    val javaOpts = sys.env("JAVA_OPTS")
+    val defaultDriverMemory = sys.env("OUR_JAVA_MEM")
 
-    // In client deploy mode, parse the properties file for certain `spark.driver.*` configs.
-    // These configs encode java options, class paths, and library paths needed to launch the JVM.
+    // Spark submit specific environment variables
+    val deployMode = sys.env("SPARK_SUBMIT_DEPLOY_MODE")
+    val propertiesFile = sys.env("SPARK_SUBMIT_PROPERTIES_FILE")
+    val bootstrapDriver = sys.env("SPARK_SUBMIT_BOOTSTRAP_DRIVER")
+    val submitDriverMemory = sys.env.get("SPARK_SUBMIT_DRIVER_MEMORY")
+    val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
+    val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
+    val submitJavaOpts = sys.env.get("SPARK_SUBMIT_JAVA_OPTS")
+
+    assume(runner != null, "RUNNER must be set")
+    assume(classpath != null, "CLASSPATH must be set")
+    assume(javaOpts != null, "JAVA_OPTS must be set")
+    assume(defaultDriverMemory != null, "OUR_JAVA_MEM must be set")
+    assume(deployMode == "client", "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
+    assume(propertiesFile != null, "SPARK_SUBMIT_PROPERTIES_FILE must be set")
+    assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set!")
+
+    // Parse the properties file for the equivalent spark.driver.* configs
     val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
-    val confDriverMemory = properties.get("spark.driver.memory")
-    val confClassPaths = properties.get("spark.driver.extraClassPath")
-    val confLibraryPaths = properties.get("spark.driver.extraLibraryPath")
-    val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
+    val confDriverMemory = properties.get("spark.driver.memory").getOrElse(defaultDriverMemory)
+    val confLibraryPath = properties.get("spark.driver.extraLibraryPath").getOrElse("")
+    val confClasspath = properties.get("spark.driver.extraClassPath").getOrElse("")
+    val confJavaOpts = properties.get("spark.driver.extraJavaOptions").getOrElse("")
 
-    // Merge relevant command line values with the config equivalents, if any
-    val javaMemory = confDriverMemory.getOrElse(clJavaMemory)
-    val pathSeparator = sys.props("path.separator")
-    val classPaths = clClassPaths + confClassPaths.map(pathSeparator + _).getOrElse("")
-    val libraryPaths = clLibraryPaths + confLibraryPaths.map(pathSeparator + _).getOrElse("")
-    val javaOpts = clJavaOpts ++ confJavaOpts.map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val filteredJavaOpts = javaOpts.distinct.filterNot { opt =>
-      opt.startsWith("-Djava.library.path") || opt.startsWith("-Xms") || opt.startsWith("-Xmx")
-    }
+    // Favor Spark submit arguments over the equivalent configs in the properties file.
+    // Note that we do not actually use the Spark submit values for library path, classpath,
+    // and java opts here, because we have already captured them in BASH.
+    val newDriverMemory = submitDriverMemory.getOrElse(confDriverMemory)
+    val newLibraryPath =
+      if (submitLibraryPath.isDefined) {
+        // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
+        ""
+      } else {
+        "-Djava.library.path=" + confLibraryPath
+      }
+    val newClasspath =
+      if (submitClasspath.isDefined) {
+        // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
+        classpath
+      } else {
+        classpath + sys.props("path.separator") + confClasspath
+      }
+    val newJavaOpts =
+      if (submitJavaOpts.isDefined) {
+        // SPARK_SUBMIT_JAVA_OPTS is already captured in JAVA_OPTS
+        javaOpts
+      } else {
+        javaOpts + " " + confJavaOpts
+      }
 
     // Build up command
     val command: Seq[String] =
-      Seq(javaRunner) ++
-      { if (classPaths.nonEmpty) Seq("-cp", classPaths) else Seq.empty } ++
-      { if (libraryPaths.nonEmpty) Seq(s"-Djava.library.path=$libraryPaths") else Seq.empty } ++
-      filteredJavaOpts ++
-      Seq(s"-Xms$javaMemory", s"-Xmx$javaMemory") ++
-      Seq(mainClass) ++
-      args.slice(7, args.size)
-    val builder = new ProcessBuilder(command)
+      Seq(runner) ++
+      Seq("-cp", newClasspath) ++
+      Seq(newLibraryPath) ++
+      Utils.splitCommandString(newJavaOpts) ++
+      Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
+      Seq("org.apache.spark.deploy.SparkSubmit") ++
+      submitArgs
+
+    // Print the launch command. This follows closely the format used in `bin/spark-class`.
+    if (sys.env.contains("SPARK_PRINT_LAUNCH_COMMAND")) {
+      System.err.print("Spark Command: ")
+      System.err.println(command.mkString(" "))
+      System.err.println("========================================\n")
+    }
+
+    val filteredCommand = command.filter(_.nonEmpty)
+    val builder = new ProcessBuilder(filteredCommand)
     val process = builder.start()
     new RedirectThread(System.in, process.getOutputStream, "redirect stdin").start()
     new RedirectThread(process.getInputStream, System.out, "redirect stdout").start()
