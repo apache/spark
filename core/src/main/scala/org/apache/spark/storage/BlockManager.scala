@@ -517,6 +517,16 @@ private[spark] class BlockManager(
     None
   }
 
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+    val local = getLocalBytes(blockId)
+    if (local.isDefined) {
+      local
+    } else {
+      val remote = getRemoteBytes(blockId)
+      remote
+    }
+  }
+
   /**
    * Get a block from the block manager (either local or remote).
    */
