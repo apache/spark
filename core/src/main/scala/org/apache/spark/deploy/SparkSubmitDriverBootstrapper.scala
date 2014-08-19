@@ -29,9 +29,9 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * driver JVM is launched. The sole purpose of this class is to avoid handling the complexity
  * of parsing the properties file for such relevant configs in BASH.
  *
- * Usage: org.apache.spark.deploy.SparkClassLauncher <application args>
+ * Usage: org.apache.spark.deploy.SparkSubmitDriverBootstrapper <application args>
  */
-private[spark] object SparkClassLauncher {
+private[spark] object SparkSubmitDriverBootstrapper {
 
   // Note: This class depends on the behavior of `bin/spark-class` and `bin/spark-submit`.
   // Any changes made there must be reflected in this file.

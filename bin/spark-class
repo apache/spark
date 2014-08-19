@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# NOTE: Any changes to this file must be reflected in SparkClassLauncher.scala!
+# NOTE: Any changes to this file must be reflected in SparkSubmitDriverBootstrapper.scala!
 
 cygwin=false
 case "`uname`" in
@@ -160,13 +160,13 @@ export CLASSPATH
 
 if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   # This is used only if the properties file actually contains these special configs
-  # Export the environment variables needed by SparkClassLauncher
+  # Export the environment variables needed by SparkSubmitDriverBootstrapper
   export RUNNER
   export CLASSPATH
   export JAVA_OPTS
   export OUR_JAVA_MEM
   shift
-  exec "$RUNNER" org.apache.spark.deploy.SparkClassLauncher "$@"
+  exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
 else
   JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
   if [ -n "$SPARK_PRINT_LAUNCH_COMMAND" ]; then
