@@ -602,7 +602,7 @@ class ExternalGroupBy(ExternalMerger):
         self.spills += 1
         gc.collect()  # release the memory as much as possible
 
-    def _merge_items(self, index, limit=0):
+    def _merged_items(self, index, limit=0):
         size = sum(os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
                    for j in range(self.spills))
         # if the memory can not hold all the partition,
