@@ -76,7 +76,7 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     process = pb.start()
     inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
     errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream))
-    waitForOutput(inputReader, "ThriftBinaryCLIService listening on")
+    waitForOutput(inputReader, "ThriftBinaryCLIService listening on", 300000)
 
     // Spawn a thread to read the output from the forked process.
     // Note that this is necessary since in some configurations, log4j could be blocked
