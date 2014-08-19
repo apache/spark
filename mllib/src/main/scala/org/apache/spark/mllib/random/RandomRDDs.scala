@@ -35,16 +35,16 @@ import org.apache.spark.util.Utils
 object RandomRDDs {
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the uniform distribution on [0.0, 1.0].
+   * Generates an RDD comprised of i.i.d. samples from the uniform distribution `U(0.0, 1.0)`.
    *
-   * To transform the distribution in the generated RDD from U[0.0, 1.0] to U[a, b], use
-   * `RandomRDDGenerators.uniformRDD(sc, n, p, seed).map(v => a + (b - a) * v)`.
+   * To transform the distribution in the generated RDD from `U(0.0, 1.0)` to `U(a, b)`, use
+   * `RandomRDDs.uniformRDD(sc, n, p, seed).map(v => a + (b - a) * v)`.
    *
    * @param sc SparkContext used to create the RDD.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ U[0.0, 1.0].
+   * @return RDD[Double] comprised of i.i.d. samples ~ `U(0.0, 1.0)`.
    */
   def uniformRDD(
       sc: SparkContext,
@@ -84,7 +84,7 @@ object RandomRDDs {
    * Generates an RDD comprised of i.i.d. samples from the standard normal distribution.
    *
    * To transform the distribution in the generated RDD from standard normal to some other normal
-   * N(mean, sigma), use `RandomRDDGenerators.normalRDD(sc, n, p, seed).map(v => mean + sigma * v)`.
+   * `N(mean, sigma^2^)`, use `RandomRDDs.normalRDD(sc, n, p, seed).map(v => mean + sigma * v)`.
    *
    * @param sc SparkContext used to create the RDD.
    * @param size Size of the RDD.
@@ -97,9 +97,8 @@ object RandomRDDs {
       size: Long,
       numPartitions: Int = 0,
       seed: Long = Utils.random.nextLong()): RDD[Double] = {
-    val p = if (numPartitions > 0) numPartitions else sc.defaultParallelism
     val normal = new StandardNormalGenerator()
-    randomRDD(sc, normal, size, p, seed)
+    randomRDD(sc, normal, size, numPartitionsOrDefault(sc, numPartitions), seed)
   }
 
   /**
@@ -202,14 +201,14 @@ object RandomRDDs {
 
   /**
    * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
-   * uniform distribution on [0.0 1.0].
+   * uniform distribution on `U(0.0 1.0)`.
    *
    * @param sc SparkContext used to create the RDD.
    * @param numRows Number of Vectors in the RDD.
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD.
    * @param seed Seed for the RNG that generates the seed for the generator in each partition.
-   * @return RDD[Vector] with vectors containing i.i.d samples ~ U[0.0, 1.0].
+   * @return RDD[Vector] with vectors containing i.i.d samples ~ `U(0.0, 1.0)`.
    */
   def uniformVectorRDD(
       sc: SparkContext,
@@ -263,7 +262,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples ~ N(0.0, 1.0).
+   * @return RDD[Vector] with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
    */
   def normalVectorRDD(
       sc: SparkContext,
