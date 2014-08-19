@@ -349,6 +349,11 @@ class TestRDDFunctions(PySparkTestCase):
         # different number of items in one pair
         b = self.sc.parallelize(range(100, 106), 2)
         self.assertRaises(Exception, lambda: a.zip(b).count())
+        # same total number of items, but different distributions
+        a = self.sc.parallelize([2, 3], 2).flatMap(range)
+        b = self.sc.parallelize([3, 2], 2).flatMap(range)
+        self.assertEquals(a.count(), b.count())
+        self.assertRaises(Exception, lambda: a.zip(b).count())
 
 
 class TestIO(PySparkTestCase):
