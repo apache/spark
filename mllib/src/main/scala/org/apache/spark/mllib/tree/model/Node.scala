@@ -24,8 +24,13 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: DeveloperApi ::
- * Node in a decision tree
- * @param id integer node id
+ * Node in a decision tree.
+ *
+ * About node indexing:
+ *   Nodes are indexed from 1.  Node 1 is the root; nodes 2,3 are the left,right children.
+ *   Node index 0 is not used.
+ *
+ * @param id integer node id, from 1
  * @param predict predicted value at the node
  * @param isLeaf whether the leaf is a node
  * @param split split to calculate left and right nodes
@@ -51,16 +56,13 @@ class Node (
    * @param nodes array of nodes
    */
   def build(nodes: Array[Node]): Unit = {
-
     logDebug("building node " + id + " at level " + Node.indexToLevel(id))
     logDebug("id = " + id + ", split = " + split)
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)
     if (!isLeaf) {
-      val leftNodeIndex = id * 2 + 1
-      val rightNodeIndex = id * 2 + 2
-      leftNode = Some(nodes(leftNodeIndex))
-      rightNode = Some(nodes(rightNodeIndex))
+      leftNode = Some(nodes(Node.leftChildIndex(id)))
+      rightNode = Some(nodes(Node.rightChildIndex(id)))
       leftNode.get.build(nodes)
       rightNode.get.build(nodes)
     }
@@ -95,24 +97,20 @@ class Node (
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
    */
-  private[tree] def numDescendants: Int = {
-    if (isLeaf) {
-      0
-    } else {
-      2 + leftNode.get.numDescendants + rightNode.get.numDescendants
-    }
+  private[tree] def numDescendants: Int = if (isLeaf) {
+    0
+  } else {
+    2 + leftNode.get.numDescendants + rightNode.get.numDescendants
   }
 
   /**
    * Get depth of tree from this node.
    * E.g.: Depth 0 means this is a leaf node.
    */
-  private[tree] def subtreeDepth: Int = {
-    if (isLeaf) {
-      0
-    } else {
-      1 + math.max(leftNode.get.subtreeDepth, rightNode.get.subtreeDepth)
-    }
+  private[tree] def subtreeDepth: Int = if (isLeaf) {
+    0
+  } else {
+    1 + math.max(leftNode.get.subtreeDepth, rightNode.get.subtreeDepth)
   }
 
   /**
@@ -151,29 +149,34 @@ class Node (
 private[tree] object Node {
 
   /**
+   * Return the index of the left child of this node.
+   */
+  def leftChildIndex(nodeIndex: Int): Int = nodeIndex * 2
+
+  /**
+   * Return the index of the right child of this node.
+   */
+  def rightChildIndex(nodeIndex: Int): Int = nodeIndex * 2 + 1
+
+  /**
+   * Get the parent index of the given node, or 0 if it is the root.
+   */
+  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
+
+  /**
    * Return the level of a tree which the given node is in.
    */
-  def indexToLevel(nodeIndex: Int): Int = {
-    math.floor(math.log(nodeIndex + 1) / math.log(2)).toInt
+  def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
+    throw new IllegalArgumentException(s"0 is not a valid node index.")
+  } else {
+    java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
   }
 
   /**
    * Returns true if this is a left child.
    * Note: Returns false for the root.
    */
-  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex != 0 && nodeIndex % 2 == 1
-
-  /**
-   * Get the parent index of the given node, or -1 if it is the root.
-   */
-  def parentIndex(nodeIndex: Int): Int = {
-    if (isLeftChild(nodeIndex)) { // -1 for root node
-      (nodeIndex - 1) / 2
-    } else {
-      (nodeIndex - 2) / 2
-    }
-
-  }
+  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
 
   /**
    * Return the maximum number of nodes which can be in the given level of the tree.
@@ -186,6 +189,6 @@ private[tree] object Node {
    * (i.e., for the entire subtree from the root to this level).
    * @param level  Level of tree (0 = root).
    */
-  private[tree] def maxNodesInSubtree(level: Int): Int = (2 << level) - 1
+  private[tree] def maxNodesInSubtree(level: Int): Int = (1 << level + 1) - 1
 
 }

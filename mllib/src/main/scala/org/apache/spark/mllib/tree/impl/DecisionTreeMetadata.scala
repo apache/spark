@@ -105,11 +105,11 @@ private[tree] object DecisionTreeMetadata {
           numBins(f) = numUnorderedBins(k)
         } else {
           // TODO: Check the below k <= maxBins.
-          //       This used to be k < maxPossibleBins, but <= should work.
+          //       Checking k <= maxPossibleBins should work.
           //       However, there may have been a 1-off error later on allocating 1 extra
           //       (unused) bin.
           // TODO: Allow this case, where we simply will know nothing about some categories?
-          require(k < maxPossibleBins,
+          require(k <= maxPossibleBins,
             s"maxBins (= $maxPossibleBins) should be greater than max categories " +
             s"in categorical features (>= $k)")
           numBins(f) = k
@@ -117,9 +117,9 @@ private[tree] object DecisionTreeMetadata {
       }
     } else {
       strategy.categoricalFeaturesInfo.foreach { case (f, k) =>
-        require(k < maxPossibleBins,
-          s"maxBins (= $maxPossibleBins) should be greater than max categories " +
-          s"in categorical features (>= $k)")
+        require(k <= maxPossibleBins,
+          s"DecisionTree requires maxBins (= $maxPossibleBins) >= max categories " +
+          s"in categorical features (= ${strategy.categoricalFeaturesInfo.values.max})")
         numBins(f) = k
       }
     }
