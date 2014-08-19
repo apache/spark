@@ -257,6 +257,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.safetyFraction</code></td>
+  <td>0.8</td>
+  <td>
+    An additional margin of safety fraction of Java heap to use for aggregation and cogroups during
+    shuffles, in case the size estimation of maps used for shuffle is not sufficiently accurate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
