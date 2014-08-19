@@ -20,6 +20,8 @@ package org.apache.spark.mllib.linalg.distance
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
+import scala.language.implicitConversions
+
 /**
  * :: Experimental ::
  * This trait is used for objects which can determine a distance metric between two points
@@ -48,5 +50,20 @@ trait DistanceMeasure extends Function2[Vector, Vector, Double] with Serializabl
       throw new IllegalArgumentException("The number of features must be same")
     }
   }
-
 }
+
+
+object DistanceMeasure {
+
+  /**
+   * Implicit method for DistanceMeasure
+   *
+   * @param f calculating distance function (Vector, Vector) => Double
+   * @return DistanceMeasure
+   */
+  implicit def functionToDistanceMeasure(f: (Vector, Vector) => Double): DistanceMeasure = new
+      DistanceMeasure {
+    override def apply(v1: Vector, v2: Vector): Double = f(v1, v2)
+  }
+}
+
