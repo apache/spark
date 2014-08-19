@@ -22,10 +22,10 @@ import java.nio.ByteBuffer
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 
-import org.scalatest.FunSuite
+import org.scalatest.{PrivateMethodTester, FunSuite}
 
 
-class BlockFetchingClientHandlerSuite extends FunSuite {
+class BlockFetchingClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
   test("handling block data (successful fetch)") {
     val blockId = "test_block"
@@ -47,6 +47,9 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
       }
     )
 
+    val outstandingRequests = PrivateMethod[java.util.Map[_, _]]('outstandingRequests)
+    assert(handler.invokePrivate(outstandingRequests()).size === 1)
+
     val channel = new EmbeddedChannel(handler)
     val buf = ByteBuffer.allocate(totalLength + 4)  // 4 bytes for the length field itself
     buf.putInt(totalLength)
@@ -58,6 +61,8 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
     channel.writeInbound(Unpooled.wrappedBuffer(buf))
     assert(parsedBlockId === blockId)
     assert(parsedBlockData === blockData)
+
+    assert(handler.invokePrivate(outstandingRequests()).size === 0)
 
     channel.close()
   }
@@ -77,6 +82,10 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
       }
       override def onFetchSuccess(bid: String, refCntBuf: ReferenceCountedBuffer) = ???
     })
+
+    val outstandingRequests = PrivateMethod[java.util.Map[_, _]]('outstandingRequests)
+    assert(handler.invokePrivate(outstandingRequests()).size === 1)
+
     val channel = new EmbeddedChannel(handler)
     val buf = ByteBuffer.allocate(totalLength + 4)  // 4 bytes for the length field itself
     buf.putInt(totalLength)
@@ -88,6 +97,8 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
     channel.writeInbound(Unpooled.wrappedBuffer(buf))
     assert(parsedBlockId === blockId)
     assert(parsedErrorMsg === errorMsg)
+
+    assert(handler.invokePrivate(outstandingRequests()).size === 0)
 
     channel.close()
   }
