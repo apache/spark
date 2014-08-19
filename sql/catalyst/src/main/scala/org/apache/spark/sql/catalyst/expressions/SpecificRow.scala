@@ -193,6 +193,8 @@ class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
         case ByteType => new MutableByte
         case FloatType => new MutableFloat
         case ShortType => new MutableShort
+        case DoubleType => new MutableDouble
+        case BooleanType => new MutableBoolean
         case LongType => new MutableLong
         case _ => new MutableAny
       }.toArray)
