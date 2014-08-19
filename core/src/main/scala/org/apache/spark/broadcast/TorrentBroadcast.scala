@@ -89,13 +89,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     val metaId = BroadcastBlockId(id, "meta")
     val metaInfo = TorrentInfo(null, totalBlocks, totalBytes)
     SparkEnv.get.blockManager.putSingle(
-      metaId, metaInfo, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
+      metaId, metaInfo, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // Store individual pieces
     for (i <- 0 until totalBlocks) {
       val pieceId = BroadcastBlockId(id, "piece" + i)
       SparkEnv.get.blockManager.putSingle(
-        pieceId, tInfo.arrayOfBlocks(i), StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
+        pieceId, tInfo.arrayOfBlocks(i), StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     }
   }
 
