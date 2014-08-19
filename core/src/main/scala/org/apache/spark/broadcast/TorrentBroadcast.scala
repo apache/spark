@@ -62,10 +62,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](
    */
   @transient private var _value: T = obj
 
+  private val broadcastId = BroadcastBlockId(id)
+
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks()
-
-  private val broadcastId = BroadcastBlockId(id)
 
   override protected def getValue() = _value
 
@@ -75,15 +75,23 @@ private[spark] class TorrentBroadcast[T: ClassTag](
    * @return number of blocks this broadcast variable is divided into
    */
   private def writeBlocks(): Int = {
-    val blocks = TorrentBroadcast.blockifyObject(_value)
-    blocks.zipWithIndex.foreach { case (block, i) =>
-      SparkEnv.get.blockManager.putBytes(
-        BroadcastBlockId(id, "piece" + i),
-        block,
-        StorageLevel.MEMORY_AND_DISK_SER,
-        tellMaster = true)
+    // For local mode, just put the object in the BlockManager so we can find it later.
+    SparkEnv.get.blockManager.putSingle(
+      broadcastId, _value, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+
+    if (!isLocal) {
+      val blocks = TorrentBroadcast.blockifyObject(_value)
+      blocks.zipWithIndex.foreach { case (block, i) =>
+        SparkEnv.get.blockManager.putBytes(
+          BroadcastBlockId(id, "piece" + i),
+          block,
+          StorageLevel.MEMORY_AND_DISK_SER,
+          tellMaster = true)
+      }
+      blocks.length
+    } else {
+      0
     }
-    blocks.length
   }
 
   /** Fetch torrent blocks from the driver and/or other executors. */
@@ -91,24 +99,33 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
     val blocks = new Array[ByteBuffer](numBlocks)
+    val bm = SparkEnv.get.blockManager
 
     for (pid <- Random.shuffle(Seq.range(0, numBlocks))) {
       val pieceId = BroadcastBlockId(id, "piece" + pid)
-      // Note that we use getBytes rather than getRemoteBytes here because there is a chance
-      // that previous attempts to fetch the broadcast blocks have already fetched some of the
-      // blocks. In that case, some blocks would be available locally (on this executor).
-      SparkEnv.get.blockManager.getBytes(pieceId) match {
-        case Some(block) =>
-          blocks(pid) = block
-          SparkEnv.get.blockManager.putBytes(
-            pieceId,
-            block,
-            StorageLevel.MEMORY_AND_DISK_SER,
-            tellMaster = true)
 
-        case None =>
-          throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
+      // First try getLocalBytes because  there is a chance that previous attempts to fetch the
+      // broadcast blocks have already fetched some of the blocks. In that case, some blocks
+      // would be available locally (on this executor).
+      var blockOpt = bm.getLocalBytes(pieceId)
+      if (!blockOpt.isDefined) {
+        blockOpt = bm.getRemoteBytes(pieceId)
+        blockOpt match {
+          case Some(block) =>
+            // If we found the block from remote executors/driver's BlockManager, put the block
+            // in this executor's BlockManager.
+            SparkEnv.get.blockManager.putBytes(
+              pieceId,
+              block,
+              StorageLevel.MEMORY_AND_DISK_SER,
+              tellMaster = true)
+
+          case None =>
+            throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
+        }
       }
+      // If we get here, the option is defined.
+      blocks(pid) = blockOpt.get
     }
     blocks
   }

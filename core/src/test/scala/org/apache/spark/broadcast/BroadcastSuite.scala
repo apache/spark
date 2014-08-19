@@ -189,17 +189,11 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     def afterCreation(broadcastId: Long, bmm: BlockManagerMaster) {
       var blockId = BroadcastBlockId(broadcastId)
       var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      assert(statuses.size === 0)
+      assert(statuses.size === 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      assert(statuses.size === 1)
-      statuses.head match { case (bm, status) =>
-        assert(bm.executorId === "<driver>", "Block should only be on the driver")
-        assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK_SER)
-        assert(status.memSize > 0, "Block should be in memory store on the driver")
-        assert(status.diskSize === 0, "Block should not be in disk store on the driver")
-      }
+      assert(statuses.size === (if (distributed) 1 else 0))
     }
 
     // Verify that blocks are persisted in both the executors and the driver
@@ -207,7 +201,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       var blockId = BroadcastBlockId(broadcastId)
       var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       if (distributed) {
-        assert(statuses.size === numSlaves)
+        assert(statuses.size === numSlaves + 1)
       } else {
         assert(statuses.size === 1)
       }
@@ -217,7 +211,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       if (distributed) {
         assert(statuses.size === numSlaves + 1)
       } else {
-        assert(statuses.size === 1)
+        assert(statuses.size === 0)
       }
     }
 
@@ -225,12 +219,12 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // is true.
     def afterUnpersist(broadcastId: Long, bmm: BlockManagerMaster) {
       var blockId = BroadcastBlockId(broadcastId)
-      var expectedNumBlocks = if (removeFromDriver) 0 else if (distributed) 0 else 1
+      var expectedNumBlocks = if (removeFromDriver) 0 else 1
       var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       assert(statuses.size === expectedNumBlocks)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      expectedNumBlocks = if (removeFromDriver) 0 else 1
+      expectedNumBlocks = if (removeFromDriver || !distributed) 0 else 1
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       assert(statuses.size === expectedNumBlocks)
     }
