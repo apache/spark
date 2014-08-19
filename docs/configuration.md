@@ -283,12 +283,19 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.manager</code></td>
-  <td>HASH</td>
+  <td>hash</td>
   <td>
     Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
     starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
     memory-efficient in environments with small executors, such as YARN. To use that, change
-    this value to <code>SORT</code>.
+    this value to <code>sort</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.spill.batchSize</code></td>
+  <td>10000</td>
+  <td>
+    Size of object batches when reading/writing from serializers.
   </td>
 </tr>
 <tr>
