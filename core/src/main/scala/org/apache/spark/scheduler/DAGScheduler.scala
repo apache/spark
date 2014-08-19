@@ -897,13 +897,13 @@ class DAGScheduler(
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
     val stageId = task.stageId
-    val stageInfo = stageIdToStage(task.stageId).latestInfo
     val taskType = Utils.getFormattedClassName(task)
 
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
-      listenerBus.post(SparkListenerTaskEnd(stageId, stageInfo.attemptId, taskType, event.reason,
+      val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).orElse(-1)
+      listenerBus.post(SparkListenerTaskEnd(stageId, stageAttemptId, taskType, event.reason,
         event.taskInfo, event.taskMetrics))
     }
 
@@ -921,7 +921,6 @@ class DAGScheduler(
       if (isSuccessful) {
         logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       } else {
-
         logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
       }
       stage.latestInfo.completionTime = Some(clock.getTime())

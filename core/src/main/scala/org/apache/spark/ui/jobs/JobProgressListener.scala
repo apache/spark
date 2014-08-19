@@ -133,7 +133,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
-    if (info != null) {
+    // If stage attempt id is -1, it means the DAGScheduler had no idea which attempt this task
+    // compeletion event is for. Let's just drop it here. This means we might have some speculation
+    // tasks on the web ui that's never marked as complete.
+    if (info != null && taskEnd.stageAttemptId != -1) {
       val stageData = stageIdToData.getOrElseUpdate((taskEnd.stageId, taskEnd.stageAttemptId), {
         logWarning("Task end for unknown stage " + taskEnd.stageId)
         new StageUIData
