@@ -347,4 +347,10 @@ private[hive] case class HiveUdafFunction(
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
     function.iterate(buffer, inputs)
   }
+
+  //hiveUdaf does not support external aggregate, for HiveUdafFunction need to spill to disk,
+  //and all the vals above need Serializable
+  override def merge(input: AggregateFunction): Unit = {
+    throw new NotImplementedError(s"HiveUdaf does not support external aggregate")
+  }
 }
