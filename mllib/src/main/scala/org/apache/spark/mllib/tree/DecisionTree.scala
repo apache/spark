@@ -954,7 +954,7 @@ object DecisionTree extends Serializable with Logging {
         featureIndex += 1
       }
     } else { // Regression
-    var featureIndex = 0
+      var featureIndex = 0
       while (featureIndex < numFeatures) {
         findAggForOrderedFeature(nodeAggregates, leftNodeAgg, rightNodeAgg, featureIndex)
         featureIndex += 1

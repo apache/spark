@@ -48,17 +48,35 @@ trait Impurity extends Serializable {
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
 
-
+/**
+ * This class holds a set of sufficient statistics for computing impurity from a sample.
+ * @param statsSize  Length of the vector of sufficient statistics.
+ */
 private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializable {
 
+  /**
+   * Sufficient statistics for calculating impurity.
+   */
   var counts: Array[Double] = new Array[Double](statsSize)
 
   def copy: ImpurityAggregator
 
+  /**
+   * Add the given label to this aggregator.
+   */
   def add(label: Double): Unit
 
+  /**
+   * Compute the impurity for the samples given so far.
+   * If no samples have been collected, return 0.
+   */
   def calculate(): Double
 
+  /**
+   * Merge another aggregator into this one, modifying this aggregator.
+   * @param other  Aggregator of the same type.
+   * @return  merged aggregator
+   */
   def merge(other: ImpurityAggregator): ImpurityAggregator = {
     require(counts.size == other.counts.size,
       s"Two ImpurityAggregator instances cannot be merged with different counts sizes." +
@@ -71,14 +89,31 @@ private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializ
     this
   }
 
+  /**
+   * Number of samples added to this aggregator.
+   */
   def count: Long
 
+  /**
+   * Create a new (empty) aggregator of the same type as this one.
+   */
   def newAggregator: ImpurityAggregator
 
+  /**
+   * Return the prediction corresponding to the set of labels given to this aggregator.
+   */
   def predict: Double
 
+  /**
+   * Return the probability of the prediction returned by [[predict]],
+   * or -1 if no probability is available.
+   */
   def prob(label: Double): Double = -1
 
+  /**
+   * Return the index of the largest element in this array.
+   * If there are ties, the first maximal element is chosen.
+   */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
     val result = array.foldLeft(-1, Double.MinValue, 0) {
       case ((maxIndex, maxValue, currentIndex), currentValue) =>
