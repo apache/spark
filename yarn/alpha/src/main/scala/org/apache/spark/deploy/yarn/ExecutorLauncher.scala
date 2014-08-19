@@ -249,7 +249,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // Wait until all containers have finished
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
-    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed) &&
+        !isFinished) {
       yarnAllocator.allocateContainers(
         math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
       checkNumExecutorsFailed()
@@ -271,7 +272,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     val t = new Thread {
       override def run() {
-        while (!driverClosed) {
+        while (!driverClosed && !isFinished) {
           checkNumExecutorsFailed()
           val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning
           if (missingExecutorCount > 0) {
