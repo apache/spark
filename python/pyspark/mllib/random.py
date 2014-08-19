@@ -35,7 +35,7 @@ class RandomRDDs:
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
-        uniform distribution on [0.0, 1.0].
+        uniform distribution U(0.0, 1.0).
 
         To transform the distribution in the generated RDD from U(0.0, 1.0)
         to U(a, b), use
@@ -106,7 +106,7 @@ class RandomRDDs:
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
-        from the uniform distribution U(0.0 1.0).
+        from the uniform distribution U(0.0, 1.0).
 
         >>> import numpy as np
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())

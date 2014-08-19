@@ -201,7 +201,7 @@ object RandomRDDs {
 
   /**
    * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
-   * uniform distribution on `U(0.0 1.0)`.
+   * uniform distribution on `U(0.0, 1.0)`.
    *
    * @param sc SparkContext used to create the RDD.
    * @param numRows Number of Vectors in the RDD.
