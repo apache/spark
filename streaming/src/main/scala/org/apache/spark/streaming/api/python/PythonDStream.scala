@@ -130,7 +130,6 @@ class PythonTransformedDStream(
   }
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
-  //val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
 }
 */
 
