@@ -185,7 +185,7 @@ case class GeneratedAggregate(
           (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
-      val joinedRow = new JoinedRow
+      val joinedRow = new JoinedRow3
 
       if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
