@@ -50,3 +50,4 @@ if __name__ == "__main__":
     model = LogisticRegressionWithSGD.train(points, iterations)
     print "Final weights: " + str(model.weights)
     print "Final intercept: " + str(model.intercept)
+    sc.stop()
