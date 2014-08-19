@@ -217,7 +217,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // Wait until all containers have launched
     yarnAllocator.addResourceRequests(args.numExecutors)
     yarnAllocator.allocateResources()
-    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed) &&
+        !isFinished) {
       checkNumExecutorsFailed()
       allocateMissingExecutor()
       yarnAllocator.allocateResources()
@@ -249,7 +250,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     val t = new Thread {
       override def run() {
-        while (!driverClosed) {
+        while (!driverClosed && !isFinished) {
           checkNumExecutorsFailed()
           allocateMissingExecutor()
           logDebug("Sending progress")

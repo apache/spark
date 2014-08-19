@@ -248,13 +248,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       yarnAllocator.allocateResources()
       // Exits the loop if the user thread exits.
 
-      var iters = 0
-      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
+      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive
+          && !isFinished) {
         checkNumExecutorsFailed()
         allocateMissingExecutor()
         yarnAllocator.allocateResources()
         Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
-        iters += 1
       }
     }
     logInfo("All executors have launched.")
@@ -272,8 +271,17 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private def checkNumExecutorsFailed() {
     if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+      logInfo("max number of executor failures reached")
       finishApplicationMaster(FinalApplicationStatus.FAILED,
         "max number of executor failures reached")
+      // make sure to stop the user thread
+      val sparkContext = ApplicationMaster.sparkContextRef.get()
+      if (sparkContext != null) {
+        logInfo("Invoking sc stop from checkNumExecutorsFailed")
+        sparkContext.stop()
+      } else {
+        logError("sparkContext is null when should shutdown")
+      }
     }
   }
 
@@ -290,7 +298,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
     val t = new Thread {
       override def run() {
-        while (userThread.isAlive) {
+        while (userThread.isAlive && !isFinished) {
           checkNumExecutorsFailed()
           allocateMissingExecutor()
           logDebug("Sending progress")
