@@ -419,7 +419,7 @@ object VertexRDD {
       (vertexIter, routingTableIter) =>
         val routingTable =
           if (routingTableIter.hasNext) routingTableIter.next() else RoutingTablePartition.empty
-        Iterator(ShippableVertexPartition(vertexIter, routingTable, defaultVal))
+        Iterator(ShippableVertexPartition(vertexIter, routingTable, defaultVal, mergeFunc))
     }
     new VertexRDD(vertexPartitions)
   }
