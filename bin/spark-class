@@ -160,7 +160,7 @@ fi
 # the driver JVM itself.
 
 if [ -n "$SPARK_SUBMIT_CLIENT_MODE" ]; then
-  # This is currently used only if the properties file actually consists of these special configs
+  # This is currently used only if the properties file actually contains these special configs
   exec "$RUNNER" org.apache.spark.deploy.SparkClassLauncher \
     "$PROPERTIES_FILE" \
     "$RUNNER" \
@@ -168,7 +168,6 @@ if [ -n "$SPARK_SUBMIT_CLIENT_MODE" ]; then
     "$SPARK_SUBMIT_LIBRARY_PATH" \
     "$JAVA_OPTS" \
     "$OUR_JAVA_MEM" \
-    true \
     "$@"
 else
   exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"

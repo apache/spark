@@ -25,18 +25,18 @@ import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
  * Wrapper of `bin/spark-class` that prepares the launch environment of the child JVM properly.
- * This is currently only used for running Spark submit in client mode. The goal moving forward
- * is to use this class for all use cases of `bin/spark-class`.
  */
-object SparkClassLauncher {
+private[spark] object SparkClassLauncher {
+
+  // TODO: This is currently only used for running Spark submit in client mode.
+  // The goal moving forward is to use this class for all use cases of `bin/spark-class`.
 
   /**
-   * Launch a Spark class with the given class paths, library paths, java options and memory.
-   * If we are launching an application through Spark submit in client mode, we must also
-   * take into account special `spark.driver.*` properties needed to start the driver JVM.
+   * Launch a Spark class with the given class paths, library paths, java options and memory,
+   * taking into account special `spark.driver.*` properties needed to start the driver JVM.
    */
   def main(args: Array[String]): Unit = {
-    if (args.size < 8) {
+    if (args.size < 7) {
       System.err.println(
         """
           |Usage: org.apache.spark.deploy.SparkClassLauncher
@@ -47,14 +47,13 @@ object SparkClassLauncher {
           |  [java library paths] - library paths to pass to the child JVM
           |  [java opts]          - java options to pass to the child JVM
           |  [java memory]        - memory used to launch the child JVM
-          |  [client mode]        - whether the child JVM will run the Spark driver
           |  [main class]         - main class to run in the child JVM
           |  <main args>          - arguments passed to this main class
           |
           |Example:
           |  org.apache.spark.deploy.SparkClassLauncher.SparkClassLauncher
           |    conf/spark-defaults.conf java /classpath1:/classpath2 /librarypath1:/librarypath2
-          |    "-XX:-UseParallelGC -Dsome=property" 5g true org.apache.spark.deploy.SparkSubmit
+          |    "-XX:-UseParallelGC -Dsome=property" 5g org.apache.spark.deploy.SparkSubmit
           |    --master local --class org.apache.spark.examples.SparkPi 10
         """.stripMargin)
       System.exit(1)
@@ -65,29 +64,18 @@ object SparkClassLauncher {
     val clLibraryPaths = args(3)
     val clJavaOpts = Utils.splitCommandString(args(4))
     val clJavaMemory = args(5)
-    val clientMode = args(6) == "true"
-    val mainClass = args(7)
+    val mainClass = args(6)
 
     // In client deploy mode, parse the properties file for certain `spark.driver.*` configs.
     // These configs encode java options, class paths, and library paths needed to launch the JVM.
-    val properties =
-      if (clientMode) {
-        SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
-      } else {
-        Map[String, String]()
-      }
+    val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
     val confDriverMemory = properties.get("spark.driver.memory")
     val confClassPaths = properties.get("spark.driver.extraClassPath")
     val confLibraryPaths = properties.get("spark.driver.extraLibraryPath")
     val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
 
     // Merge relevant command line values with the config equivalents, if any
-    val javaMemory =
-      if (clientMode) {
-        confDriverMemory.getOrElse(clJavaMemory)
-      } else {
-        clJavaMemory
-      }
+    val javaMemory = confDriverMemory.getOrElse(clJavaMemory)
     val pathSeparator = sys.props("path.separator")
     val classPaths = clClassPaths + confClassPaths.map(pathSeparator + _).getOrElse("")
     val libraryPaths = clLibraryPaths + confLibraryPaths.map(pathSeparator + _).getOrElse("")
@@ -104,7 +92,7 @@ object SparkClassLauncher {
       filteredJavaOpts ++
       Seq(s"-Xms$javaMemory", s"-Xmx$javaMemory") ++
       Seq(mainClass) ++
-      args.slice(8, args.size)
+      args.slice(7, args.size)
     val builder = new ProcessBuilder(command)
     val process = builder.start()
     new RedirectThread(System.in, process.getOutputStream, "redirect stdin").start()
