@@ -72,7 +72,7 @@ def main(infile, outfile):
             value = ser._read_with_length(infile)
             _broadcastRegistry[bid] = Broadcast(bid, value)
 
-        command = ser._read_with_length(infile)
+        command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
