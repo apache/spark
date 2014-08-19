@@ -40,13 +40,14 @@ object ShippableVertexPartition {
 
   /**
    * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
-   * table, filling in missing vertices mentioned in the routing table using `defaultVal`.
+   * table, filling in missing vertices mentioned in the routing table using `defaultVal`,
+   * and merging duplicate vertex atrribute with mergeFunc.
    */
   def apply[VD: ClassTag](
-      iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)
+    iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD, mergeFunc: (VD, VD) => VD)
     : ShippableVertexPartition[VD] = {
     val fullIter = iter ++ routingTable.iterator.map(vid => (vid, defaultVal))
-    val (index, values, mask) = VertexPartitionBase.initFrom(fullIter, (a: VD, b: VD) => a)
+    val (index, values, mask) = VertexPartitionBase.initFrom(fullIter, mergeFunc)
     new ShippableVertexPartition(index, values, mask, routingTable)
   }
 
