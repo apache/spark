@@ -29,7 +29,7 @@ abstract class GeneralDistanceMeasureSuite extends FunSuite with ShouldMatchers 
     val vector2 = Vectors.dense(1, 1, 1, 1)
 
     intercept[IllegalArgumentException] {
-      distanceMeasureFactory.distance(vector1, vector2)
+      distanceMeasureFactory(vector1, vector2)
     }
   }
 
@@ -80,7 +80,7 @@ object GeneralDistanceMeasureSuite {
 
   def calcDistanceMatrix(distanceMeasure: DistanceMeasure, vectors: Array[Vector]): Matrix = {
     val denseMatrixElements = for (v1 <- vectors; v2 <- vectors) yield {
-      distanceMeasure.distance(v2, v1)
+      distanceMeasure(v2, v1)
     }
     Matrices.dense(vectors.size, vectors.size, denseMatrixElements)
   }

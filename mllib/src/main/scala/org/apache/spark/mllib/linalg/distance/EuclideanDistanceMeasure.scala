@@ -34,8 +34,8 @@ class EuclideanDistanceMeasure extends SquaredEuclideanDistanceMeasure {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def distance(v1: Vector, v2: Vector): Double = {
-    val squaredDistance = super.distance(v1, v2)
+  override def apply(v1: Vector, v2: Vector): Double = {
+    val squaredDistance = super.apply(v1, v2)
     Math.sqrt(squaredDistance)
   }
 }

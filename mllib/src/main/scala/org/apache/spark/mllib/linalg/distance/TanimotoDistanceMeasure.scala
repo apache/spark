@@ -39,7 +39,7 @@ class TanimotoDistanceMeasure extends DistanceMeasure {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return 0 for perfect match, > 0 for greater distance
    */
-  override def distance(v1: Vector, v2: Vector): Double = {
+  override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
 
     val calcSquaredSum = (vector: Vector) => vector.toBreeze.map(x => x * x).reduce(_ + _).apply(0)

@@ -36,7 +36,7 @@ class WeightedEuclideanDistanceMeasure(weight: Vector) extends WeightedDistanceM
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def distance(v1: Vector, v2: Vector): Double = {
+  override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
 
     val sum = v1.toArray.zip(v2.toArray).zip(weight.toArray).map {

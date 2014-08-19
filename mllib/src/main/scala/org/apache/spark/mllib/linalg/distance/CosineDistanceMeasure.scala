@@ -36,7 +36,7 @@ class CosineDistanceMeasure extends DistanceMeasure {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def distance(v1: linalg.Vector, v2: linalg.Vector): Double = {
+  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
     validate(v1, v2)
 
     val dotProduct = v1.toBreeze.dot(v2.toBreeze)

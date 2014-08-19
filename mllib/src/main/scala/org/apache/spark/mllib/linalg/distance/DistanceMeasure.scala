@@ -25,7 +25,7 @@ import org.apache.spark.mllib.linalg.Vector
  * This trait is used for objects which can determine a distance metric between two points
  */
 @Experimental
-trait DistanceMeasure extends Serializable {
+trait DistanceMeasure extends Function2[Vector, Vector, Double] with Serializable {
 
   /**
    * Calculates the distance metric between 2 points
@@ -34,7 +34,7 @@ trait DistanceMeasure extends Serializable {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  def distance(v1: Vector, v2: Vector): Double
+  override def apply(v1: Vector, v2: Vector): Double
 
   /**
    * Checks whether both of the length are same

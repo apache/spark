@@ -25,7 +25,7 @@ class ChebyshevDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
   test("the distance should be 6") {
     val vector1 = Vectors.dense(1, -1, 1, -1)
     val vector2 = Vectors.dense(2, -3, 4, 5)
-    val distance = distanceMeasureFactory.distance(vector1, vector2)
+    val distance = distanceMeasureFactory(vector1, vector2)
     assert(distance == 6, s"the distance should be 6, but ${distance}")
   }
 }
