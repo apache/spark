@@ -42,16 +42,23 @@ DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
 # For client mode, the driver will be launched in the same JVM that launches
-# SparkSubmit, so we need to read the properties file for any extra class paths,
-# library paths, java options and memory early on. Otherwise, it will be too
-# late by the time the JVM has started.
+# SparkSubmit, so we may need to read the properties file for any extra class
+# paths, library paths, java options and memory early on. Otherwise, it will
+# be too late by the time the JVM has started.
 
 if [ "$DEPLOY_MODE" == "client" ]; then
   if [ -n "$DRIVER_MEMORY" ]; then
     export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
   fi
-  export PROPERTIES_FILE
-  export SPARK_SUBMIT_CLIENT_MODE=1
+  # Parse the properties file only if the special configs exist
+  contains_special_configs=$(
+    grep -e "spark.driver.extra*\|spark.driver.memory" "$PROPERTIES_FILE" | \
+    grep -v "^[[:space:]]*#"
+  )
+  if [ -n "$contains_special_configs" ]; then
+    export PROPERTIES_FILE
+    export SPARK_SUBMIT_CLIENT_MODE=1
+  fi
 fi
 
 exec $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
