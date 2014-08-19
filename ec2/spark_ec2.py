@@ -453,18 +453,25 @@ def launch_cluster(conn, opts, cluster_name):
     for master in master_nodes:
         name = '{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id)
         for i in range(0, 5):
-            master.add_tag(key='Name', value=name)
-            if master.tags.get(u'Name', "") == name:
-                break
-            print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+            try:
+                master.add_tag(key='Name', value=name)
+            except:
+                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+                if (i == 5):
+                    raise "Error - failed max attempts to add name tag"
+                time.sleep(5)
+
 
     for slave in slave_nodes:
         name = '{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id)
         for i in range(0, 5):
-            slave.add_tag(key='Name', value=name)
-            if slave.tags.get(u'Name', "") == name:
-                break
-            print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+            try:
+                slave.add_tag(key='Name', value=name)
+            except:
+                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+                if (i == 5):
+                    raise "Error - failed max attempts to add name tag"
+                time.sleep(5)
 
     # Return all the instances
     return (master_nodes, slave_nodes)
