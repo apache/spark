@@ -140,8 +140,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
 
     // compute the mean absolute error and check that it's always less than 0.1
-    val errors = output.map(batch => batch.map(
-      p => math.abs(p._1 - p._2)).reduce(_+_) / nPoints.toDouble)
+    val errors = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints)
     assert(errors.forall(x => x <= 0.1))
 
   }
