@@ -467,7 +467,7 @@ private[spark] class ConnectionManager(
 
           val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
           if (!sendingConnectionOpt.isDefined) {
-            logError("Corresponding SendingConnectionManagerId not found")
+            logError(s"Corresponding SendingConnection to ${remoteConnectionManagerId} not found")
             return
           }
 
