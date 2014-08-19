@@ -42,9 +42,9 @@ DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
 PROPERTIES_FILE=${PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
 # For client mode, the driver will be launched in the same JVM that launches
-# SparkSubmit, so we to read the properties file for any class paths, library
-# paths, java options and memory early on. Otherwise, it will be too late by
-# the time the JVM has started.
+# SparkSubmit, so we need to read the properties file for any extra class paths,
+# library paths, java options and memory early on. Otherwise, it will be too
+# late by the time the JVM has started.
 
 if [ "$DEPLOY_MODE" == "client" ]; then
   if [ -n "$DRIVER_MEMORY" ]; then

@@ -41,8 +41,7 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
 fi
 
-# Load utility functions
-. "$FWDIR/bin/utils.sh"
+source $FWDIR/bin/utils.sh
 
 SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
