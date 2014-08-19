@@ -267,12 +267,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       // TODO: This is a bit ugly. Can we make it nicer?
       // TODO: Handle container failure
 
-      // Exists the loop if the user thread exits.
-      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
-        if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
-          finishApplicationMaster(FinalApplicationStatus.FAILED,
-            "max number of executor failures reached")
-        }
+      // Exits the loop if the user thread exits.
+      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive
+          && !isFinished) {
+        checkNumExecutorsFailed()
         yarnAllocator.allocateContainers(
           math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
         Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
@@ -303,11 +301,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
     val t = new Thread {
       override def run() {
-        while (userThread.isAlive) {
-          if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
-            finishApplicationMaster(FinalApplicationStatus.FAILED,
-              "max number of executor failures reached")
-          }
+        while (userThread.isAlive && !isFinished) {
+          checkNumExecutorsFailed()
           val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning
           if (missingExecutorCount > 0) {
             logInfo("Allocating %d containers to make up for (potentially) lost containers".
@@ -325,6 +320,22 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     t.start()
     logInfo("Started progress reporter thread - sleep time : " + sleepTime)
     t
+  }
+
+  private def checkNumExecutorsFailed() {
+    if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+      logInfo("max number of executor failures reached")
+      finishApplicationMaster(FinalApplicationStatus.FAILED,
+        "max number of executor failures reached")
+      // make sure to stop the user thread
+      val sparkContext = ApplicationMaster.sparkContextRef.get()
+      if (sparkContext != null) {
+        logInfo("Invoking sc stop from checkNumExecutorsFailed")
+        sparkContext.stop()
+      } else {
+        logError("sparkContext is null when should shutdown")
+      }
+    }
   }
 
   private def sendProgress() {
