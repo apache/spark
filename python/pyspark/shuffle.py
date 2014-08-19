@@ -339,27 +339,9 @@ class ExternalMerger(Merger):
 
         try:
             for i in range(self.partitions):
-                self.data = {}
-                for j in range(self.spills):
-                    path = self._get_spill_dir(j)
-                    p = os.path.join(path, str(i))
-                    # do not check memory during merging
-                    self.mergeCombiners(self.serializer.load_stream(open(p)), 0)
-
-                    # limit the total partitions
-                    if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
-                            and j < self.spills - 1
-                            and get_used_memory() > hard_limit):
-                        self.data.clear()  # will read from disk again
-                        gc.collect()  # release the memory as much as possible
-                        for v in self._recursive_merged_items(i):
-                            yield v
-                        break
-                else:
-                    for v in self.data.iteritems():
-                        yield v
-                    self.data.clear()
-
+                for v in self._merged_items(i):
+                    yield v
+                self.data.clear()
                 gc.collect()
                 hard_limit = self._next_limit()
 
@@ -367,9 +349,26 @@ class ExternalMerger(Merger):
                 for j in range(self.spills):
                     path = self._get_spill_dir(j)
                     os.remove(os.path.join(path, str(i)))
-
         finally:
             self._cleanup()
+
+    def _merged_items(self, index, limit=0):
+        self.data = {}
+        for j in range(self.spills):
+            path = self._get_spill_dir(j)
+            p = os.path.join(path, str(index))
+            # do not check memory during merging
+            self.mergeCombiners(self.serializer.load_stream(open(p)), 0)
+
+            # limit the total partitions
+            if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
+                    and j < self.spills - 1
+                    and get_used_memory() > limit):
+                self.data.clear()  # will read from disk again
+                gc.collect()  # release the memory as much as possible
+                return self._recursive_merged_items(index)
+
+        return self.data.iteritems()
 
     def _cleanup(self):
         """ Clean up all the files in disks """
@@ -603,7 +602,23 @@ class ExternalGroupBy(ExternalMerger):
         self.spills += 1
         gc.collect()  # release the memory as much as possible
 
-    def _recursive_merged_items(self, index):
+    def _merge_items(self, index, limit=0):
+        size = sum(os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
+                   for j in range(self.spills))
+        # if the memory can not hold all the partition,
+        # then use sort based merge
+        if (size >> 20) > self.memory_limit / 2:
+            return self._sorted_items(index)
+
+        self.data = {}
+        for j in range(self.spills):
+            path = self._get_spill_dir(j)
+            p = os.path.join(path, str(index))
+            # do not check memory during merging
+            self.mergeCombiners(self.serializer.load_stream(open(p)), 0)
+        return self.data.iteritems()
+
+    def _sorted_items(self, index):
         """ load a partition from disk, then sort and group by key """
         def load_partition(j):
             path = self._get_spill_dir(j)
