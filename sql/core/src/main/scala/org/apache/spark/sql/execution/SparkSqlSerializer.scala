@@ -139,7 +139,11 @@ private[sql] class OpenHashSetSerializer extends Serializer[OpenHashSet[_]] {
     val set = new OpenHashSet[Any](numItems + 1)
     var i = 0
     while (i < numItems) {
-      val row = new GenericRow(rowSerializer.read(kryo, input, classOf[Array[Any]].asInstanceOf[Class[Any]]).asInstanceOf[Array[Any]])
+      val row =
+        new GenericRow(rowSerializer.read(
+          kryo,
+          input,
+          classOf[Array[Any]].asInstanceOf[Class[Any]]).asInstanceOf[Array[Any]])
       set.add(row)
       i += 1
     }
