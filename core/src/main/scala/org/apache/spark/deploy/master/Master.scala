@@ -697,7 +697,7 @@ private[spark] class Master(
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
-      app.desc.appUiUrl = ui.basePath
+      app.desc.appUiUrl = ui.getBasePath
       true
     } catch {
       case e: Exception =>
