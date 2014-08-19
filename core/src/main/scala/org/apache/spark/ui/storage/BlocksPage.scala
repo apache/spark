@@ -31,13 +31,10 @@ import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class BlocksPage(parent: StorageTab) extends WebUIPage("rdd/blocks") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "Only JSON view available",
-      parent.headerTabs, parent)
+    return UIUtils.headerSparkPage("Only JSON view available", Seq[Node](), parent)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {

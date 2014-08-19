@@ -32,13 +32,10 @@ import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tasks") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "Only JSON view available",
-      parent.headerTabs, parent)
+    return UIUtils.headerSparkPage("Only JSON view available", Seq[Node](), parent)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
