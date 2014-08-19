@@ -184,8 +184,6 @@ class PythonForeachDStream(
   this.register()
 }
 
-/*
-This does not work. Ignore this for now. -TD
 class PythonTransformedDStream(
     prev: DStream[Array[Byte]],
     transformFunction: PythonRDDFunction
@@ -204,7 +202,6 @@ class PythonTransformedDStream(
   val asJavaDStream  = JavaDStream.fromDStream(this)
   //val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
 }
-*/
 
 /**
  * This is a input stream just for the unitest. This is equivalent to a checkpointable,

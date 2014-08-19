@@ -102,6 +102,7 @@ class StreamingContext(object):
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
+        @param timeout: time to wait in milliseconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
