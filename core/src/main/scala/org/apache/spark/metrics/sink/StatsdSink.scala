@@ -83,6 +83,10 @@ private[spark] class StatsdSink(val property: Properties, val registry: MetricRe
   }
 
   override def report() {
-    reporter.report()
+    try {
+      reporter.report()
+    } catch {
+      case e: NullPointerException => println("StatsD reporter errored upon exit");
+    }
   }
 }
