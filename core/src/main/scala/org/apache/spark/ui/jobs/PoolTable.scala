@@ -34,7 +34,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
   }
 
   private def poolTable(
-      makeRow: (Schedulable, HashMap[String, HashMap[(Int, Int), StageInfo]]) => Seq[Node],
+      makeRow: (Schedulable, HashMap[String, HashMap[Int, StageInfo]]) => Seq[Node],
       rows: Seq[Schedulable]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
@@ -53,7 +53,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
 
   private def poolRow(
       p: Schedulable,
-      poolToActiveStages: HashMap[String, HashMap[(Int, Int), StageInfo]]): Seq[Node] = {
+      poolToActiveStages: HashMap[String, HashMap[Int, StageInfo]]): Seq[Node] = {
     val activeStages = poolToActiveStages.get(p.name) match {
       case Some(stages) => stages.size
       case None => 0

@@ -46,13 +46,14 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // Map from stageId to StageInfo
   val activeStages = new HashMap[Int, StageInfo]
 
-  // Map from (stageId, attemptId) to StageInfo
+  // Map from (stageId, attemptId) to StageUIData
   val stageIdToData = new HashMap[(Int, Int), StageUIData]
 
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
 
-  val poolToActiveStages = HashMap[String, HashMap[(Int, Int), StageInfo]]()
+  // Map from pool name to a hash map (map from stage id to StageInfo).
+  val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
 
   val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
 
@@ -72,7 +73,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
 
     poolToActiveStages.get(stageData.schedulingPool).foreach { hashMap =>
-      hashMap.remove((stage.stageId, stage.attemptId))
+      hashMap.remove(stage.stageId)
     }
     activeStages.remove(stage.stageId)
     if (stage.failureReason.isEmpty) {
@@ -109,8 +110,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }
 
-    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[(Int, Int), StageInfo]())
-    stages((stage.stageId, stage.attemptId)) = stage
+    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo])
+    stages(stage.stageId) = stage
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {

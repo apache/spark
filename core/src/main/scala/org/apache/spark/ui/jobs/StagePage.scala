@@ -43,7 +43,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage("Details for Stage %s".format(stageId), content, parent)
+        return UIUtils.headerSparkPage(
+          s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
       }
 
       val stageData = stageDataOption.get
