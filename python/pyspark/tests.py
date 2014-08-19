@@ -97,7 +97,7 @@ class TestMerger(unittest.TestCase):
                          sum(xrange(self.N)))
 
     def test_medium_dataset(self):
-        m = ExternalMerger(self.agg, 10)
+        m = ExternalMerger(self.agg, 30)
         m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
@@ -110,10 +110,10 @@ class TestMerger(unittest.TestCase):
                          sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
-        m = ExternalMerger(self.agg, 10)
+        m = ExternalMerger(self.agg, 10, partitions=3)
         m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
+        self.assertEqual(sum(len(v) for k, v in m.iteritems()),
                          self.N * 10)
         m._cleanup()
 

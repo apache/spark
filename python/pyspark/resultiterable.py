@@ -33,7 +33,10 @@ class ResultIterable(object):
         return iter(self.it)
 
     def __len__(self):
-        return sum(1 for _ in self.it)
+        try:
+            return len(self.it)
+        except TypeError:
+            return sum(1 for _ in self.it)
 
     def __reduce__(self):
         return (ResultIterable, (list(self.it),))
