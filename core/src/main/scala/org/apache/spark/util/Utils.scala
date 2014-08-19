@@ -449,7 +449,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get the path of temporary directory.  Spark's local directories can be configured through
+   * Get the path of a temporary directory.  Spark's local directories can be configured through
    * multiple settings, which are used with the following precedence:
    *
    *   - If called from inside of a YARN container, this will return a directory chosen by YARN.
@@ -471,6 +471,8 @@ private[spark] object Utils extends Logging {
   /**
    * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
    * and returns only the directories that exist / could be created.
+   *
+   * If no directories could be created, this will return an empty list.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
     val confValue = if (isRunningInYarnContainer(conf)) {
