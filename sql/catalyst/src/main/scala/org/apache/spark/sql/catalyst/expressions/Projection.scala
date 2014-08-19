@@ -110,7 +110,8 @@ class JoinedRow extends Row {
   def apply(i: Int) =
     if (i < row1.size) row1(i) else row2(i - row1.size)
 
-  def isNullAt(i: Int) = apply(i) == null
+  def isNullAt(i: Int) =
+    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
 
   def getInt(i: Int): Int =
     if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
