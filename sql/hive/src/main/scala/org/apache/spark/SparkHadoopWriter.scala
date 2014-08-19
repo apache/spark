@@ -94,7 +94,7 @@ private[hive] class SparkHiveHadoopWriter(
   }
 
   def open(dynamicPartPath: String) {
-    val numfmt = NumberFormat.getInstance()
+    val numfmt = SparkHiveHadoopWriter.threadLocalNumberFormat.get()
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
@@ -108,7 +108,7 @@ private[hive] class SparkHiveHadoopWriter(
     if (outputPath == null) {
       throw new IOException("Undefined job output-path")
     }
-    val workPath = new Path(outputPath, dynamicPartPath.substring(1))//remove "/"
+    val workPath = new Path(outputPath, dynamicPartPath.substring(1)) // remove "/"
     val path = new Path(workPath, outputName)
     getOutputCommitter().setupTask(getTaskContext())
     writer = HiveFileFormatUtils.getHiveRecordWriter(
@@ -218,5 +218,11 @@ private[hive] object SparkHiveHadoopWriter {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     }
     outputPath.makeQualified(fs)
+  }
+
+  val threadLocalNumberFormat = new ThreadLocal[NumberFormat] {
+    override def initialValue() = {
+      NumberFormat.getInstance()
+    }
   }
 }
