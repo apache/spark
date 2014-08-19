@@ -902,8 +902,8 @@ class DAGScheduler(
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
-      val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).orElse(-1)
-      listenerBus.post(SparkListenerTaskEnd(stageId, stageAttemptId, taskType, event.reason,
+      val attemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
+      listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
         event.taskInfo, event.taskMetrics))
     }
 
@@ -950,8 +950,8 @@ class DAGScheduler(
               logError(s"Failed to update accumulators for $task", e)
           }
         }
-        listenerBus.post(SparkListenerTaskEnd(stageId, stageInfo.attemptId, taskType, event.reason,
-          event.taskInfo, event.taskMetrics))
+        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
+          event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
         task match {
           case rt: ResultTask[_, _] =>
