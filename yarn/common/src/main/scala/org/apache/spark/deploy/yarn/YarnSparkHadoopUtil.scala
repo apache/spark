@@ -94,7 +94,7 @@ object YarnSparkHadoopUtil {
   val RM_REQUEST_PRIORITY = 1
 
   // Host to rack map - saved from allocation requests. We are expecting this not to change.
-  // Note that it is possible for this to change : and ResurceManager will indicate that to us via
+  // Note that it is possible for this to change : and ResourceManager will indicate that to us via
   // update response to allocate. But we are punting on handling that for now.
   private val hostToRack = new ConcurrentHashMap[String, String]()
   private val rackToHostSet = new ConcurrentHashMap[String, JSet[String]]()

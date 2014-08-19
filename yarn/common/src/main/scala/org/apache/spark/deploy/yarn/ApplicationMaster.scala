@@ -56,8 +56,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures", math.max(args.numExecutors * 2, 3)))
 
-  private var finished = false
-  private var registered = false
+  @volatile private var finished = false
   private var reporterThread: Thread = _
   private var allocator: YarnAllocator = _
 
@@ -123,7 +122,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   final def finish(status: FinalApplicationStatus, diagnostics: String = "") = synchronized {
     if (!finished) {
-      logInfo(s"Finishing ApplicationMaster with $status")
+      logInfo(s"Finishing ApplicationMaster with $status"  +
+        Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
       finished = true
       reporterThread.interrupt()
       reporterThread.join()
@@ -163,6 +163,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       uiAddress,
       uiHistoryAddress)
 
+    allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
 
@@ -327,18 +328,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
     actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
-  }
-
-  private def allocateExecutors() = {
-    logInfo("Requesting" + args.numExecutors + " executors.")
-    try {
-      while (allocator.getNumExecutorsRunning < args.numExecutors && !finished) {
-        checkNumExecutorsFailed()
-        allocator.allocateResources()
-        Thread.sleep(ALLOCATE_HEARTBEAT_INTERVAL)
-      }
-    }
-    logInfo("All executors have launched.")
   }
 
   private def checkNumExecutorsFailed() = {

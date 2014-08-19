@@ -403,7 +403,7 @@ trait ClientBase extends Logging {
         classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
       }
     val amArgs =
-      Seq(classOf[ApplicationMaster].getName()) ++ userClass ++
+      Seq(amClass) ++ userClass ++
       (if (args.userJar != null) Seq("--jar", args.userJar) else Nil) ++
       Seq("--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,

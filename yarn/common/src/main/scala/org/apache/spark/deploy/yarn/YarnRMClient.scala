@@ -26,7 +26,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.SplitInfo
 
 /**
- * Interface that defines a Yarn RM client.
+ * Interface that defines a Yarn RM client. Abstracts away Yarn version-specific functionality that
+ * is used by Spark's AM.
  */
 trait YarnRMClient {
 

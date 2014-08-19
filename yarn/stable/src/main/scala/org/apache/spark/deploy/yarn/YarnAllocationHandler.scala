@@ -56,7 +56,7 @@ private[yarn] class YarnAllocationHandler(
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    map: collection.Map[String, collection.Set[SplitInfo]])
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
   extends YarnAllocator with Logging {
 
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
@@ -94,7 +94,8 @@ private[yarn] class YarnAllocationHandler(
   private val maxExecutors = args.numExecutors
   private val executorMemory = args.executorMemory
   private val executorCores = args.executorCores
-  private val (preferredHostToCount, preferredRackToCount) = generateNodeToWeight(conf, map)
+  private val (preferredHostToCount, preferredRackToCount) =
+    generateNodeToWeight(conf, preferredNodes)
 
   override def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
