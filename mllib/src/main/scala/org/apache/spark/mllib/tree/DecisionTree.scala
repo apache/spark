@@ -454,6 +454,129 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
+   * Get the node index corresponding to this data point.
+   * This function mimics prediction, passing an example from the root node down to a node
+   * at the current level being trained; that node's index is returned.
+   *
+   * @return  Leaf index if the data point reaches a leaf.
+   *          Otherwise, last node reachable in tree matching this example.
+   *          Note: This is the global node index, i.e., the index used in the tree.
+   *                This index is different from the index used during training a particular
+   *                set of nodes in a (level, group).
+   */
+  def predictNodeIndex(node: Node, binnedFeatures: Array[Int], bins: Array[Array[Bin]], unorderedFeatures: Set[Int]): Int = {
+    if (node.isLeaf) {
+      node.id
+    } else {
+      val featureIndex = node.split.get.feature
+      val splitLeft = node.split.get.featureType match {
+        case Continuous => {
+          val binIndex = binnedFeatures(featureIndex)
+          val featureValueUpperBound = bins(featureIndex)(binIndex).highSplit.threshold
+          // bin binIndex has range (bin.lowSplit.threshold, bin.highSplit.threshold]
+          // We do not need to check lowSplit since bins are separated by splits.
+          featureValueUpperBound <= node.split.get.threshold
+        }
+        case Categorical => {
+          val featureValue = if (unorderedFeatures.contains(featureIndex)) {
+            binnedFeatures(featureIndex)
+          } else {
+            val binIndex = binnedFeatures(featureIndex)
+            bins(featureIndex)(binIndex).category
+          }
+          node.split.get.categories.contains(featureValue)
+        }
+        case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown reason.")
+      }
+      if (node.leftNode.isEmpty || node.rightNode.isEmpty) {
+        // Return index from next layer of nodes to train
+        if (splitLeft) {
+          Node.leftChildIndex(node.id)
+        } else {
+          Node.rightChildIndex(node.id)
+        }
+      } else {
+        if (splitLeft) {
+          predictNodeIndex(node.leftNode.get, binnedFeatures, bins, unorderedFeatures)
+        } else {
+          predictNodeIndex(node.rightNode.get, binnedFeatures, bins, unorderedFeatures)
+        }
+      }
+    }
+  }
+
+  /**
+   * Helper for binSeqOp.
+   *
+   * @param agg  Array storing aggregate calculation.
+   *             For ordered features, this is of size:
+   *               numClasses * numBins * numFeatures * numNodes.
+   *             For unordered features, this is of size:
+   *               2 * numClasses * numBins * numFeatures * numNodes.
+   * @param treePoint   Data point being aggregated.
+   * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
+   */
+  def someUnorderedBinSeqOp(
+                             agg: Array[Array[Array[ImpurityAggregator]]],
+                             treePoint: TreePoint,
+                             nodeIndex: Int, bins: Array[Array[Bin]], unorderedFeatures: Set[Int]): Unit = {
+    // Iterate over all features.
+    val numFeatures = treePoint.binnedFeatures.size
+    var featureIndex = 0
+    while (featureIndex < numFeatures) {
+      if (unorderedFeatures.contains(featureIndex)) {
+        // Unordered feature
+        val featureValue = treePoint.binnedFeatures(featureIndex)
+        // Update the left or right count for one bin.
+        // Find all matching bins and increment their values.
+        val numCategoricalBins = bins(featureIndex).size  //metadata.numBins(featureIndex)
+        var binIndex = 0
+        while (binIndex < numCategoricalBins) {
+          if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
+            agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
+          } else {
+            agg(nodeIndex)(featureIndex)(numCategoricalBins + binIndex).add(treePoint.label)
+          }
+          binIndex += 1
+        }
+      } else {
+        // Ordered feature
+        val binIndex = treePoint.binnedFeatures(featureIndex)
+        agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
+      }
+      featureIndex += 1
+    }
+  }
+
+  /**
+   * Helper for binSeqOp: for regression and for classification with only ordered features.
+   *
+   * Performs a sequential aggregation over a partition for regression.
+   * For l nodes, k features,
+   * the count, sum, sum of squares of one of the p bins is incremented.
+   *
+   * @param agg Array storing aggregate calculation, updated by this function.
+   *            Size: 3 * numBins * numFeatures * numNodes
+   * @param treePoint   Data point being aggregated.
+   * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
+   * @return agg
+   */
+  def orderedBinSeqOp(
+                       agg: Array[Array[Array[ImpurityAggregator]]],
+                       treePoint: TreePoint,
+                       nodeIndex: Int): Unit = {
+    val label = treePoint.label
+    // Iterate over all features.
+    val numFeatures = treePoint.binnedFeatures.size
+    var featureIndex = 0
+    while (featureIndex < numFeatures) {
+      val binIndex = treePoint.binnedFeatures(featureIndex)
+      agg(nodeIndex)(featureIndex)(binIndex).add(label)
+      featureIndex += 1
+    }
+  }
+
+  /**
    * Returns an array of optimal splits for a group of nodes at a given level
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
@@ -529,60 +652,8 @@ object DecisionTree extends Serializable with Logging {
     // shift when more than one group is used at deep tree level
     val groupShift = numNodes * groupIndex
 
-    /**
-     * Get the node index corresponding to this data point.
-     * This function mimics prediction, passing an example from the root node down to a node
-     * at the current level being trained; that node's index is returned.
-     *
-     * @return  Leaf index if the data point reaches a leaf.
-     *          Otherwise, last node reachable in tree matching this example.
-     *          Note: This is the global node index, i.e., the index used in the tree.
-     *                This index is different from the index used during training a particular
-     *                set of nodes in a (level, group).
-     */
-    def predictNodeIndex(node: Node, binnedFeatures: Array[Int]): Int = {
-      if (node.isLeaf) {
-        node.id
-      } else {
-        val featureIndex = node.split.get.feature
-        val splitLeft = node.split.get.featureType match {
-          case Continuous => {
-            val binIndex = binnedFeatures(featureIndex)
-            val featureValueUpperBound = bins(featureIndex)(binIndex).highSplit.threshold
-            // bin binIndex has range (bin.lowSplit.threshold, bin.highSplit.threshold]
-            // We do not need to check lowSplit since bins are separated by splits.
-            featureValueUpperBound <= node.split.get.threshold
-          }
-          case Categorical => {
-            val featureValue = if (metadata.isUnordered(featureIndex)) {
-              binnedFeatures(featureIndex)
-            } else {
-              val binIndex = binnedFeatures(featureIndex)
-              bins(featureIndex)(binIndex).category
-            }
-            node.split.get.categories.contains(featureValue)
-          }
-          case _ => throw new RuntimeException(s"predictNodeIndex failed for unknown reason.")
-        }
-        if (node.leftNode.isEmpty || node.rightNode.isEmpty) {
-          // Return index from next layer of nodes to train
-          if (splitLeft) {
-            Node.leftChildIndex(node.id)
-          } else {
-            Node.rightChildIndex(node.id)
-          }
-        } else {
-          if (splitLeft) {
-            predictNodeIndex(node.leftNode.get, binnedFeatures)
-          } else {
-            predictNodeIndex(node.rightNode.get, binnedFeatures)
-          }
-        }
-      }
-    }
-
     // Used for treePointToNodeIndex
-    val levelOffset = Node.maxNodesInSubtree(level - 1)
+    val globalNodeIndexOffset = Node.maxNodesInSubtree(level - 1) + groupShift + 1
 
     /**
      * Find the node index for the given example.
@@ -593,90 +664,12 @@ object DecisionTree extends Serializable with Logging {
       if (level == 0) {
         0
       } else {
-        val globalNodeIndex = predictNodeIndex(nodes(1), treePoint.binnedFeatures)
+        val globalNodeIndex = predictNodeIndex(nodes(1), treePoint.binnedFeatures, bins, metadata.unorderedFeatures)
         // Get index for this (level, group).
         // - levelOffset corrects for nodes before this level.
         // - groupShift corrects for groups in this level before the current group.
         // - 1 corrects for the fact that globalNodeIndex starts at 1, not 0.
-        globalNodeIndex - levelOffset - groupShift - 1
-      }
-    }
-
-
-    val rightChildShift = numClasses * numBins * numFeatures * numNodes
-
-    /**
-     * Helper for binSeqOp.
-     *
-     * @param agg  Array storing aggregate calculation.
-     *             For ordered features, this is of size:
-     *               numClasses * numBins * numFeatures * numNodes.
-     *             For unordered features, this is of size:
-     *               2 * numClasses * numBins * numFeatures * numNodes.
-     * @param treePoint   Data point being aggregated.
-     * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
-     */
-    def someUnorderedBinSeqOp(
-                               agg: Array[Array[Array[ImpurityAggregator]]],
-                               treePoint: TreePoint,
-                               nodeIndex: Int): Unit = {
-      val label = treePoint.label
-      // Iterate over all features.
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
-        if (metadata.isUnordered(featureIndex)) {
-          // Unordered feature
-          val featureValue = treePoint.binnedFeatures(featureIndex)
-          // Update the left or right count for one bin.
-          // Find all matching bins and increment their values.
-          val numCategoricalBins = metadata.numBins(featureIndex)
-          var binIndex = 0
-          while (binIndex < numCategoricalBins) {
-            if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
-              agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
-            } else {
-              agg(nodeIndex)(featureIndex)(numCategoricalBins + binIndex).add(treePoint.label)
-            }
-            binIndex += 1
-          }
-        } else {
-          // Ordered feature
-          val binIndex = treePoint.binnedFeatures(featureIndex)
-          agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
-        }
-        featureIndex += 1
-      }
-    }
-
-    /**
-     * Helper for binSeqOp: for regression and for classification with only ordered features.
-     *
-     * Performs a sequential aggregation over a partition for regression.
-     * For l nodes, k features,
-     * the count, sum, sum of squares of one of the p bins is incremented.
-     *
-     * @param agg Array storing aggregate calculation, updated by this function.
-     *            Size: 3 * numBins * numFeatures * numNodes
-     * @param treePoint   Data point being aggregated.
-     * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
-     * @return agg
-     */
-    def orderedBinSeqOp(
-                         agg: Array[Array[Array[ImpurityAggregator]]],
-                         treePoint: TreePoint,
-                         nodeIndex: Int): Unit = {
-      val label = treePoint.label
-      // Iterate over all features.
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
-        // Update count, sum, and sum^2 for one bin.
-        val binIndex = treePoint.binnedFeatures(featureIndex)
-        if (binIndex >= agg(nodeIndex)(featureIndex).size) {
-          throw new RuntimeException(
-            s"binIndex: $binIndex, agg(nodeIndex)(featureIndex).size = ${agg(nodeIndex)(featureIndex).size}")
-        }
-        agg(nodeIndex)(featureIndex)(binIndex).add(label)
-        featureIndex += 1
+        globalNodeIndex - globalNodeIndexOffset
       }
     }
 
@@ -709,7 +702,7 @@ object DecisionTree extends Serializable with Logging {
         if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg, treePoint, nodeIndex)
         } else {
-          someUnorderedBinSeqOp(agg, treePoint, nodeIndex)
+          someUnorderedBinSeqOp(agg, treePoint, nodeIndex, bins, metadata.unorderedFeatures)
         }
       }
       agg
@@ -751,7 +744,6 @@ object DecisionTree extends Serializable with Logging {
     // Calculate best splits for all nodes at a given level
     timer.start("chooseSplits")
     val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
-    val globalNodeIndexOffset = Node.maxNodesInSubtree(level - 1) + groupShift + 1
     // Iterating over all nodes at this level
     var nodeIndex = 0
     while (nodeIndex < numNodes) {
