@@ -25,6 +25,8 @@ import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
  * Wrapper of `bin/spark-class` that prepares the launch environment of the child JVM properly.
+ * This is currently only used for running Spark submit in client mode. The goal moving forward
+ * is to use this class for all use cases of `bin/spark-class`.
  */
 object SparkClassLauncher {
 
@@ -61,7 +63,7 @@ object SparkClassLauncher {
     val javaRunner = args(1)
     val clClassPaths = args(2)
     val clLibraryPaths = args(3)
-    val clJavaOpts = args(4)
+    val clJavaOpts = Utils.splitCommandString(args(4))
     val clJavaMemory = args(5)
     val clientMode = args(6) == "true"
     val mainClass = args(7)
@@ -89,9 +91,8 @@ object SparkClassLauncher {
     val pathSeparator = sys.props("path.separator")
     val classPaths = clClassPaths + confClassPaths.map(pathSeparator + _).getOrElse("")
     val libraryPaths = clLibraryPaths + confLibraryPaths.map(pathSeparator + _).getOrElse("")
-    val javaOpts = Utils.splitCommandString(clJavaOpts) ++
-      confJavaOpts.map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val filteredJavaOpts = javaOpts.filterNot { opt =>
+    val javaOpts = clJavaOpts ++ confJavaOpts.map(Utils.splitCommandString).getOrElse(Seq.empty)
+    val filteredJavaOpts = javaOpts.distinct.filterNot { opt =>
       opt.startsWith("-Djava.library.path") || opt.startsWith("-Xms") || opt.startsWith("-Xmx")
     }
 
