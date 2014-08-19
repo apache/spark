@@ -123,14 +123,14 @@ class TestSorter(unittest.TestCase):
         l = range(1024)
         random.shuffle(l)
         sorter = ExternalSorter(1024)
-        self.assertEquals(sorted(l), sorter.sorted(l))
-        self.assertEquals(sorted(l, reverse=True), sorter.sorted(l, reverse=True))
-        self.assertEquals(sorted(l, key=lambda x: -x), sorter.sorted(l, key=lambda x: -x))
+        self.assertEquals(sorted(l), list(sorter.sorted(l)))
+        self.assertEquals(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
+        self.assertEquals(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
         self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
-                          sorter.sorted(l, key=lambda x: -x, reverse=True))
+                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
-        l = range(100)
+        l = range(1024)
         random.shuffle(l)
         sorter = ExternalSorter(1)
         self.assertEquals(sorted(l), list(sorter.sorted(l)))
