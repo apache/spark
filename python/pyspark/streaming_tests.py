@@ -48,7 +48,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         self.ssc._sc.stop()
         # Why does it long time to terminate StremaingContext and SparkContext?
         # Should we change the sleep time if this depends on machine spec?
-        time.sleep(10)
+        time.sleep(1)
 
     @classmethod
     def tearDownClass(cls):
@@ -436,7 +436,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
             # Check time out.
             if (current_time - start_time) > self.timeout:
                 break
-            self.ssc.awaitTermination(50)
+            #self.ssc.awaitTermination(50)
+            time.sleep(0.05)
             # Check if the output is the same length of expexted output.
             if len(expected_output) == len(result):
                 break

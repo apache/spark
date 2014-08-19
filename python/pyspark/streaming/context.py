@@ -16,6 +16,7 @@
 #
 
 import sys
+import time
 from signal import signal, SIGTERM, SIGINT
 
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
@@ -102,11 +103,12 @@ class StreamingContext(object):
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
+        timeout is milliseconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            self._jssc.awaitTermination(timeout)
+            time.sleep(timeout/1000)
 
     #TODO: add storageLevel
     def socketTextStream(self, hostname, port):
