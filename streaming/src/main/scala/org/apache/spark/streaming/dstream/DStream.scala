@@ -109,14 +109,14 @@ abstract class DStream[T: ClassTag] (
   /* Find the creation callSite */
   val creationSite = Utils.getCallSite
 
-  /* Store the creation callSite in threadlocal */
-  private[streaming] def setCreationCallSite() = {
+  /* Store the RDD creation callSite in threadlocal */
+  private def setRDDCreationCallSite() = {
     ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, creationSite.shortForm)
     ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, creationSite.longForm)
   }
 
   /* Store the supplied callSite in threadlocal */
-  private[streaming] def setCallSite(callSite: CallSite) = {
+  private def setRDDCallSite(callSite: CallSite) = {
     ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, callSite.shortForm)
     ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, callSite.longForm)
   }
@@ -310,7 +310,7 @@ abstract class DStream[T: ClassTag] (
       case None => {
         if (isTimeValid(time)) {
           val prevCallSite = getCallSite
-          setCreationCallSite
+          setRDDCreationCallSite
           val rddOption = compute(time) match {
             case Some(newRDD) =>
               if (storageLevel != StorageLevel.NONE) {
@@ -329,7 +329,7 @@ abstract class DStream[T: ClassTag] (
             case None =>
               return None
           }
-          setCallSite(prevCallSite)
+          setRDDCallSite(prevCallSite)
           return rddOption
         } else {
           return None
