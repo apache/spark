@@ -117,7 +117,7 @@ private[hive] class SparkHiveHadoopWriter(
       conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
       fileSinkConf,
       path,
-      null)
+      Reporter.NULL)
   }
 
   def write(value: Writable) {
