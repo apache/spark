@@ -1687,6 +1687,31 @@ class RDD(object):
         >>> x.zip(y).collect()
         [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
         """
+        if self.getNumPartitions() != other.getNumPartitions():
+            raise ValueError("Can only zip with RDD which has the same number of partitions")
+
+        def get_batch_size(ser):
+            if isinstance(ser, BatchedSerializer):
+                return ser.batchSize
+            return 0
+
+        def batch_as(rdd, batchSize):
+            ser = rdd._jrdd_deserializer
+            if isinstance(ser, BatchedSerializer):
+                ser = ser.serializer
+            return rdd._reserialize(BatchedSerializer(ser, batchSize))
+
+        my_batch = get_batch_size(self._jrdd_deserializer)
+        other_batch = get_batch_size(other._jrdd_deserializer)
+        if my_batch != other_batch:
+            # use the greatest batchSize to batch the other one.
+            if my_batch > other_batch:
+                other = batch_as(other, my_batch)
+            else:
+                self = batch_as(self, other_batch)
+
+        # There will be an Exception in JVM if there are different number
+        # of items in each partitions.
         pairRDD = self._jrdd.zip(other._jrdd)
         deserializer = PairDeserializer(self._jrdd_deserializer,
                                         other._jrdd_deserializer)

@@ -255,6 +255,9 @@ class PairDeserializer(CartesianDeserializer):
 
     def load_stream(self, stream):
         for (keys, vals) in self.prepare_keys_values(stream):
+            if len(keys) != len(vals):
+                raise ValueError("Can not deserialize RDD with different number of items"
+                                 " in pair: (%d, %d)" % (len(keys), len(vals)))
             for pair in izip(keys, vals):
                 yield pair
 
