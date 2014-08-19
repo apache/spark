@@ -20,7 +20,8 @@ from itertools import chain, ifilter, imap
 import operator
 
 from pyspark.serializers import NoOpSerializer,\
-    BatchedSerializer, CloudPickleSerializer, pack_long
+    BatchedSerializer, CloudPickleSerializer, pack_long,\
+    CompressedSerializer
 from pyspark.rdd import _JavaStackTrace
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
@@ -458,7 +459,8 @@ class PipelinedDStream(DStream):
             serializer = self.ctx.serializer
 
         command = (self.func, self._prev_jrdd_deserializer, serializer)
-        pickled_command = CloudPickleSerializer().dumps(command)
+        ser = CompressedSerializer(CloudPickleSerializer())
+        pickled_command = ser.dumps(command)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
@@ -467,12 +469,13 @@ class PipelinedDStream(DStream):
         env = MapConverter().convert(self.ctx.environment,
                                      self.ctx._gateway._gateway_client)
         includes = ListConverter().convert(self.ctx._python_includes,
-                                     self.ctx._gateway._gateway_client)
+                                           self.ctx._gateway._gateway_client)
         python_dstream = self.ctx._jvm.PythonDStream(self._prev_jdstream.dstream(),
-                bytearray(pickled_command),
-                env, includes, self.preservesPartitioning,
-                self.ctx.pythonExec, broadcast_vars, self.ctx._javaAccumulator,
-                class_tag)
+                                                     bytearray(pickled_command),
+                                                     env, includes, self.preservesPartitioning,
+                                                     self.ctx.pythonExec,
+                                                     broadcast_vars, self.ctx._javaAccumulator,
+                                                     class_tag)
         self._jdstream_val = python_dstream.asJavaDStream()
         return self._jdstream_val
 
