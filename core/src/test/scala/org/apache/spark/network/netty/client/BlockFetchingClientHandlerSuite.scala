@@ -35,12 +35,17 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
     var parsedBlockId: String = ""
     var parsedBlockData: String = ""
     val handler = new BlockFetchingClientHandler
-    handler.blockFetchSuccessCallback = (bid, refCntBuf) => {
-      parsedBlockId = bid
-      val bytes = new Array[Byte](refCntBuf.byteBuffer().remaining)
-      refCntBuf.byteBuffer().get(bytes)
-      parsedBlockData = new String(bytes)
-    }
+    handler.addRequest(blockId,
+      new BlockClientListener {
+        override def onFetchFailure(blockId: String, errorMsg: String): Unit = ???
+        override def onFetchSuccess(bid: String, refCntBuf: ReferenceCountedBuffer): Unit = {
+          parsedBlockId = bid
+          val bytes = new Array[Byte](refCntBuf.byteBuffer().remaining)
+          refCntBuf.byteBuffer().get(bytes)
+          parsedBlockData = new String(bytes)
+        }
+      }
+    )
 
     val channel = new EmbeddedChannel(handler)
     val buf = ByteBuffer.allocate(totalLength + 4)  // 4 bytes for the length field itself
@@ -65,11 +70,13 @@ class BlockFetchingClientHandlerSuite extends FunSuite {
     var parsedBlockId: String = ""
     var parsedErrorMsg: String = ""
     val handler = new BlockFetchingClientHandler
-    handler.blockFetchFailureCallback = (bid, msg) => {
-      parsedBlockId = bid
-      parsedErrorMsg = msg
-    }
-
+    handler.addRequest(blockId, new BlockClientListener {
+      override def onFetchFailure(bid: String, msg: String) ={
+        parsedBlockId = bid
+        parsedErrorMsg = msg
+      }
+      override def onFetchSuccess(bid: String, refCntBuf: ReferenceCountedBuffer) = ???
+    })
     val channel = new EmbeddedChannel(handler)
     val buf = ByteBuffer.allocate(totalLength + 4)  // 4 bytes for the length field itself
     buf.putInt(totalLength)

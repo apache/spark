@@ -37,14 +37,14 @@ import org.apache.spark.Logging
  *
  * See [[org.apache.spark.network.netty.server.BlockServer]] for client/server protocol.
  *
- * Concurrency: [[BlockFetchingClient]] is not thread safe and should not be shared.
+ * Concurrency: thread safe and can be called from multiple threads.
  */
 @throws[TimeoutException]
 private[spark]
 class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String, port: Int)
   extends Logging {
 
-  val handler = new BlockFetchingClientHandler
+  private val handler = new BlockFetchingClientHandler
 
   /** Netty Bootstrap for creating the TCP connection. */
   private val bootstrap: Bootstrap = {
@@ -84,17 +84,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
    * rate of fetching; otherwise we could run out of memory.
    *
    * @param blockIds sequence of block ids to fetch.
-   * @param blockFetchSuccessCallback callback function when a block is successfully fetched.
-   *                                  First argument is the block id, and second argument is the
-   *                                  raw data in a ByteBuffer.
-   * @param blockFetchFailureCallback callback function when we failed to fetch any of the blocks.
-   *                                  First argument is the block id, and second argument is the
-   *                                  error message.
+   * @param listener callback to fire on fetch success / failure.
    */
-  def fetchBlocks(
-      blockIds: Seq[String],
-      blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit,
-      blockFetchFailureCallback: (String, String) => Unit): Unit = {
+  def fetchBlocks(blockIds: Seq[String], listener: BlockClientListener): Unit = {
     // It's best to limit the number of "write" calls since it needs to traverse the whole pipeline.
     // It's also best to limit the number of "flush" calls since it requires system calls.
     // Let's concatenate the string and then call writeAndFlush once.
@@ -106,9 +98,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
       s"Sending request $blockIds to $hostname:$port"
     }
 
-    // TODO: This is not the most elegant way to handle this ...
-    handler.blockFetchSuccessCallback = blockFetchSuccessCallback
-    handler.blockFetchFailureCallback = blockFetchFailureCallback
+    blockIds.foreach { blockId =>
+      handler.addRequest(blockId, listener)
+    }
 
     val writeFuture = cf.channel().writeAndFlush(blockIds.mkString("\n") + "\n")
     writeFuture.addListener(new ChannelFutureListener {
@@ -120,8 +112,13 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
           }
         } else {
           // Fail all blocks.
-          logError(s"Failed to send request $blockIds to $hostname:$port", future.cause)
-          blockIds.foreach(blockFetchFailureCallback(_, future.cause.getMessage))
+          val errorMsg =
+            s"Failed to send request $blockIds to $hostname:$port: ${future.cause.getMessage}"
+          logError(errorMsg, future.cause)
+          blockIds.foreach { blockId =>
+            listener.onFetchFailure(blockId, errorMsg)
+            handler.removeRequest(blockId)
+          }
         }
       }
     })

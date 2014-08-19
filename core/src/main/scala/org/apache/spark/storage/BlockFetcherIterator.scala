@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
-import org.apache.spark.network.netty.client.{LazyInitIterator, ReferenceCountedBuffer}
+import org.apache.spark.network.netty.client.{BlockClientListener, LazyInitIterator, ReferenceCountedBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
@@ -285,37 +285,40 @@ object BlockFetcherIterator {
 
       client.fetchBlocks(
         blocks,
-        (blockId: String, refBuf: ReferenceCountedBuffer) => {
-          // Increment the reference count so the buffer won't be recycled.
-          // TODO: This could result in memory leaks when the task is stopped due to exception
-          // before the iterator is exhausted.
-          refBuf.retain()
-          val buf = refBuf.byteBuffer()
-          val blockSize = buf.remaining()
-          val bid = BlockId(blockId)
-
-          // TODO: remove code duplication between here and BlockManager.dataDeserialization.
-          results.put(new FetchResult(bid, sizeMap(bid), () => {
-            def createIterator: Iterator[Any] = {
-              val stream = blockManager.wrapForCompression(bid, refBuf.inputStream())
-              serializer.newInstance().deserializeStream(stream).asIterator
+        new BlockClientListener {
+          override def onFetchFailure(blockId: String, errorMsg: String): Unit = {
+            logError(s"Could not get block(s) from $cmId with error: $errorMsg")
+            for ((blockId, size) <- req.blocks) {
+              results.put(new FetchResult(blockId, -1, null))
             }
-            new LazyInitIterator(createIterator) {
-              // Release the buffer when we are done traversing it.
-              override def close(): Unit = refBuf.release()
-            }
-          }))
-
-          readMetrics.synchronized {
-            readMetrics.remoteBytesRead += blockSize
-            readMetrics.remoteBlocksFetched += 1
           }
-          logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
-        },
-        (blockId: String, errorMsg: String) => {
-          logError(s"Could not get block(s) from $cmId with error: $errorMsg")
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
+
+          override def onFetchSuccess(blockId: String, data: ReferenceCountedBuffer): Unit = {
+            // Increment the reference count so the buffer won't be recycled.
+            // TODO: This could result in memory leaks when the task is stopped due to exception
+            // before the iterator is exhausted.
+            data.retain()
+            val buf = data.byteBuffer()
+            val blockSize = buf.remaining()
+            val bid = BlockId(blockId)
+
+            // TODO: remove code duplication between here and BlockManager.dataDeserialization.
+            results.put(new FetchResult(bid, sizeMap(bid), () => {
+              def createIterator: Iterator[Any] = {
+                val stream = blockManager.wrapForCompression(bid, data.inputStream())
+                serializer.newInstance().deserializeStream(stream).asIterator
+              }
+              new LazyInitIterator(createIterator) {
+                // Release the buffer when we are done traversing it.
+                override def close(): Unit = data.release()
+              }
+            }))
+
+            readMetrics.synchronized {
+              readMetrics.remoteBytesRead += blockSize
+              readMetrics.remoteBlocksFetched += 1
+            }
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
       )

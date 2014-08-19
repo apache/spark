@@ -29,7 +29,7 @@ import io.netty.buffer.{ByteBufUtil, Unpooled}
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.netty.client.{ReferenceCountedBuffer, BlockFetchingClientFactory}
+import org.apache.spark.network.netty.client.{BlockClientListener, ReferenceCountedBuffer, BlockFetchingClientFactory}
 import org.apache.spark.network.netty.server.BlockServer
 import org.apache.spark.storage.{FileSegment, BlockDataProvider}
 
@@ -99,15 +99,18 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
 
     client.fetchBlocks(
       blockIds,
-      (blockId, buf) => {
-        receivedBlockIds.add(blockId)
-        buf.retain()
-        receivedBuffers.add(buf)
-        sem.release()
-      },
-      (blockId, errorMsg) => {
-        errorBlockIds.add(blockId)
-        sem.release()
+      new BlockClientListener {
+        override def onFetchFailure(blockId: String, errorMsg: String): Unit = {
+          errorBlockIds.add(blockId)
+          sem.release()
+        }
+
+        override def onFetchSuccess(blockId: String, data: ReferenceCountedBuffer): Unit = {
+          receivedBlockIds.add(blockId)
+          data.retain()
+          receivedBuffers.add(data)
+          sem.release()
+        }
       }
     )
     if (!sem.tryAcquire(blockIds.size, 30, TimeUnit.SECONDS)) {

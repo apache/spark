@@ -26,15 +26,39 @@ import org.apache.spark.Logging
 /**
  * Handler that processes server responses. It uses the protocol documented in
  * [[org.apache.spark.network.netty.server.BlockServer]].
+ *
+ * Concurrency: thread safe and can be called from multiple threads.
  */
 private[client]
 class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] with Logging {
 
-  var blockFetchSuccessCallback: (String, ReferenceCountedBuffer) => Unit = _
-  var blockFetchFailureCallback: (String, String) => Unit = _
+  /** Tracks the list of outstanding requests and their listeners on success/failure. */
+  private val outstandingRequests = java.util.Collections.synchronizedMap {
+    new java.util.HashMap[String, BlockClientListener]
+  }
+
+  def addRequest(blockId: String, listener: BlockClientListener): Unit = {
+    outstandingRequests.put(blockId, listener)
+  }
+
+  def removeRequest(blockId: String): Unit = {
+    outstandingRequests.remove(blockId)
+  }
 
   override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-    logError(s"Exception in connection from ${ctx.channel.remoteAddress}", cause)
+    val errorMsg = s"Exception in connection from ${ctx.channel.remoteAddress}: ${cause.getMessage}"
+    logError(errorMsg, cause)
+
+    // Fire the failure callback for all outstanding blocks
+    outstandingRequests.synchronized {
+      val iter = outstandingRequests.entrySet().iterator()
+      while (iter.hasNext) {
+        val entry = iter.next()
+        entry.getValue.onFetchFailure(entry.getKey, errorMsg)
+      }
+      outstandingRequests.clear()
+    }
+
     ctx.close()
   }
 
@@ -54,10 +78,26 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
       in.readBytes(errorMessageBytes)
       val errorMsg = new String(errorMessageBytes)
       logTrace(s"Received block $blockId ($blockSize B) with error $errorMsg from $server")
-      blockFetchFailureCallback(blockId, errorMsg)
+
+      val listener = outstandingRequests.get(blockId)
+      if (listener == null) {
+        // Ignore callback
+        logWarning(s"Got a response for block $blockId but it is not in our outstanding requests")
+      } else {
+        outstandingRequests.remove(blockId)
+        listener.onFetchFailure(blockId, errorMsg)
+      }
     } else {
       logTrace(s"Received block $blockId ($blockSize B) from $server")
-      blockFetchSuccessCallback(blockId, new ReferenceCountedBuffer(in))
+
+      val listener = outstandingRequests.get(blockId)
+      if (listener == null) {
+        // Ignore callback
+        logWarning(s"Got a response for block $blockId but it is not in our outstanding requests")
+      } else {
+        outstandingRequests.remove(blockId)
+        listener.onFetchSuccess(blockId, new ReferenceCountedBuffer(in))
+      }
     }
   }
 }
