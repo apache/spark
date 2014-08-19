@@ -31,8 +31,6 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
   private val jsRenderingEnabled = parent.jsRenderingEnabled
 
@@ -45,7 +43,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     } else {
       UIUtils.listingTable(rddHeader, rddRow, rdds, simpleTable = true)
     }
-    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Storage ", content, parent)
   }
 
   /** Render the whole JSON */
@@ -71,7 +69,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>
@@ -89,7 +87,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   /** Render a Json row representing an RDD */
   private def rddRowJson(rdd: RDDInfo): JValue = {
     val rddNameVal = "<a href=" +
-      {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)} +
+      {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)} +
       ">" + {rdd.name} + "</a>"
     ("RDD Name" -> rddNameVal) ~
     ("Storage Level" -> {rdd.storageLevel.description}) ~

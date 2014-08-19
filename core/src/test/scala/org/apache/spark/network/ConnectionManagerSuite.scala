@@ -17,14 +17,21 @@
 
 package org.apache.spark.network
 
+import java.io.IOException
 import java.nio._
+import java.util.concurrent.TimeoutException
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.scalatest.FunSuite
 
+import org.mockito.Mockito._
+import org.mockito.Matchers._
+
+import scala.concurrent.TimeoutException
 import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.{Failure, Success, Try}
 
 /**
   * Test the ConnectionManager with various security settings.
@@ -46,7 +53,7 @@ class ConnectionManagerSuite extends FunSuite {
     buffer.flip
 
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(manager.id, bufferMessage)
+    Await.result(manager.sendMessageReliably(manager.id, bufferMessage), 10 seconds)
 
     assert(receivedMessage == true)
 
@@ -79,7 +86,7 @@ class ConnectionManagerSuite extends FunSuite {
 
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-      manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+      Await.result(manager.sendMessageReliably(managerServer.id, bufferMessage), 10 seconds)
     })
 
     assert(numReceivedServerMessages == 10)
@@ -118,7 +125,10 @@ class ConnectionManagerSuite extends FunSuite {
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
     buffer.flip
     val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-    manager.sendMessageReliablySync(managerServer.id, bufferMessage)
+    // Expect managerServer to close connection, which we'll report as an error:
+    intercept[IOException] {
+      Await.result(manager.sendMessageReliably(managerServer.id, bufferMessage), 10 seconds)
+    }
 
     assert(numReceivedServerMessages == 0)
     assert(numReceivedMessages == 0)
@@ -163,6 +173,8 @@ class ConnectionManagerSuite extends FunSuite {
         val g = Await.result(f, 1 second)
         assert(false)
       } catch {
+        case i: IOException =>
+          assert(true)
         case e: TimeoutException => {
           // we should timeout here since the client can't do the negotiation
           assert(true)
@@ -209,7 +221,6 @@ class ConnectionManagerSuite extends FunSuite {
     }).foreach(f => {
       try {
         val g = Await.result(f, 1 second)
-        if (!g.isDefined) assert(false) else assert(true)
       } catch {
         case e: Exception => {
           assert(false)
@@ -223,7 +234,68 @@ class ConnectionManagerSuite extends FunSuite {
     managerServer.stop()
   }
 
+  test("Ack error message") {
+    val conf = new SparkConf
+    conf.set("spark.authenticate", "false")
+    val securityManager = new SecurityManager(conf)
+    val manager = new ConnectionManager(0, conf, securityManager)
+    val managerServer = new ConnectionManager(0, conf, securityManager)
+    managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      throw new Exception
+    })
 
+    val size = 10 * 1024 * 1024
+    val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
+    buffer.flip
+    val bufferMessage = Message.createBufferMessage(buffer)
+
+    val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
+
+    intercept[IOException] {
+      Await.result(future, 1 second)
+    }
+
+    manager.stop()
+    managerServer.stop()
+
+  }
+
+  test("sendMessageReliably timeout") {
+    val clientConf = new SparkConf
+    clientConf.set("spark.authenticate", "false")
+    val ackTimeout = 30
+    clientConf.set("spark.core.connection.ack.wait.timeout", s"${ackTimeout}")
+
+    val clientSecurityManager = new SecurityManager(clientConf)
+    val manager = new ConnectionManager(0, clientConf, clientSecurityManager)
+
+    val serverConf = new SparkConf
+    serverConf.set("spark.authenticate", "false")
+    val serverSecurityManager = new SecurityManager(serverConf)
+    val managerServer = new ConnectionManager(0, serverConf, serverSecurityManager)
+    managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      // sleep 60 sec > ack timeout for simulating server slow down or hang up
+      Thread.sleep(ackTimeout * 3 * 1000)
+      None
+    })
+
+    val size = 10 * 1024 * 1024
+    val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
+    buffer.flip
+    val bufferMessage = Message.createBufferMessage(buffer.duplicate)
+
+    val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
+
+    // Future should throw IOException in 30 sec.
+    // Otherwise TimeoutExcepton is thrown from Await.result.
+    // We expect TimeoutException is not thrown.
+    intercept[IOException] {
+      Await.result(future, (ackTimeout * 2) second)
+    }
+
+    manager.stop()
+    managerServer.stop()
+  }
 
 }
 

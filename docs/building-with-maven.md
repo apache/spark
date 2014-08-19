@@ -96,6 +96,15 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
+# Building Thrift JDBC server and CLI for Spark SQL
+
+Spark SQL supports Thrift JDBC server and CLI.
+See sql-programming-guide.md for more information about those features.
+You can use those features by setting `-Phive-thriftserver` when building Spark as follows.
+{% highlight bash %}
+mvn -Phive-thriftserver assembly
+{% endhighlight %}
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). 

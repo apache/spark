@@ -55,7 +55,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
     val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
     val convergenceTol = 1e-12
-    val maxNumIterations = 10
+    val numIterations = 10
 
     val (_, loss) = LBFGS.runLBFGS(
       dataRDD,
@@ -63,7 +63,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       simpleUpdater,
       numCorrections,
       convergenceTol,
-      maxNumIterations,
+      numIterations,
       regParam,
       initialWeightsWithIntercept)
 
@@ -99,7 +99,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
     // Prepare another non-zero weights to compare the loss in the first iteration.
     val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
     val convergenceTol = 1e-12
-    val maxNumIterations = 10
+    val numIterations = 10
 
     val (weightLBFGS, lossLBFGS) = LBFGS.runLBFGS(
       dataRDD,
@@ -107,7 +107,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       squaredL2Updater,
       numCorrections,
       convergenceTol,
-      maxNumIterations,
+      numIterations,
       regParam,
       initialWeightsWithIntercept)
 
@@ -140,10 +140,10 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
     /**
      * For the first run, we set the convergenceTol to 0.0, so that the algorithm will
-     * run up to the maxNumIterations which is 8 here.
+     * run up to the numIterations which is 8 here.
      */
     val initialWeightsWithIntercept = Vectors.dense(0.0, 0.0)
-    val maxNumIterations = 8
+    val numIterations = 8
     var convergenceTol = 0.0
 
     val (_, lossLBFGS1) = LBFGS.runLBFGS(
@@ -152,7 +152,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       squaredL2Updater,
       numCorrections,
       convergenceTol,
-      maxNumIterations,
+      numIterations,
       regParam,
       initialWeightsWithIntercept)
 
@@ -167,7 +167,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       squaredL2Updater,
       numCorrections,
       convergenceTol,
-      maxNumIterations,
+      numIterations,
       regParam,
       initialWeightsWithIntercept)
 
@@ -182,7 +182,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       squaredL2Updater,
       numCorrections,
       convergenceTol,
-      maxNumIterations,
+      numIterations,
       regParam,
       initialWeightsWithIntercept)
 
@@ -200,12 +200,12 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
     // Prepare another non-zero weights to compare the loss in the first iteration.
     val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
     val convergenceTol = 1e-12
-    val maxNumIterations = 10
+    val numIterations = 10
 
     val lbfgsOptimizer = new LBFGS(gradient, squaredL2Updater)
       .setNumCorrections(numCorrections)
       .setConvergenceTol(convergenceTol)
-      .setMaxNumIterations(maxNumIterations)
+      .setNumIterations(numIterations)
       .setRegParam(regParam)
 
     val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
@@ -241,7 +241,7 @@ class LBFGSClusterSuite extends FunSuite with LocalClusterSparkContext {
     val lbfgs = new LBFGS(new LogisticGradient, new SquaredL2Updater)
       .setNumCorrections(1)
       .setConvergenceTol(1e-12)
-      .setMaxNumIterations(1)
+      .setNumIterations(1)
       .setRegParam(1.0)
     val random = new Random(0)
     // If we serialize data directly in the task closure, the size of the serialized task would be

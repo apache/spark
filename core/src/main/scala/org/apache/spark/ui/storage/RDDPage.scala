@@ -31,8 +31,6 @@ import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
   private val jsRenderingEnabled = parent.jsRenderingEnabled
 
@@ -41,8 +39,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val storageStatusList = listener.storageStatusList
     val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
       // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "RDD Not Found",
-        parent.headerTabs, parent)
+      return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
     }
 
     // Worker table
@@ -110,8 +107,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         UIUtils.fillTableJavascript(parent.prefix + "/rdd/workers", workerTableId, Some(rddId)) ++
           UIUtils.fillTableJavascript(parent.prefix + "/rdd/blocks", blockTableId, Some(rddId))
     }
-    UIUtils.headerSparkPage(content, basePath, appName, "RDD Storage Info for " +
-      rddInfo.name, parent.headerTabs, parent)
+    UIUtils.headerSparkPage( "RDD Storage Info for " + rddInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */

@@ -65,10 +65,17 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    set("javax.jdo.option.ConnectionURL",
+    setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    set("hive.metastore.warehouse.dir", warehousePath)
+    setConf("hive.metastore.warehouse.dir", warehousePath)
   }
+
+  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
+  testTempDir.delete()
+  testTempDir.mkdir()
+
+  // For some hive test case which contain ${system:test.tmp.dir}
+  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
 
   configure() // Must be called before initializing the catalog below.
 
@@ -108,6 +115,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   hiveFilesTemp.deleteOnExit()
+
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)

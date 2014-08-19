@@ -44,6 +44,7 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var sorter: ExternalSorter[K, V, _] = null
   private var outputFile: File = null
+  private var indexFile: File = null
 
   // Are we in the process of stopping? Because map tasks can call stop() with success = true
   // and then call stop() with success = false if they get an exception, we want to make sure
@@ -52,89 +53,41 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
+  private val writeMetrics = new ShuffleWriteMetrics()
+  context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
+
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
-    // Get an iterator with the elements for each partition ID
-    val partitions: Iterator[(Int, Iterator[Product2[K, _]])] = {
-      if (dep.mapSideCombine) {
-        if (!dep.aggregator.isDefined) {
-          throw new IllegalStateException("Aggregator is empty for map-side combine")
-        }
-        sorter = new ExternalSorter[K, V, C](
-          dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
-        sorter.write(records)
-        sorter.partitionedIterator
-      } else {
-        // In this case we pass neither an aggregator nor an ordering to the sorter, because we
-        // don't care whether the keys get sorted in each partition; that will be done on the
-        // reduce side if the operation being run is sortByKey.
-        sorter = new ExternalSorter[K, V, V](
-          None, Some(dep.partitioner), None, dep.serializer)
-        sorter.write(records)
-        sorter.partitionedIterator
+    if (dep.mapSideCombine) {
+      if (!dep.aggregator.isDefined) {
+        throw new IllegalStateException("Aggregator is empty for map-side combine")
       }
+      sorter = new ExternalSorter[K, V, C](
+        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+      sorter.insertAll(records)
+    } else {
+      // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
+      // care whether the keys get sorted in each partition; that will be done on the reduce side
+      // if the operation being run is sortByKey.
+      sorter = new ExternalSorter[K, V, V](
+        None, Some(dep.partitioner), None, dep.serializer)
+      sorter.insertAll(records)
     }
 
     // Create a single shuffle file with reduce ID 0 that we'll write all results to. We'll later
     // serve different ranges of this file using an index file that we create at the end.
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, 0)
+
     outputFile = blockManager.diskBlockManager.getFile(blockId)
+    indexFile = blockManager.diskBlockManager.getFile(blockId.name + ".index")
 
-    // Track location of each range in the output file
-    val offsets = new Array[Long](numPartitions + 1)
-    val lengths = new Array[Long](numPartitions)
-
-    // Statistics
-    var totalBytes = 0L
-    var totalTime = 0L
-
-    for ((id, elements) <- partitions) {
-      if (elements.hasNext) {
-        val writer = blockManager.getDiskWriter(blockId, outputFile, ser, fileBufferSize)
-        for (elem <- elements) {
-          writer.write(elem)
-        }
-        writer.commitAndClose()
-        val segment = writer.fileSegment()
-        offsets(id + 1) = segment.offset + segment.length
-        lengths(id) = segment.length
-        totalTime += writer.timeWriting()
-        totalBytes += segment.length
-      } else {
-        // The partition is empty; don't create a new writer to avoid writing headers, etc
-        offsets(id + 1) = offsets(id)
-      }
-    }
-
-    val shuffleMetrics = new ShuffleWriteMetrics
-    shuffleMetrics.shuffleBytesWritten = totalBytes
-    shuffleMetrics.shuffleWriteTime = totalTime
-    context.taskMetrics.shuffleWriteMetrics = Some(shuffleMetrics)
-    context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
-    context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
-
-    // Write an index file with the offsets of each block, plus a final offset at the end for the
-    // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
-    // out where each block begins and ends.
-
-    val diskBlockManager = blockManager.diskBlockManager
-    val indexFile = diskBlockManager.getFile(blockId.name + ".index")
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
-    try {
-      var i = 0
-      while (i < numPartitions + 1) {
-        out.writeLong(offsets(i))
-        i += 1
-      }
-    } finally {
-      out.close()
-    }
+    val partitionLengths = sorter.writePartitionedFile(blockId, context)
 
     // Register our map output with the ShuffleBlockManager, which handles cleaning it over time
     blockManager.shuffleBlockManager.addCompletedMap(dep.shuffleId, mapId, numPartitions)
 
     mapStatus = new MapStatus(blockManager.blockManagerId,
-      lengths.map(MapOutputTracker.compressSize))
+      partitionLengths.map(MapOutputTracker.compressSize))
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -150,6 +103,9 @@ private[spark] class SortShuffleWriter[K, V, C](
         // The map task failed, so delete our output file if we created one
         if (outputFile != null) {
           outputFile.delete()
+        }
+        if (indexFile != null) {
+          indexFile.delete()
         }
         return None
       }
