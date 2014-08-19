@@ -57,7 +57,7 @@ s"""
 }.foreach(println)
 }}}
  */
-abstract class MutableValue {
+abstract class MutableValue extends Serializable {
   var isNull: Boolean = true
   def boxed: Any
   def update(v: Any)
@@ -196,6 +196,8 @@ class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
         case LongType => new MutableLong
         case _ => new MutableAny
       }.toArray)
+
+  def this() = this(Seq.empty)
 
   override def length: Int = values.length
 
