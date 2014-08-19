@@ -467,29 +467,16 @@ private[spark] class ConnectionManager(
 
           val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
           if (!sendingConnectionOpt.isDefined) {
-            logError("Corresponding SendingConnectionManagerId not found")
+            logWarning("Corresponding SendingConnectionManagerId not found, maybe removed in advance")
             return
           }
 
           val sendingConnection = sendingConnectionOpt.get
-          connectionsById -= remoteConnectionManagerId
-          sendingConnection.close()
-
           val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
 
           assert(sendingConnectionManagerId == remoteConnectionManagerId)
 
-          messageStatuses.synchronized {
-            for (s <- messageStatuses.values
-                 if s.connectionManagerId == sendingConnectionManagerId) {
-              logInfo("Notifying " + s)
-              s.markDone(None)
-            }
-
-            messageStatuses.retain((i, status) => {
-              status.connectionManagerId != sendingConnectionManagerId
-            })
-          }
+          sendingConnection.close()
         case _ => logError("Unsupported type of connection.")
       }
     } finally {
