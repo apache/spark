@@ -496,7 +496,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     // Only inject debugging code if debugging is turned on.
     val debugCode =
-      if (log.isDebugEnabled) {
+      if (false) {
         val localLogger = log
         val localLoggerTree = reify { localLogger }
         q"""
