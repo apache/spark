@@ -27,7 +27,7 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * Launch an application through Spark submit in client mode with the appropriate classpath,
  * library paths, java options and memory. These properties of the JVM must be set before the
  * driver JVM is launched. The sole purpose of this class is to avoid handling the complexity
- * of parsing the properties file for such relevant configs in BASH.
+ * of parsing the properties file for such relevant configs in Bash.
  *
  * Usage: org.apache.spark.deploy.SparkSubmitDriverBootstrapper <application args>
  */
@@ -69,7 +69,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
 
     // Favor Spark submit arguments over the equivalent configs in the properties file.
     // Note that we do not actually use the Spark submit values for library path, classpath,
-    // and java opts here, because we have already captured them in BASH.
+    // and Java opts here, because we have already captured them in Bash.
     val newDriverMemory = submitDriverMemory.getOrElse(confDriverMemory)
     val newLibraryPath =
       if (submitLibraryPath.isDefined) {

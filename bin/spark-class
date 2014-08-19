@@ -156,7 +156,7 @@ export CLASSPATH
 
 # In Spark submit client mode, the driver is launched in the same JVM as Spark submit itself.
 # Here we must parse the properties file for relevant "spark.driver.*" configs before launching
-# the driver JVM itself. Instead of handling this complexity in BASH, we launch a separate JVM
+# the driver JVM itself. Instead of handling this complexity in Bash, we launch a separate JVM
 # to prepare the launch environment of this driver JVM.
 
 if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
