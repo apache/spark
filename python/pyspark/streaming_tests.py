@@ -39,7 +39,6 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
         self.ssc = StreamingContext(appName=class_name, duration=Seconds(1))
-        time.sleep(1)
 
     def tearDown(self):
         # Do not call pyspark.streaming.context.StreamingContext.stop directly because
@@ -52,7 +51,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        time.sleep(5)
+        # Make sure tp shutdown the callback server 
         SparkContext._gateway._shutdown_callback_server()
 
 
@@ -436,7 +435,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
             # Check time out.
             if (current_time - start_time) > self.timeout:
                 break
-            #self.ssc.awaitTermination(50)
+            # StreamingContext.awaitTermination is not used to wait because 
+            # if py4j server is called every 50 milliseconds, it gets an error
             time.sleep(0.05)
             # Check if the output is the same length of expexted output.
             if len(expected_output) == len(result):

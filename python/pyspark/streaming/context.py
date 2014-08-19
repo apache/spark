@@ -103,12 +103,12 @@ class StreamingContext(object):
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
-        timeout is milliseconds
+        @param timeout: time to wait in milliseconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            time.sleep(timeout/1000)
+            self._jssc.awaitTermination(timeout)
 
     #TODO: add storageLevel
     def socketTextStream(self, hostname, port):
