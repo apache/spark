@@ -25,7 +25,7 @@ from pyspark.serializers import NoOpSerializer,\
 from pyspark.rdd import _JavaStackTrace
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
-from pyspark.streaming.utils import rddToFileName
+from pyspark.streaming.utils import rddToFileName, RDDFunction
 
 
 from py4j.java_collections import ListConverter, MapConverter
@@ -227,7 +227,6 @@ class DStream(object):
         This is an output operator, so this DStream will be registered as an output
         stream and there materialized.
         """
-        from utils import RDDFunction
         wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
         self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), wrapped_func)
 
@@ -386,18 +385,18 @@ class DStream(object):
 
         return self.foreachRDD(saveAsTextFile)
 
-    def saveAsPickledFiles(self, prefix, suffix=None):
+    def saveAsPickleFiles(self, prefix, suffix=None):
         """
         Save this DStream as a SequenceFile of serialized objects. The serializer
         used is L{pyspark.serializers.PickleSerializer}, default batch size
         is 10.
         """
 
-        def saveAsTextFile(rdd, time):
+        def saveAsPickleFile(rdd, time):
             path = rddToFileName(prefix, suffix, time)
             rdd.saveAsPickleFile(path)
 
-        return self.foreachRDD(saveAsTextFile)
+        return self.foreachRDD(saveAsPickleFile)
 
 
 # TODO: implement updateStateByKey
