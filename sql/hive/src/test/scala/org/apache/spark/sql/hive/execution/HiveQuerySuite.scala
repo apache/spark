@@ -271,7 +271,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
     """.stripMargin)
 
-  createQueryTest("dynamice partiton",
+  createQueryTest("dynamic_partiton",
     """
       |drop table IF EXISTS dynamic_part_table;
       |create table dynamic_part_table(intcol int) partitioned by (partcol1 int, partcol2 int);
