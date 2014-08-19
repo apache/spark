@@ -18,7 +18,7 @@ package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{CountDownLatch, Executors}
+import java.util.concurrent.{TimeUnit, CountDownLatch, Executors}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{ExecutionContext, Future}
@@ -118,8 +118,7 @@ class SparkSinkSuite extends TestSuiteBase {
     transceiversAndClients.foreach(x => {
       Future {
         val client = x._2
-        var events: EventBatch = null
-        events = client.getEventBatch(1000)
+        val events = client.getEventBatch(1000)
         if (!failSome || counter.getAndIncrement() % 2 == 0) {
           client.ack(events.getSequenceNumber)
         } else {
@@ -137,6 +136,7 @@ class SparkSinkSuite extends TestSuiteBase {
       }
     })
     batchCounter.await()
+    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
     executorContext.shutdown()
     if(failSome) {
       assert(availableChannelSlots(channel) === 3000)
