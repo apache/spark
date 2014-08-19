@@ -93,7 +93,7 @@ private[spark] object JettyUtils extends Logging {
   def createServletHandler(
       path: String,
       servlet: HttpServlet,
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String): ServletContextHandler = {
     val prefixedPath = attachPrefix(basePath, path)
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
@@ -174,35 +174,32 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       handlers: Seq[ServletContextHandler],
-      conf: SparkConf): ServerInfo = {
+      conf: SparkConf,
+      serverName: String = ""): ServerInfo = {
 
     val collection = new ContextHandlerCollection
     collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
 
-    @tailrec
+    // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server(new InetSocketAddress(hostName, currentPort))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
       server.setHandler(collection)
-
-      Try {
+      try {
         server.start()
-      } match {
-        case s: Success[_] =>
-          (server, server.getConnectors.head.getLocalPort)
-        case f: Failure[_] =>
+        (server, server.getConnectors.head.getLocalPort)
+      } catch {
+        case e: Exception =>
           server.stop()
           pool.stop()
-          logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
-          logInfo("Error was: " + f.toString)
-          connect((currentPort + 1) % 65536)
+          throw e
       }
     }
 
-    val (server, boundPort) = connect(port)
+    val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, serverName)
     ServerInfo(server, boundPort, collection)
   }
 

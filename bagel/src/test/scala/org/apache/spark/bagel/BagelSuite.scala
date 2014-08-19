@@ -80,7 +80,7 @@ class BagelSuite extends FunSuite with Assertions with BeforeAndAfter with Timeo
   test("large number of iterations") {
     // This tests whether jobs with a large number of iterations finish in a reasonable time,
     // because non-memoized recursion in RDD or DAGScheduler used to cause them to hang
-    failAfter(10 seconds) {
+    failAfter(30 seconds) {
       sc = new SparkContext("local", "test")
       val verts = sc.parallelize((1 to 4).map(id => (id.toString, new TestVertex(true, 0))))
       val msgs = sc.parallelize(Array[(String, TestMessage)]())
@@ -101,7 +101,7 @@ class BagelSuite extends FunSuite with Assertions with BeforeAndAfter with Timeo
       sc = new SparkContext("local", "test")
       val verts = sc.parallelize((1 to 4).map(id => (id.toString, new TestVertex(true, 0))))
       val msgs = sc.parallelize(Array[(String, TestMessage)]())
-      val numSupersteps = 50
+      val numSupersteps = 20
       val result =
         Bagel.run(sc, verts, msgs, sc.defaultParallelism, StorageLevel.DISK_ONLY) {
           (self: TestVertex, msgs: Option[Array[TestMessage]], superstep: Int) =>

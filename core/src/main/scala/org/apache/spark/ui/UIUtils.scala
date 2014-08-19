@@ -25,6 +25,7 @@ import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
+  val TABLE_CLASS = "table table-bordered table-striped table-condensed sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -135,34 +136,48 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("")
+  def uiRoot: String = {
+    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
+      System.getenv("APPLICATION_WEB_PROXY_BASE")
+    } else if (System.getProperty("spark.ui.proxyBase") != null) {
+      System.getProperty("spark.ui.proxyBase")
+    }
+    else {
+      ""
+    }
+  }
 
   def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
 
+  def commonHeaderNodes = {
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+          type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
+          type="text/css" />
+    <script src={prependBaseUri("/static/sorttable.js")} ></script>
+    <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
+    <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+  }
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
-      content: => Seq[Node],
-      basePath: String,
-      appName: String,
       title: String,
-      tabs: Seq[WebUITab],
-      activeTab: WebUITab,
+      content: => Seq[Node],
+      activeTab: SparkUITab,
       refreshInterval: Option[Int] = None): Seq[Node] = {
 
-    val header = tabs.map { tab =>
+    val appName = activeTab.appName
+    val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(basePath, "/" + tab.prefix)}>{tab.name}</a>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
       </li>
     }
 
     <html>
       <head>
-        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-              type="text/css" />
-        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-              type="text/css" />
-        <script src={prependBaseUri("/static/sorttable.js")} ></script>
+        {commonHeaderNodes}
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -193,11 +208,7 @@ private[spark] object UIUtils extends Logging {
   def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     <html>
       <head>
-        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-              type="text/css" />
-        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
-        <script src={prependBaseUri("/static/sorttable.js")} ></script>
+        {commonHeaderNodes}
         <title>{title}</title>
       </head>
       <body>
@@ -224,9 +235,9 @@ private[spark] object UIUtils extends Logging {
       data: Seq[T],
       fixedWidth: Boolean = false): Seq[Node] = {
 
-    var tableClass = "table table-bordered table-striped table-condensed sortable"
+    var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
-      tableClass += " table-fixed"
+      listingTableClass += " table-fixed"
     }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
@@ -246,7 +257,7 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
-    <table class={tableClass}>
+    <table class={listingTableClass}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}

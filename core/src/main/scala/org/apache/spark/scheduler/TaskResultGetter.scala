@@ -71,7 +71,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
           case ex: Exception =>
-            taskSetManager.abort("Exception while deserializing and fetching task: %s".format(ex))
+            logError("Exception while getting task result", ex)
+            taskSetManager.abort("Exception while getting task result: %s".format(ex))
         }
       }
     })

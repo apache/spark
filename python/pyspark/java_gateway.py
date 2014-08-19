@@ -24,6 +24,7 @@ from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
+
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -38,7 +39,7 @@ def launch_gateway():
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
         submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
-        command = [os.path.join(SPARK_HOME, script), "pyspark-shell"] + submit_args
+        command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
@@ -47,11 +48,24 @@ def launch_gateway():
         else:
             # preexec_fn not supported on Windows
             proc = Popen(command, stdout=PIPE, stdin=PIPE)
-        # Determine which ephemeral port the server started on:
-        gateway_port = int(proc.stdout.readline())
+
+        try:
+            # Determine which ephemeral port the server started on:
+            gateway_port = proc.stdout.readline()
+            gateway_port = int(gateway_port)
+        except ValueError:
+            (stdout, _) = proc.communicate()
+            exit_code = proc.poll()
+            error_msg = "Launching GatewayServer failed"
+            error_msg += " with exit code %d! " % exit_code if exit_code else "! "
+            error_msg += "(Warning: unexpected output detected.)\n\n"
+            error_msg += gateway_port + stdout
+            raise Exception(error_msg)
+
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):
+
             def __init__(self, stream):
                 Thread.__init__(self)
                 self.daemon = True

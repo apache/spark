@@ -17,10 +17,12 @@
 
 package org.apache.spark.network
 
+import java.io.IOException
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import java.net._
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicInteger
 
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
@@ -38,37 +40,53 @@ import scala.language.postfixOps
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
 
-private[spark] class ConnectionManager(port: Int, conf: SparkConf,
-    securityManager: SecurityManager) extends Logging {
+private[spark] class ConnectionManager(
+    port: Int,
+    conf: SparkConf,
+    securityManager: SecurityManager,
+    name: String = "Connection manager")
+  extends Logging {
 
+  /**
+   * Used by sendMessageReliably to track messages being sent.
+   * @param message the message that was sent
+   * @param connectionManagerId the connection manager that sent this message
+   * @param completionHandler callback that's invoked when the send has completed or failed
+   */
   class MessageStatus(
       val message: Message,
       val connectionManagerId: ConnectionManagerId,
       completionHandler: MessageStatus => Unit) {
 
+    /** This is non-None if message has been ack'd */
     var ackMessage: Option[Message] = None
-    var attempted = false
-    var acked = false
 
-    def markDone() { completionHandler(this) }
+    def markDone(ackMessage: Option[Message]) {
+      this.ackMessage = ackMessage
+      completionHandler(this)
+    }
   }
 
   private val selector = SelectorProvider.provider.openSelector()
+  private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
   // default to 30 second timeout waiting for authentication
   private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
+  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
     conf.getInt("spark.core.connection.handler.threads.max", 60),
     conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-message-executor"))
 
   private val handleReadWriteExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.io.threads.min", 4),
     conf.getInt("spark.core.connection.io.threads.max", 32),
     conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-read-write-executor"))
 
   // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks :
   // which should be executed asap
@@ -76,7 +94,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     conf.getInt("spark.core.connection.connect.threads.min", 1),
     conf.getInt("spark.core.connection.connect.threads.max", 8),
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
+    new LinkedBlockingDeque[Runnable](),
+    Utils.namedThreadFactory("handle-connect-executor"))
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
@@ -102,7 +121,11 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
-  serverChannel.socket.bind(new InetSocketAddress(port))
+  private def startService(port: Int): (ServerSocketChannel, Int) = {
+    serverChannel.socket.bind(new InetSocketAddress(port))
+    (serverChannel, serverChannel.socket.getLocalPort)
+  }
+  Utils.startServiceOnPort[ServerSocketChannel](port, startService, name)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
@@ -249,15 +272,15 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   def run() {
     try {
       while(!selectorThread.isInterrupted) {
-        while (! registerRequests.isEmpty) {
-          val conn: SendingConnection = registerRequests.dequeue
+        while (!registerRequests.isEmpty) {
+          val conn: SendingConnection = registerRequests.dequeue()
           addListeners(conn)
           conn.connect()
           addConnection(conn)
         }
 
         while(!keyInterestChangeRequests.isEmpty) {
-          val (key, ops) = keyInterestChangeRequests.dequeue
+          val (key, ops) = keyInterestChangeRequests.dequeue()
 
           try {
             if (key.isValid) {
@@ -308,7 +331,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
               // Some keys within the selectors list are invalid/closed. clear them.
               val allKeys = selector.keys().iterator()
 
-              while (allKeys.hasNext()) {
+              while (allKeys.hasNext) {
                 val key = allKeys.next()
                 try {
                   if (! key.isValid) {
@@ -341,7 +364,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
         if (0 != selectedKeysCount) {
           val selectedKeys = selector.selectedKeys().iterator()
-          while (selectedKeys.hasNext()) {
+          while (selectedKeys.hasNext) {
             val key = selectedKeys.next
             selectedKeys.remove()
             try {
@@ -419,62 +442,55 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     connectionsByKey -= connection.key
 
     try {
-      if (connection.isInstanceOf[SendingConnection]) {
-        val sendingConnection = connection.asInstanceOf[SendingConnection]
-        val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-        logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
+      connection match {
+        case sendingConnection: SendingConnection =>
+          val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
+          logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
 
-        connectionsById -= sendingConnectionManagerId
-        connectionsAwaitingSasl -= connection.connectionId
+          connectionsById -= sendingConnectionManagerId
+          connectionsAwaitingSasl -= connection.connectionId
 
-        messageStatuses.synchronized {
-          messageStatuses
-            .values.filter(_.connectionManagerId == sendingConnectionManagerId).foreach(status => {
-              logInfo("Notifying " + status)
-              status.synchronized {
-              status.attempted = true
-               status.acked = false
-               status.markDone()
-              }
+          messageStatuses.synchronized {
+            messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
+              .foreach(status => {
+                logInfo("Notifying " + status)
+                status.markDone(None)
+              })
+
+            messageStatuses.retain((i, status) => {
+              status.connectionManagerId != sendingConnectionManagerId
             })
+          }
+        case receivingConnection: ReceivingConnection =>
+          val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
+          logInfo("Removing ReceivingConnection to " + remoteConnectionManagerId)
 
-          messageStatuses.retain((i, status) => {
-            status.connectionManagerId != sendingConnectionManagerId
-          })
-        }
-      } else if (connection.isInstanceOf[ReceivingConnection]) {
-        val receivingConnection = connection.asInstanceOf[ReceivingConnection]
-        val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
-        logInfo("Removing ReceivingConnection to " + remoteConnectionManagerId)
-
-        val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
-          if (! sendingConnectionOpt.isDefined) {
-          logError("Corresponding SendingConnectionManagerId not found")
-          return
-        }
-
-        val sendingConnection = sendingConnectionOpt.get
-        connectionsById -= remoteConnectionManagerId
-        sendingConnection.close()
-
-        val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-
-        assert (sendingConnectionManagerId == remoteConnectionManagerId)
-
-        messageStatuses.synchronized {
-          for (s <- messageStatuses.values if s.connectionManagerId == sendingConnectionManagerId) {
-            logInfo("Notifying " + s)
-            s.synchronized {
-              s.attempted = true
-              s.acked = false
-              s.markDone()
-            }
+          val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
+          if (!sendingConnectionOpt.isDefined) {
+            logError(s"Corresponding SendingConnection to ${remoteConnectionManagerId} not found")
+            return
           }
 
-          messageStatuses.retain((i, status) => {
-            status.connectionManagerId != sendingConnectionManagerId
-          })
-        }
+          val sendingConnection = sendingConnectionOpt.get
+          connectionsById -= remoteConnectionManagerId
+          sendingConnection.close()
+
+          val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
+
+          assert(sendingConnectionManagerId == remoteConnectionManagerId)
+
+          messageStatuses.synchronized {
+            for (s <- messageStatuses.values
+                 if s.connectionManagerId == sendingConnectionManagerId) {
+              logInfo("Notifying " + s)
+              s.markDone(None)
+            }
+
+            messageStatuses.retain((i, status) => {
+              status.connectionManagerId != sendingConnectionManagerId
+            })
+          }
+        case _ => logError("Unsupported type of connection.")
       }
     } finally {
       // So that the selection keys can be removed.
@@ -517,13 +533,13 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
       connectionsAwaitingSasl -= waitingConn.connectionId
       waitingConn.getAuthenticated().synchronized {
-        waitingConn.getAuthenticated().notifyAll();
+        waitingConn.getAuthenticated().notifyAll()
       }
       return
     } else {
       var replyToken : Array[Byte] = null
       try {
-        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken);
+        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken)
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
@@ -532,16 +548,16 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           }
           return
         }
-        var securityMsgResp = SecurityMessage.fromResponse(replyToken,
-          securityMsg.getConnectionId.toString())
-        var message = securityMsgResp.toBufferMessage
-        if (message == null) throw new Exception("Error creating security message")
+        val securityMsgResp = SecurityMessage.fromResponse(replyToken,
+          securityMsg.getConnectionId.toString)
+        val message = securityMsgResp.toBufferMessage
+        if (message == null) throw new IOException("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
       } catch  {
         case e: Exception => {
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
-          throw new Exception("Error evaluating sasl response: " + e)
+          throw new IOException("Error evaluating sasl response: ", e)
         }
       }
     }
@@ -568,9 +584,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           logDebug("Server sasl not completed: " + connection.connectionId)
         }
         if (replyToken != null) {
-          var securityMsgResp = SecurityMessage.fromResponse(replyToken,
+          val securityMsgResp = SecurityMessage.fromResponse(replyToken,
             securityMsg.getConnectionId)
-          var message = securityMsgResp.toBufferMessage
+          val message = securityMsgResp.toBufferMessage
           if (message == null) throw new Exception("Error creating security Message")
           sendSecurityMessage(connection.getRemoteConnectionManagerId(), message)
         }
@@ -618,7 +634,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         return true
       }
     }
-    return false
+    false
   }
 
   private def handleMessage(
@@ -630,54 +646,66 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       case bufferMessage: BufferMessage => {
         if (authEnabled) {
           val res = handleAuthentication(connection, bufferMessage)
-          if (res == true) {
+          if (res) {
             // message was security negotiation so skip the rest
             logDebug("After handleAuth result was true, returning")
             return
           }
         }
-        if (bufferMessage.hasAckId) {
-          val sentMessageStatus = messageStatuses.synchronized {
+        if (bufferMessage.hasAckId()) {
+          messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
               case Some(status) => {
                 messageStatuses -= bufferMessage.ackId
-                status
+                status.markDone(Some(message))
               }
               case None => {
-                throw new Exception("Could not find reference for received ack message " +
-                  message.id)
-                null
+                /**
+                 * We can fall down on this code because of following 2 cases
+                 *
+                 * (1) Invalid ack sent due to buggy code.
+                 *
+                 * (2) Late-arriving ack for a SendMessageStatus
+                 *     To avoid unwilling late-arriving ack
+                 *     caused by long pause like GC, you can set
+                 *     larger value than default to spark.core.connection.ack.wait.timeout
+                 */
+                logWarning(s"Could not find reference for received ack Message ${message.id}")
               }
             }
           }
-          sentMessageStatus.synchronized {
-            sentMessageStatus.ackMessage = Some(message)
-            sentMessageStatus.attempted = true
-            sentMessageStatus.acked = true
-            sentMessageStatus.markDone()
-          }
         } else {
-          val ackMessage = if (onReceiveCallback != null) {
-            logDebug("Calling back")
-            onReceiveCallback(bufferMessage, connectionManagerId)
-          } else {
-            logDebug("Not calling back as callback is null")
-            None
-          }
-
-          if (ackMessage.isDefined) {
-            if (!ackMessage.get.isInstanceOf[BufferMessage]) {
-              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
-                + ackMessage.get.getClass())
-            } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
-              logDebug("Response to " + bufferMessage + " does not have ack id set")
-              ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
+          var ackMessage : Option[Message] = None
+          try {
+            ackMessage = if (onReceiveCallback != null) {
+              logDebug("Calling back")
+              onReceiveCallback(bufferMessage, connectionManagerId)
+            } else {
+              logDebug("Not calling back as callback is null")
+              None
             }
-          }
 
-          sendMessage(connectionManagerId, ackMessage.getOrElse {
-            Message.createBufferMessage(bufferMessage.id)
-          })
+            if (ackMessage.isDefined) {
+              if (!ackMessage.get.isInstanceOf[BufferMessage]) {
+                logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
+                  + ackMessage.get.getClass)
+              } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
+                logDebug("Response to " + bufferMessage + " does not have ack id set")
+                ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
+              }
+            }
+          } catch {
+            case e: Exception => {
+              logError(s"Exception was thrown while processing message", e)
+              val m = Message.createBufferMessage(bufferMessage.id)
+              m.hasError = true
+              ackMessage = Some(m)
+            }
+          } finally {
+            sendMessage(connectionManagerId, ackMessage.getOrElse {
+              Message.createBufferMessage(bufferMessage.id)
+            })
+          }
         }
       }
       case _ => throw new Exception("Unknown type message received")
@@ -694,9 +722,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
-            var securityMsg = SecurityMessage.fromResponse(firstResponse,
+            val securityMsg = SecurityMessage.fromResponse(firstResponse,
               conn.connectionId.toString())
-            var message = securityMsg.toBufferMessage
+            val message = securityMsg.toBufferMessage
             if (message == null) throw new Exception("Error creating security message")
             connectionsAwaitingSasl += ((conn.connectionId, conn))
             sendSecurityMessage(connManagerId, message)
@@ -789,11 +817,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
             case Some(msgStatus) => {
               messageStatuses -= message.id
               logInfo("Notifying " + msgStatus.connectionManagerId)
-              msgStatus.synchronized {
-                msgStatus.attempted = true
-                msgStatus.acked = false
-                msgStatus.markDone()
-              }
+              msgStatus.markDone(None)
             }
             case None => {
               logError("no messageStatus for failed message id: " + message.id)
@@ -812,21 +836,49 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     selector.wakeup()
   }
 
+  /**
+   * Send a message and block until an acknowldgment is received or an error occurs.
+   * @param connectionManagerId the message's destination
+   * @param message the message being sent
+   * @return a Future that either returns the acknowledgment message or captures an exception.
+   */
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
-      : Future[Option[Message]] = {
-    val promise = Promise[Option[Message]]
-    val status = new MessageStatus(
-      message, connectionManagerId, s => promise.success(s.ackMessage))
+      : Future[Message] = {
+    val promise = Promise[Message]()
+
+    val timeoutTask = new TimerTask {
+      override def run(): Unit = {
+        messageStatuses.synchronized {
+          messageStatuses.remove(message.id).foreach ( s => {
+            promise.failure(
+              new IOException(s"sendMessageReliably failed because ack " +
+                "was not received within ${ackTimeout} sec"))
+          })
+        }
+      }
+    }
+
+    val status = new MessageStatus(message, connectionManagerId, s => {
+      timeoutTask.cancel()
+      s.ackMessage match {
+        case None => // Indicates a failure where we either never sent or never got ACK'd
+          promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
+        case Some(ackMessage) =>
+          if (ackMessage.hasError) {
+            promise.failure(
+              new IOException("sendMessageReliably failed with ACK that signalled a remote error"))
+          } else {
+            promise.success(ackMessage)
+          }
+      }
+    })
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
+
+    ackTimeoutMonitor.schedule(timeoutTask, ackTimeout * 1000)
     sendMessage(connectionManagerId, message)
     promise.future
-  }
-
-  def sendMessageReliablySync(connectionManagerId: ConnectionManagerId,
-      message: Message): Option[Message] = {
-    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {
@@ -834,6 +886,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   }
 
   def stop() {
+    ackTimeoutMonitor.cancel()
     selectorThread.interrupt()
     selectorThread.join()
     selector.close()
@@ -851,6 +904,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
 
 private[spark] object ConnectionManager {
+  import ExecutionContext.Implicits.global
 
   def main(args: Array[String]) {
     val conf = new SparkConf
@@ -885,7 +939,7 @@ private[spark] object ConnectionManager {
 
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-      manager.sendMessageReliablySync(manager.id, bufferMessage)
+      Await.result(manager.sendMessageReliably(manager.id, bufferMessage), Duration.Inf)
     })
     println("--------------------------")
     println()
@@ -906,8 +960,10 @@ private[spark] object ConnectionManager {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
     }).foreach(f => {
-      val g = Await.result(f, 1 second)
-      if (!g.isDefined) println("Failed")
+      f.onFailure {
+        case e => println("Failed due to " + e)
+      }
+      Await.ready(f, 1 second)
     })
     val finishTime = System.currentTimeMillis
 
@@ -941,8 +997,10 @@ private[spark] object ConnectionManager {
       val bufferMessage = Message.createBufferMessage(buffers(count - 1 - i).duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
     }).foreach(f => {
-      val g = Await.result(f, 1 second)
-      if (!g.isDefined) println("Failed")
+      f.onFailure {
+        case e => println("Failed due to " + e)
+      }
+      Await.ready(f, 1 second)
     })
     val finishTime = System.currentTimeMillis
 
@@ -971,8 +1029,10 @@ private[spark] object ConnectionManager {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
         }).foreach(f => {
-          val g = Await.result(f, 1 second)
-          if (!g.isDefined) println("Failed")
+          f.onFailure {
+            case e => println("Failed due to " + e)
+          }
+          Await.ready(f, 1 second)
         })
       val finishTime = System.currentTimeMillis
       Thread.sleep(1000)

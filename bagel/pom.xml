@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-bagel_2.10</artifactId>
+  <properties>
+    <sbt.project.name>bagel</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Bagel</name>
   <url>http://spark.apache.org/</url>

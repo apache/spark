@@ -107,14 +107,16 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
    *
-   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param partitionStrategy the partitioning strategy to use when partitioning the edges
+   * in the graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
    *
-   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param partitionStrategy the partitioning strategy to use when partitioning the edges
+   * in the graph.
    * @param numPartitions the number of edge partitions in the new graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]
@@ -342,7 +344,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("webgraph")
-   * val outDeg: RDD[(VertexId, Int)] = rawGraph.outDegrees()
+   * val outDeg: RDD[(VertexId, Int)] = rawGraph.outDegrees
    * val graph = rawGraph.outerJoinVertices(outDeg) {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }

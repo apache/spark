@@ -17,11 +17,10 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
+import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
@@ -51,22 +50,22 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   }
 
   test("get uncached rdd") {
-    expecting {
-      blockManager.get(RDDBlockId(0, 0)).andReturn(None)
-      blockManager.put(RDDBlockId(0, 0), ArrayBuffer[Any](1, 2, 3, 4), StorageLevel.MEMORY_ONLY,
-        true).andStubReturn(Seq[(BlockId, BlockStatus)]())
-    }
-
-    whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0)
-      val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
-      assert(value.toList === List(1, 2, 3, 4))
-    }
+    // Do not mock this test, because attempting to match Array[Any], which is not covariant,
+    // in blockManager.put is a losing battle. You have been warned.
+    blockManager = sc.env.blockManager
+    cacheManager = sc.env.cacheManager
+    val context = new TaskContext(0, 0, 0)
+    val computeValue = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+    val getValue = blockManager.get(RDDBlockId(rdd.id, split.index))
+    assert(computeValue.toList === List(1, 2, 3, 4))
+    assert(getValue.isDefined, "Block cached from getOrCompute is not found!")
+    assert(getValue.get.data.toList === List(1, 2, 3, 4))
   }
 
   test("get cached rdd") {
     expecting {
-      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(ArrayBuffer(5, 6, 7).iterator))
+      val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(result))
     }
 
     whenExecuting(blockManager) {

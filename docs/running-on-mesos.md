@@ -127,7 +127,8 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 (You can also use [`spark-submit`](submitting-applications.html) and configure `spark.executor.uri`
-in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file.)
+in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file. Note
+that `spark-submit` currently only supports deploying the Spark driver in `client` mode for Mesos.)
 
 When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
 it does not need to be redundantly passed in as a system property.

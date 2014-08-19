@@ -266,8 +266,6 @@ version := "1.0"
 scalaVersion := "{{site.SCALA_VERSION}}"
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
-
-resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
 For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
@@ -349,12 +347,6 @@ Note that Spark artifacts are tagged with a Scala version.
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
-  <repositories>
-    <repository>
-      <id>Akka repository</id>
-      <url>http://repo.akka.io/releases</url>
-    </repository>
-  </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.apache.spark</groupId>

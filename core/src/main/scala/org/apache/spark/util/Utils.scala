@@ -18,10 +18,10 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL, URLConnection}
+import java.net._
 import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
-import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -38,10 +38,13 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+
+/** CallSite represents a place in user code. It can have a short and a long form. */
+private[spark] case class CallSite(shortForm: String, longForm: String)
 
 /**
  * Various utility methods used by Spark.
@@ -142,6 +145,9 @@ private[spark] object Utils extends Logging {
   def classIsLoadable(clazz: String): Boolean = {
     Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
   }
+
+  /** Preferred alternative to Class.forName(className) */
+  def classForName(className: String) = Class.forName(className, true, getContextOrSparkClassLoader)
 
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
@@ -281,19 +287,40 @@ private[spark] object Utils extends Logging {
   /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
                  out: OutputStream,
-                 closeStreams: Boolean = false)
+                 closeStreams: Boolean = false): Long =
   {
-    val buf = new Array[Byte](8192)
-    var n = 0
-    while (n != -1) {
-      n = in.read(buf)
-      if (n != -1) {
-        out.write(buf, 0, n)
+    var count = 0L
+    try {
+      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]) {
+        // When both streams are File stream, use transferTo to improve copy performance.
+        val inChannel = in.asInstanceOf[FileInputStream].getChannel()
+        val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
+        val size = inChannel.size()
+
+        // In case transferTo method transferred less data than we have required.
+        while (count < size) {
+          count += inChannel.transferTo(count, size - count, outChannel)
+        }
+      } else {
+        val buf = new Array[Byte](8192)
+        var n = 0
+        while (n != -1) {
+          n = in.read(buf)
+          if (n != -1) {
+            out.write(buf, 0, n)
+            count += n
+          }
+        }
       }
-    }
-    if (closeStreams) {
-      in.close()
-      out.close()
+      count
+    } finally {
+      if (closeStreams) {
+        try {
+          in.close()
+        } finally {
+          out.close()
+        }
+      }
     }
   }
 
@@ -550,19 +577,19 @@ private[spark] object Utils extends Logging {
     new ThreadFactoryBuilder().setDaemon(true)
 
   /**
+   * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
+   */
+  def namedThreadFactory(prefix: String): ThreadFactory = {
+    daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+  }
+
+  /**
    * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
    * unique, sequentially assigned integer.
    */
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+    val threadFactory = namedThreadFactory(prefix)
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
-  /**
-   * Return the string to tell how long has passed in milliseconds.
-   */
-  def getUsedTimeMs(startTimeMs: Long): String = {
-    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
@@ -570,8 +597,15 @@ private[spark] object Utils extends Logging {
    * unique, sequentially assigned integer.
    */
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
+    val threadFactory = namedThreadFactory(prefix)
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
+
+  /**
+   * Return the string to tell how long has passed in milliseconds.
+   */
+  def getUsedTimeMs(startTimeMs: Long): String = {
+    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
@@ -799,23 +833,19 @@ private[spark] object Utils extends Logging {
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
-  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String) {
-
-    /** Returns a printable version of the call site info suitable for logs. */
-    override def toString = {
-      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
-    }
-  }
-
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSiteInfo: CallSiteInfo = {
+  def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot(_.getMethodName.contains("getStackTrace"))
+      .filterNot { ste:StackTraceElement => 
+        // When running under some profilers, the current stack trace might contain some bogus 
+        // frames. This is intended to ensure that we don't crash in these situations by
+        // ignoring any frames that we can't examine.
+        (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
+      }
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -824,11 +854,11 @@ private[spark] object Utils extends Logging {
     var lastSparkMethod = "<unknown>"
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
-    var finished = false
-    var firstUserClass = "<unknown>"
+    var insideSpark = true
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     for (el <- trace) {
-      if (!finished) {
+      if (insideSpark) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
@@ -836,15 +866,21 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
+          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
-          firstUserClass = el.getClassName
-          finished = true
+          callStack += el.toString
+          insideSpark = false
         }
+      } else {
+        callStack += el.toString
       }
     }
-    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
+    CallSite(
+      shortForm = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      longForm = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -856,10 +892,66 @@ private[spark] object Utils extends Logging {
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(effectiveStart)
-    stream.read(buff)
-    stream.close()
+    try {
+      stream.skip(effectiveStart)
+      stream.read(buff)
+    } finally {
+      stream.close()
+    }
     Source.fromBytes(buff).mkString
+  }
+
+  /**
+   * Return a string containing data across a set of files. The `startIndex`
+   * and `endIndex` is based on the cumulative size of all the files take in
+   * the given order. See figure below for more details.
+   */
+  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
+    val fileLengths = files.map { _.length }
+    val startIndex = math.max(start, 0)
+    val endIndex = math.min(end, fileLengths.sum)
+    val fileToLength = files.zip(fileLengths).toMap
+    logDebug("Log files: \n" + fileToLength.mkString("\n"))
+
+    val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
+    var sum = 0L
+    for (file <- files) {
+      val startIndexOfFile = sum
+      val endIndexOfFile = sum + fileToLength(file)
+      logDebug(s"Processing file $file, " +
+        s"with start index = $startIndexOfFile, end index = $endIndex")
+
+      /*
+                                      ____________
+       range 1:                      |            |
+                                     |   case A   |
+
+       files:   |==== file 1 ====|====== file 2 ======|===== file 3 =====|
+
+                     |   case B  .       case C       .    case D    |
+       range 2:      |___________.____________________.______________|
+       */
+
+      if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
+        // Case C: read the whole file
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+      } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
+        // Case A and B: read from [start of required range] to [end of file / end of range]
+        val effectiveStartIndex = startIndex - startIndexOfFile
+        val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
+        // Case D: read from [start of file] to [end of require range]
+        val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
+        val effectiveEndIndex = endIndex - startIndexOfFile
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      }
+      sum += fileToLength(file)
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+    }
+    stringBuffer.toString
   }
 
   /**
@@ -1230,6 +1322,101 @@ private[spark] object Utils extends Logging {
           case _ => true
         }
       }
+    }
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(e: Exception): String = {
+    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(
+      className: String,
+      description: String,
+      stackTrace: Array[StackTraceElement]): String = {
+    val desc = if (description == null) "" else description
+    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
+    s"$className: $desc\n$st"
+  }
+
+  /**
+   * Convert all spark properties set in the given SparkConf to a sequence of java options.
+   */
+  def sparkJavaOpts(conf: SparkConf, filterKey: (String => Boolean) = _ => true): Seq[String] = {
+    conf.getAll
+      .filter { case (k, _) => filterKey(k) }
+      .map { case (k, v) => s"-D$k=$v" }
+  }
+
+  /**
+   * Default number of retries in binding to a port.
+   */
+  val portMaxRetries: Int = {
+    if (sys.props.contains("spark.testing")) {
+      // Set a higher number of retries for tests...
+      sys.props.get("spark.ports.maxRetries").map(_.toInt).getOrElse(100)
+    } else {
+      Option(SparkEnv.get)
+        .flatMap(_.conf.getOption("spark.ports.maxRetries"))
+        .map(_.toInt)
+        .getOrElse(16)
+    }
+  }
+
+  /**
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   *
+   * @param startPort The initial port to start the service on.
+   * @param maxRetries Maximum number of retries to attempt.
+   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
+      startService: Int => (T, Int),
+      serviceName: String = "",
+      maxRetries: Int = portMaxRetries): (T, Int) = {
+    val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    for (offset <- 0 to maxRetries) {
+      // Do not increment port if startPort is 0, which is treated as a special port
+      val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
+      try {
+        val (service, port) = startService(tryPort)
+        logInfo(s"Successfully started service$serviceString on port $port.")
+        return (service, port)
+      } catch {
+        case e: Exception if isBindCollision(e) =>
+          if (offset >= maxRetries) {
+            val exceptionMessage =
+              s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
+            val exception = new BindException(exceptionMessage)
+            // restore original stack trace
+            exception.setStackTrace(e.getStackTrace)
+            throw exception
+          }
+          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+            s"Attempting port ${tryPort + 1}.")
+      }
+    }
+    // Should never happen
+    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+  }
+
+  /**
+   * Return whether the exception is caused by an address-port collision when binding.
+   */
+  def isBindCollision(exception: Throwable): Boolean = {
+    exception match {
+      case e: BindException =>
+        if (e.getMessage != null && e.getMessage.contains("Address already in use")) {
+          return true
+        }
+        isBindCollision(e.getCause)
+      case e: Exception => isBindCollision(e.getCause)
+      case _ => false
     }
   }
 

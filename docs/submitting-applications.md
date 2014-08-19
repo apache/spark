@@ -33,6 +33,7 @@ dependencies, and can support different cluster managers and deploy modes that S
   --class <main-class>
   --master <master-url> \
   --deploy-mode <deploy-mode> \
+  --conf <key>=<value> \
   ... # other options
   <application-jar> \
   [application-arguments]
@@ -42,9 +43,22 @@ Some of the commonly used options are:
 
 * `--class`: The entry point for your application (e.g. `org.apache.spark.examples.SparkPi`)
 * `--master`: The [master URL](#master-urls) for the cluster (e.g. `spark://23.195.26.187:7077`)
-* `--deploy-mode`: Whether to deploy your driver program within the cluster or run it locally as an external client (either `cluster` or `client`)
+* `--deploy-mode`: Whether to deploy your driver on the worker nodes (`cluster`) or locally as an external client (`client`) (default: `client`)*
+* `--conf`: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap "key=value" in quotes (as shown).
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
+
+*A common deployment strategy is to submit your application from a gateway machine that is
+physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
+In this setup, `client` mode is appropriate. In `client` mode, the driver is launched directly
+within the client `spark-submit` process, with the input and output of the application attached
+to the console. Thus, this mode is especially suitable for applications that involve the REPL
+(e.g. Spark shell).
+
+Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
+locally on your laptop), it is common to use `cluster` mode to minimize network latency between
+the drivers and the executors. Note that `cluster` mode is currently not supported for standalone
+clusters, Mesos clusters, or python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.

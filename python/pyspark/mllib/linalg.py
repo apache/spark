@@ -23,10 +23,12 @@ object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
 
+import numpy
 from numpy import array, array_equal, ndarray, float64, int32
 
 
 class SparseVector(object):
+
     """
     A simple sparse vector class for passing data to MLlib. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
@@ -159,6 +161,15 @@ class SparseVector(object):
                 j += 1
             return result
 
+    def toArray(self):
+        """
+        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        """
+        arr = numpy.zeros(self.size)
+        for i in xrange(self.indices.size):
+            arr[self.indices[i]] = self.values[i]
+        return arr
+
     def __str__(self):
         inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
         vals = "[" + ",".join([str(v) for v in self.values]) + "]"
@@ -192,6 +203,7 @@ class SparseVector(object):
 
 
 class Vectors(object):
+
     """
     Factory methods for working with vectors. Note that dense vectors
     are simply represented as NumPy array objects, so there is no need
@@ -247,6 +259,7 @@ class Vectors(object):
         else:
             return "[" + ",".join([str(v) for v in vector]) + "]"
 
+
 def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
@@ -254,4 +267,8 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
+    # remove current path from list of search paths to avoid importing mllib.random
+    # for C{import random}, which is done in an external dependency of pyspark during doctests.
+    import sys
+    sys.path.pop(0)
     _test()

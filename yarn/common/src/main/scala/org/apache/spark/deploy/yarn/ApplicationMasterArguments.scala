@@ -26,10 +26,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Seq[String]()
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = 2
+  var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
 
   parseArgs(args.toList)
-  
+
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer = new ArrayBuffer[String]()
 
@@ -47,7 +47,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userClass = value
           args = tail
 
-        case ("--args") :: value :: tail =>
+        case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
           args = tail
 
@@ -75,7 +75,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
     userArgs = userArgsBuffer.readOnly
   }
-  
+
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
@@ -92,4 +92,8 @@ class ApplicationMasterArguments(val args: Array[String]) {
       "  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n")
     System.exit(exitCode)
   }
+}
+
+object ApplicationMasterArguments {
+  val DEFAULT_NUMBER_EXECUTORS = 2
 }
