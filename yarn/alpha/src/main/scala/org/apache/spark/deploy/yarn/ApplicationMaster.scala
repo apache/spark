@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.IOException
-import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
@@ -58,7 +57,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private val fs = FileSystem.get(yarnConf)
 
   private var yarnAllocator: YarnAllocationHandler = _
-  private var isFinished: Boolean = false
+  @volatile private var isFinished: Boolean = false
   private var uiAddress: String = _
   private var uiHistoryAddress: String = _
   private val maxAppAttempts: Int = conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES,
