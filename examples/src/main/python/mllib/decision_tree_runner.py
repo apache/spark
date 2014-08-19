@@ -17,6 +17,8 @@
 
 """
 Decision tree classification and regression using MLlib.
+
+This example requires NumPy (http://www.numpy.org/).
 """
 
 import numpy, os, sys
@@ -117,6 +119,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         dataPath = sys.argv[1]
     if not os.path.isfile(dataPath):
+        sc.stop()
         usage()
     points = MLUtils.loadLibSVMFile(sc, dataPath)
 
@@ -133,3 +136,5 @@ if __name__ == "__main__":
     print "  Model depth: %d\n" % model.depth()
     print "  Training accuracy: %g\n" % getAccuracy(model, reindexedData)
     print model
+
+    sc.stop()
