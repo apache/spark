@@ -126,8 +126,13 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
       finished = true
       reporterThread.interrupt()
-      reporterThread.join()
-      client.shutdown(status, diagnostics)
+      try {
+        if (Thread.currentThread() != reporterThread) {
+          reporterThread.join()
+        }
+      } finally {
+        client.shutdown(status, diagnostics)
+      }
     }
   }
 
