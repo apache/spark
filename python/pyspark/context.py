@@ -320,6 +320,10 @@ class SparkContext(object):
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
 
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.1)
+
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
         ...    testFile.write("Hello world!")
@@ -338,6 +342,10 @@ class SparkContext(object):
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.1)
 
         For example, if you have the following files::
 
