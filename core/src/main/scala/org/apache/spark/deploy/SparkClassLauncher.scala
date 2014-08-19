@@ -105,9 +105,6 @@ object SparkClassLauncher {
       Seq(s"-Xms$javaMemory", s"-Xmx$javaMemory") ++
       Seq(mainClass) ++
       args.slice(8, args.size)
-
-    command.foreach(println)
-
     val builder = new ProcessBuilder(command)
     val process = builder.start()
     new RedirectThread(System.in, process.getOutputStream, "redirect stdin").start()
