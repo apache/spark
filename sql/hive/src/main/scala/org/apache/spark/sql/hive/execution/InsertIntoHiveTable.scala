@@ -342,7 +342,7 @@ case class InsertIntoHiveTable(
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
-      if (dynamicPartNum>0) {
+      if (dynamicPartNum > 0) {
         db.loadDynamicPartitions(
           outputPath,
           qualifiedTableName,
