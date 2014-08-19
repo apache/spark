@@ -465,7 +465,10 @@ private[spark] object Utils extends Logging {
   }
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
-    conf.getenv("NM_HOST") != null || conf.getenv("CONTAINER_ID") != null
+    // These environment variables are set by YARN.
+    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
+    // For Hadoop 2.X, we check for CONTAINER_ID.
+    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
   }
 
   /**
@@ -484,7 +487,7 @@ private[spark] object Utils extends Logging {
         conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
     }
     val rootDirs = confValue.split(',')
-    logDebug(s"Getting/creating local root dirs at '$rootDirs'")
+    logDebug(s"Getting/creating local root dirs at '$confValue'")
 
     rootDirs.flatMap { rootDir =>
       val localDir: File = new File(rootDir)
