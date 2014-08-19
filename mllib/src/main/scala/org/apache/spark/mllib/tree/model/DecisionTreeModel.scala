@@ -39,7 +39,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @return Double prediction from the trained model
    */
   def predict(features: Vector): Double = {
-    topNode.predictIfLeaf(features)
+    topNode.predict(features)
   }
 
   /**
