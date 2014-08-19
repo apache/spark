@@ -59,10 +59,10 @@ object StreamingLinearRegression {
     val testData = ssc.textFileStream(args(1)).map(LabeledPoint.parse)
 
     val model = new StreamingLinearRegressionWithSGD()
-      .setInitialWeights(Vectors.dense(Array.fill[Double](args(3).toInt)(0)))
+      .setInitialWeights(Vectors.zeros(args(3).toInt))
 
     model.trainOn(trainingData)
-    model.predictOn(testData).print()
+    model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
     ssc.start()
     ssc.awaitTermination()
