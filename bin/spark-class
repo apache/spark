@@ -41,7 +41,7 @@ fi
 
 if [ -n "$SPARK_MEM" ]; then
   echo -e "Warning: SPARK_MEM is deprecated, please use a more specific config option" 1>&2
-  echo -e "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)." 1>&2
+  echo -e "(e.g., spark.executor.memory or spark.driver.memory)." 1>&2
 fi
 
 # Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
@@ -168,7 +168,7 @@ if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   export JAVA_OPTS
   export OUR_JAVA_MEM
   export SPARK_CLASS=1
-  shift # Ignore main class and use our own
+  shift # Ignore main class (org.apache.spark.deploy.SparkSubmit) and use our own
   exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
 else
   # Note: The format of this command is closely echoed in SparkSubmitDriverBootstrapper.scala
