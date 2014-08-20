@@ -17,8 +17,11 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.IOException
 import java.net.Socket
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -54,9 +57,14 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
   private var yarnAllocator: YarnAllocationHandler = _
-  private var driverClosed: Boolean = false
+  private val maxAppAttempts: Int = conf.getInt(
+    YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
+  private val fs = FileSystem.get(yarnConf)
+
+  @volatile private var driverClosed: Boolean = false
   private var isFinished: Boolean = false
   private var registered: Boolean = false
+  @volatile private var isLastAMRetry: Boolean = true
 
   private var amClient: AMRMClient[ContainerRequest] = _
 
@@ -99,11 +107,16 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // then user specified and /tmp.
     System.setProperty("spark.local.dir", getLocalDirs())
 
+    // Use priority 30 as its higher then HDFS. Its same priority as MapReduce is using.
+    ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
+
+    appAttemptId = ApplicationMaster.getApplicationAttemptId()
+    logInfo("ApplicationAttemptId: " + appAttemptId)
+    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     amClient = AMRMClient.createAMRMClient()
     amClient.init(yarnConf)
     amClient.start()
 
-    appAttemptId = ApplicationMaster.getApplicationAttemptId()
     synchronized {
       if (!isFinished) {
         registerApplicationMaster()
@@ -129,7 +142,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val interval = math.min(timeoutInterval / 2, schedulerInterval)
 
     reporterThread = launchReporterThread(interval)
-
+    isLastAMRetry = true
 
     // Wait for the reporter thread to Finish.
     reporterThread.join()
@@ -280,9 +293,42 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     }
   }
 
+  /**
+   * Clean up the staging directory.
+   */
+  private def cleanupStagingDir() {
+    var stagingDirPath: Path = null
+    try {
+      val preserveFiles = sparkConf.get("spark.yarn.preserve.staging.files", "false").toBoolean
+      if (!preserveFiles) {
+        stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+        if (stagingDirPath == null) {
+          logError("Staging directory is null")
+          return
+        }
+        logInfo("Deleting staging directory " + stagingDirPath)
+        fs.delete(stagingDirPath, true)
+      }
+    } catch {
+      case ioe: IOException =>
+        logError("Failed to cleanup staging dir " + stagingDirPath, ioe)
+    }
+  }
+
+  // The shutdown hook that runs when a signal is received AND during normal close of the JVM.
+  class AppMasterShutdownHook(appMaster: ExecutorLauncher) extends Runnable {
+
+    def run() {
+      logInfo("AppMaster received a signal.")
+      // we need to clean up staging dir before HDFS is shut down
+      // make sure we don't delete it until this is the last AM
+      if (appMaster.isLastAMRetry) appMaster.cleanupStagingDir()
+    }
+  }
+
 }
 
-object ExecutorLauncher {
+object ExecutorLauncher extends Logging {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>
