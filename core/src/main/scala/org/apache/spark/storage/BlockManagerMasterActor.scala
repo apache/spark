@@ -52,6 +52,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
+  // Remove RDD, Shuffle, Broadcast timeout
+  private val removeBlocksTimeout = conf.getLong("spark.storage.removeBlocksTimeout",
+    akkaTimeout.toSeconds * 10) * 1000
+
   val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
     math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
@@ -151,7 +155,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val removeMsg = RemoveRdd(rddId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+        bm.slaveActor.ask(removeMsg)(removeBlocksTimeout).mapTo[Int]
       }.toSeq
     )
   }
@@ -162,7 +166,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Boolean]
+        bm.slaveActor.ask(removeMsg)(removeBlocksTimeout).mapTo[Boolean]
       }.toSeq
     )
   }
@@ -181,7 +185,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }
     Future.sequence(
       requiredBlockManagers.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+        bm.slaveActor.ask(removeMsg)(removeBlocksTimeout).mapTo[Int]
       }.toSeq
     )
   }
