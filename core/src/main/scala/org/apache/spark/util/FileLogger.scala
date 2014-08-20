@@ -52,7 +52,20 @@ private[spark] class FileLogger(
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
 
-  private val fileSystem = Utils.getHadoopFileSystem(logDir)
+  /**
+   * To avoid effects of FileSystem#close or FileSystem.closeAll called from other modules,
+   * create unique FileSystem instance only for FileLogger
+   */
+  private val fileSystem = {
+    val conf = SparkHadoopUtil.get.newConfiguration()
+    val logUri = new URI(logDir)
+    val scheme = logUri.getScheme
+    if (scheme == "hdfs") {
+      conf.setBoolean("fs.hdfs.impl.disable.cache", true)
+    }
+    FileSystem.get(logUri, conf)
+  }
+
   var fileIndex = 0
 
   // Only used if compression is enabled
