@@ -1178,7 +1178,7 @@
     </profile>
 
     <profile>
-      <id>hive-thriftserver</id>
+      <id>hive</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
