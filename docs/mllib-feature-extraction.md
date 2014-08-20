@@ -13,8 +13,8 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction
 [Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
-Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`.
-And document frequency `$DF(t, D)$` is the number of documents that contains term `$t$`.
+Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`,
+while document frequency `$DF(t, D)$` is the number of documents that contains term `$t$`.
 If we only use term frequency to measure the importance, it is very easy to over-emphasize terms that
 appear very often but carry little information about the document, e.g., "a", "the", and "of".
 If a term appears very often across the corpus, it means it doesn't carry special information about
@@ -37,10 +37,12 @@ Our implementation of term frequency utilizes the
 [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
 A raw feature is mapped into an index (term) by applying a hash function.
 Then term frequencies are calculated based on the mapped indices.
-This approach saves the global term-to-index map, which is expensive for a large corpus,
-but it suffers from hash collision, where different raw features may become the same term after hashing.
+This approach avoids the need to compute a global term-to-index map,
+which can be expensive for a large corpus, but it suffers from potential hash collisions,
+where different raw features may become the same term after hashing.
 To reduce the chance of collision, we can increase the target feature dimension, i.e., 
 the number of buckets of the hash table.
+The default feature dimension is `$2^{20} = 1,048,576$`.
 
 **Note:** MLlib doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
@@ -65,8 +67,7 @@ val sc: SparkContext = ...
 // Load documents (one per line).
 val documents: RDD[Seq[String]] = sc.textFile("...").map(_.split(" ").toSeq)
 
-val numFeatures = 1000000
-val hashingTF = new HashingTF(numFeatures)
+val hashingTF = new HashingTF()
 val tf: RDD[Vector] = hasingTF.transform(documents)
 {% endhighlight %}
 
