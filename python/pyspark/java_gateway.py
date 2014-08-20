@@ -54,12 +54,18 @@ def launch_gateway():
             gateway_port = proc.stdout.readline()
             gateway_port = int(gateway_port)
         except ValueError:
+            # Grab the remaining lines of stdout
             (stdout, _) = proc.communicate()
             exit_code = proc.poll()
             error_msg = "Launching GatewayServer failed"
             error_msg += " with exit code %d! " % exit_code if exit_code else "! "
-            error_msg += "(Warning: unexpected output detected.)\n\n"
-            error_msg += gateway_port + stdout
+            if gateway_port == "" and stdout == "":
+                error_msg += "(Warning: no output detected.)\n"
+            else:
+                error_msg += "(Warning: unexpected output detected.)\n\n"
+                error_msg += "--------------------------------------------------------------\n"
+                error_msg += gateway_port + stdout
+                error_msg += "--------------------------------------------------------------\n"
             raise Exception(error_msg)
 
         # Create a thread to echo output from the GatewayServer, which is required
