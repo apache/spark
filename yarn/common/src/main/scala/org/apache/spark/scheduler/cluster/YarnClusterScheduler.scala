@@ -24,10 +24,11 @@ import org.apache.spark.util.Utils
 import org.apache.hadoop.conf.Configuration
 
 /**
- *
- * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of ApplicationMaster, etc is done
+ * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of
+ * ApplicationMaster, etc is done
  */
-private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
+private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
+  extends TaskSchedulerImpl(sc) {
 
   logInfo("Created YarnClusterScheduler")
 
@@ -51,4 +52,10 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
     super.postStartHook()
     logInfo("YarnClusterScheduler.postStartHook done")
   }
+
+  override def stop() {
+    super.stop()
+    ApplicationMaster.sparkContextStopped(sc)
+  }
+
 }

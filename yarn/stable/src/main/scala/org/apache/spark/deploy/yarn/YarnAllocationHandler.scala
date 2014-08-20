@@ -112,7 +112,7 @@ private[yarn] class YarnAllocationHandler(
   }
 
   override def allocateResources() = {
-    addResourceRequests(maxExecutors - numPendingAllocate.get())
+    addResourceRequests(maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get())
 
     // We have already set the container request. Poll the ResourceManager for a response.
     // This doubles as a heartbeat if there are no pending container requests.
