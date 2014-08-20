@@ -113,6 +113,7 @@ private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializ
   /**
    * Return the index of the largest element in this array.
    * If there are ties, the first maximal element is chosen.
+   * TODO: Move this elsewhere in Spark?
    */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
     val result = array.foldLeft(-1, Double.MinValue, 0) {

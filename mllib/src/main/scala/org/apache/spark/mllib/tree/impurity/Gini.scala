@@ -89,9 +89,6 @@ private[tree] class GiniAggregator(numClasses: Int)
       throw new IllegalArgumentException(s"GiniAggregator given label $label" +
         s" but requires label < numClasses (= ${counts.size}).")
     }
-    if (label.toInt >= counts.size) {
-      throw new RuntimeException(s"label = $label, counts = $counts")
-    }
     counts(label.toInt) += 1
   }
 
