@@ -109,7 +109,9 @@ private[sql] object JsonRDD extends Logging {
         val newType = dataType match {
           case NullType => StringType
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
-          case struct: StructType => nullTypeToStringType(struct)
+          case ArrayType(struct: StructType, containsNull) =>
+            ArrayType(nullTypeToStringType(struct), containsNull)
+          case struct: StructType =>nullTypeToStringType(struct)
           case other: DataType => other
         }
         StructField(fieldName, newType, nullable)

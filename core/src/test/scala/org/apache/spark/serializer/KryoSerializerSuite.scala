@@ -23,8 +23,9 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SparkConf, SharedSparkContext}
 import org.apache.spark.serializer.KryoTest._
+
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -207,39 +208,43 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
         .fold(new ClassWithoutNoArgConstructor(10))((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
     assert(10 + control.sum === result)
   }
-}
 
-class KryoSerializerResizableOutputSuite extends FunSuite {
-  import org.apache.spark.SparkConf
-  import org.apache.spark.SparkContext
-  import org.apache.spark.LocalSparkContext
-  import org.apache.spark.SparkException
+  test("kryo with nonexistent custom registrator should fail") {
+    import org.apache.spark.{SparkConf, SparkException}
 
-  // trial and error showed this will not serialize with 1mb buffer
-  val x = (1 to 400000).toArray
-
-  test("kryo without resizable output buffer should fail on large array") {
     val conf = new SparkConf(false)
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.kryoserializer.buffer.mb", "1")
-    conf.set("spark.kryoserializer.buffer.max.mb", "1")
-    val sc = new SparkContext("local", "test", conf)
-    intercept[SparkException](sc.parallelize(x).collect)
-    LocalSparkContext.stop(sc)
+    conf.set("spark.kryo.registrator", "this.class.does.not.exist")
+    
+    val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
+    assert(thrown.getMessage.contains("Failed to invoke this.class.does.not.exist"))
   }
 
-  test("kryo with resizable output buffer should succeed on large array") {
-    val conf = new SparkConf(false)
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.kryoserializer.buffer.mb", "1")
-    conf.set("spark.kryoserializer.buffer.max.mb", "2")
-    val sc = new SparkContext("local", "test", conf)
-    assert(sc.parallelize(x).collect === x)
-    LocalSparkContext.stop(sc)
+  test("default class loader can be set by a different thread") {
+    val ser = new KryoSerializer(new SparkConf)
+
+    // First serialize the object
+    val serInstance = ser.newInstance()
+    val bytes = serInstance.serialize(new ClassLoaderTestingObject)
+
+    // Deserialize the object to make sure normal deserialization works
+    serInstance.deserialize[ClassLoaderTestingObject](bytes)
+
+    // Set a special, broken ClassLoader and make sure we get an exception on deserialization
+    ser.setDefaultClassLoader(new ClassLoader() {
+      override def loadClass(name: String) = throw new UnsupportedOperationException
+    })
+    intercept[UnsupportedOperationException] {
+      ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
+    }
   }
 }
+
+
+class ClassLoaderTestingObject
+
 
 object KryoTest {
+
   case class CaseClass(i: Int, s: String) {}
 
   class ClassWithNoArgConstructor {

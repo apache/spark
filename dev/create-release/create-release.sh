@@ -35,6 +35,12 @@ RELEASE_VERSION=${RELEASE_VERSION:-1.0.0}
 RC_NAME=${RC_NAME:-rc2}
 USER_NAME=${USER_NAME:-pwendell}
 
+if [ -z "$JAVA_HOME" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+JAVA_7_HOME=${JAVA_7_HOME:-$JAVA_HOME}
+
 set -e
 
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
@@ -111,12 +117,13 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
-make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4"
-make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0"
+make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
+make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
 make_binary_release "hadoop2" \
-  "-Phive -Phive-thriftserver -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0"
+  "-Phive -Phive-thriftserver -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
 make_binary_release "hadoop2-without-hive" \
-  "-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0"
+  "-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
+wait
 
 # Copy data
 echo "Copying release tarballs"
@@ -130,7 +137,8 @@ scp spark-* \
 cd spark
 sbt/sbt clean
 cd docs
-PRODUCTION=1 jekyll build
+# Compile docs with Java 7 to use nicer format
+JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 ssh $USER_NAME@people.apache.org \
