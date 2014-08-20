@@ -20,8 +20,6 @@ package org.apache.spark.broadcast
 import java.io._
 import java.nio.ByteBuffer
 
-import org.apache.spark.util.io.ByteArrayChunkOutputStream
-
 import scala.collection.JavaConversions.asJavaEnumeration
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -30,6 +28,7 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 /**
  * A BitTorrent-like implementation of [[org.apache.spark.broadcast.Broadcast]].
