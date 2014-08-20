@@ -30,12 +30,13 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
 import heapq
+import bisect
 from random import Random
 from math import sqrt, log
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long
+    PickleSerializer, pack_long, CompressedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -574,6 +575,10 @@ class RDD(object):
         # noqa
 
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        >>> sc.parallelize(tmp).sortByKey().first()
+        ('1', 3)
+        >>> sc.parallelize(tmp).sortByKey(True, 1).collect()
+        [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
         >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
         [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
         >>> tmp2 = [('Mary', 1), ('had', 2), ('a', 3), ('little', 4), ('lamb', 5)]
@@ -584,42 +589,36 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        bounds = list()
+        def sortPartition(iterator):
+            return iter(sorted(iterator, key=lambda (k, v): keyfunc(k), reverse=not ascending))
+
+        if numPartitions == 1:
+            if self.getNumPartitions() > 1:
+                self = self.coalesce(1)
+            return self.mapPartitions(sortPartition)
 
         # first compute the boundary of each part via sampling: we want to partition
         # the key-space into bins such that the bins have roughly the same
         # number of (key, value) pairs falling into them
-        if numPartitions > 1:
-            rddSize = self.count()
-            # constant from Spark's RangePartitioner
-            maxSampleSize = numPartitions * 20.0
-            fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
+        rddSize = self.count()
+        maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
+        fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
+        samples = self.sample(False, fraction, 1).map(lambda (k, v): k).collect()
+        samples = sorted(samples, reverse=(not ascending), key=keyfunc)
 
-            samples = self.sample(False, fraction, 1).map(
-                lambda (k, v): k).collect()
-            samples = sorted(samples, reverse=(not ascending), key=keyfunc)
+        # we have numPartitions many parts but one of the them has
+        # an implicit boundary
+        bounds = [samples[len(samples) * (i + 1) / numPartitions]
+                  for i in range(0, numPartitions - 1)]
 
-            # we have numPartitions many parts but one of the them has
-            # an implicit boundary
-            for i in range(0, numPartitions - 1):
-                index = (len(samples) - 1) * (i + 1) / numPartitions
-                bounds.append(samples[index])
-
-        def rangePartitionFunc(k):
-            p = 0
-            while p < len(bounds) and keyfunc(k) > bounds[p]:
-                p += 1
+        def rangePartitioner(k):
+            p = bisect.bisect_left(bounds, keyfunc(k))
             if ascending:
                 return p
             else:
                 return numPartitions - 1 - p
 
-        def mapFunc(iterator):
-            yield sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
-
-        return (self.partitionBy(numPartitions, partitionFunc=rangePartitionFunc)
-                    .mapPartitions(mapFunc, preservesPartitioning=True)
-                    .flatMap(lambda x: x, preservesPartitioning=True))
+        return self.partitionBy(numPartitions, rangePartitioner).mapPartitions(sortPartition, True)
 
     def sortBy(self, keyfunc, ascending=True, numPartitions=None):
         """
@@ -1190,7 +1189,9 @@ class RDD(object):
             for x in iterator:
                 if not isinstance(x, basestring):
                     x = unicode(x)
-                yield x.encode("utf-8")
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
         keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -1684,6 +1685,31 @@ class RDD(object):
         >>> x.zip(y).collect()
         [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
         """
+        if self.getNumPartitions() != other.getNumPartitions():
+            raise ValueError("Can only zip with RDD which has the same number of partitions")
+
+        def get_batch_size(ser):
+            if isinstance(ser, BatchedSerializer):
+                return ser.batchSize
+            return 0
+
+        def batch_as(rdd, batchSize):
+            ser = rdd._jrdd_deserializer
+            if isinstance(ser, BatchedSerializer):
+                ser = ser.serializer
+            return rdd._reserialize(BatchedSerializer(ser, batchSize))
+
+        my_batch = get_batch_size(self._jrdd_deserializer)
+        other_batch = get_batch_size(other._jrdd_deserializer)
+        if my_batch != other_batch:
+            # use the greatest batchSize to batch the other one.
+            if my_batch > other_batch:
+                other = batch_as(other, my_batch)
+            else:
+                self = batch_as(self, other_batch)
+
+        # There will be an Exception in JVM if there are different number
+        # of items in each partitions.
         pairRDD = self._jrdd.zip(other._jrdd)
         deserializer = PairDeserializer(self._jrdd_deserializer,
                                         other._jrdd_deserializer)
@@ -1809,7 +1835,8 @@ class PipelinedRDD(RDD):
             self._jrdd_deserializer = NoOpSerializer()
         command = (self.func, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
-        pickled_command = CloudPickleSerializer().dumps(command)
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)

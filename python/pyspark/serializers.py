@@ -67,6 +67,7 @@ import struct
 import sys
 import types
 import collections
+import zlib
 
 from pyspark import cloudpickle
 
@@ -254,6 +255,9 @@ class PairDeserializer(CartesianDeserializer):
 
     def load_stream(self, stream):
         for (keys, vals) in self.prepare_keys_values(stream):
+            if len(keys) != len(vals):
+                raise ValueError("Can not deserialize RDD with different number of items"
+                                 " in pair: (%d, %d)" % (len(keys), len(vals)))
             for pair in izip(keys, vals):
                 yield pair
 
@@ -314,8 +318,8 @@ def _hijack_namedtuple():
 
     _old_namedtuple = _copy_func(collections.namedtuple)
 
-    def namedtuple(name, fields, verbose=False, rename=False):
-        cls = _old_namedtuple(name, fields, verbose, rename)
+    def namedtuple(*args, **kwargs):
+        cls = _old_namedtuple(*args, **kwargs)
         return _hack_namedtuple(cls)
 
     # replace namedtuple with new one
@@ -401,6 +405,22 @@ class AutoSerializer(FramedSerializer):
             return cPickle.loads(obj[1:])
         else:
             raise ValueError("invalid sevialization type: %s" % _type)
+
+
+class CompressedSerializer(FramedSerializer):
+    """
+    compress the serialized data
+    """
+
+    def __init__(self, serializer):
+        FramedSerializer.__init__(self)
+        self.serializer = serializer
+
+    def dumps(self, obj):
+        return zlib.compress(self.serializer.dumps(obj), 1)
+
+    def loads(self, obj):
+        return self.serializer.loads(zlib.decompress(obj))
 
 
 class UTF8Deserializer(Serializer):

@@ -153,6 +153,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
           case org.apache.spark.Success =>
+            stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             (None, Option(taskEnd.taskMetrics))
           case e: ExceptionFailure =>  // Handle ExceptionFailure because we might have metrics
@@ -198,6 +199,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       - oldMetrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L))
     stageData.shuffleReadBytes += shuffleReadDelta
     execSummary.shuffleRead += shuffleReadDelta
+
+    val inputBytesDelta =
+      (taskMetrics.inputMetrics.map(_.bytesRead).getOrElse(0L)
+      - oldMetrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L))
+    stageData.inputBytes += inputBytesDelta
+    execSummary.inputBytes += inputBytesDelta
 
     val diskSpillDelta =
       taskMetrics.diskBytesSpilled - oldMetrics.map(_.diskBytesSpilled).getOrElse(0L)
