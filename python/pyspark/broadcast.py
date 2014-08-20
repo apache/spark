@@ -21,18 +21,16 @@
 >>> b = sc.broadcast([1, 2, 3, 4, 5])
 >>> b.value
 [1, 2, 3, 4, 5]
-
->>> from pyspark.broadcast import _broadcastRegistry
->>> _broadcastRegistry[b.bid] = b
->>> from cPickle import dumps, loads
->>> loads(dumps(b)).value
-[1, 2, 3, 4, 5]
-
 >>> sc.parallelize([0, 0]).flatMap(lambda x: b.value).collect()
 [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+>>> b.unpersist()
 
 >>> large_broadcast = sc.broadcast(list(range(10000)))
 """
+import os
+
+from pyspark.serializers import CompressedSerializer, PickleSerializer
+
 # Holds broadcasted data received from Java, keyed by its id.
 _broadcastRegistry = {}
 
@@ -52,17 +50,38 @@ class Broadcast(object):
     Access its value through C{.value}.
     """
 
-    def __init__(self, bid, value, java_broadcast=None, pickle_registry=None):
+    def __init__(self, bid, value, java_broadcast=None,
+                 pickle_registry=None, path=None):
         """
         Should not be called directly by users -- use
         L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}
         instead.
         """
-        self.value = value
         self.bid = bid
+        if path is None:
+            self.value = value
         self._jbroadcast = java_broadcast
         self._pickle_registry = pickle_registry
+        self.path = path
+
+    def unpersist(self, blocking=False):
+        self._jbroadcast.unpersist(blocking)
+        os.unlink(self.path)
 
     def __reduce__(self):
         self._pickle_registry.add(self)
         return (_from_id, (self.bid, ))
+
+    def __getattr__(self, item):
+        if item == 'value' and self.path is not None:
+            ser = CompressedSerializer(PickleSerializer())
+            value = ser.load_stream(open(self.path)).next()
+            self.value = value
+            return value
+
+        raise AttributeError(item)
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
