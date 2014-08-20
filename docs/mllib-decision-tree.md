@@ -167,6 +167,7 @@ println("Training Error = " + trainErr)
 
 <div data-lang="java">
 {% highlight java %}
+import scala.Tuple2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
@@ -174,7 +175,6 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.DecisionTree;
 import org.apache.spark.mllib.tree.model.DecisionTreeModel;
-import scala.Tuple2;
 
 JavaRDD<LabeledPoint> data = ... // data set
 
@@ -186,7 +186,7 @@ String impurity = "gini";
 Integer maxDepth = 5;
 Integer maxBins = 100;
 
-final DecisionTreeModel model = DecisionTree.trainClassifier(data.rdd(), numClasses,
+final DecisionTreeModel model = DecisionTree.trainClassifier(data, numClasses,
   categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
 // Evaluate model on training instances and compute training error
@@ -198,9 +198,11 @@ JavaPairRDD<Double, Double> predictionAndLabel =
   });
 Double trainErr = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() != pl._2();
+      return !pl._1().equals(pl._2());
     }
   }).count() / data.count();
+System.out.print("Training error: " + trainErr);
+System.out.print("Learned model:\n" + model);
 {% endhighlight %}
 </div>
 
@@ -289,7 +291,7 @@ String impurity = "variance";
 Integer maxDepth = 5;
 Integer maxBins = 100;
 
-final DecisionTreeModel model = DecisionTree.trainRegressor(data.rdd(),
+final DecisionTreeModel model = DecisionTree.trainRegressor(data,
   categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
 // Evaluate model on training instances and compute training error
@@ -305,6 +307,8 @@ Double trainMSE = predictionAndLabel.map(new Function<Tuple2<Double, Double>, Do
       return diff * diff;
     }
   }).sum() / data.count();
+System.out.print("Training Mean Squared Error: " + trainMSE);
+System.out.print("Learned model:\n" + model);
 {% endhighlight %}
 </div>
 
