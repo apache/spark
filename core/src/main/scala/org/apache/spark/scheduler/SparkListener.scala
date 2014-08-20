@@ -39,7 +39,8 @@ case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Propert
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
+case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
@@ -47,6 +48,7 @@ case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListe
 @DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
+    stageAttemptId: Int,
     taskType: String,
     reason: TaskEndReason,
     taskInfo: TaskInfo,
@@ -75,10 +77,15 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+/**
+ * Periodic updates from executors.
+ * @param execId executor id
+ * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
+ */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    taskMetrics: Seq[(Long, Int, TaskMetrics)])
+    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
   extends SparkListenerEvent
 
 @DeveloperApi
