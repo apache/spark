@@ -163,11 +163,6 @@
           <artifactId>spark-hive_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hive-thriftserver</id>
-      <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
