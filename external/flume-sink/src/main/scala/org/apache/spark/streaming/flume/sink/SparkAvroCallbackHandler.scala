@@ -16,7 +16,7 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.{ConcurrentLinkedQueue, ConcurrentHashMap, Executors}
+import java.util.concurrent.{TimeUnit, ConcurrentLinkedQueue, ConcurrentHashMap, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConversions._
@@ -70,7 +70,7 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    */
   override def getEventBatch(n: Int): EventBatch = {
     logDebug("Got getEventBatch call from Spark.")
-    if(stopped) {
+    if (stopped) {
       new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
     }
     val sequenceNumber = seqBase + seqCounter.incrementAndGet()
@@ -141,7 +141,7 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
     stopped = true
     processorsToShutdown.foreach(_.shutdown())
     transactionExecutorOpt.foreach(executor => {
-      executor.shutdown()
+      executor.shutdownNow()
     })
   }
 }

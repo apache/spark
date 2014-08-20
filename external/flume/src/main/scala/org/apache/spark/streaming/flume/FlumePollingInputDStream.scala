@@ -18,28 +18,27 @@ package org.apache.spark.streaming.flume
 
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
+import java.util.concurrent.{TimeUnit, LinkedBlockingQueue, Executors}
 
-import org.apache.avro.AvroRemoteException
+import com.google.common.base.Throwables
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.Try
+import scala.util.control.Breaks
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
-import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
-
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
+import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
-import scala.util.Try
-import scala.util.control.Breaks
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
@@ -52,11 +51,11 @@ import scala.util.control.Breaks
  * @tparam T Class type of the object of this stream
  */
 private[streaming] class FlumePollingInputDStream[T: ClassTag](
-  @transient _ssc: StreamingContext,
-  val addresses: Seq[InetSocketAddress],
-  val maxBatchSize: Int,
-  val parallelism: Int,
-  storageLevel: StorageLevel
+    @transient _ssc: StreamingContext,
+    val addresses: Seq[InetSocketAddress],
+    val maxBatchSize: Int,
+    val parallelism: Int,
+    storageLevel: StorageLevel
   ) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
@@ -65,10 +64,10 @@ private[streaming] class FlumePollingInputDStream[T: ClassTag](
 }
 
 private[streaming] class FlumePollingReceiver(
-  addresses: Seq[InetSocketAddress],
-  maxBatchSize: Int,
-  parallelism: Int,
-  storageLevel: StorageLevel
+    addresses: Seq[InetSocketAddress],
+    maxBatchSize: Int,
+    parallelism: Int,
+    storageLevel: StorageLevel
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val channelFactoryExecutor =
@@ -133,30 +132,27 @@ private[streaming] class FlumePollingReceiver(
                   }
                 }.recover {
                   case e: Exception =>
-                    // Is the exception an interrupted exception? If yes,
-                    // check if the receiver was stopped. If the receiver was stopped,
-                    // simply exit. Else send a Nack and exit.
-                    if (e.isInstanceOf[InterruptedException]) {
-                      if (isStopped()) {
-                        loop.break()
-                      } else {
-                        sendNack(batchReceived, client, seq, e)
-                      }
-                    }
-                    // if there is a cause do the same check as above.
-                    Option(e.getCause) match {
-                      case Some(exception: InterruptedException) =>
+                    Throwables.getRootCause(e) match {
+                      // If the cause was an InterruptedException,
+                      // then check if the receiver is stopped - if yes,
+                      // just break out of the loop. Else send a Nack and
+                      // log a warning.
+                      // In the unlikely case, the cause was not an Exception,
+                      // then just throw it out and exit.
+                      case interrupted: InterruptedException =>
                         if (isStopped()) {
                           loop.break()
                         } else {
-                          sendNack(batchReceived, client, seq, e)
+                          sendNack(batchReceived, client, seq)
+                          logWarning("Interrupted while receiving data from Flume", interrupted)
                         }
-                      case Some(otherException: Exception) =>
-                        sendNack(batchReceived, client, seq, e)
-                      case Some(majorError: Throwable) =>
-                        throw majorError // kill immediately
-                      case None =>
-                        sendNack(batchReceived, client, seq, e)
+                      case exception: Exception =>
+                        sendNack(batchReceived, client, seq)
+                        logWarning("Error while receiving data from Flume", exception)
+                      case majorError: Throwable =>
+                        // Don't bother with Nack - exit immediately
+                        logError("Major error while receiving data from Flume.", majorError)
+                        throw majorError
                     }
                 }
               } catch {
@@ -173,7 +169,7 @@ private[streaming] class FlumePollingReceiver(
   }
 
   private def sendNack(batchReceived: Boolean, client: SparkFlumeProtocol.Callback,
-    seq: CharSequence, exception: Exception): Unit = {
+    seq: CharSequence): Unit = {
     Try {
       if (batchReceived) {
         // Let Flume know that the events need to be pushed back into the channel.
@@ -183,10 +179,8 @@ private[streaming] class FlumePollingReceiver(
       }
     }.recover({
       case e: Exception => logError(
-        "Sending Nack also failed. A Flume agent is down.")
+        "Sending Nack also failed. A Flume agent is down.", e)
     })
-    TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
-    logWarning("Error while attempting to store events", exception)
   }
 
   override def onStop(): Unit = {
