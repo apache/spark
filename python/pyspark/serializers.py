@@ -412,15 +412,15 @@ class UTF8Deserializer(Serializer):
     def __init__(self, use_unicode=False):
         self.use_unicode = use_unicode
 
+    def loads(self, stream):
+        length = read_int(stream)
+        s = stream.read(length)
+        return s.decode("utf-8") if self.use_unicode else s
+
     def load_stream(self, stream):
         try:
-            _read_int = read_int  # faster than global lookup
-            if self.use_unicode:
-                while True:
-                    yield stream.read(_read_int(stream)).decode("utf-8")
-            else:
-                while True:
-                    yield stream.read(_read_int(stream))
+            while True:
+                yield self.loads(stream)
         except struct.error:
             return
         except EOFError:
