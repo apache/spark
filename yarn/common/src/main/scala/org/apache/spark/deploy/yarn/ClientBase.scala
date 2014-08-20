@@ -29,7 +29,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -191,23 +191,11 @@ trait ClientBase extends Logging {
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
     // local resources to the application master.
     val fs = FileSystem.get(conf)
-
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    if (UserGroupInformation.isSecurityEnabled()) {
-      if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-        logError(errorMessage)
-        throw new SparkException(errorMessage)
-      }
-    }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
+    val nns = ClientBase.getNameNodesToAccess(sparkConf) + dst
+    ClientBase.obtainTokensForNamenodes(nns, conf, credentials)
+
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
-
-    if (UserGroupInformation.isSecurityEnabled()) {
-      val dstFs = dst.getFileSystem(conf)
-      dstFs.addDelegationTokens(delegTokenRenewer, credentials)
-    }
-
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
@@ -271,6 +259,14 @@ trait ClientBase extends Logging {
     localResources
   }
 
+  /** Get all application master environment variables set on this SparkConf */
+  def getAppMasterEnv: Seq[(String, String)] = {
+    val prefix = "spark.yarn.appMasterEnv."
+    sparkConf.getAll.filter{case (k, v) => k.startsWith(prefix)}
+      .map{case (k, v) => (k.substring(prefix.length), v)}
+  }
+
+
   def setupLaunchEnv(
       localResources: HashMap[String, LocalResource],
       stagingDir: String): HashMap[String, String] = {
@@ -288,6 +284,11 @@ trait ClientBase extends Logging {
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
+    getAppMasterEnv.foreach { case (key, value) =>
+      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
+    }
+
+    // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       // Allow users to specify some environment variables.
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs, File.pathSeparator)
@@ -299,11 +300,11 @@ trait ClientBase extends Logging {
   }
 
   def userArgsToString(clientArgs: ClientArguments): String = {
-    val prefix = " --args "
+    val prefix = " --arg "
     val args = clientArgs.userArgs
     val retval = new StringBuilder()
     for (arg <- args) {
-      retval.append(prefix).append(" '").append(arg).append("' ")
+      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
     }
     retval.toString
   }
@@ -385,7 +386,7 @@ trait ClientBase extends Logging {
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
     for ((k, v) <- sparkConf.getAll) {
-      javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
+      javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
     if (args.amClass == classOf[ApplicationMaster].getName) {
@@ -399,7 +400,8 @@ trait ClientBase extends Logging {
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
       javaOpts ++
-      Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
+      Seq(args.amClass, "--class", YarnSparkHadoopUtil.escapeForShell(args.userClass),
+        "--jar ", YarnSparkHadoopUtil.escapeForShell(args.userJar),
         userArgsToString(args),
         "--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,
@@ -417,6 +419,13 @@ trait ClientBase extends Logging {
     amContainer.setCommands(printableCommands)
 
     setupSecurityToken(amContainer)
+
+    // send the acl settings into YARN to control who has access via YARN interfaces
+    val securityManager = new SecurityManager(sparkConf)
+    val acls = Map[ApplicationAccessType, String] (
+      ApplicationAccessType.VIEW_APP -> securityManager.getViewAcls,
+      ApplicationAccessType.MODIFY_APP -> securityManager.getModifyAcls)
+    amContainer.setApplicationACLs(acls)
     amContainer
   }
 }
@@ -613,5 +622,41 @@ object ClientBase extends Logging {
   private def addClasspathEntry(path: String, env: HashMap[String, String]) =
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
+
+  /** 
+   * Get the list of namenodes the user may access.
+   */
+  private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "").split(",").map(_.trim()).filter(!_.isEmpty)
+      .map(new Path(_)).toSet
+  }
+
+  private[yarn] def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  private[yarn] def obtainTokensForNamenodes(paths: Set[Path], conf: Configuration,
+    creds: Credentials) {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = getTokenRenewer(conf)
+
+      paths.foreach {
+        dst =>
+          val dstFs = dst.getFileSystem(conf)
+          logDebug("getting token for namenode: " + dst)
+          dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
+  }
 
 }

@@ -38,8 +38,8 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
   }
-  if (conf.contains("master.ui.port")) {
-    webUiPort = conf.get("master.ui.port").toInt
+  if (conf.contains("spark.master.ui.port")) {
+    webUiPort = conf.get("spark.master.ui.port").toInt
   }
 
   parse(args.toList)

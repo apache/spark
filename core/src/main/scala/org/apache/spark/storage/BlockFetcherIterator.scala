@@ -18,17 +18,17 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
+import org.apache.spark.network.netty.client.{BlockClientListener, LazyInitIterator, ReferenceCountedBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
-
-import io.netty.buffer.ByteBuf
+import scala.util.{Failure, Success}
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.executor.ShuffleReadMetrics
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
-import org.apache.spark.network.netty.ShuffleCopier
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
@@ -46,38 +46,42 @@ import org.apache.spark.util.Utils
 private[storage]
 trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
   def initialize()
-  def numLocalBlocks: Int
-  def numRemoteBlocks: Int
-  def fetchWaitTime: Long
-  def remoteBytesRead: Long
 }
 
 
 private[storage]
 object BlockFetcherIterator {
 
-  // A request to fetch one or more blocks, complete with their sizes
+  /**
+   * A request to fetch blocks from a remote BlockManager.
+   * @param address remote BlockManager to fetch from.
+   * @param blocks Sequence of tuple, where the first element is the block id,
+   *               and the second element is the estimated size, used to calculate bytesInFlight.
+   */
   class FetchRequest(val address: BlockManagerId, val blocks: Seq[(BlockId, Long)]) {
     val size = blocks.map(_._2).sum
   }
 
-  // A result of a fetch. Includes the block ID, size in bytes, and a function to deserialize
-  // the block (since we want all deserializaton to happen in the calling thread); can also
-  // represent a fetch failure if size == -1.
+  /**
+   * Result of a fetch from a remote block. A failure is represented as size == -1.
+   * @param blockId block id
+   * @param size estimated size of the block, used to calculate bytesInFlight.
+   *             Note that this is NOT the exact bytes.
+   * @param deserialize closure to return the result in the form of an Iterator.
+   */
   class FetchResult(val blockId: BlockId, val size: Long, val deserialize: () => Iterator[Any]) {
     def failed: Boolean = size == -1
   }
 
+  // TODO: Refactor this whole thing to make code more reusable.
   class BasicBlockFetcherIterator(
       private val blockManager: BlockManager,
       val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer)
+      serializer: Serializer,
+      readMetrics: ShuffleReadMetrics)
     extends BlockFetcherIterator {
 
     import blockManager._
-
-    private var _remoteBytesRead = 0L
-    private var _fetchWaitTime = 0L
 
     if (blocksByAddress == null) {
       throw new IllegalArgumentException("BlocksByAddress is null")
@@ -88,13 +92,9 @@ object BlockFetcherIterator {
 
     protected var startTime = System.currentTimeMillis
 
-    // This represents the number of local blocks, also counting zero-sized blocks
-    private var numLocal = 0
     // BlockIds for local blocks that need to be fetched. Excludes zero-sized blocks
     protected val localBlocksToFetch = new ArrayBuffer[BlockId]()
 
-    // This represents the number of remote blocks, also counting zero-sized blocks
-    private var numRemote = 0
     // BlockIds for remote blocks that need to be fetched. Excludes zero-sized blocks
     protected val remoteBlocksToFetch = new HashSet[BlockId]()
 
@@ -103,10 +103,10 @@ object BlockFetcherIterator {
 
     // Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
     // the number of bytes in flight is limited to maxBytesInFlight
-    private val fetchRequests = new Queue[FetchRequest]
+    protected val fetchRequests = new Queue[FetchRequest]
 
     // Current bytes in flight from our requests
-    private var bytesInFlight = 0L
+    protected var bytesInFlight = 0L
 
     protected def sendRequest(req: FetchRequest) {
       logDebug("Sending request for %d blocks (%s) from %s".format(
@@ -118,8 +118,8 @@ object BlockFetcherIterator {
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
-      future.onSuccess {
-        case Some(message) => {
+      future.onComplete {
+        case Success(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
           for (blockMessage <- blockMessageArray) {
@@ -131,12 +131,15 @@ object BlockFetcherIterator {
             val networkSize = blockMessage.getData.limit()
             results.put(new FetchResult(blockId, sizeMap(blockId),
               () => dataDeserialize(blockId, blockMessage.getData, serializer)))
-            _remoteBytesRead += networkSize
+            // TODO: NettyBlockFetcherIterator has some race conditions where multiple threads can
+            // be incrementing bytes read at the same time (SPARK-2625).
+            readMetrics.remoteBytesRead += networkSize
+            readMetrics.remoteBlocksFetched += 1
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
-        case None => {
-          logError("Could not get block(s) from " + cmId)
+        case Failure(exception) => {
+          logError("Could not get block(s) from " + cmId, exception)
           for ((blockId, size) <- req.blocks) {
             results.put(new FetchResult(blockId, -1, null))
           }
@@ -154,14 +157,14 @@ object BlockFetcherIterator {
       // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
       // at most maxBytesInFlight in order to limit the amount of data in flight.
       val remoteRequests = new ArrayBuffer[FetchRequest]
+      var totalBlocks = 0
       for ((address, blockInfos) <- blocksByAddress) {
+        totalBlocks += blockInfos.size
         if (address == blockManagerId) {
-          numLocal = blockInfos.size
           // Filter out zero-sized blocks
           localBlocksToFetch ++= blockInfos.filter(_._2 != 0).map(_._1)
           _numBlocksToFetch += localBlocksToFetch.size
         } else {
-          numRemote += blockInfos.size
           val iterator = blockInfos.iterator
           var curRequestSize = 0L
           var curBlocks = new ArrayBuffer[(BlockId, Long)]
@@ -191,7 +194,7 @@ object BlockFetcherIterator {
         }
       }
       logInfo("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
-        (numLocal + numRemote) + " blocks")
+        totalBlocks + " blocks")
       remoteRequests
     }
 
@@ -204,6 +207,7 @@ object BlockFetcherIterator {
           // getLocalFromDisk never return None but throws BlockException
           val iter = getLocalFromDisk(id, serializer).get
           // Pass 0 as size since it's not in flight
+          readMetrics.localBlocksFetched += 1
           results.put(new FetchResult(id, 0, () => iter))
           logDebug("Got local block " + id)
         } catch {
@@ -237,12 +241,6 @@ object BlockFetcherIterator {
       logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
     }
 
-    override def numLocalBlocks: Int = numLocal
-    override def numRemoteBlocks: Int = numRemote
-    override def fetchWaitTime: Long = _fetchWaitTime
-    override def remoteBytesRead: Long = _remoteBytesRead
-
-
     // Implementing the Iterator methods with an iterator that reads fetched blocks off the queue
     // as they arrive.
     @volatile protected var resultsGotten = 0
@@ -254,7 +252,7 @@ object BlockFetcherIterator {
       val startFetchWait = System.currentTimeMillis()
       val result = results.take()
       val stopFetchWait = System.currentTimeMillis()
-      _fetchWaitTime += (stopFetchWait - startFetchWait)
+      readMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
       if (! result.failed) bytesInFlight -= result.size
       while (!fetchRequests.isEmpty &&
         (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
@@ -268,80 +266,62 @@ object BlockFetcherIterator {
   class NettyBlockFetcherIterator(
       blockManager: BlockManager,
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer)
-    extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer) {
-
-    import blockManager._
-
-    val fetchRequestsSync = new LinkedBlockingQueue[FetchRequest]
-
-    private def startCopiers(numCopiers: Int): List[_ <: Thread] = {
-      (for ( i <- Range(0,numCopiers) ) yield {
-        val copier = new Thread {
-          override def run(){
-            try {
-              while(!isInterrupted && !fetchRequestsSync.isEmpty) {
-                sendRequest(fetchRequestsSync.take())
-              }
-            } catch {
-              case x: InterruptedException => logInfo("Copier Interrupted")
-              // case _ => throw new SparkException("Exception Throw in Shuffle Copier")
-            }
-          }
-        }
-        copier.start
-        copier
-      }).toList
-    }
-
-    // keep this to interrupt the threads when necessary
-    private def stopCopiers() {
-      for (copier <- copiers) {
-        copier.interrupt()
-      }
-    }
+      serializer: Serializer,
+      readMetrics: ShuffleReadMetrics)
+    extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer, readMetrics) {
 
     override protected def sendRequest(req: FetchRequest) {
-
-      def putResult(blockId: BlockId, blockSize: Long, blockData: ByteBuf) {
-        val fetchResult = new FetchResult(blockId, blockSize,
-          () => dataDeserialize(blockId, blockData.nioBuffer, serializer))
-        results.put(fetchResult)
-      }
-
       logDebug("Sending request for %d blocks (%s) from %s".format(
-        req.blocks.size, Utils.bytesToString(req.size), req.address.host))
-      val cmId = new ConnectionManagerId(req.address.host, req.address.nettyPort)
-      val cpier = new ShuffleCopier(blockManager.conf)
-      cpier.getBlocks(cmId, req.blocks, putResult)
-      logDebug("Sent request for remote blocks " + req.blocks + " from " + req.address.host )
-    }
+        req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
+      val cmId = new ConnectionManagerId(req.address.host, req.address.port)
 
-    private var copiers: List[_ <: Thread] = null
+      bytesInFlight += req.size
+      val sizeMap = req.blocks.toMap // so we can look up the size of each blockID
 
-    override def initialize() {
-      // Split Local Remote Blocks and set numBlocksToFetch
-      val remoteRequests = splitLocalRemoteBlocks()
-      // Add the remote requests into our queue in a random order
-      for (request <- Utils.randomize(remoteRequests)) {
-        fetchRequestsSync.put(request)
-      }
+      // This could throw a TimeoutException. In that case we will just retry the task.
+      val client = blockManager.nettyBlockClientFactory.createClient(
+        cmId.host, req.address.nettyPort)
+      val blocks = req.blocks.map(_._1.toString)
 
-      copiers = startCopiers(conf.getInt("spark.shuffle.copier.threads", 6))
-      logInfo("Started " + fetchRequestsSync.size + " remote fetches in " +
-        Utils.getUsedTimeMs(startTime))
+      client.fetchBlocks(
+        blocks,
+        new BlockClientListener {
+          override def onFetchFailure(blockId: String, errorMsg: String): Unit = {
+            logError(s"Could not get block(s) from $cmId with error: $errorMsg")
+            for ((blockId, size) <- req.blocks) {
+              results.put(new FetchResult(blockId, -1, null))
+            }
+          }
 
-      // Get Local Blocks
-      startTime = System.currentTimeMillis
-      getLocalBlocks()
-      logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
-    }
+          override def onFetchSuccess(blockId: String, data: ReferenceCountedBuffer): Unit = {
+            // Increment the reference count so the buffer won't be recycled.
+            // TODO: This could result in memory leaks when the task is stopped due to exception
+            // before the iterator is exhausted.
+            data.retain()
+            val buf = data.byteBuffer()
+            val blockSize = buf.remaining()
+            val bid = BlockId(blockId)
 
-    override def next(): (BlockId, Option[Iterator[Any]]) = {
-      resultsGotten += 1
-      val result = results.take()
-      // If all the results has been retrieved, copiers will exit automatically
-      (result.blockId, if (result.failed) None else Some(result.deserialize()))
+            // TODO: remove code duplication between here and BlockManager.dataDeserialization.
+            results.put(new FetchResult(bid, sizeMap(bid), () => {
+              def createIterator: Iterator[Any] = {
+                val stream = blockManager.wrapForCompression(bid, data.inputStream())
+                serializer.newInstance().deserializeStream(stream).asIterator
+              }
+              new LazyInitIterator(createIterator) {
+                // Release the buffer when we are done traversing it.
+                override def close(): Unit = data.release()
+              }
+            }))
+
+            readMetrics.synchronized {
+              readMetrics.remoteBytesRead += blockSize
+              readMetrics.remoteBlocksFetched += 1
+            }
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          }
+        }
+      )
     }
   }
   // End of NettyBlockFetcherIterator

@@ -84,8 +84,8 @@ Section 9.2.4 in
 [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 details). For example, for a binary classification problem with one categorical feature with three
 categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical
-features are ordered as A followed by C followed B or A, B, C. The two split candidates are A \| C, B
-and A , B \| C where \| denotes the split. A similar heuristic is used for multiclass classification
+features are ordered as A followed by C followed B or A, C, B. The two split candidates are A \| C, B
+and A , C \| B where \| denotes the split. A similar heuristic is used for multiclass classification
 when `$2^(M-1)-1$` is greater than the number of bins -- the impurity for each categorical feature value
 is used for ordering.
 
