@@ -99,12 +99,16 @@ private[spark] object SparkSubmitDriverBootstrapper {
         javaOpts + confJavaOpts.map(" " + _).getOrElse("")
       }
 
+    val filteredJavaOpts = Utils.splitCommandString(newJavaOpts)
+      .filterNot(_.startsWith("-Xms"))
+      .filterNot(_.startsWith("-Xmx"))
+
     // Build up command
     val command: Seq[String] =
       Seq(runner) ++
       Seq("-cp", newClasspath) ++
       Seq(newLibraryPath) ++
-      Utils.splitCommandString(newJavaOpts) ++
+      filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++
       submitArgs
