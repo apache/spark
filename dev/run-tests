@@ -55,7 +55,7 @@ JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*
 # Partial solution for SPARK-1455. Only run Hive tests if there are sql changes.
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
-  diffs=`git diff --name-only master | grep "^sql/"`
+  diffs=`git diff --name-only master | grep "^\(sql/\)\|\(bin/spark-sql\)\|\(sbin/start-thriftserver.sh\)"`
   if [ -n "$diffs" ]; then
     echo "Detected changes in SQL. Will run Hive test suite."
     _RUN_SQL_TESTS=true
