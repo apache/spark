@@ -18,10 +18,8 @@
 package org.apache.spark.streaming.api.python
 
 import java.io._
-import java.io.{ObjectInputStream, IOException}
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
+import java.util.{List => JList, ArrayList => JArrayList, Map => JMap}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
 
@@ -56,7 +54,9 @@ class PythonDStream[T: ClassTag](
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     parent.getOrCompute(validTime) match{
       case Some(rdd) =>
-        val pythonRDD = new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning, pythonExec, broadcastVars, accumulator)
+        // create PythonRDD to compute Python functions.
+        val pythonRDD = new PythonRDD(rdd, command, envVars, pythonIncludes,
+          preservePartitoning, pythonExec, broadcastVars, accumulator)
         Some(pythonRDD.asJavaRDD.rdd)
       case None => None
     }
@@ -81,8 +81,8 @@ DStream[Array[Byte]](prev.ssc){
       case Some(rdd)=>Some(rdd)
         val pairwiseRDD = new PairwiseRDD(rdd)
         /*
-         * Since python operation is executed by Scala after StreamingContext.start.
-         * What PythonPairwiseDStream does is equivalent to python code in pySpark.
+         * Since python function is executed by Scala after StreamingContext.start.
+         * What PythonPairwiseDStream does is equivalent to python code in pyspark.
          *
          * with _JavaStackTrace(self.context) as st:
          *    pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
@@ -99,6 +99,7 @@ DStream[Array[Byte]](prev.ssc){
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
+
 class PythonForeachDStream(
     prev: DStream[Array[Byte]],
     foreachFunction: PythonRDDFunction
@@ -112,29 +113,11 @@ class PythonForeachDStream(
   this.register()
 }
 
-class PythonTransformedDStream(
-    prev: DStream[Array[Byte]],
-    transformFunction: PythonRDDFunction
-  ) extends DStream[Array[Byte]](prev.ssc) {
-
-  override def dependencies = List(prev)
-
-  override def slideDuration: Duration = prev.slideDuration
-
-  override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
-    prev.getOrCompute(validTime).map(rdd => {
-      transformFunction.call(rdd.toJavaRDD(), validTime.milliseconds).rdd
-    })
-  }
-
-  val asJavaDStream  = JavaDStream.fromDStream(this)
-}
 
 /**
  * This is a input stream just for the unitest. This is equivalent to a checkpointable,
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
  * returns the i_th element at the i_th batch under manual clock.
- * This implementation is inspired by QueStream
  */
 
 class PythonTestInputStream(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[JavaRDD[Array[Byte]]])

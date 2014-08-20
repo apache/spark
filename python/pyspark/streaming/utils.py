@@ -19,6 +19,9 @@ from pyspark.rdd import RDD
 
 
 class RDDFunction():
+    """
+    This class is for py4j callback. This
+    """
     def __init__(self, ctx, jrdd_deserializer, func):
         self.ctx = ctx
         self.deserializer = jrdd_deserializer
@@ -38,6 +41,7 @@ class RDDFunction():
 
 
 def msDurationToString(ms):
+    #TODO: add doctest
     """
     Returns a human-readable string representing a duration such as "35ms"
     """
@@ -54,8 +58,10 @@ def msDurationToString(ms):
     else:
         return "%.2f h" % (float(ms) / hour)
 
+
 def rddToFileName(prefix, suffix, time):
-    if suffix is not None:
-        return prefix + "-" + str(time) + "." + suffix
-    else:
+    #TODO: add doctest
+    if suffix is None:
         return prefix + "-" + str(time)
+    else:
+        return prefix + "-" + str(time) + "." + suffix

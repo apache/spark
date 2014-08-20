@@ -276,23 +276,6 @@ class DStream(object):
             yield list(iterator)
         return self.mapPartitions(func)
 
-    #def transform(self, func): - TD
-    #    from utils import RDDFunction
-    #    wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
-    #    jdstream = self.ctx._jvm.PythonTransformedDStream(self._jdstream.dstream(), wrapped_func).toJavaDStream
-    #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW
-
-    def _test_output(self, result):
-        """
-        This function is only for test case.
-        Store data in a DStream to result to verify the result in test case
-        """
-        def get_output(rdd, time):
-            taken = rdd.collect()
-            result.append(taken)
-
-        self.foreachRDD(get_output)
-
     def cache(self):
         """
         Persist this DStream with the default storage level (C{MEMORY_ONLY_SER}).
@@ -397,6 +380,17 @@ class DStream(object):
             rdd.saveAsPickleFile(path)
 
         return self.foreachRDD(saveAsPickleFile)
+
+    def _test_output(self, result):
+        """
+        This function is only for test case.
+        Store data in a DStream to result to verify the result in test case
+        """
+        def get_output(rdd, time):
+            collected = rdd.collect()
+            result.append(collected)
+
+        self.foreachRDD(get_output)
 
 
 # TODO: implement updateStateByKey

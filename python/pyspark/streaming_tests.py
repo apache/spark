@@ -20,9 +20,10 @@ Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
 
 This file would be merged to tests.py after all functions are ready.
-But for now, this file is separated due to focusing to streaming test case.
+Since python API for streaming is beta, this file is separated.
 
-Callback server seems like unstable sometimes, which cause error in test case.
+Callback server is sometimes unstable sometimes, which cause error in test case.
+But this is very rare case.
 
 """
 from itertools import chain
@@ -58,15 +59,14 @@ class PySparkStreamingTestCase(unittest.TestCase):
 class TestBasicOperationsSuite(PySparkStreamingTestCase):
     """
     2 tests for each function for batach deserializer and unbatch deserilizer because
-    we cannot change the deserializer after streaming process starts.
+    the deserializer is not changed dunamically after streaming process starts.
     Default numInputPartitions is 2.
     If the number of input element is over 3, that DStream use batach deserializer.
     If not, that DStream use unbatch deserializer.
 
-    Most of the operation uses UTF8 deserializer to get value from Scala.
-    I am wondering if these test are enough or not.
-    All tests input should have list of lists. This represents stream.
+    All tests input should have list of lists. This list represents stream.
     Every batch interval, the first object of list are chosen to make DStream.
+    e.g The first list in the list is input of the first batch. 
     Please see the BasicTestSuits in Scala which is close to this implementation.
     """
     def setUp(self):
@@ -412,7 +412,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def _run_stream(self, test_input, test_func, expected_output, numSlices=None):
         """
-        Start stream and return the output.
+        Start stream and return the result.
         @param test_input: dataset for the test. This should be list of lists.
         @param test_func: wrapped test_function. This function should return PythonDstream object.
         @param expexted_output: expected output for this testcase.
@@ -443,6 +443,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
                 break
 
         return result
+
 
 class TestSaveAsFilesSuite(PySparkStreamingTestCase):
     def setUp(self):
