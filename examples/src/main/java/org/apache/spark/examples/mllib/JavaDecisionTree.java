@@ -49,7 +49,7 @@ public final class JavaDecisionTree {
     SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 
     // Compute the number of classes from the data.
     Integer numClasses = data.map(new Function<LabeledPoint, Double>() {

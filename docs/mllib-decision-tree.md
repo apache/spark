@@ -130,7 +130,9 @@ subsequent level are split into smaller tasks.
 
 ### Classification
 
-The example below demonstrates how to load a CSV file, parse it as an RDD of `LabeledPoint` and then
+The example below demonstrates how to load a
+[LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
+parse it as an RDD of `LabeledPoint` and then
 perform classification using a decision tree using Gini impurity as an impurity measure and a
 maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
 
@@ -186,7 +188,7 @@ SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
 String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 // Compute the number of classes from the data.
 Integer numClasses = data.map(new Function<LabeledPoint, Double>() {
   @Override public Double call(LabeledPoint p) {
@@ -255,7 +257,9 @@ to an underlying `DecisionTree` model in Scala.
 
 ### Regression
 
-The example below demonstrates how to load a CSV file, parse it as an RDD of `LabeledPoint` and then
+The example below demonstrates how to load a
+[LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
+parse it as an RDD of `LabeledPoint` and then
 perform regression using a decision tree using variance as an impurity measure and a maximum tree
 depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
@@ -308,7 +312,7 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 
 String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
 
 SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
