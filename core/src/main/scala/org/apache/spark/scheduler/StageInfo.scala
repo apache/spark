@@ -29,6 +29,7 @@ import org.apache.spark.storage.RDDInfo
 @DeveloperApi
 class StageInfo(
     val stageId: Int,
+    val attemptId: Int,
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
@@ -56,9 +57,15 @@ private[spark] object StageInfo {
    * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
    * sequence of narrow dependencies should also be associated with this Stage.
    */
-  def fromStage(stage: Stage): StageInfo = {
+  def fromStage(stage: Stage, numTasks: Option[Int] = None): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
-    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos, stage.details)
+    new StageInfo(
+      stage.id,
+      stage.attemptId,
+      stage.name,
+      numTasks.getOrElse(stage.numTasks),
+      rddInfos,
+      stage.details)
   }
 }
