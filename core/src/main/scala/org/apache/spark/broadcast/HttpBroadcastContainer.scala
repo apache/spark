@@ -35,7 +35,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SecurityManager, SparkConf}
 
-class HttpBroadcastContainer extends Serializable with Logging {
+private class HttpBroadcastContainer extends Serializable with Logging {
 
   private var initialized = false
   private var broadcastDir: File = null
