@@ -18,46 +18,39 @@
 package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg
 
 /**
  * :: Experimental ::
- * Tanimoto distance implementation
+ * Cosine distance implementation
  *
- * @see http://en.wikipedia.org/wiki/Jaccard_index
+ * @see http://en.wikipedia.org/wiki/Cosine_similarity
  */
 @Experimental
-class TanimotoDistanceMeasure extends DistanceMetric {
+class CosineDistanceMetric extends DistanceMetric {
 
   /**
-   * Calculates the tanimoto distance between 2 points
-   *
-   * The coefficient (a measure of similarity) is: Td(a, b) = a.b / (|a|^2 + |b|^2 - a.b)
-   * The distance d(a,b) = 1 - T(a,b)
+   * Calculates the cosine distance between 2 points
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return 0 for perfect match, > 0 for greater distance
+   * @return a scalar doubles of the distance
    */
-  override def apply(v1: Vector, v2: Vector): Double = {
+  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
     validate(v1, v2)
 
-    val calcSquaredSum = (vector: Vector) => vector.toBreeze.map(x => x * x).reduce(_ + _).apply(0)
     val dotProduct = v1.toBreeze.dot(v2.toBreeze)
-    var denominator = (calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct)
+    var denominator = v1.toBreeze.norm(2) * v2.toBreeze.norm(2)
 
-    // correct for floating-point round-off: distance >= 0
-    if(denominator < dotProduct) {
+    // correct for floating-point rounding errors
+    if (denominator < dotProduct) {
       denominator = dotProduct
     }
 
-    // denominator == 0 only when dot(a,a) == dot(b,b) == dot(a,b) == 0
-    val distance = if(denominator > 0) {
-      1 - dotProduct / denominator
+    // correct for zero-vector corner case
+    if (denominator == 0 && dotProduct == 0) {
+      return 0.0
     }
-    else {
-      0.0
-    }
-    distance
+    1.0 - (dotProduct / denominator)
   }
 }

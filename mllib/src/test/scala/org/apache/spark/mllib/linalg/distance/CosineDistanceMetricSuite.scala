@@ -19,8 +19,8 @@ package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.Vectors
 
-class CosineDistanceMeasureSuite extends GeneralDistanceMetricSuite {
-  override def distanceFactory = new CosineDistanceMeasure
+class CosineDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory = new CosineDistanceMetric
 
   test("concreate distance check") {
     val vector1 = Vectors.dense(1.0, 2.0)

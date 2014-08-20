@@ -14,30 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg
-
-/**
- * :: Experimental ::
- * Squared euclidean distance implementation
- */
-@Experimental
-class SquaredEuclideanDistanceMeasure extends DistanceMetric {
-
-  /**
-   * Calculates the squared euclidean distance between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
-    validate(v1, v2)
-
-    val diffVector = (v1.toBreeze - v2.toBreeze)
-    diffVector.dot(diffVector)
-  }
+class SquaredEuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory = new SquaredEuclideanDistanceMetric
 }

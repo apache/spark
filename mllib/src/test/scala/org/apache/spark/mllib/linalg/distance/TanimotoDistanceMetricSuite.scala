@@ -19,8 +19,8 @@ package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.Vectors
 
-class TanimotoDistanceMeasureSuite extends GeneralDistanceMetricSuite {
-  override def distanceFactory = new TanimotoDistanceMeasure
+class TanimotoDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory = new TanimotoDistanceMetric
 
   test("calculate tanimoto distance for 2-dimension") {
     val vector1 = Vectors.dense(1.0, 2.0)
