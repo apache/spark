@@ -31,6 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * :: DeveloperApi ::
@@ -102,6 +103,10 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+
+  // Write metrics for current spill
+  private var curWriteMetrics: ShuffleWriteMetrics = _
+
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
@@ -172,7 +177,9 @@ class ExternalAppendOnlyMap[K, V, C](
     logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
       .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
-    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+    curWriteMetrics = new ShuffleWriteMetrics()
+    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
+      curWriteMetrics)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -183,9 +190,8 @@ class ExternalAppendOnlyMap[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      val bytesWritten = w.bytesWritten
-      batchSizes.append(bytesWritten)
-      _diskBytesSpilled += bytesWritten
+      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
+      batchSizes.append(curWriteMetrics.shuffleBytesWritten)
       objectsWritten = 0
     }
 
@@ -199,7 +205,9 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+          curWriteMetrics = new ShuffleWriteMetrics()
+          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
+            curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {

@@ -21,8 +21,6 @@ import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.MessageTypeParser
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 
@@ -33,7 +31,6 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, IntegerType}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
@@ -136,6 +133,57 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getBoolean(7) === (i % 2 == 0))
         assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
     }
+  }
+
+  test("Treat binary as string") {
+    val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
+
+    // Create the test file.
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val range = (0 to 255)
+    val rowRDD = TestSQLContext.sparkContext.parallelize(range)
+      .map(i => org.apache.spark.sql.Row(i, s"val_$i".getBytes))
+    // We need to ask Parquet to store the String column as a Binary column.
+    val schema = StructType(
+      StructField("c1", IntegerType, false) ::
+      StructField("c2", BinaryType, false) :: Nil)
+    val schemaRDD1 = applySchema(rowRDD, schema)
+    schemaRDD1.saveAsParquetFile(path)
+    val resultWithBinary = parquetFile(path).collect
+    range.foreach {
+      i =>
+        assert(resultWithBinary(i).getInt(0) === i)
+        assert(resultWithBinary(i)(1) === s"val_$i".getBytes)
+    }
+
+    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
+    // This ParquetRelation always use Parquet types to derive output.
+    val parquetRelation = new ParquetRelation(
+      path.toString,
+      Some(TestSQLContext.sparkContext.hadoopConfiguration),
+      TestSQLContext) {
+      override val output =
+        ParquetTypesConverter.convertToAttributes(
+          ParquetTypesConverter.readMetaData(new Path(path), conf).getFileMetaData.getSchema,
+          TestSQLContext.isParquetBinaryAsString)
+    }
+    val schemaRDD = new SchemaRDD(TestSQLContext, parquetRelation)
+    val resultWithString = schemaRDD.collect
+    range.foreach {
+      i =>
+        assert(resultWithString(i).getInt(0) === i)
+        assert(resultWithString(i)(1) === s"val_$i")
+    }
+
+    schemaRDD.registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT c1, c2 FROM tmp WHERE c2 = 'val_5' OR c2 = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    // Set it back.
+    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
   }
 
   test("Read/Write All Types with non-primitive type") {
@@ -381,11 +429,14 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val predicate5 = new GreaterThan(attribute1, attribute2)
     val badfilter = ParquetFilters.createFilter(predicate5)
     assert(badfilter.isDefined === false)
+
+    val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
+    val badfilter2 = ParquetFilters.createFilter(predicate6)
+    assert(badfilter2.isDefined === false)
   }
 
   test("test filter by predicate pushdown") {
     for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
-      println(s"testing field $myval")
       val query1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
       assert(
         query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],

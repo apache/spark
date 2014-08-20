@@ -19,6 +19,8 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
+import org.apache.spark.shuffle.hash.HashShuffleManager
+
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -30,6 +32,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
@@ -41,7 +44,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   // so we coerce consolidation if not already enabled.
   testConf.set("spark.shuffle.consolidateFiles", "true")
 
-  val shuffleBlockManager = new ShuffleBlockManager(null) {
+  private val shuffleManager = new HashShuffleManager(testConf.clone)
+
+  val shuffleBlockManager = new ShuffleBlockManager(null, shuffleManager) {
     override def conf = testConf.clone
     var idToSegmentMap = mutable.Map[ShuffleBlockId, FileSegment]()
     override def getBlockLocation(id: ShuffleBlockId) = idToSegmentMap(id)
@@ -66,7 +71,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   override def beforeEach() {
-    diskBlockManager = new DiskBlockManager(shuffleBlockManager, rootDirs)
+    val conf = testConf.clone
+    conf.set("spark.local.dir", rootDirs)
+    diskBlockManager = new DiskBlockManager(shuffleBlockManager, conf)
     shuffleBlockManager.idToSegmentMap.clear()
   }
 
@@ -147,13 +154,13 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, confCopy, new LiveListenerBus))),
       confCopy)
     val store = new BlockManager("<driver>", actorSystem, master , serializer, confCopy,
-      securityManager, null)
+      securityManager, null, shuffleManager)
 
     try {
 
       val shuffleManager = store.shuffleBlockManager
 
-      val shuffle1 = shuffleManager.forMapTask(1, 1, 1, serializer)
+      val shuffle1 = shuffleManager.forMapTask(1, 1, 1, serializer, new ShuffleWriteMetrics)
       for (writer <- shuffle1.writers) {
         writer.write("test1")
         writer.write("test2")
@@ -165,7 +172,8 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
       val shuffle1Segment = shuffle1.writers(0).fileSegment()
       shuffle1.releaseWriters(success = true)
 
-      val shuffle2 = shuffleManager.forMapTask(1, 2, 1, new JavaSerializer(testConf))
+      val shuffle2 = shuffleManager.forMapTask(1, 2, 1, new JavaSerializer(testConf),
+        new ShuffleWriteMetrics)
 
       for (writer <- shuffle2.writers) {
         writer.write("test3")
@@ -183,7 +191,8 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
       // of block based on remaining data in file : which could mess things up when there is concurrent read
       // and writes happening to the same shuffle group.
 
-      val shuffle3 = shuffleManager.forMapTask(1, 3, 1, new JavaSerializer(testConf))
+      val shuffle3 = shuffleManager.forMapTask(1, 3, 1, new JavaSerializer(testConf),
+        new ShuffleWriteMetrics)
       for (writer <- shuffle3.writers) {
         writer.write("test3")
         writer.write("test4")
