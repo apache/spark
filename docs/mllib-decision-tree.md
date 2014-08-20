@@ -7,20 +7,26 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Tree
 * Table of contents
 {:toc}
 
-Decision trees and their ensembles are popular methods for the machine learning tasks of
+[Decision trees](http://en.wikipedia.org/wiki/Decision_tree_learning)
+and their ensembles are popular methods for the machine learning tasks of
 classification and regression. Decision trees are widely used since they are easy to interpret,
-handle categorical variables, extend to the multiclass classification setting, do not require
+handle categorical features, extend to the multiclass classification setting, do not require
 feature scaling and are able to capture nonlinearities and feature interactions. Tree ensemble
-algorithms such as decision forest and boosting are among the top performers for classification and
+algorithms such as decision forests and boosting are among the top performers for classification and
 regression tasks.
+
+MLlib supports decision trees for binary and multiclass classification and for regression,
+using both continuous and categorical features. The implementation partitions data by rows,
+allowing distributed training with millions of instances.
 
 ## Basic algorithm
 
 The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature
-space by choosing a single element from the *best split set* where each element of the set maximizes
-the information gain at a tree node. In other words, the split chosen at each tree node is chosen
-from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$` is the information
-gain when a split `$s$` is applied to a dataset `$D$`.
+space.  The tree predicts the same label for each bottommost (leaf) partition.
+Each partition is chosen greedily by selecting the *best split* from a set of possible splits,
+in order to maximize the information gain at a tree node. In other words, the split chosen at each
+tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$`
+is the information gain when a split `$s$` is applied to a dataset `$D$`.
 
 ### Node impurity and information gain
 
@@ -52,9 +58,10 @@ impurity measure for regression (variance).
   </tbody>
 </table>
 
-The *information gain* is the difference in the parent node impurity and the weighted sum of the two
-child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$` into two
-datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`, respectively:
+The *information gain* is the difference between the parent node impurity and the weighted sum of
+the two child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$`
+into two datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`,
+respectively, the information gain is:
 
 `$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
 
@@ -62,14 +69,15 @@ datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`,
 
 **Continuous features**
 
-For small datasets in single machine implementations, the split candidates for each continuous
+For small datasets in single-machine implementations, the split candidates for each continuous
 feature are typically the unique values for the feature. Some implementations sort the feature
 values and then use the ordered unique values as split candidates for faster tree calculations.
 
-Finding ordered unique feature values is computationally intensive for large distributed
-datasets. One can get an approximate set of split candidates by performing a quantile calculation
-over a sampled fraction of the data. The ordered splits create "bins" and the maximum number of such
-bins can be specified using the `maxBins` parameters.
+Sorting feature values is expensive for large distributed datasets.
+This implementation computes an approximate set of split candidates by performing a quantile
+calculation over a sampled fraction of the data.
+The ordered splits create "bins" and the maximum number of such
+bins can be specified using the `maxBins` parameter.
 
 Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario
 since the default `maxBins` value is 100). The tree algorithm automatically reduces the number of
@@ -77,33 +85,46 @@ bins if the condition is not satisfied.
 
 **Categorical features**
 
-For `$M$` categorical feature values, one could come up with `$2^(M-1)-1$` split candidates. For
-binary classification, we can reduce the number of split candidates to `$M-1$` by ordering the
+For a categorical feature with `$M$` possible values (categories), one could come up with
+`$2^{M-1}-1$` split candidates. For binary classification and regression,
+we can reduce the number of split candidates to `$M-1$` by ordering the
 categorical feature values by the proportion of labels falling in one of the two classes (see
 Section 9.2.4 in
 [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 details). For example, for a binary classification problem with one categorical feature with three
-categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical
-features are ordered as A followed by C followed B or A, C, B. The two split candidates are A \| C, B
+categories A, B and C whose corresponding proportions of label 1 are 0.2, 0.6 and 0.4, the categorical
+features are ordered as A, C, B. The two split candidates are A \| C, B
 and A , C \| B where \| denotes the split. A similar heuristic is used for multiclass classification
-when `$2^(M-1)-1$` is greater than the number of bins -- the impurity for each categorical feature value
-is used for ordering.
+when `$2^{M-1}-1$` is greater than the `maxBins` parameter: the impurity for each categorical feature value
+is used for ordering. In multiclass classification, all `$2^{M-1}-1$` possible splits are used
+whenever possible.
+
+Note that the `maxBins` parameter must be at least `$M_{max}$`, the maximum number of categories for
+any categorical feature.
 
 ### Stopping rule
 
 The recursive tree construction is stopped at a node when one of the two conditions is met:
 
-1. The node depth is equal to the `maxDepth` training parameter
+1. The node depth is equal to the `maxDepth` training parameter.
 2. No split candidate leads to an information gain at the node.
 
 ### Max memory requirements
 
-For faster processing, the decision tree algorithm performs simultaneous histogram computations for all nodes at each level of the tree. This could lead to high memory requirements at deeper levels of the tree leading to memory overflow errors. To alleviate this problem, a 'maxMemoryInMB' training parameter is provided which specifies the maximum amount of memory at the workers (twice as much at the master) to be allocated to the histogram computation. The default value is conservatively chosen to be 128 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements for a level-wise computation crosses the `maxMemoryInMB` threshold, the node training tasks at each subsequent level is split into smaller tasks.
+For faster processing, the decision tree algorithm performs simultaneous histogram computations for
+all nodes at each level of the tree. This could lead to high memory requirements at deeper levels
+of the tree, leading to memory overflow errors. To alleviate this problem, a `maxMemoryInMB`
+training parameter specifies the maximum amount of memory at the workers (twice as much at the
+master) to be allocated to the histogram computation. The default value is conservatively chosen to
+be 128 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements
+for a level-wise computation cross the `maxMemoryInMB` threshold, the node training tasks at each
+subsequent level are split into smaller tasks.
 
 ### Practical limitations
 
 1. The implemented algorithm reads both sparse and dense data. However, it is not optimized for sparse input.
-2. Python is not supported in this release.
+2. Computation scales approximately linearly in the number of training instances,
+    in the number of features, and in the `maxBins` parameter.
 
 ## Examples
 
@@ -114,35 +135,101 @@ perform classification using a decision tree using Gini impurity as an impurity 
 maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
+
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.Gini
+import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file
-val data = sc.textFile("data/mllib/sample_tree_data.csv")
-val parsedData = data.map { line =>
-  val parts = line.split(',').map(_.toDouble)
-  LabeledPoint(parts(0), Vectors.dense(parts.tail))
-}
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
-// Run training algorithm to build the model
+// Train a DecisionTree model.
+//  Empty categoricalFeaturesInfo indicates all features are continuous.
+val numClasses = 2
+val categoricalFeaturesInfo = Map[Int, Int]()
+val impurity = "gini"
 val maxDepth = 5
-val model = DecisionTree.train(parsedData, Classification, Gini, maxDepth)
+val maxBins = 100
 
-// Evaluate model on training examples and compute training error
-val labelAndPreds = parsedData.map { point =>
+val model = DecisionTree.trainClassifier(data, numClasses, categoricalFeaturesInfo, impurity,
+  maxDepth, maxBins)
+
+// Evaluate model on training instances and compute training error
+val labelAndPreds = data.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
+val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / data.count
 println("Training Error = " + trainErr)
 {% endhighlight %}
 </div>
+
+<div data-lang="java">
+{% highlight java %}
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.tree.DecisionTree;
+import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+import scala.Tuple2;
+
+JavaRDD<LabeledPoint> data = ... // data set
+
+// Train a DecisionTree model.
+//  Empty categoricalFeaturesInfo indicates all features are continuous.
+Integer numClasses = ... // number of classes
+HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+String impurity = "gini";
+Integer maxDepth = 5;
+Integer maxBins = 100;
+
+final DecisionTreeModel model = DecisionTree.trainClassifier(data.rdd(), numClasses,
+  categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+
+// Evaluate model on training instances and compute training error
+JavaPairRDD<Double, Double> predictionAndLabel = 
+  data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+    }
+  });
+Double trainErr = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+    @Override public Boolean call(Tuple2<Double, Double> pl) {
+      return pl._1() != pl._2();
+    }
+  }).count() / data.count();
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.util import MLUtils
+
+# an RDD of LabeledPoint
+data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
+
+# Train a DecisionTree model.
+#  Empty categoricalFeaturesInfo indicates all features are continuous.
+model = DecisionTree.trainClassifier(data, numClasses=2, categoricalFeaturesInfo={},
+                                     impurity='gini', maxDepth=5, maxBins=100)
+
+# Evaluate model on training instances and compute training error
+predictions = model.predict(data.map(lambda x: x.features))
+labelsAndPredictions = data.map(lambda lp: lp.label).zip(predictions)
+trainErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(data.count())
+print('Training Error = ' + str(trainErr))
+{% endhighlight %}
+
+Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
+than separately calling `predict` on each data point.  This is because the Python code makes calls
+to an underlying `DecisionTree` model in Scala.
+</div>
+
 </div>
 
 ### Regression
@@ -153,33 +240,98 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 <div class="codetabs">
+
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.Variance
+import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file
-val data = sc.textFile("data/mllib/sample_tree_data.csv")
-val parsedData = data.map { line =>
-  val parts = line.split(',').map(_.toDouble)
-  LabeledPoint(parts(0), Vectors.dense(parts.tail))
-}
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
-// Run training algorithm to build the model
+// Train a DecisionTree model.
+//  Empty categoricalFeaturesInfo indicates all features are continuous.
+val categoricalFeaturesInfo = Map[Int, Int]()
+val impurity = "variance"
 val maxDepth = 5
-val model = DecisionTree.train(parsedData, Regression, Variance, maxDepth)
+val maxBins = 100
 
-// Evaluate model on training examples and compute training error
-val valuesAndPreds = parsedData.map { point =>
+val model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo, impurity,
+  maxDepth, maxBins)
+
+// Evaluate model on training instances and compute training error
+val labelsAndPredictions = data.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-println("training Mean Squared Error = " + MSE)
+val trainMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
+println("Training Mean Squared Error = " + trainMSE)
 {% endhighlight %}
 </div>
+
+<div data-lang="java">
+{% highlight java %}
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.tree.DecisionTree;
+import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+import scala.Tuple2;
+
+JavaRDD<LabeledPoint> data = ... // data set
+
+// Train a DecisionTree model.
+//  Empty categoricalFeaturesInfo indicates all features are continuous.
+HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+String impurity = "variance";
+Integer maxDepth = 5;
+Integer maxBins = 100;
+
+final DecisionTreeModel model = DecisionTree.trainRegressor(data.rdd(),
+  categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+
+// Evaluate model on training instances and compute training error
+JavaPairRDD<Double, Double> predictionAndLabel = 
+  data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+    }
+  });
+Double trainMSE = predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
+    @Override public Double call(Tuple2<Double, Double> pl) {
+      Double diff = pl._1() - pl._2(); 
+      return diff * diff;
+    }
+  }).sum() / data.count();
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.util import MLUtils
+
+# an RDD of LabeledPoint
+data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
+
+# Train a DecisionTree model.
+#  Empty categoricalFeaturesInfo indicates all features are continuous.
+model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo={},
+                                    impurity='variance', maxDepth=5, maxBins=100)
+
+# Evaluate model on training instances and compute training error
+predictions = model.predict(data.map(lambda x: x.features))
+labelsAndPredictions = data.map(lambda lp: lp.label).zip(predictions)
+trainMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(data.count())
+print('Training Mean Squared Error = ' + str(trainMSE))
+{% endhighlight %}
+
+Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
+than separately calling `predict` on each data point.  This is because the Python code makes calls
+to an underlying `DecisionTree` model in Scala.
+</div>
+
 </div>
