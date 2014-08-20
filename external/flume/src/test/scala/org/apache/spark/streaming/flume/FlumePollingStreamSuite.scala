@@ -198,7 +198,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   def assertChannelIsEmpty(channel: MemoryChannel) = {
-    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining");
+    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining")
     queueRemaining.setAccessible(true)
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
     assert(m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] === 5000)

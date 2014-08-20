@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.storage
 
-import io.netty.channel.ChannelInitializer
-import io.netty.channel.socket.SocketChannel
-import io.netty.handler.codec.string.StringEncoder
+import java.nio.ByteBuffer
 
 
-class FileClientChannelInitializer(handler: FileClientHandler)
-  extends ChannelInitializer[SocketChannel] {
-
-  def initChannel(channel: SocketChannel) {
-    channel.pipeline.addLast("encoder", new StringEncoder).addLast("handler", handler)
-  }
+/**
+ * An interface for providing data for blocks.
+ *
+ * getBlockData returns either a FileSegment (for zero-copy send), or a ByteBuffer.
+ *
+ * Aside from unit tests, [[BlockManager]] is the main class that implements this.
+ */
+private[spark] trait BlockDataProvider {
+  def getBlockData(blockId: String): Either[FileSegment, ByteBuffer]
 }

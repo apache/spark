@@ -69,10 +69,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val userResult = new AtomicBoolean(false)
 
   final def run(): Unit = {
-    // Setup the directories so things go to YARN approved directories rather
-    // than user specified and /tmp.
-    System.setProperty("spark.local.dir", getLocalDirs())
-
     if (isDriver) {
       // Set the web ui port to be ephemeral for yarn so we don't conflict with
       // other spark processes running on the same box
@@ -211,20 +207,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def isLastAttempt() = {
     val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
     client.getAttemptId().getAttemptId() >= maxAppAttempts
-  }
-
-  /** Get the Yarn-approved local directories. */
-  private def getLocalDirs(): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .orElse(Option(System.getenv("LOCAL_DIRS")))
-
-    localDirs match {
-      case None => throw new Exception("Yarn Local dirs can't be empty")
-      case Some(l) => l
-    }
   }
 
   private def launchReporterThread(): Thread = {
