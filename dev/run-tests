@@ -62,7 +62,7 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
-rm conf/spark-env.sh
+rm -f conf/spark-env.sh
 
 # Fail fast
 set -e
@@ -111,7 +111,7 @@ fi
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.
-echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS test | \
+echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Pscala-2.10 test | \
   grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo ""
