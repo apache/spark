@@ -45,7 +45,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private val settings = new HashMap[String, String]()
+  private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
@@ -209,6 +209,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   override def clone: SparkConf = {
     new SparkConf(false).setAll(settings)
   }
+
+  /**
+   * By using this instead of System.getenv(), environment variables can be mocked
+   * in unit tests.
+   */
+  private[spark] def getenv(name: String): String = System.getenv(name)
 
   /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
     * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */

@@ -71,7 +71,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   override def beforeEach() {
-    diskBlockManager = new DiskBlockManager(shuffleBlockManager, rootDirs)
+    val conf = testConf.clone
+    conf.set("spark.local.dir", rootDirs)
+    diskBlockManager = new DiskBlockManager(shuffleBlockManager, conf)
     shuffleBlockManager.idToSegmentMap.clear()
   }
 
