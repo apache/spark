@@ -51,9 +51,6 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     port
   }
 
-  // If verbose is true, the test program will print all outputs coming from the Hive Thrift server.
-  val VERBOSE = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).getOrElse("false").toBoolean
-
   Class.forName(DRIVER_NAME)
 
   override def beforeAll() { launchServer() }
@@ -68,8 +65,7 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     val command =
       s"""../../sbin/start-thriftserver.sh
          |  --master local
-         |  --hiveconf hive.root.logger=INFO,console
-         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}="$jdbcUrl"
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$METASTORE_PATH
          |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$HOST
          |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$PORT
@@ -77,12 +73,10 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
 
     val pb = new ProcessBuilder(command ++ args: _*)
     val environment = pb.environment()
-    environment.put("HIVE_SERVER2_THRIFT_PORT", PORT.toString)
-    environment.put("HIVE_SERVER2_THRIFT_BIND_HOST", HOST)
     process = pb.start()
     inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
     errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream))
-    waitForOutput(inputReader, "ThriftBinaryCLIService listening on")
+    waitForOutput(inputReader, "ThriftBinaryCLIService listening on", 300000)
 
     // Spawn a thread to read the output from the forked process.
     // Note that this is necessary since in some configurations, log4j could be blocked
@@ -91,12 +85,8 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
       while (true) {
         val stdout = readFrom(inputReader)
         val stderr = readFrom(errorReader)
-        if (VERBOSE && stdout.length > 0) {
-          println(stdout)
-        }
-        if (VERBOSE && stderr.length > 0) {
-          println(stderr)
-        }
+        print(stdout)
+        print(stderr)
         Thread.sleep(50)
       }
     }

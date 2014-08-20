@@ -17,14 +17,18 @@
 # limitations under the License.
 #
 
+# NOTE: Any changes in this file must be reflected in SparkClassLauncher.scala!
+
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 ORIG_ARGS=("$@")
 
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
-    DEPLOY_MODE=$2
+    SPARK_SUBMIT_DEPLOY_MODE=$2
+  elif [ "$1" = "--properties-file" ]; then
+    SPARK_SUBMIT_PROPERTIES_FILE=$2
   elif [ "$1" = "--driver-memory" ]; then
-    DRIVER_MEMORY=$2
+    export SPARK_SUBMIT_DRIVER_MEMORY=$2
   elif [ "$1" = "--driver-library-path" ]; then
     export SPARK_SUBMIT_LIBRARY_PATH=$2
   elif [ "$1" = "--driver-class-path" ]; then
@@ -35,10 +39,24 @@ while (($#)); do
   shift
 done
 
-DEPLOY_MODE=${DEPLOY_MODE:-"client"}
+DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
+export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
+export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
-if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
-  export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
+# For client mode, the driver will be launched in the same JVM that launches
+# SparkSubmit, so we may need to read the properties file for any extra class
+# paths, library paths, java options and memory early on. Otherwise, it will
+# be too late by the time the driver JVM has started.
+
+if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
+  # Parse the properties file only if the special configs exist
+  contains_special_configs=$(
+    grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
+    grep -v "^[[:space:]]*#"
+  )
+  if [ -n "$contains_special_configs" ]; then
+    export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+  fi
 fi
 
 exec $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
