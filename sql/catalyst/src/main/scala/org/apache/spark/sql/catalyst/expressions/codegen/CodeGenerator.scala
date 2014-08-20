@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 
+// These classes are here to avoid issues with serialization and integration with quasiquotes.
 class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
 class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
 
@@ -52,6 +53,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
   private val javaSeparator = "$"
+
+  /**
+   * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
+   */
+  var debugLogging = false
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -496,7 +502,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     // Only inject debugging code if debugging is turned on.
     val debugCode =
-      if (false) {
+      if (debugLogging) {
         val localLogger = log
         val localLoggerTree = reify { localLogger }
         q"""

@@ -156,6 +156,12 @@ class JoinedRow extends Row {
 
 /**
  * JIT HACK: Replace with macros
+ * The `JoinedRow` class is used in many performance critical situation.  Unfortunately, since there
+ * are multiple different types of `Rows` that could be stored as `row1` and `row2` most of the
+ * calls in the critical path are polymorphic.  By creating special versions of this class that are
+ * used in only a single location of the code, we increase the chance that only a single type of
+ * Row will be referenced, increasing the opportunity for the JIT to play tricks.  This sounds
+ * crazy but in benchmarks it had noticeable effects.
  */
 class JoinedRow2 extends Row {
   private[this] var row1: Row = _

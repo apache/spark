@@ -158,7 +158,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
-        s"query should contain two relations, each of which has size smaller than autoConvertSize instead ${rdd.queryExecution}")
+        s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.

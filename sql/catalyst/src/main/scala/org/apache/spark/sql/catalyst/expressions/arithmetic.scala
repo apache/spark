@@ -93,12 +93,25 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 
   override def children = left :: right :: Nil
 
-  override def references = (left.flatMap(_.references) ++ right.flatMap(_.references)).toSet
+  override def references = left.references ++ right.references
 
   override def dataType = left.dataType
 
   override def eval(input: Row): Any = {
     val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
+    if (leftEval == null) {
+      rightEval
+    } else if (rightEval == null) {
+      leftEval
+    } else {
+      val numeric = left.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+      if (numeric.compare(leftEval, rightEval) < 0) {
+        rightEval
+      } else {
+        leftEval
+      }
+    }
   }
 
   override def toString = s"MaxOf($left, $right)"
