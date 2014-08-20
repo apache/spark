@@ -170,6 +170,7 @@ if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   shift
   exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
 else
+  # Note: The format of this command is closely echoed in SparkSubmitDriverBootstrapper.scala
   if [ -n "$SPARK_PRINT_LAUNCH_COMMAND" ]; then
     echo -n "Spark Command: " 1>&2
     echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2

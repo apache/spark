@@ -46,7 +46,7 @@ export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PR
 # For client mode, the driver will be launched in the same JVM that launches
 # SparkSubmit, so we may need to read the properties file for any extra class
 # paths, library paths, java options and memory early on. Otherwise, it will
-# be too late by the time the JVM has started.
+# be too late by the time the driver JVM has started.
 
 if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
   # Parse the properties file only if the special configs exist
