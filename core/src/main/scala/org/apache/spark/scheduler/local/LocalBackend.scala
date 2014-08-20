@@ -69,6 +69,9 @@ private[spark] class LocalActor(
 
     case StopExecutor =>
       executor.stop()
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   def reviveOffers() {

@@ -1365,6 +1365,9 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   override def postStop() {

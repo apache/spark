@@ -144,6 +144,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
       case RetrieveSparkProps =>
         sender ! sparkProperties
+
+      case _@message =>
+        logWarning(s"Received unexpected actor system event: $message")
     }
 
     // Make fake resource offers on all executors

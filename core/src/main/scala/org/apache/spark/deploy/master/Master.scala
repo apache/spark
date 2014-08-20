@@ -398,6 +398,9 @@ private[spark] class Master(
     case RequestWebUIPort => {
       sender ! WebUIPortResponse(webUi.boundPort)
     }
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   def canCompleteRecovery =

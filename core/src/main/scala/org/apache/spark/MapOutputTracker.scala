@@ -64,6 +64,10 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
       logInfo("MapOutputTrackerActor stopped!")
       sender ! true
       context.stop(self)
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
+
   }
 }
 
