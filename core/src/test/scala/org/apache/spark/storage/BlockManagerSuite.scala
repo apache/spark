@@ -73,8 +73,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
   private def makeBlockManager(maxMem: Long, name: String = "<driver>"): BlockManager = {
-    new BlockManager(name, actorSystem, master, serializer, maxMem, conf, securityMgr,
+    val bm = new BlockManager(name, actorSystem, serializer, maxMem, conf, securityMgr,
       mapOutputTracker, shuffleManager)
+    bm.initialize(master)
+    bm
   }
 
   before {

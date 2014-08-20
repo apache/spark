@@ -56,7 +56,6 @@ private[spark] class BlockResult(
 private[spark] class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
-    val master: BlockManagerMaster,
     defaultSerializer: Serializer,
     maxMemory: Long,
     val conf: SparkConf,
@@ -64,6 +63,8 @@ private[spark] class BlockManager(
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager)
   extends BlockDataProvider with Logging {
+
+  var master: BlockManagerMaster = _
 
   private val port = conf.getInt("spark.blockManager.port", 0)
   val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
@@ -139,8 +140,6 @@ private[spark] class BlockManager(
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
 
-  initialize()
-
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
    * program could be using a user-defined codec in a third party jar, which is loaded in
@@ -154,21 +153,52 @@ private[spark] class BlockManager(
   def this(
       execId: String,
       actorSystem: ActorSystem,
+      serializer: Serializer,
+      conf: SparkConf,
+      securityManager: SecurityManager,
+      mapOutputTracker: MapOutputTracker,
+      shuffleManager: ShuffleManager) = {
+    this(execId, actorSystem, serializer, BlockManager.getMaxMemory(conf),
+      conf, securityManager, mapOutputTracker, shuffleManager)
+  }
+
+  // A constructor for unit tests.
+  def this(
+      executorId: String,
+      actorSystem: ActorSystem,
+      master: BlockManagerMaster,
+      defaultSerializer: Serializer,
+      maxMemory: Long,
+      conf: SparkConf,
+      securityManager: SecurityManager,
+      mapOutputTracker: MapOutputTracker,
+      shuffleManager: ShuffleManager) = {
+    this(executorId, actorSystem, defaultSerializer, maxMemory, conf, securityManager,
+      mapOutputTracker, shuffleManager)
+    this.master = master
+  }
+
+  // A constructor for unit tests.
+  def this(
+      execId: String,
+      actorSystem: ActorSystem,
       master: BlockManagerMaster,
       serializer: Serializer,
       conf: SparkConf,
       securityManager: SecurityManager,
       mapOutputTracker: MapOutputTracker,
       shuffleManager: ShuffleManager) = {
-    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
+    this(execId, actorSystem, serializer, BlockManager.getMaxMemory(conf),
       conf, securityManager, mapOutputTracker, shuffleManager)
+    this.master = master
   }
 
   /**
    * Initialize the BlockManager. Register to the BlockManagerMaster, and start the
    * BlockManagerWorker actor.
    */
-  private def initialize(): Unit = {
+  def initialize(master: BlockManagerMaster): Unit = {
+    this.master = master
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
   }
@@ -522,24 +552,45 @@ private[spark] class BlockManager(
     doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
   }
 
+  /**
+   * Try to get block directly from the driver if the driver has it and it is small enough.
+   * If that is not possible, get the locations from the driver and then fetch it from other
+   * block managers.
+   *
+   * This tries to piggyback on the first control message to fetch the block data directly
+   * from the driver's block manager.
+   *
+   * @return (fetched from non-driver block managers, block data)
+   */
+  def getRemoteBytesPiggybackControl(blockId: BlockId): (Boolean, Option[ByteBuffer]) = {
+    logDebug(s"Getting remote block $blockId as bytes")
+    master.getBlockOrLocations(blockId) match {
+      case Left(data) =>
+        (false, Some(ByteBuffer.wrap(data)))
+      case Right(locs) =>
+        (true, doGetRemote(blockId, locs))
+    }
+  }
+
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
-    val locations = Random.shuffle(master.getLocations(blockId))
-    for (loc <- locations) {
+    doGetRemote(blockId, master.getLocations(blockId)).map { data =>
+      if (asBlockResult) {
+        new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit())
+      } else {
+        data
+      }
+    }
+  }
+
+  private def doGetRemote(blockId: BlockId, locs: Seq[BlockManagerId]): Option[ByteBuffer] = {
+    for (loc <- Random.shuffle(locs)) {
       logDebug(s"Getting remote block $blockId from $loc")
       val data = BlockManagerWorker.syncGetBlock(
         GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
       if (data != null) {
-        if (asBlockResult) {
-          return Some(new BlockResult(
-            dataDeserialize(blockId, data),
-            DataReadMethod.Network,
-            data.limit()))
-        } else {
-          return Some(data)
-        }
+        return Some(data)
       }
-      logDebug(s"The value of block $blockId is null")
     }
     logDebug(s"Block $blockId not found")
     None

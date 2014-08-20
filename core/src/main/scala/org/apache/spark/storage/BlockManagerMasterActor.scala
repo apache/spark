@@ -38,7 +38,11 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
  * all slaves' block managers.
  */
 private[spark]
-class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
+class BlockManagerMasterActor(
+    val isLocal: Boolean,
+    conf: SparkConf,
+    listenerBus: LiveListenerBus,
+    blockManager: Option[BlockManager] = None)
   extends Actor with ActorLogReceive with Logging {
 
   // Mapping from block manager id to the block manager's information.
@@ -52,12 +56,13 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
-  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
+  private val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
     math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
-  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
+  private val checkTimeoutInterval =
+    conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
-  var timeoutCheckingTask: Cancellable = null
+  private var timeoutCheckingTask: Cancellable = null
 
   override def preStart() {
     import context.dispatcher
@@ -82,6 +87,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case GetLocationsMultipleBlockIds(blockIds) =>
       sender ! getLocationsMultipleBlockIds(blockIds)
+
+    case GetBlockOrLocations(blockId) =>
+      sender ! getBlockOrLocations(blockId)
 
     case GetPeers(blockManagerId, size) =>
       sender ! getPeers(blockManagerId, size)
@@ -400,6 +408,19 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def getLocationsMultipleBlockIds(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
     blockIds.map(blockId => getLocations(blockId))
+  }
+
+  private def getBlockOrLocations(blockId: BlockId): Either[Array[Byte], Seq[BlockManagerId]] = {
+    if (blockManager.isDefined) {
+      val data = blockManager.get.getLocalBytes(blockId)
+      if (data.isDefined) {
+        // TODO: Make this configurable. 100KB right now.
+        if (data.get.limit() < 100 * 1024) {
+          return Left(data.get.array())
+        }
+      }
+    }
+    Right(getLocations(blockId))
   }
 
   private def getPeers(blockManagerId: BlockManagerId, size: Int): Seq[BlockManagerId] = {
