@@ -77,8 +77,6 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
     validatePrediction(validationData.map(row => model.latestModel().predict(row.features)),
       validationData)
-
-    ssc.stop()
   }
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
@@ -113,8 +111,6 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     assert(deltas.forall(x => (x._1 - x._2) <= 0.1))
     // check that error shrunk on at least 2 batches
     assert(deltas.map(x => if ((x._1 - x._2) < 0) 1 else 0).sum > 1)
-
-    ssc.stop()
   }
 
   // Test predictions on a stream
@@ -142,7 +138,5 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // compute the mean absolute error and check that it's always less than 0.1
     val errors = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints)
     assert(errors.forall(x => x <= 0.1))
-
-    ssc.stop()
   }
 }
