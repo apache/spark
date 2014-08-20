@@ -825,8 +825,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val blockManager = mock(classOf[BlockManager])
     val shuffleBlockManager = mock(classOf[ShuffleBlockManager])
     when(shuffleBlockManager.conf).thenReturn(conf)
-    val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
-      System.getProperty("java.io.tmpdir"))
+    val diskBlockManager = new DiskBlockManager(shuffleBlockManager, conf)
 
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)

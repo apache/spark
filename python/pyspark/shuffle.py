@@ -214,7 +214,7 @@ class ExternalMerger(Merger):
 
     def _get_dirs(self):
         """ Get all the directories """
-        path = os.environ.get("SPARK_LOCAL_DIR", "/tmp")
+        path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
         dirs = path.split(",")
         return [os.path.join(d, "python", str(os.getpid()), str(id(self)))
                 for d in dirs]
