@@ -49,7 +49,6 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
 
   // Test if we can accurately learn Y = 10*X1 + 10*X2 on streaming data
   test("parameter accuracy") {
-
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
@@ -82,7 +81,6 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
   test("parameter convergence") {
-
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0))
@@ -113,12 +111,10 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     assert(deltas.forall(x => (x._1 - x._2) <= 0.1))
     // check that error shrunk on at least 2 batches
     assert(deltas.map(x => if ((x._1 - x._2) < 0) 1 else 0).sum > 1)
-
   }
 
   // Test predictions on a stream
   test("predictions") {
-
     // create model initialized with true weights
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(10.0, 10.0))
@@ -142,7 +138,5 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // compute the mean absolute error and check that it's always less than 0.1
     val errors = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints)
     assert(errors.forall(x => x <= 0.1))
-
   }
-
 }
