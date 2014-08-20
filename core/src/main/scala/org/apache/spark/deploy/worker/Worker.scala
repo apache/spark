@@ -349,6 +349,9 @@ private[spark] class Worker(
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
     }
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   def masterDisconnected() {

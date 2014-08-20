@@ -68,6 +68,9 @@ class BlockManagerSlaveActor(
 
     case GetMatchingBlockIds(filter, _) =>
       sender ! blockManager.getMatchingBlockIds(filter)
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   private def doAsync[T](actionMessage: String, responseActor: ActorRef)(body: => T) {

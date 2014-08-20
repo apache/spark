@@ -161,6 +161,10 @@ private[spark] class AppClient(
         markDead("Application has been stopped.")
         sender ! true
         context.stop(self)
+
+      case _@message =>
+        logWarning(s"Received unexpected actor system event: $message")
+
     }
 
     /**

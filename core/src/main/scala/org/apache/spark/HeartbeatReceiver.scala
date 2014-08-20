@@ -45,5 +45,9 @@ private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
+
   }
 }

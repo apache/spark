@@ -134,6 +134,10 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
       println(s"Cause was: $cause")
       System.exit(-1)
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
+
   }
 }
 

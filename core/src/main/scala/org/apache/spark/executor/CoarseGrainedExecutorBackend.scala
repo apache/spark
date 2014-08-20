@@ -92,6 +92,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       context.stop(self)
       context.system.shutdown()
+
+    case _@message =>
+      logWarning(s"Received unexpected actor system event: $message")
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
