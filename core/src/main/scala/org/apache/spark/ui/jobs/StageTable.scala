@@ -155,7 +155,7 @@ private[ui] class StageTableBase(
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
     {if (s.attemptId > 0) {
-      <td>{s.stageId} (attempt {s.attemptId})</td>
+      <td>{s.stageId} (retry {s.attemptId})</td>
     } else {
       <td>{s.stageId}</td>
     }} ++

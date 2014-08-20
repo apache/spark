@@ -915,17 +915,18 @@ class DAGScheduler(
     }
     val stage = stageIdToStage(task.stageId)
 
-    def markStageAsFinished(stage: Stage, isSuccessful: Boolean) = {
+    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
       val serviceTime = stage.latestInfo.submissionTime match {
         case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
         case _ => "Unknown"
       }
-      if (isSuccessful) {
+      if (errorMessage.isEmpty) {
         logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
+        stage.latestInfo.completionTime = Some(clock.getTime())
       } else {
+        stage.latestInfo.stageFailed(errorMessage.get)
         logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
       }
-      stage.latestInfo.completionTime = Some(clock.getTime())
       listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       runningStages -= stage
     }
@@ -964,7 +965,7 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    markStageAsFinished(stage, isSuccessful = true)
+                    markStageAsFinished(stage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
@@ -993,7 +994,7 @@ class DAGScheduler(
               stage.addOutputLoc(smt.partitionId, status)
             }
             if (runningStages.contains(stage) && stage.pendingTasks.isEmpty) {
-              markStageAsFinished(stage, isSuccessful = true)
+              markStageAsFinished(stage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
@@ -1046,7 +1047,7 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        markStageAsFinished(failedStage, isSuccessful = false)
+        markStageAsFinished(failedStage, Some("Fetch failure"))
         runningStages -= failedStage
         // TODO: Cancel running tasks in the stage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
