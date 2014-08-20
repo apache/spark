@@ -28,7 +28,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 . $FWDIR/bin/load-spark-env.sh
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
+CLASSPATH="$FWDIR/conf/log4j.properties:$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
