@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.util.collection.OpenHashSet
-
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
@@ -31,6 +28,8 @@ import com.twitter.chill.{AllScalaRegistrar, ResourcePool}
 
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils
 
@@ -47,7 +46,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
                   new HyperLogLogSerializer)
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
 
-    // Specific hashsets must come first
+    // Specific hashsets must come first TODO: Move to core.
     kryo.register(classOf[IntegerHashSet], new IntegerHashSetSerializer)
     kryo.register(classOf[LongHashSet], new LongHashSetSerializer)
     kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]],

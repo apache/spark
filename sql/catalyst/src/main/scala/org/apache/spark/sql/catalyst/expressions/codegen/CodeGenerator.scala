@@ -539,6 +539,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def hashSetForType(dt: DataType) = dt match {
     case IntegerType => typeOf[IntegerHashSet]
     case LongType => typeOf[LongHashSet]
+    case unsupportedType =>
+      sys.error(s"Code generation not support for hashset of type $unsupportedType")
   }
 
   protected def primitiveForType(dt: DataType) = dt match {
