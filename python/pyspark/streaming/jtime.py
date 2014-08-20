@@ -19,10 +19,11 @@ from pyspark.streaming import utils
 from pyspark.streaming.duration import Duration
 
 """
-The name of this file, time is not good naming for python
+The name of this file, time is not a good naming for python
 because if we do import time when we want to use native python time package, it does
 not import python time package.
 """
+# TODO: add doctest
 
 
 class Time(object):

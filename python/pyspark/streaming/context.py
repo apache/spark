@@ -142,9 +142,9 @@ class StreamingContext(object):
 
     def _testInputStream(self, test_inputs, numSlices=None):
         """
-        This function is only for test.
-        This implementation is inspired by QueStream implementation.
-        Give list of RDD to generate DStream which contains the RDD.
+        This function is only for unittest.
+        It requires a sequence as input, and returns the i_th element at the i_th batch
+        under manual clock.
         """
         test_rdds = list()
         test_rdd_deserializers = list()
@@ -152,7 +152,8 @@ class StreamingContext(object):
             test_rdd = self._sc.parallelize(test_input, numSlices)
             test_rdds.append(test_rdd._jrdd)
             test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
-
+        # All deserializer has to be the same.
+        # TODO: add deserializer validation
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
 
