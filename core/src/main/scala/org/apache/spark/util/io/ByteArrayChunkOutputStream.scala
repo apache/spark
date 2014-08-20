@@ -30,20 +30,20 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   private val chunks = new ArrayBuffer[Array[Byte]]
 
-  private var latestChunkIndex = -1
+  private var lastChunkIndex = -1
   private var position = chunkSize
 
   @inline
   private def allocateNewChunkIfNeeded(): Unit = {
     if (position == chunkSize) {
       chunks += new Array[Byte](chunkSize)
-      latestChunkIndex += 1
+      lastChunkIndex += 1
       position = 0
     }
   }
 
   def toArrays: Array[Array[Byte]] = {
-    if (latestChunkIndex == -1) {
+    if (lastChunkIndex == -1) {
       new Array[Array[Byte]](0)
     } else {
       val ret = new Array[Array[Byte]](chunks.size)
@@ -51,10 +51,10 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
         ret(i) = chunks(i)
       }
       if (position == chunkSize) {
-        ret(latestChunkIndex) = chunks(latestChunkIndex)
+        ret(lastChunkIndex) = chunks(lastChunkIndex)
       } else {
-        ret(latestChunkIndex) = new Array[Byte](position)
-        System.arraycopy(chunks(latestChunkIndex), 0, ret(latestChunkIndex), 0, position)
+        ret(lastChunkIndex) = new Array[Byte](position)
+        System.arraycopy(chunks(lastChunkIndex), 0, ret(lastChunkIndex), 0, position)
       }
       ret
     }
@@ -62,7 +62,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()
-    chunks(latestChunkIndex)(position) = b.toByte
+    chunks(lastChunkIndex)(position) = b.toByte
     position += 1
   }
 
@@ -74,7 +74,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     while (written < total) {
       allocateNewChunkIfNeeded()
       val thisBatch = math.min(chunkSize - position, total - written)
-      System.arraycopy(bytes, written, chunks(latestChunkIndex), position, thisBatch)
+      System.arraycopy(bytes, written, chunks(lastChunkIndex), position, thisBatch)
       written += thisBatch
       position += thisBatch
     }
