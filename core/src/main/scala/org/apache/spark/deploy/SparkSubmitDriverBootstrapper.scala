@@ -29,7 +29,7 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * driver JVM is launched. The sole purpose of this class is to avoid handling the complexity
  * of parsing the properties file for such relevant configs in Bash.
  *
- * Usage: org.apache.spark.deploy.SparkSubmitDriverBootstrapper <application args>
+ * Usage: org.apache.spark.deploy.SparkSubmitDriverBootstrapper <submit args>
  */
 private[spark] object SparkSubmitDriverBootstrapper {
 
@@ -116,13 +116,23 @@ private[spark] object SparkSubmitDriverBootstrapper {
       System.err.println("========================================\n")
     }
 
+    // Start the driver JVM
     val filteredCommand = command.filter(_.nonEmpty)
     val builder = new ProcessBuilder(filteredCommand)
     val process = builder.start()
-    new RedirectThread(System.in, process.getOutputStream, "redirect stdin").start()
-    new RedirectThread(process.getInputStream, System.out, "redirect stdout").start()
-    new RedirectThread(process.getErrorStream, System.err, "redirect stderr").start()
-    System.exit(process.waitFor())
+
+    // Redirect stdin, stdout, and stderr to/from the child JVM
+    val stdinThread = new RedirectThread(System.in, process.getOutputStream, "redirect stdin")
+    val stdoutThread = new RedirectThread(process.getInputStream, System.out, "redirect stdout")
+    val stderrThread = new RedirectThread(process.getErrorStream, System.err, "redirect stderr")
+    stdinThread.start()
+    stdoutThread.start()
+    stderrThread.start()
+
+    // Terminate on broken pipe, which signals that the parent process has exited. This is
+    // important for the PySpark shell, where Spark submit itself is a python subprocess.
+    stdinThread.join()
+    process.destroy()
   }
 
 }
