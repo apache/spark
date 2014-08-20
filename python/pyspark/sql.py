@@ -498,10 +498,7 @@ def _infer_schema(row):
 
 def _create_converter(obj, dataType):
     """Create an converter to drop the names of fields in obj """
-    if not _has_struct(dataType):
-        return lambda x: x
-
-    elif isinstance(dataType, ArrayType):
+    if isinstance(dataType, ArrayType):
         conv = _create_converter(obj[0], dataType.elementType)
         return lambda row: map(conv, row)
 
@@ -509,6 +506,9 @@ def _create_converter(obj, dataType):
         value = obj.values()[0]
         conv = _create_converter(value, dataType.valueType)
         return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+
+    elif not isinstance(dataType, StructType):
+        return lambda x: x
 
     # dataType must be StructType
     names = [f.name for f in dataType.fields]
@@ -529,8 +529,7 @@ def _create_converter(obj, dataType):
     elif hasattr(obj, "__dict__"):  # object
         conv = lambda o: [o.__dict__.get(n, None) for n in names]
 
-    nested = any(_has_struct(f.dataType) for f in dataType.fields)
-    if not nested:
+    if all(isinstance(f.dataType, PrimitiveType) for f in dataType.fields):
         return conv
 
     row = conv(obj)
@@ -912,6 +911,8 @@ class SQLContext:
         """Create a new SQLContext.
 
         @param sparkContext: The SparkContext to wrap.
+        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -1035,7 +1036,8 @@ class SQLContext:
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
         if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated")
+            warnings.warn("Using RDD of dict to inferSchema is deprecated,"
+                          "please use pyspark.Row instead")
 
         schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
@@ -1091,8 +1093,8 @@ class SQLContext:
         >>> sqlCtx.sql(
         ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
         ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
-        ...     "float + 1.1 as float FROM table2").collect()
-        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.1)]
+        ...     "float + 1.5 as float FROM table2").collect()
+        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.5)]
 
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
@@ -1265,7 +1267,9 @@ class SQLContext:
             for x in iterator:
                 if not isinstance(x, basestring):
                     x = unicode(x)
-                yield x.encode("utf-8")
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
         keyed = rdd.mapPartitions(func)
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
@@ -1314,6 +1318,18 @@ class HiveContext(SQLContext):
     Configuration for Hive is read from hive-site.xml on the classpath.
     It supports running both SQL and HiveQL commands.
     """
+
+    def __init__(self, sparkContext, hiveContext=None):
+        """Create a new HiveContext.
+
+        @param sparkContext: The SparkContext to wrap.
+        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        HiveContext in the JVM, instead we make all calls to this object.
+        """
+        SQLContext.__init__(self, sparkContext)
+
+        if hiveContext:
+            self._scala_HiveContext = hiveContext
 
     @property
     def _ssql_ctx(self):

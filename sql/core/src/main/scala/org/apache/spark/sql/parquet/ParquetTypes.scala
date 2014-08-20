@@ -43,10 +43,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
     classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
-  def toPrimitiveDataType(parquetType: ParquetPrimitiveType): DataType =
+  def toPrimitiveDataType(
+      parquetType: ParquetPrimitiveType,
+      binayAsString: Boolean): DataType =
     parquetType.getPrimitiveTypeName match {
       case ParquetPrimitiveTypeName.BINARY
-        if parquetType.getOriginalType == ParquetOriginalType.UTF8 => StringType
+        if (parquetType.getOriginalType == ParquetOriginalType.UTF8 ||
+          binayAsString) => StringType
       case ParquetPrimitiveTypeName.BINARY => BinaryType
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
@@ -85,7 +88,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * @param parquetType The type to convert.
    * @return The corresponding Catalyst type.
    */
-  def toDataType(parquetType: ParquetType): DataType = {
+  def toDataType(parquetType: ParquetType, isBinaryAsString: Boolean): DataType = {
     def correspondsToMap(groupType: ParquetGroupType): Boolean = {
       if (groupType.getFieldCount != 1 || groupType.getFields.apply(0).isPrimitive) {
         false
@@ -107,7 +110,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
 
     if (parquetType.isPrimitive) {
-      toPrimitiveDataType(parquetType.asPrimitiveType)
+      toPrimitiveDataType(parquetType.asPrimitiveType, isBinaryAsString)
     } else {
       val groupType = parquetType.asGroupType()
       parquetType.getOriginalType match {
@@ -116,7 +119,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          ArrayType(toDataType(field), containsNull = false)
+          ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -126,9 +129,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(
             keyValueGroup.getFieldCount == 2,
             "Parquet Map type malformatted: nested group should have 2 (key, value) fields!")
-          val keyType = toDataType(keyValueGroup.getFields.apply(0))
+          val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
-          val valueType = toDataType(keyValueGroup.getFields.apply(1))
+          val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
           assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
           // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
           // at here.
@@ -138,22 +141,22 @@ private[parquet] object ParquetTypesConverter extends Logging {
           // Note: the order of these checks is important!
           if (correspondsToMap(groupType)) { // MapType
             val keyValueGroup = groupType.getFields.apply(0).asGroupType()
-            val keyType = toDataType(keyValueGroup.getFields.apply(0))
+            val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
-            val valueType = toDataType(keyValueGroup.getFields.apply(1))
+            val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
             assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
             // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
             // at here.
             MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
-            val elementType = toDataType(groupType.getFields.apply(0))
+            val elementType = toDataType(groupType.getFields.apply(0), isBinaryAsString)
             ArrayType(elementType, containsNull = false)
           } else { // everything else: StructType
             val fields = groupType
               .getFields
               .map(ptype => new StructField(
               ptype.getName,
-              toDataType(ptype),
+              toDataType(ptype, isBinaryAsString),
               ptype.getRepetition != Repetition.REQUIRED))
             StructType(fields)
           }
@@ -276,7 +279,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
   }
 
-  def convertToAttributes(parquetSchema: ParquetType): Seq[Attribute] = {
+  def convertToAttributes(parquetSchema: ParquetType, isBinaryAsString: Boolean): Seq[Attribute] = {
     parquetSchema
       .asGroupType()
       .getFields
@@ -284,7 +287,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         field =>
           new AttributeReference(
             field.getName,
-            toDataType(field),
+            toDataType(field, isBinaryAsString),
             field.getRepetition != Repetition.REQUIRED)())
   }
 
@@ -403,7 +406,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * @param conf The Hadoop configuration to use.
    * @return A list of attributes that make up the schema.
    */
-  def readSchemaFromFile(origPath: Path, conf: Option[Configuration]): Seq[Attribute] = {
+  def readSchemaFromFile(
+      origPath: Path,
+      conf: Option[Configuration],
+      isBinaryAsString: Boolean): Seq[Attribute] = {
     val keyValueMetadata: java.util.Map[String, String] =
       readMetaData(origPath, conf)
         .getFileMetaData
@@ -412,7 +418,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       convertFromString(keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
     } else {
       val attributes = convertToAttributes(
-        readMetaData(origPath, conf).getFileMetaData.getSchema)
+        readMetaData(origPath, conf).getFileMetaData.getSchema, isBinaryAsString)
       log.info(s"Falling back to schema conversion from Parquet types; result: $attributes")
       attributes
     }
