@@ -48,7 +48,7 @@ user for an item.
 Since v1.1, we scale the regularization parameter `lambda` in solving each least squares problem by
 the number of ratings the user generated in updating user factors,
 or the number of ratings the product received in updating product factors.
-This approach is named "ALS-WR" and introduced in the paper
+This approach is named "ALS-WR" and discussed in the paper
 "[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
 It makes `lambda` less dependent on the scale of the dataset.
 So we can apply the best parameter learned from a sampled subset to the full dataset
