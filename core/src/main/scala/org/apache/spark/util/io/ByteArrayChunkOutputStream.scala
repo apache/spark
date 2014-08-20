@@ -47,7 +47,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
       new Array[Array[Byte]](0)
     } else {
       val ret = new Array[Array[Byte]](chunks.size)
-      for (i <- 0 to chunks.size - 1) {
+      for (i <- 0 until chunks.size - 1) {
         ret(i) = chunks(i)
       }
       if (position == chunkSize) {
