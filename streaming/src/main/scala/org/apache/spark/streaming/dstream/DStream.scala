@@ -116,7 +116,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   /* Return the current callSite */
-  private[streaming] def getRDDCreationCallSite(): CallSite = {
+  private def getRDDCreationCallSite(): CallSite = {
     CallSite(ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_SHORT),
              ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_LONG))
   }
