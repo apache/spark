@@ -418,7 +418,7 @@ private[spark] class ConnectionManager(
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
-        logInfo("Accepted connection from [" + newConnection.remoteAddress.getAddress + "]")
+        logInfo("Accepted connection from [" + newConnection.remoteAddress + "]")
       } catch {
         // might happen in case of issues with registering with selector
         case e: Exception => logError("Error in accept loop", e)
