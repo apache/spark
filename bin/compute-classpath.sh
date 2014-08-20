@@ -115,11 +115,11 @@ if [ -n "$datanucleus_jars" ]; then
   fi
 fi
 
-test_jars=$(find "$FWDIR"/lib_managed/test \( -name '*jar' -a -type f \) -printf "%p:" 2>/dev/null )
+test_jars=$(find "$FWDIR"/lib_managed/test \( -name '*jar' -a -type f \) 2>/dev/null | \
+    tr "\n" : | sed s/:$//g)
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
 if [[ $SPARK_TESTING == 1 ]]; then
-  CLASSPATH="$CLASSPATH:$test_jars"
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/test-classes"
@@ -129,6 +129,9 @@ if [[ $SPARK_TESTING == 1 ]]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/test-classes"
+  if [[ $SCALA_VERSION == "2.11" ]]; then
+      CLASSPATH="$CLASSPATH:$test_jars"
+  fi
 fi
 
 # Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !

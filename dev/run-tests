@@ -122,6 +122,7 @@ echo "========================================================================="
   # We always build with Hive because the PySpark Spark SQL tests need it.
   BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
 
+<<<<<<< HEAD
   echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS"
 
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
@@ -135,6 +136,13 @@ echo "========================================================================="
     | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
+=======
+# echo "q" is needed because sbt on encountering a build file with failure
+# (either resolution or compilation) prompts the user for input either q, r,
+# etc to quit or retry. This echo is there to make it not block.
+echo -e "q\n" | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Pscala-2.10 test | \
+  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+>>>>>>> Few more fixes/ improvements to jenkins build.
 
 echo ""
 echo "========================================================================="

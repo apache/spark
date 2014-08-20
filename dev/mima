@@ -24,7 +24,7 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-echo -e "q\n" | sbt/sbt oldDeps/update
+echo -e "q\n" | sbt/sbt -Pscala-2.10 oldDeps/update
 rm -f .generated-mima*
 
 # Generate Mima Ignore is called twice, first with latest built jars 
@@ -38,7 +38,7 @@ echo "SPARK_CLASSPATH=$SPARK_CLASSPATH"
 
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
 
-echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
+echo -e "q\n" | sbt/sbt -Pscala-2.10 mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then
