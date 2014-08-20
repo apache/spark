@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
@@ -249,6 +249,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
     FileInputFormat.setInputPaths(jobConf, path)
     if (tableDesc != null) {
+      PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
