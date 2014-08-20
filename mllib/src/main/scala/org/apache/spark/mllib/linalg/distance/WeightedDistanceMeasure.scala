@@ -26,7 +26,9 @@ import org.apache.spark.mllib.linalg.Vector
  */
 @Experimental
 private[distance]
-abstract class WeightedDistanceMeasure(weight: Vector) extends DistanceMeasure {
+trait WeightedDistanceMeasure extends DistanceMeasure {
+
+  val weight: Vector
 
   /**
    * Validates the size of the weight vector additionally

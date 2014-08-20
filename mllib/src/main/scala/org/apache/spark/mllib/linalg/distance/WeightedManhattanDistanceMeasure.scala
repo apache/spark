@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vector
  * between each coordinate, optionally with weights.
  */
 @Experimental
-class WeightedManhattanDistanceMeasure(val weight: Vector) extends WeightedDistanceMeasure(weight) {
+class WeightedManhattanDistanceMeasure(val weight: Vector) extends WeightedDistanceMeasure {
 
   /**
    * Calculates the distance metric between 2 points

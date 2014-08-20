@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vector
  * between each coordinate, optionally adding weights.
  */
 @Experimental
-class WeightedEuclideanDistanceMeasure(weight: Vector) extends WeightedDistanceMeasure(weight) {
+class WeightedEuclideanDistanceMeasure(val weight: Vector) extends WeightedDistanceMeasure {
 
   /**
    * Calculates the distance metric between 2 points
