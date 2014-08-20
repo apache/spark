@@ -113,8 +113,6 @@ if [ "$SPARK_PID_DIR" = "" ]; then
 fi
 
 # some variables
-export SPARK_LOGFILE=spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.log
-export SPARK_ROOT_LOGGER="INFO,DRFA"
 log=$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out
 pid=$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid
 
