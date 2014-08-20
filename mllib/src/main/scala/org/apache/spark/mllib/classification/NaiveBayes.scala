@@ -19,9 +19,9 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
@@ -73,7 +73,7 @@ class NaiveBayesModel private[mllib] (
  * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
  * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
  * document classification.  By making every vector a 0-1 vector, it can also be used as
- * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+ * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
  */
 class NaiveBayes private (private var lambda: Double) extends Serializable with Logging {
 
@@ -91,12 +91,30 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
    * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
   def run(data: RDD[LabeledPoint]) = {
+    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
+      val values = v match {
+        case sv: SparseVector =>
+          sv.values
+        case dv: DenseVector =>
+          dv.values
+      }
+      if (!values.forall(_ >= 0.0)) {
+        throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")
+      }
+    }
+
     // Aggregates term frequencies per label.
     // TODO: Calling combineByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
-      createCombiner = (v: Vector) => (1L, v.toBreeze.toDenseVector),
-      mergeValue = (c: (Long, BDV[Double]), v: Vector) => (c._1 + 1L, c._2 += v.toBreeze),
+      createCombiner = (v: Vector) => {
+        requireNonnegativeValues(v)
+        (1L, v.toBreeze.toDenseVector)
+      },
+      mergeValue = (c: (Long, BDV[Double]), v: Vector) => {
+        requireNonnegativeValues(v)
+        (c._1 + 1L, c._2 += v.toBreeze)
+      },
       mergeCombiners = (c1: (Long, BDV[Double]), c2: (Long, BDV[Double])) =>
         (c1._1 + c2._1, c1._2 += c2._2)
     ).collect()
