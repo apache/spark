@@ -595,7 +595,7 @@ class RDD(object):
 
         def sortPartition(iterator):
             sort = ExternalSorter(memory * 0.9, serializer).sorted if spill else sorted
-            return sort(iterator, key=lambda (k, v): keyfunc(k), reverse=(not ascending))
+            return iter(sort(iterator, key=lambda (k, v): keyfunc(k), reverse=(not ascending)))
 
         if numPartitions == 1:
             if self.getNumPartitions() > 1:
