@@ -303,3 +303,15 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * A plan node that does nothing but lie about the output of its child.  Used to spice a
+ * (hopefully structurally equivalent) tree from a different optimization sequence into an already
+ * resolved tree.
+ */
+@DeveloperApi
+case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
+  def children = child :: Nil
+  def execute() = child.execute()
+}

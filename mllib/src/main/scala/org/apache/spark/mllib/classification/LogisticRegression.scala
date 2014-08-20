@@ -62,7 +62,7 @@ class LogisticRegressionModel (
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    val score = 1.0/ (1.0 + math.exp(-margin))
+    val score = 1.0 / (1.0 + math.exp(-margin))
     threshold match {
       case Some(t) => if (score < t) 0.0 else 1.0
       case None => score
@@ -73,6 +73,8 @@ class LogisticRegressionModel (
 /**
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
+ *
+ * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,
@@ -101,7 +103,7 @@ class LogisticRegressionWithSGD private (
 }
 
 /**
- * Top-level methods for calling Logistic Regression.
+ * Top-level methods for calling Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 object LogisticRegressionWithSGD {
@@ -186,5 +188,24 @@ object LogisticRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
+  }
+}
+
+/**
+ * Train a classification model for Logistic Regression using Limited-memory BFGS.
+ * Standard feature scaling and L2 regularization are used by default.
+ * NOTE: Labels used in Logistic Regression should be {0, 1}
+ */
+class LogisticRegressionWithLBFGS
+  extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
+
+  this.setFeatureScaling(true)
+
+  override val optimizer = new LBFGS(new LogisticGradient, new SquaredL2Updater)
+
+  override protected val validators = List(DataValidators.binaryLabelValidator)
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new LogisticRegressionModel(weights, intercept)
   }
 }

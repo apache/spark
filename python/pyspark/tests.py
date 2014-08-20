@@ -29,12 +29,17 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 import zipfile
+
+if sys.version_info[:2] <= (2, 6):
+    import unittest2 as unittest
+else:
+    import unittest
+
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int
+from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
@@ -251,6 +256,15 @@ class TestRDDFunctions(PySparkTestCase):
         raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
         self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
 
+    def test_save_as_textfile_with_utf8(self):
+        x = u"\u00A1Hola, mundo!"
+        data = self.sc.parallelize([x.encode("utf-8")])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsTextFile(tempFile.name)
+        raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
+        self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
+
     def test_transforming_cartesian_result(self):
         # Regression test for SPARK-1034
         rdd1 = self.sc.parallelize([1, 2])
@@ -317,6 +331,38 @@ class TestRDDFunctions(PySparkTestCase):
         jane = Person(2, "Jane", "Doe")
         theDoes = self.sc.parallelize([jon, jane])
         self.assertEquals([jon, jane], theDoes.collect())
+
+    def test_large_broadcast(self):
+        N = 100000
+        data = [[float(i) for i in range(300)] for i in range(N)]
+        bdata = self.sc.broadcast(data)  # 270MB
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        self.assertEquals(N, m)
+
+    def test_zip_with_different_serializers(self):
+        a = self.sc.parallelize(range(5))
+        b = self.sc.parallelize(range(100, 105))
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
+        a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
+        b = b._reserialize(MarshalSerializer())
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
+
+    def test_zip_with_different_number_of_items(self):
+        a = self.sc.parallelize(range(5), 2)
+        # different number of partitions
+        b = self.sc.parallelize(range(100, 106), 3)
+        self.assertRaises(ValueError, lambda: a.zip(b))
+        # different number of batched items in JVM
+        b = self.sc.parallelize(range(100, 104), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+        # different number of items in one pair
+        b = self.sc.parallelize(range(100, 106), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+        # same total number of items, but different distributions
+        a = self.sc.parallelize([2, 3], 2).flatMap(range)
+        b = self.sc.parallelize([3, 2], 2).flatMap(range)
+        self.assertEquals(a.count(), b.count())
+        self.assertRaises(Exception, lambda: a.zip(b).count())
 
 
 class TestIO(PySparkTestCase):
@@ -605,6 +651,7 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
 
+    @unittest.skipIf(sys.version_info[:2] <= (2, 6), "Skipped on 2.6 until SPARK-2951 is fixed")
     def test_newhadoop(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
@@ -905,8 +952,9 @@ class TestSparkSubmit(unittest.TestCase):
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         content = re.sub(pattern, '', content.strip())
         path = os.path.join(self.programDir, name + ".zip")
-        with zipfile.ZipFile(path, 'w') as zip:
-            zip.writestr(name, content)
+        zip = zipfile.ZipFile(path, 'w')
+        zip.writestr(name, content)
+        zip.close()
         return path
 
     def test_single_script(self):
