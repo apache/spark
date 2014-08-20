@@ -72,10 +72,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private var registered = false
 
   def run() {
-    // Setup the directories so things go to YARN approved directories rather
-    // than user specified and /tmp.
-    System.setProperty("spark.local.dir", getLocalDirs())
-
     // Set the web ui port to be ephemeral for yarn so we don't conflict with
     // other spark processes running on the same box
     System.setProperty("spark.ui.port", "0")
@@ -142,20 +138,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
     System.setProperty(
       "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
-  }
-
-  // Get the Yarn approved local directories.
-  private def getLocalDirs(): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .orElse(Option(System.getenv("LOCAL_DIRS")))
- 
-    localDirs match {
-      case None => throw new Exception("Yarn local dirs can't be empty")
-      case Some(l) => l
-    }
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
@@ -247,13 +229,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       yarnAllocator.allocateResources()
       // Exits the loop if the user thread exits.
 
-      var iters = 0
-      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
+      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive
+          && !isFinished) {
         checkNumExecutorsFailed()
         allocateMissingExecutor()
         yarnAllocator.allocateResources()
         Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
-        iters += 1
       }
     }
     logInfo("All executors have launched.")
@@ -271,8 +252,17 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private def checkNumExecutorsFailed() {
     if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+      logInfo("max number of executor failures reached")
       finishApplicationMaster(FinalApplicationStatus.FAILED,
         "max number of executor failures reached")
+      // make sure to stop the user thread
+      val sparkContext = ApplicationMaster.sparkContextRef.get()
+      if (sparkContext != null) {
+        logInfo("Invoking sc stop from checkNumExecutorsFailed")
+        sparkContext.stop()
+      } else {
+        logError("sparkContext is null when should shutdown")
+      }
     }
   }
 
@@ -289,7 +279,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
     val t = new Thread {
       override def run() {
-        while (userThread.isAlive) {
+        while (userThread.isAlive && !isFinished) {
           checkNumExecutorsFailed()
           allocateMissingExecutor()
           logDebug("Sending progress")

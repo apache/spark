@@ -40,28 +40,3 @@ private[spark] object PythonUtils {
     paths.filter(_ != "").mkString(File.pathSeparator)
   }
 }
-
-
-/**
- * A utility class to redirect the child process's stdout or stderr.
- */
-private[spark] class RedirectThread(
-    in: InputStream,
-    out: OutputStream,
-    name: String)
-  extends Thread(name) {
-
-  setDaemon(true)
-  override def run() {
-    scala.util.control.Exception.ignoring(classOf[IOException]) {
-      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      val buf = new Array[Byte](1024)
-      var len = in.read(buf)
-      while (len != -1) {
-        out.write(buf, 0, len)
-        out.flush()
-        len = in.read(buf)
-      }
-    }
-  }
-}
