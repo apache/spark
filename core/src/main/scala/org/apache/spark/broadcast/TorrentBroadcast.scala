@@ -20,6 +20,8 @@ package org.apache.spark.broadcast
 import java.io._
 import java.nio.ByteBuffer
 
+import org.apache.spark.util.io.ByteArrayChunkOutputStream
+
 import scala.collection.JavaConversions.asJavaEnumeration
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -201,29 +203,13 @@ private object TorrentBroadcast extends Logging {
   }
 
   def blockifyObject[T: ClassTag](obj: T): Array[ByteBuffer] = {
-    // TODO: Create a special ByteArrayOutputStream that splits the output directly into chunks
     // so we don't need to do the extra memory copy.
-    val bos = new ByteArrayOutputStream()
+    val bos = new ByteArrayChunkOutputStream(BLOCK_SIZE)
     val out: OutputStream = if (compress) compressionCodec.compressedOutputStream(bos) else bos
     val ser = SparkEnv.get.serializer.newInstance()
     val serOut = ser.serializeStream(out)
     serOut.writeObject[T](obj).close()
-    val byteArray = bos.toByteArray
-    val bais = new ByteArrayInputStream(byteArray)
-    val numBlocks = math.ceil(byteArray.length.toDouble / BLOCK_SIZE).toInt
-    val blocks = new Array[ByteBuffer](numBlocks)
-
-    var blockId = 0
-    for (i <- 0 until (byteArray.length, BLOCK_SIZE)) {
-      val thisBlockSize = math.min(BLOCK_SIZE, byteArray.length - i)
-      val tempByteArray = new Array[Byte](thisBlockSize)
-      bais.read(tempByteArray, 0, thisBlockSize)
-
-      blocks(blockId) = ByteBuffer.wrap(tempByteArray)
-      blockId += 1
-    }
-    bais.close()
-    blocks
+    bos.toArrays.map(ByteBuffer.wrap)
   }
 
   def unBlockifyObject[T: ClassTag](blocks: Array[ByteBuffer]): T = {
