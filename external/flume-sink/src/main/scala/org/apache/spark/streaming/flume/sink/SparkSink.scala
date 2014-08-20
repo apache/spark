@@ -53,7 +53,6 @@ import org.apache.flume.sink.AbstractSink
  *
  */
 
-private[flume]
 class SparkSink extends AbstractSink with Logging with Configurable {
 
   // Size of the pool to use for holding transaction processors.
@@ -130,6 +129,14 @@ class SparkSink extends AbstractSink with Logging with Configurable {
     logInfo("Blocking Sink Runner, sink will continue to run..")
     blockingLatch.await()
     Status.BACKOFF
+  }
+
+  private[flume] def getPort(): Int = {
+    serverOpt
+      .map(_.getPort)
+      .getOrElse(
+        throw new RuntimeException("Server was not started!")
+      )
   }
 }
 

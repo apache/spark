@@ -60,6 +60,8 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
   override def eval(input: Row): Any = {
     child.eval(input) == null
   }
+
+  override def toString = s"IS NULL $child"
 }
 
 case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
