@@ -529,9 +529,10 @@ object DecisionTree extends Serializable with Logging {
         val featureValue = treePoint.binnedFeatures(featureIndex)
         // Update the left or right count for one bin.
         // Find all matching bins and increment their values.
-        val numCategoricalBins = bins(featureIndex).size  //metadata.numBins(featureIndex)
+        val numCategoricalBins = bins(featureIndex).size / 2  //metadata.numBins(featureIndex)
         var binIndex = 0
         while (binIndex < numCategoricalBins) {
+          // loop over bins, with possible offset, for fixed node, feature, label (for unordered categorical)
           if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
             agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
           } else {
@@ -541,6 +542,7 @@ object DecisionTree extends Serializable with Logging {
         }
       } else {
         // Ordered feature
+        // random access, for fixed nodeIndex
         val binIndex = treePoint.binnedFeatures(featureIndex)
         agg(nodeIndex)(featureIndex)(binIndex).add(treePoint.label)
       }
@@ -570,6 +572,7 @@ object DecisionTree extends Serializable with Logging {
     val numFeatures = treePoint.binnedFeatures.size
     var featureIndex = 0
     while (featureIndex < numFeatures) {
+      // random access, for fixed nodeIndex
       val binIndex = treePoint.binnedFeatures(featureIndex)
       agg(nodeIndex)(featureIndex)(binIndex).add(label)
       featureIndex += 1

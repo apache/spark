@@ -29,24 +29,103 @@ import scala.collection.mutable
  */
 private[tree] class DTStatsAggregator(
     val numNodes: Int,
-    val numFeatures: Int,
     val numBins: Array[Int],
+    unorderedFeatures: Set[Int],
     val statsSize: Int) {
 
-  require(numBins.size == numFeatures, s"DTStatsAggregator was given numBins" +
-    s" (of size ${numBins.size}) which did not match numFeatures = $numFeatures.")
+  val numFeatures: Int = numBins.size
 
-  val featureOffsets: Array[Int] = numBins.scanLeft(0)(_ + _).map(statsSize * _)
+  val isUnordered: Array[Boolean] =
+    Range(0, numFeatures).map(f => unorderedFeatures.contains(f)).toArray
 
-  val allStatsSize: Int = numNodes * featureOffsets.last * statsSize
+  private val featureOffsets: Array[Int] = {
+    def featureOffsetsCalc(total: Int, featureIndex: Int): Int = {
+      if (isUnordered(featureIndex)) {
+        total + 2 * numBins(featureIndex)
+      } else {
+        total + numBins(featureIndex)
+      }
+    }
+    Range(0, numFeatures).scanLeft(0)(featureOffsetsCalc).map(statsSize * _).toArray
+  }
 
+  /**
+   * Number of elements for each node, corresponding to stride between nodes in [[allStats]].
+   */
+  private val nodeStride: Int = featureOffsets.last * statsSize
+
+  /**
+   * Total number of elements stored in this aggregator.
+   */
+  val allStatsSize: Int = numNodes * nodeStride
+
+  /**
+   * Flat array of elements.
+   * Index for start of stats for a (node, feature, bin) is:
+   *   index = nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize
+   * Note: For unordered features, the left child stats have binIndex in [0, numBins(featureIndex))
+   *       and the right child stats in [numBins(featureIndex), 2 * numBins(featureIndex))
+   */
   val allStats: Array[Double] = new Array[Double](allStatsSize)
 
-// TODO: Make views
-  /*
-  Uses:
-  point access
+  /**
+   * Get a view of the stats for a given (node, feature, bin) for ordered features.
+   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
+   */
+  def view(nodeIndex: Int, featureIndex: Int, binIndex: Int): (Array[Double], Int) = {
+    (allStats, nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize)
+  }
 
+  /**
+   * Pre-compute node offset for use with [[nodeView]].
+   */
+  def getNodeOffset(nodeIndex: Int): Int = nodeIndex * nodeStride
+
+  /**
+   * Get a view of the stats for a given (node, feature, bin) for ordered features.
+   * This uses a pre-computed node offset from [[getNodeOffset]].
+   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
+   */
+  def nodeView(nodeOffset: Int, featureIndex: Int, binIndex: Int): (Array[Double], Int) = {
+    (allStats, nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize)
+  }
+
+  /**
+   * Pre-compute (node, feature) offset for use with [[nodeFeatureView]].
+   */
+  def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int =
+    nodeIndex * nodeStride + featureOffsets(featureIndex)
+
+  /**
+   * Get a view of the stats for a given (node, feature, bin) for ordered features.
+   * This uses a pre-computed (node, feature) offset from [[getNodeFeatureOffset]].
+   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
+   */
+  def nodeFeatureView(nodeFeatureOffset: Int, binIndex: Int): (Array[Double], Int) = {
+    (allStats, nodeFeatureOffset + binIndex * statsSize)
+  }
+
+  /**
+   * Merge this aggregator with another, and returns this aggregator.
+   * This method modifies this aggregator in-place.
+   */
+  def merge(other: DTStatsAggregator): DTStatsAggregator = {
+    //TODO
+  }
+
+  // TODO: Make views
+  /*
+  VIEWS TO MAKE:
+  random access
+    impurityAggregator.update(statsAggregator.view(nodeIndex, featureIndex, binIndex), label)
+  random access for fixed nodeIndex
+    statsAggregator.getNodeOffset(nodeIndex) = nodeIndex * nodeStride
+    impurityAggregator.update(statsAggregator.nodeView(nodeOffset, featureIndex, binIndex), label)
+  loop over bins, with rightChildOffset, for fixed node, feature (for unordered categorical)
+    statsAggregator.getNodeFeatureOffset(nodeIndex, featureIndex) = nodeIndex * nodeStride + featureOffsets(featureIndex)
+    impurityAggregator.update(statsAggregator.nodeFeatureView(nodeFeatureOffset, binIndex, isLeft), label)
+
+  complete sum
    */
 
 }
