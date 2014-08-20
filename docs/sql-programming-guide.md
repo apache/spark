@@ -578,9 +578,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
 (https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
-the JDBC server with the beeline script comes with either Spark or Hive 0.12.  In order to use Hive
-you must first run '`sbt/sbt -Phive-thriftserver assembly/assembly`' (or use `-Phive-thriftserver`
-for maven).
+the JDBC server with the beeline script comes with either Spark or Hive 0.12.
 
 To start the JDBC server, run the following in the Spark directory:
 

@@ -99,7 +99,7 @@ echo -e "q\n" | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly 
 
 # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled:
 if [ -n "$_RUN_SQL_TESTS" ]; then
-  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
 fi
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,

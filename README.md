@@ -118,11 +118,7 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
 ## A Note About Thrift JDBC server and CLI for Spark SQL
 
 Spark SQL supports Thrift JDBC server and CLI.
-See sql-programming-guide.md for more information about those features.
-You can use those features by setting `-Phive-thriftserver` when building Spark as follows.
-
-    $ sbt/sbt -Phive-thriftserver assembly
-
+See sql-programming-guide.md for more information about using the JDBC server.
 
 ## Configuration
 
