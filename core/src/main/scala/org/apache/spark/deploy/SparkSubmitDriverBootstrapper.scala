@@ -37,6 +37,13 @@ private[spark] object SparkSubmitDriverBootstrapper {
   // Any changes made there must be reflected in this file.
 
   def main(args: Array[String]): Unit = {
+
+    // This should be called only from `bin/spark-class`
+    if (!sys.env.contains("SPARK_CLASS")) {
+      System.err.println("SparkSubmitDriverBootstrapper must be called from `bin/spark-class`!")
+      System.exit(1)
+    }
+
     val submitArgs = args
     val runner = sys.env("RUNNER")
     val classpath = sys.env("CLASSPATH")

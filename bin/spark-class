@@ -167,7 +167,8 @@ if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   export CLASSPATH
   export JAVA_OPTS
   export OUR_JAVA_MEM
-  shift
+  export SPARK_CLASS=1
+  shift # Ignore main class and use our own
   exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
 else
   # Note: The format of this command is closely echoed in SparkSubmitDriverBootstrapper.scala
