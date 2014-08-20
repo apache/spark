@@ -43,6 +43,12 @@
   </properties>
 
   <dependencies>
+    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -113,6 +119,18 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <relocations>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>org.spark-project.guava</shadedPattern>
+                  <includes>
+                    <include>com.google.common.**</include>
+                  </includes>
+                  <excludes>
+                    <exclude>com.google.common.base.Optional**</exclude>
+                  </excludes>
+                </relocation>
+              </relocations>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
