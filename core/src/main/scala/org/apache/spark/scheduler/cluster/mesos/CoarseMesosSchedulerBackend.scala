@@ -71,10 +71,6 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-    "Spark home is not set; set it through the spark.home system " +
-    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
-
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
   var nextMesosTaskId = 0
@@ -110,6 +106,9 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
+    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
+      "Spark home is not set; set it through the spark.home system " +
+        "property, the SPARK_HOME environment variable or the SparkContext constructor"))      
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
