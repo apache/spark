@@ -1115,16 +1115,47 @@
     </profile>
 
     <profile>
-      <id>mapr</id>
+      <id>mapr3</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
-        <yarn.version>2.3.0-mapr-4.0.0-beta</yarn.version>
-        <hbase.version>0.94.17-mapr-1403</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1401</zookeeper.version>
+        <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
+        <hbase.version>0.94.17-mapr-1405</hbase.version>
+        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
+    </profile>
+
+    <profile>
+      <id>mapr4</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <hadoop.version>2.3.0-mapr-4.0.0-FCS</hadoop.version>
+        <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
+        <hbase.version>0.94.17-mapr-1405-4.0.0-FCS</hbase.version>
+        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.curator</groupId>
+          <artifactId>curator-recipes</artifactId>
+          <version>2.4.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.zookeeper</groupId>
+              <artifactId>zookeeper</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+          <version>3.4.5-mapr-1406</version> 
+        </dependency>
+      </dependencies>
     </profile>
 
     <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
