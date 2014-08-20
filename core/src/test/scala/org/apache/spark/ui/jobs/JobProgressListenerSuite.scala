@@ -134,7 +134,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     listener.onTaskEnd(
       SparkListenerTaskEnd(task.stageId, 1, taskType, Success, taskInfo, metrics))
     assert(listener.stageIdToData((task.stageId, 1)).numCompleteTasks === 1)
-    assert(listener.stageIdToData((task.stageId, 1)).numFailedTasks === failCount)
+    assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
   }
 
   test("test update metrics") {

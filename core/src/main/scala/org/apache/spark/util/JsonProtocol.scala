@@ -189,7 +189,7 @@ private[spark] object JsonProtocol {
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
-    ("Attempt ID" -> stageInfo.attemptId) ~
+    ("Stage Attempt ID" -> stageInfo.attemptId) ~
     ("Stage Name" -> stageInfo.name) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
     ("RDD Info" -> rddInfo) ~
