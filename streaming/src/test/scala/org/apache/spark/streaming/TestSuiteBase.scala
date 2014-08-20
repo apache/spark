@@ -119,7 +119,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def batchDuration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  def checkpointDir = {
+  lazy val checkpointDir = {
     val dir = Files.createTempDir()
     logDebug(s"checkpointDir: $dir")
     dir.deleteOnExit()
