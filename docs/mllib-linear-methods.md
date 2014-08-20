@@ -521,7 +521,7 @@ print("Mean Squared Error = " + str(MSE))
 ## Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online, 
-updating the parameters of the model as new data arrive. MLlib currently supports 
+updating the parameters of the model as new data arrives. MLlib currently supports 
 streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
@@ -546,10 +546,10 @@ import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
 
 {% endhighlight %}
 
-Then we make input streams for training and testing data. We assume a Streaming Context `ssc`
+Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
 has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
 for more info. For this example, we use labeled points in training and testing streams, 
-but in practice you will likely want to use unlabeled Vectors for test data.
+but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
 
@@ -562,8 +562,9 @@ We create our model by initializing the weights to 0
 
 {% highlight scala %}
 
+val numFeatures = 3
 val model = new StreamingLinearRegressionWithSGD()
-    .setInitialWeights(Vectors.zeros(3))
+    .setInitialWeights(Vectors.zeros(numFeatures))
 
 {% endhighlight %}
 
