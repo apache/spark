@@ -449,12 +449,71 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
-   * return a single directory, even though the spark.local.dir property might be a list of
-   * multiple paths.
+   * Get the path of a temporary directory.  Spark's local directories can be configured through
+   * multiple settings, which are used with the following precedence:
+   *
+   *   - If called from inside of a YARN container, this will return a directory chosen by YARN.
+   *   - If the SPARK_LOCAL_DIRS environment variable is set, this will return a directory from it.
+   *   - Otherwise, if the spark.local.dir is set, this will return a directory from it.
+   *   - Otherwise, this will return java.io.tmpdir.
+   *
+   * Some of these configuration options might be lists of multiple paths, but this method will
+   * always return a single directory.
    */
   def getLocalDir(conf: SparkConf): String = {
-    conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
+    getOrCreateLocalRootDirs(conf)(0)
+  }
+
+  private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
+    // These environment variables are set by YARN.
+    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
+    // For Hadoop 2.X, we check for CONTAINER_ID.
+    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+  }
+
+  /**
+   * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
+   * and returns only the directories that exist / could be created.
+   *
+   * If no directories could be created, this will return an empty list.
+   */
+  private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+    val confValue = if (isRunningInYarnContainer(conf)) {
+      // If we are in yarn mode, systems can have different disk layouts so we must set it
+      // to what Yarn on this system said was available.
+      getYarnLocalDirs(conf)
+    } else {
+      Option(conf.getenv("SPARK_LOCAL_DIRS")).getOrElse(
+        conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
+    }
+    val rootDirs = confValue.split(',')
+    logDebug(s"Getting/creating local root dirs at '$confValue'")
+
+    rootDirs.flatMap { rootDir =>
+      val localDir: File = new File(rootDir)
+      val foundLocalDir = localDir.exists || localDir.mkdirs()
+      if (!foundLocalDir) {
+        logError(s"Failed to create local root dir in $rootDir.  Ignoring this directory.")
+        None
+      } else {
+        Some(rootDir)
+      }
+    }
+  }
+
+  /** Get the Yarn approved local directories. */
+  private def getYarnLocalDirs(conf: SparkConf): String = {
+    // Hadoop 0.23 and 2.x have different Environment variable names for the
+    // local dirs, so lets check both. We assume one of the 2 is set.
+    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
+    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
+      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
+      .getOrElse(""))
+
+    if (localDirs.isEmpty) {
+      throw new Exception("Yarn Local dirs can't be empty")
+    }
+    localDirs
   }
 
   /**

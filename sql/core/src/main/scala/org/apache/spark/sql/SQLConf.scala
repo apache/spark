@@ -54,6 +54,7 @@ private[spark] object SQLConf {
 trait SQLConf {
   import SQLConf._
 
+  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
