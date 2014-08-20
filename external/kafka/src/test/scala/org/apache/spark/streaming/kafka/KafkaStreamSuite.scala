@@ -25,6 +25,7 @@ import scala.collection.mutable
 
 import kafka.admin.CreateTopicCommand
 import kafka.common.TopicAndPartition
+import kafka.message.MessageAndMetadata
 import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
 import kafka.utils.ZKStringSerializer
 import kafka.serializer.{StringDecoder, StringEncoder}
@@ -76,11 +77,15 @@ class KafkaStreamSuite extends TestSuiteBase {
 
   override def afterFunction() {
     producer.close()
+    producer = null
     server.shutdown()
+    server = null
     brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
 
     zkClient.close()
+    zkClient = null
     zookeeper.shutdown()
+    zookeeper = null
 
     super.afterFunction()
   }
@@ -120,6 +125,58 @@ class KafkaStreamSuite extends TestSuiteBase {
     ssc.stop()
   }
 
+  test("Kafka input stream messageHandler test") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+
+    val topic1 = "topic1"
+    val sent1 = Map("a" -> 3)
+    createTopic(topic1)
+    produceAndSendMessage(topic1, sent1)
+
+    val topic2 = "topic2"
+    val sent2 = Map("b" -> 5)
+    createTopic(topic2)
+    produceAndSendMessage(topic2, sent2)
+
+    val kafkaParams = Map("zookeeper.connect" -> zkConnect,
+      "group.id" -> s"test-consumer-${random.nextInt(10000)}",
+      "auto.offset.reset" -> "smallest")
+
+    val messageHandler: MessageAndMetadata[String, String] => String =
+      msgAndMetadata => msgAndMetadata.topic
+
+    val stream = KafkaUtils.createStream[
+        String,
+        String,
+        StringDecoder,
+        StringDecoder,
+        String](
+      ssc,
+      kafkaParams,
+      Map(topic1 -> 1, topic2 -> 1),
+      messageHandler,
+      StorageLevel.MEMORY_ONLY)
+
+    val result = new mutable.HashMap[String, Long]()
+    stream.countByValue()
+      .foreachRDD { r =>
+        val ret = r.collect()
+        ret.toMap.foreach { kv =>
+          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+          result.put(kv._1, count)
+        }
+      }
+    ssc.start()
+    ssc.awaitTermination(3000)
+
+    val expectedResult = Map(topic1 -> 3, topic2 -> 5)
+
+    assert(expectedResult.size === result.size)
+    expectedResult.keys.foreach { k => assert(expectedResult(k) === result(k).toInt) }
+
+    ssc.stop()
+  }
+
   private def createTestMessage(topic: String, sent: Map[String, Int])
     : Seq[KeyedMessage[String, String]] = {
     val messages = for ((s, freq) <- sent; i <- 0 until freq) yield {
@@ -137,7 +194,9 @@ class KafkaStreamSuite extends TestSuiteBase {
 
   def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
     val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
-    producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    if (producer == null) {
+      producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    }
     producer.send(createTestMessage(topic, sent): _*)
     logInfo("==================== 6 ====================")
   }

@@ -24,6 +24,7 @@ import java.util.Properties
 import java.util.concurrent.Executors
 
 import kafka.consumer._
+import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 import kafka.utils.ZKStringSerializer
@@ -42,6 +43,8 @@ import org.apache.spark.streaming.receiver.Receiver
  *                    See: http://kafka.apache.org/configuration.html
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
+ * @param messageHandler A function to specify how to process Kafka message MessageAndMetadata
+ *                       and return the result of R.
  * @param storageLevel RDD storage level.
  */
 private[streaming]
@@ -49,16 +52,18 @@ class KafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
-  T <: Decoder[_]: ClassTag](
+  T <: Decoder[_]: ClassTag,
+  R: ClassTag](
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
+    messageHandler: MessageAndMetadata[K, V] => R,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
+  ) extends ReceiverInputDStream[R](ssc_) with Logging {
 
-  def getReceiver(): Receiver[(K, V)] = {
-    new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
-        .asInstanceOf[Receiver[(K, V)]]
+  def getReceiver(): Receiver[R] = {
+    new KafkaReceiver[K, V, U, T, R](kafkaParams, topics, messageHandler, storageLevel)
+        .asInstanceOf[Receiver[R]]
   }
 }
 
@@ -67,11 +72,13 @@ class KafkaReceiver[
   K: ClassTag,
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
-  T <: Decoder[_]: ClassTag](
+  T <: Decoder[_]: ClassTag,
+  R: ClassTag](
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
+    messageHandler: MessageAndMetadata[K, V] => R,
     storageLevel: StorageLevel
-  ) extends Receiver[Any](storageLevel) with Logging {
+  ) extends Receiver[R](storageLevel) with Logging {
 
   // Connection to Kafka
   var consumerConnector : ConsumerConnector = null
@@ -118,25 +125,23 @@ class KafkaReceiver[
     try {
       // Start the messages handler for each partition
       topicMessageStreams.values.foreach { streams =>
-        streams.foreach { stream => executorPool.submit(new MessageHandler(stream)) }
+        streams.foreach { stream =>
+          executorPool.submit(new Runnable {
+            override def run(): Unit = {
+              logInfo("Starting MessageHandler.")
+              try {
+                for (msgAndMetadata <- stream) {
+                  store(messageHandler(msgAndMetadata))
+                }
+              } catch {
+                  case e: Throwable => logError("Error handling message; exiting", e)
+              }
+            }
+          })
+        }
       }
     } finally {
       executorPool.shutdown() // Just causes threads to terminate after work is done
-    }
-  }
-
-  // Handles Kafka Messages
-  private class MessageHandler[K: ClassTag, V: ClassTag](stream: KafkaStream[K, V])
-    extends Runnable {
-    def run() {
-      logInfo("Starting MessageHandler.")
-      try {
-        for (msgAndMetadata <- stream) {
-          store((msgAndMetadata.key, msgAndMetadata.message))
-        }
-      } catch {
-        case e: Throwable => logError("Error handling message; exiting", e)
-      }
     }
   }
 
