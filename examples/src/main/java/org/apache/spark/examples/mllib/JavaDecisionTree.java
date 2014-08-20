@@ -19,11 +19,10 @@ package org.apache.spark.examples.mllib;
 
 import java.util.HashMap;
 
-import scala.reflect.ClassTag;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.function.Function2;
-      import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -34,22 +33,23 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 
-
 /**
  * Classification and regression using decision trees.
  */
 public final class JavaDecisionTree {
 
   public static void main(String[] args) {
-    if (args.length != 1) {
+    String datapath = "data/mllib/sample_libsvm_data.txt";
+    if (args.length == 1) {
+      datapath = args[0];
+    } else if (args.length > 1) {
       System.err.println("Usage: JavaDecisionTree <libsvm format data file>");
       System.exit(1);
     }
     SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
-    String datapath = args[0];
 
-    JavaRDD<LabeledPoint> data = JavaRDD.fromRDD(MLUtils.loadLibSVMFile(sc.sc(), datapath));
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
 
     // Compute the number of classes from the data.
     Integer numClasses = data.map(new Function<LabeledPoint, Double>() {
@@ -57,7 +57,9 @@ public final class JavaDecisionTree {
         return p.label();
       }
     }).countByValue().size();
-    // Empty categoricalFeaturesInfo indicates all features are continuous.
+
+    // Set parameters.
+    //  Empty categoricalFeaturesInfo indicates all features are continuous.
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
     String impurity = "gini";
     Integer maxDepth = 5;
@@ -80,12 +82,11 @@ public final class JavaDecisionTree {
           return !pl._1().equals(pl._2());
         }
       }).count() / data.count();
-    System.out.print("Training error: " + trainErr);
-    System.out.print("Learned classification tree model:\n" + model);
+    System.out.println("Training error: " + trainErr);
+    System.out.println("Learned classification tree model:\n" + model);
 
     // Train a DecisionTree model for regression.
     impurity = "variance";
-
     final DecisionTreeModel regressionModel = DecisionTree.trainRegressor(data,
         categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
@@ -107,8 +108,8 @@ public final class JavaDecisionTree {
           return a + b;
         }
       }) / data.count();
-    System.out.print("Training Mean Squared Error: " + trainMSE);
-    System.out.print("Learned regression tree model:\n" + regressionModel);
+    System.out.println("Training Mean Squared Error: " + trainMSE);
+    System.out.println("Learned regression tree model:\n" + regressionModel);
 
     sc.stop();
   }
