@@ -438,27 +438,31 @@ private[spark] class ConnectionManager(
   }
 
   def removeConnection(connection: Connection) {
-    connectionsByKey -= connection.key
+    if (connectionsByKey.contains(connection.key)) {
+      connectionsByKey -= connection.key
+    }
 
     try {
       connection match {
         case sendingConnection: SendingConnection =>
-          val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-          logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
-
-          connectionsById -= sendingConnectionManagerId
-          connectionsAwaitingSasl -= connection.connectionId
-
-          messageStatuses.synchronized {
-            messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
-              .foreach(status => {
-                logInfo("Notifying " + status)
-                status.markDone(None)
+          sendingConnection.synchronized {
+            val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
+            logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
+            
+            connectionsById -= sendingConnectionManagerId
+            connectionsAwaitingSasl -= connection.connectionId
+            
+            messageStatuses.synchronized {
+              messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
+                .foreach(status => {
+                  logInfo("Notifying " + status)
+                  status.markDone(None)
+                })
+            
+              messageStatuses.retain((i, status) => {
+                status.connectionManagerId != sendingConnectionManagerId
               })
-
-            messageStatuses.retain((i, status) => {
-              status.connectionManagerId != sendingConnectionManagerId
-            })
+            }
           }
         case receivingConnection: ReceivingConnection =>
           val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
@@ -466,7 +470,7 @@ private[spark] class ConnectionManager(
 
           val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
           if (!sendingConnectionOpt.isDefined) {
-            logWarning("Corresponding SendingConnectionManagerId not found, maybe removed in advance")
+            logWarning(s"Corresponding SendingConnection to ${remoteConnectionManagerId} not found")
             return
           }
 
@@ -474,7 +478,6 @@ private[spark] class ConnectionManager(
           val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
 
           assert(sendingConnectionManagerId == remoteConnectionManagerId)
-
           sendingConnection.close()
         case _ => logError("Unsupported type of connection.")
       }
