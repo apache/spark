@@ -575,6 +575,8 @@ class RDD(object):
         # noqa
 
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        >>> sc.parallelize(tmp).sortByKey().first()
+        ('1', 3)
         >>> sc.parallelize(tmp).sortByKey(True, 1).collect()
         [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
         >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
@@ -614,15 +616,14 @@ class RDD(object):
         bounds = [samples[len(samples) * (i + 1) / numPartitions]
                   for i in range(0, numPartitions - 1)]
 
-        def rangePartitionFunc(k):
+        def rangePartitioner(k):
             p = bisect.bisect_left(bounds, keyfunc(k))
             if ascending:
                 return p
             else:
                 return numPartitions - 1 - p
 
-        return (self.partitionBy(numPartitions, rangePartitionFunc)
-                .mapPartitions(sortPartition, True))
+        return self.partitionBy(numPartitions, rangePartitioner).mapPartitions(sortPartition, True)
 
     def sortBy(self, keyfunc, ascending=True, numPartitions=None):
         """
