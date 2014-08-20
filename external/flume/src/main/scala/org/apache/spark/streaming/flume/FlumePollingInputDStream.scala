@@ -20,6 +20,8 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
 
+import org.apache.avro.AvroRemoteException
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -36,6 +38,9 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
 
+import scala.util.Try
+import scala.util.control.Breaks
+
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
  * [[org.apache.spark.streaming.flume.sink.SparkSink]]s.
@@ -47,11 +52,11 @@ import org.apache.spark.streaming.flume.sink._
  * @tparam T Class type of the object of this stream
  */
 private[streaming] class FlumePollingInputDStream[T: ClassTag](
-    @transient _ssc: StreamingContext,
-    val addresses: Seq[InetSocketAddress],
-    val maxBatchSize: Int,
-    val parallelism: Int,
-    storageLevel: StorageLevel
+  @transient _ssc: StreamingContext,
+  val addresses: Seq[InetSocketAddress],
+  val maxBatchSize: Int,
+  val parallelism: Int,
+  storageLevel: StorageLevel
   ) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
@@ -60,10 +65,10 @@ private[streaming] class FlumePollingInputDStream[T: ClassTag](
 }
 
 private[streaming] class FlumePollingReceiver(
-    addresses: Seq[InetSocketAddress],
-    maxBatchSize: Int,
-    parallelism: Int,
-    storageLevel: StorageLevel
+  addresses: Seq[InetSocketAddress],
+  maxBatchSize: Int,
+  parallelism: Int,
+  storageLevel: StorageLevel
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val channelFactoryExecutor =
@@ -90,58 +95,98 @@ private[streaming] class FlumePollingReceiver(
       // Threads that pull data from Flume.
       receiverExecutor.submit(new Runnable {
         override def run(): Unit = {
-          while (true) {
-            val connection = connections.poll()
-            val client = connection.client
-            try {
-              val eventBatch = client.getEventBatch(maxBatchSize)
-              if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
-                // No error, proceed with processing data
-                val seq = eventBatch.getSequenceNumber
-                val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
-                logDebug(
-                  "Received batch of " + events.size() + " events with sequence number: " + seq)
-                try {
-                  // Convert each Flume event to a serializable SparkFlumeEvent
-                  val buffer = new ArrayBuffer[SparkFlumeEvent](events.size())
-                  var j = 0
-                  while (j < events.size()) {
-                    buffer += toSparkFlumeEvent(events(j))
-                    j += 1
-                  }
-                  store(buffer)
-                  logDebug("Sending ack for sequence number: " + seq)
-                  // Send an ack to Flume so that Flume discards the events from its channels.
-                  client.ack(seq)
-                  logDebug("Ack sent for sequence number: " + seq)
-                } catch {
-                  case e: Exception =>
-                    try {
-                      // Let Flume know that the events need to be pushed back into the channel.
-                      logDebug("Sending nack for sequence number: " + seq)
-                      client.nack(seq) // If the agent is down, even this could fail and throw
-                      logDebug("Nack sent for sequence number: " + seq)
-                    } catch {
-                      case e: Exception => logError(
-                        "Sending Nack also failed. A Flume agent is down.")
+          val loop = new Breaks
+          loop.breakable {
+            while (!isStopped()) {
+              val connection = connections.poll()
+              val client = connection.client
+              var batchReceived = false
+              try {
+                var eventBatch: EventBatch = null
+                var seq: CharSequence = null
+                Try {
+                  eventBatch = client.getEventBatch(maxBatchSize)
+                  batchReceived = true
+                  if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
+                    // No error, proceed with processing data
+                    seq = eventBatch.getSequenceNumber
+                    val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
+                    logDebug(
+                      "Received batch of " + events.size() + " events with sequence number: " + seq)
+                    // Convert each Flume event to a serializable SparkFlumeEvent
+                    val buffer = new ArrayBuffer[SparkFlumeEvent](events.size())
+                    var j = 0
+                    while (j < events.size()) {
+                      buffer += toSparkFlumeEvent(events(j))
+                      j += 1
                     }
-                    TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
-                    logWarning("Error while attempting to store events", e)
+                    store(buffer)
+                    logDebug("Sending ack for sequence number: " + seq)
+                    // Send an ack to Flume so that Flume discards the events from its channels.
+                    client.ack(seq)
+                    logDebug("Ack sent for sequence number: " + seq)
+                  } else {
+                    batchReceived = false
+                    logWarning(
+                      "Did not receive events from Flume agent due to error on the Flume " +
+                        "agent: " + eventBatch.getErrorMsg)
+                  }
+                }.recover {
+                  case e: Exception =>
+                    // Is the exception an interrupted exception? If yes,
+                    // check if the receiver was stopped. If the receiver was stopped,
+                    // simply exit. Else send a Nack and exit.
+                    if (e.isInstanceOf[InterruptedException]) {
+                      if (isStopped()) {
+                        loop.break()
+                      } else {
+                        sendNack(batchReceived, client, seq, e)
+                      }
+                    }
+                    // if there is a cause do the same check as above.
+                    Option(e.getCause) match {
+                      case Some(exception: InterruptedException) =>
+                        if (isStopped()) {
+                          loop.break()
+                        } else {
+                          sendNack(batchReceived, client, seq, e)
+                        }
+                      case Some(otherException: Exception) =>
+                        sendNack(batchReceived, client, seq, e)
+                      case Some(majorError: Throwable) =>
+                        throw majorError // kill immediately
+                      case None =>
+                        sendNack(batchReceived, client, seq, e)
+                    }
                 }
-              } else {
-                logWarning("Did not receive events from Flume agent due to error on the Flume " +
-                  "agent: " + eventBatch.getErrorMsg)
+              } catch {
+                case e: Exception =>
+                  logWarning("Error while reading data from Flume", e)
+              } finally {
+                connections.add(connection)
               }
-            } catch {
-              case e: Exception =>
-                logWarning("Error while reading data from Flume", e)
-            } finally {
-              connections.add(connection)
             }
           }
         }
       })
     }
+  }
+
+  private def sendNack(batchReceived: Boolean, client: SparkFlumeProtocol.Callback,
+    seq: CharSequence, exception: Exception): Unit = {
+    Try {
+      if (batchReceived) {
+        // Let Flume know that the events need to be pushed back into the channel.
+        logDebug("Sending nack for sequence number: " + seq)
+        client.nack(seq) // If the agent is down, even this could fail and throw
+        logDebug("Nack sent for sequence number: " + seq)
+      }
+    }.recover({
+      case e: Exception => logError(
+        "Sending Nack also failed. A Flume agent is down.")
+    })
+    TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
+    logWarning("Error while attempting to store events", exception)
   }
 
   override def onStop(): Unit = {
