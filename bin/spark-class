@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+# NOTE: Any changes to this file must be reflected in SparkSubmitDriverBootstrapper.scala!
+
 cygwin=false
 case "`uname`" in
     CYGWIN*) cygwin=true;;
@@ -39,7 +41,7 @@ fi
 
 if [ -n "$SPARK_MEM" ]; then
   echo -e "Warning: SPARK_MEM is deprecated, please use a more specific config option" 1>&2
-  echo -e "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)." 1>&2
+  echo -e "(e.g., spark.executor.memory or spark.driver.memory)." 1>&2
 fi
 
 # Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
@@ -73,11 +75,17 @@ case "$1" in
     OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
     ;;
 
-  # Spark submit uses SPARK_SUBMIT_OPTS and SPARK_JAVA_OPTS
-    'org.apache.spark.deploy.SparkSubmit')
-    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_SUBMIT_OPTS \
-      -Djava.library.path=$SPARK_SUBMIT_LIBRARY_PATH"
+  # Spark submit uses SPARK_JAVA_OPTS + SPARK_SUBMIT_OPTS +
+  # SPARK_DRIVER_MEMORY + SPARK_SUBMIT_DRIVER_MEMORY.
+  'org.apache.spark.deploy.SparkSubmit')
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_SUBMIT_OPTS"
     OUR_JAVA_MEM=${SPARK_DRIVER_MEMORY:-$DEFAULT_MEM}
+    if [ -n "$SPARK_SUBMIT_LIBRARY_PATH" ]; then
+      OUR_JAVA_OPTS="$OUR_JAVA_OPTS -Djava.library.path=$SPARK_SUBMIT_LIBRARY_PATH"
+    fi
+    if [ -n "$SPARK_SUBMIT_DRIVER_MEMORY" ]; then
+      OUR_JAVA_MEM="$SPARK_SUBMIT_DRIVER_MEMORY"
+    fi
     ;;
 
   *)
@@ -101,11 +109,12 @@ fi
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
+
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
 fi
-export JAVA_OPTS
+
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
 TOOLS_DIR="$FWDIR"/tools
@@ -146,10 +155,28 @@ if $cygwin; then
 fi
 export CLASSPATH
 
-if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
-  echo -n "Spark Command: " 1>&2
-  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2
-  echo -e "========================================\n" 1>&2
+# In Spark submit client mode, the driver is launched in the same JVM as Spark submit itself.
+# Here we must parse the properties file for relevant "spark.driver.*" configs before launching
+# the driver JVM itself. Instead of handling this complexity in Bash, we launch a separate JVM
+# to prepare the launch environment of this driver JVM.
+
+if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
+  # This is used only if the properties file actually contains these special configs
+  # Export the environment variables needed by SparkSubmitDriverBootstrapper
+  export RUNNER
+  export CLASSPATH
+  export JAVA_OPTS
+  export OUR_JAVA_MEM
+  export SPARK_CLASS=1
+  shift # Ignore main class (org.apache.spark.deploy.SparkSubmit) and use our own
+  exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
+else
+  # Note: The format of this command is closely echoed in SparkSubmitDriverBootstrapper.scala
+  if [ -n "$SPARK_PRINT_LAUNCH_COMMAND" ]; then
+    echo -n "Spark Command: " 1>&2
+    echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2
+    echo -e "========================================\n" 1>&2
+  fi
+  exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"

@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.python
 
-import java.lang.Runtime
 import java.io.{DataOutputStream, DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
@@ -25,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging {

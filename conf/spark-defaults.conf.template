@@ -2,7 +2,9 @@
 # This is useful for setting default environmental settings.
 
 # Example:
-# spark.master            spark://master:7077
-# spark.eventLog.enabled  true
-# spark.eventLog.dir      hdfs://namenode:8021/directory
-# spark.serializer        org.apache.spark.serializer.KryoSerializer
+# spark.master                     spark://master:7077
+# spark.eventLog.enabled           true
+# spark.eventLog.dir               hdfs://namenode:8021/directory
+# spark.serializer                 org.apache.spark.serializer.KryoSerializer
+# spark.driver.memory              5g
+# spark.executor.extraJavaOptions  -XX:+PrintGCDetail -Dkey=value -Dnumbers="one two three"

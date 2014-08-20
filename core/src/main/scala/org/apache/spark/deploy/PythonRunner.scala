@@ -22,8 +22,8 @@ import java.net.URI
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
-import org.apache.spark.api.python.{PythonUtils, RedirectThread}
-import org.apache.spark.util.Utils
+import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
  * A main class used by spark-submit to launch Python applications. It executes python as a
