@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg
  * @see http://en.wikipedia.org/wiki/Cosine_similarity
  */
 @Experimental
-class CosineDistanceMeasure extends DistanceMeasure {
+class CosineDistanceMeasure extends DistanceMetric {
 
   /**
    * Calculates the cosine distance between 2 points

@@ -19,13 +19,13 @@ package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.Vectors
 
-class CosineDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceMeasureFactory = new CosineDistanceMeasure
+class CosineDistanceMeasureSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory = new CosineDistanceMeasure
 
   test("concreate distance check") {
     val vector1 = Vectors.dense(1.0, 2.0)
     val vector2 = Vectors.dense(3.0, 4.0)
-    val distance = distanceMeasureFactory(vector1, vector2)
+    val distance = distanceFactory(vector1, vector2)
 
     val coefficient = 100000
     Math.floor(distance * coefficient) / coefficient should be(0.01613)
@@ -34,7 +34,7 @@ class CosineDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
   test("two vectors have the same magnitude") {
     val vector1 = Vectors.dense(1.0, 1.0)
     val vector2 = Vectors.dense(2.0, 2.0)
-    val distance = distanceMeasureFactory(vector1, vector2)
+    val distance = distanceFactory(vector1, vector2)
 
     val coefficient = 100000
     Math.floor(distance * coefficient) / coefficient should be(0.0)

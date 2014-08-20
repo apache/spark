@@ -20,12 +20,12 @@ package org.apache.spark.mllib.linalg.distance
 import org.apache.spark.mllib.linalg.Vectors
 
 class ChebyshevDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceMeasureFactory: DistanceMeasure = new ChebyshevDistanceMeasure
+  override def distanceFactory: DistanceMeasure = new ChebyshevDistanceMeasure
 
   test("the distance should be 6") {
     val vector1 = Vectors.dense(1, -1, 1, -1)
     val vector2 = Vectors.dense(2, -3, 4, 5)
-    val distance = distanceMeasureFactory(vector1, vector2)
+    val distance = distanceFactory(vector1, vector2)
     assert(distance == 6, s"the distance should be 6, but ${distance}")
   }
 }

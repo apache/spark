@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vector
  * @see http://en.wikipedia.org/wiki/Jaccard_index
  */
 @Experimental
-class TanimotoDistanceMeasure extends DistanceMeasure {
+class TanimotoDistanceMeasure extends DistanceMetric {
 
   /**
    * Calculates the tanimoto distance between 2 points

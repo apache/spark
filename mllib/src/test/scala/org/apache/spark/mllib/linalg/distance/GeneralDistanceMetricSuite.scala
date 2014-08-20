@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
-import org.scalatest.{FunSuite, ShouldMatchers}
+import org.apache.spark.mllib.linalg.Vectors
+import org.scalatest.{ShouldMatchers, FunSuite}
 
 private[distance]
-trait GeneralDistanceMeasureSuite extends FunSuite with ShouldMatchers {
-  def distanceFactory: DistanceMeasure
+trait GeneralDistanceMetricSuite extends FunSuite with ShouldMatchers {
+  def distanceFactory: DistanceMetric
 
   test("the length of two vectors should be same") {
     val vector1 = Vectors.dense(1, 1, 1)
@@ -63,23 +63,5 @@ trait GeneralDistanceMeasureSuite extends FunSuite with ShouldMatchers {
 
     // symmetry
     assert(SymmetryValidator(distanceMatrix), "not symmetry")
-
-    //  triangle inequality
-    assert(TriangleInequalityValidator(distanceMatrix), "not triangle inequality")
-  }
-}
-
-private[distance]
-object GeneralDistanceMeasureSuite {
-
-  def calcDistanceMatrix(distanceMeasure: DistanceMeasure, vectors: Array[Vector]): Matrix = {
-    val denseMatrixElements = for (v1 <- vectors; v2 <- vectors) yield {
-      distanceMeasure(v2, v1)
-    }
-    Matrices.dense(vectors.size, vectors.size, denseMatrixElements)
-  }
-
-  def roundValue(value: Double, numDigits: Int): Double = {
-    Math.round(value * Math.pow(10, numDigits)) / Math.pow(10, numDigits)
   }
 }

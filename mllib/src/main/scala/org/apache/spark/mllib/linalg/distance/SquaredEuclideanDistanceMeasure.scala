@@ -25,7 +25,7 @@ import org.apache.spark.mllib.linalg
  * Squared euclidean distance implementation
  */
 @Experimental
-class SquaredEuclideanDistanceMeasure extends DistanceMeasure {
+class SquaredEuclideanDistanceMeasure extends DistanceMetric {
 
   /**
    * Calculates the squared euclidean distance between 2 points
@@ -37,8 +37,7 @@ class SquaredEuclideanDistanceMeasure extends DistanceMeasure {
   override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
     validate(v1, v2)
 
-    (v1.toArray zip v2.toArray).map {
-      case (elm1: Double, elm2: Double) => Math.pow(elm1 - elm2, 2)
-    }.sum
+    val diffVector = (v1.toBreeze - v2.toBreeze)
+    diffVector.dot(diffVector)
   }
 }

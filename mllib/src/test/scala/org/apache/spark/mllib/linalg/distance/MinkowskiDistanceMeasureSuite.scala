@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg.distance
 import org.apache.spark.mllib.linalg.Vectors
 
 class MinkowskiDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceMeasureFactory: DistanceMeasure = new MinkowskiDistanceMeasure(4.0)
+  override def distanceFactory: DistanceMeasure = new MinkowskiDistanceMeasure(4.0)
 
   test("the distance between the vectors should be expected") {
     val vector1 = Vectors.dense(0, 0, 0)

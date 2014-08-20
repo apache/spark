@@ -21,7 +21,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 class WeightedEuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
 
-  override def distanceMeasureFactory: DistanceMeasure = {
+  override def distanceFactory: DistanceMeasure = {
     val weights = Vectors.dense(0.1, 0.1, 0.1, 0.1, 0.1, 0.1) // size should be 6
     new WeightedEuclideanDistanceMeasure(weights)
   }

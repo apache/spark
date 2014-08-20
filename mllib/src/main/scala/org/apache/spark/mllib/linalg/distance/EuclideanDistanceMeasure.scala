@@ -25,17 +25,24 @@ import org.apache.spark.mllib.linalg.Vector
  * Euclidean distance implementation
  */
 @Experimental
-class EuclideanDistanceMeasure extends SquaredEuclideanDistanceMeasure {
+class EuclideanDistanceMeasure extends DistanceMeasure {
 
   /**
    * Calculates the euclidean distance (L2 distance) between 2 points
+   *
+   * D(x, y) = sqrt(sum((x1-y1)^2 + (x2-y2)^2 + ... + (xn-yn)^2))
+   * or
+   * D(x, y) = sqrt((x-y) dot (x-y))
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
   override def apply(v1: Vector, v2: Vector): Double = {
-    val squaredDistance = super.apply(v1, v2)
+    validate(v1, v2)
+
+    val diffVector = (v1.toBreeze - v2.toBreeze)
+    val squaredDistance = diffVector.dot(diffVector)
     Math.sqrt(squaredDistance)
   }
 }

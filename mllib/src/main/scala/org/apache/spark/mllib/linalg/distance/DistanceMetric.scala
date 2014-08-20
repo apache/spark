@@ -17,6 +17,16 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-class ManhattanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceFactory = new ManhattanDistanceMeasure()
-}
+import org.apache.spark.annotation.Experimental
+
+/**
+ * :: Experimental ::
+ * This trait is used for objects which can determine a distance metric between two points
+ * However, classes which inherits aren't require to satisfy triangle inequality
+ *
+ * 1. d(x, y) >= 0 (non-negative)
+ * 2. d(x, y) = 0 if and only if x = y (identity of indiscernibles)
+ * 3. d(x, y) = d(y, x) (symmetry)
+ */
+@Experimental
+trait DistanceMetric extends DistanceMeasure
