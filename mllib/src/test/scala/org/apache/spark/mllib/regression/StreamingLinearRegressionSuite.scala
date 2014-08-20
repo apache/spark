@@ -48,7 +48,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
   }
 
   // Test if we can accurately learn Y = 10*X1 + 10*X2 on streaming data
-  test("parameter accuracy") {
+  ignore("parameter accuracy") {
 
     // create model
     val model = new StreamingLinearRegressionWithSGD()
@@ -81,7 +81,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
   }
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
-  test("parameter convergence") {
+  ignore("parameter convergence") {
 
     // create model
     val model = new StreamingLinearRegressionWithSGD()
@@ -117,7 +117,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
   }
 
   // Test predictions on a stream
-  test("predictions") {
+  ignore("predictions") {
 
     // create model initialized with true weights
     val model = new StreamingLinearRegressionWithSGD()
