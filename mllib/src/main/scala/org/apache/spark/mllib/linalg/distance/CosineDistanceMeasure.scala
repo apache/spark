@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV, sum}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
@@ -29,18 +30,10 @@ import org.apache.spark.mllib.linalg
 @Experimental
 class CosineDistanceMeasure extends DistanceMeasure {
 
-  /**
-   * Calculates the cosine distance between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
-    validate(v1, v2)
-
-    val dotProduct = v1.toBreeze.dot(v2.toBreeze)
+  override def mixVectors(v1: Vector, v2: Vector): breeze.linalg.Vector[Double] = {
     var denominator = v1.toBreeze.norm(2) * v2.toBreeze.norm(2)
+    val dotProductElements = v1.toBreeze.:*(v2.toBreeze)
+    val dotProduct = sum(dotProductElements)
 
     // correct for floating-point rounding errors
     if (denominator < dotProduct) {
@@ -49,8 +42,16 @@ class CosineDistanceMeasure extends DistanceMeasure {
 
     // correct for zero-vector corner case
     if (denominator == 0 && dotProduct == 0) {
+      // convert all element into Double.MinValue
+      return dotProductElements.map(elm => Double.MinValue)
+    }
+    dotProductElements.map(elm => elm / denominator)
+  }
+
+  override def vectorToDistance(breezeVector: BV[Double]): Double = {
+    if (breezeVector.forall(elm => elm == Double.MinValue)) {
       return 0.0
     }
-    1.0 - (dotProduct / denominator)
+    1.0 - sum(breezeVector)
   }
 }

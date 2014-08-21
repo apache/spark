@@ -17,30 +17,26 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.sum
+import breeze.linalg.{Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
- * A Euclidean distance metric implementation
- * this metric is calculated by summing the square root of the squared differences
- * between each coordinate, optionally adding weights.
+ * This trait is used for multiplying the weighted graph in a weighted distance function
  */
 @Experimental
-class WeightedEuclideanDistanceMetric(val weight: Vector) extends WeightedDistanceMetric {
+private[distance]
+trait Weighted extends DistanceMeasure {
+  val weights: Vector
 
   /**
-   * Calculates the distance metric between 2 points
+   * Multiply the weighted vector
    *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
+   * @param bv Breeze Vector[Double]
+   * @return Breese Vector[Double]
    */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-
-    val vector = (weight.toBreeze).:*((v1.toBreeze - v2.toBreeze).map(diff => Math.pow(diff, 2)))
-    Math.sqrt(sum(vector))
+  override def dotProductWithWeight(bv: BV[Double]): BV[Double] = {
+    bv.:*(weights.toBreeze)
   }
 }

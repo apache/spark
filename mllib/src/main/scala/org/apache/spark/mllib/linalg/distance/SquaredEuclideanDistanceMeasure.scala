@@ -17,27 +17,22 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
  * Squared euclidean distance implementation
  */
 @Experimental
-class SquaredEuclideanDistanceMeasure extends DistanceMeasure{
+class SquaredEuclideanDistanceMeasure extends DistanceMeasure {
 
-  /**
-   * Calculates the squared euclidean distance between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
-    validate(v1, v2)
+  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
+    (v1.toBreeze - v2.toBreeze)
+  }
 
-    val diffVector = (v1.toBreeze - v2.toBreeze)
-    diffVector.dot(diffVector)
+  override def vectorToDistance(breezeVector: BV[Double]): Double = {
+    breezeVector.dot(breezeVector)
   }
 }

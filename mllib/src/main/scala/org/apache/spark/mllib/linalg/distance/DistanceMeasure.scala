@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -42,7 +43,40 @@ trait DistanceMeasure extends Function2[Vector, Vector, Double] with Serializabl
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def apply(v1: Vector, v2: Vector): Double
+  override def apply(v1: Vector, v2: Vector): Double = {
+    validate(v1, v2)
+    val breezeVector = mixVectors(v1, v2)
+    vectorToDistance(dotProductWithWeight(breezeVector))
+  }
+
+  /**
+   * Mix the target vectors
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return Breeze Vector[Doube]
+   */
+  def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
+    throw new NotImplementedError("mixVectors is not implemented")
+  }
+
+  /**
+   * Calculates dot product with the weighted vector
+   *
+   * @param breezeVector Breeze Vector[Double]
+   * @return Breeze Vector[Double]
+   */
+  def dotProductWithWeight(breezeVector: BV[Double]): BV[Double] = breezeVector
+
+  /**
+   * Converts the mixed vector to distance
+   *
+   * @param breezeVector Breeze Vector[Double]
+   * @return Double
+   */
+  def vectorToDistance(breezeVector: BV[Double]): Double = {
+    throw new NotImplementedError("vectorToDistance is not implemented")
+  }
 
   /**
    * Checks whether both of the length are same

@@ -17,32 +17,38 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{sum, Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
  * Euclidean distance implementation
+ *
+ * Calculates the euclidean distance (L2 distance) between 2 points
+ * D(x, y) = sqrt(sum((x1-y1)^2 + (x2-y2)^2 + ... + (xn-yn)^2))
+ * or
+ * D(x, y) = sqrt((x-y) dot (x-y))
  */
 @Experimental
 class EuclideanDistanceMetric extends DistanceMetric {
 
-  /**
-   * Calculates the euclidean distance (L2 distance) between 2 points
-   *
-   * D(x, y) = sqrt(sum((x1-y1)^2 + (x2-y2)^2 + ... + (xn-yn)^2))
-   * or
-   * D(x, y) = sqrt((x-y) dot (x-y))
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-
+  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
     val diffVector = (v1.toBreeze - v2.toBreeze)
-    val squaredDistance = diffVector.dot(diffVector)
-    Math.sqrt(squaredDistance)
+    diffVector.:*(diffVector)
+  }
+
+  override def vectorToDistance(breezeVector: BV[Double]): Double = {
+    Math.sqrt(sum(breezeVector))
   }
 }
+
+/**
+ * :: Experimental ::
+ * A weighted Euclidean distance metric implementation
+ * this metric is calculated by summing the square root of the squared differences
+ * between each coordinate, optionally adding weights.
+ */
+@Experimental
+class WeightedEuclideanDistanceMetric(val weights: Vector)
+    extends EuclideanDistanceMetric with Weighted

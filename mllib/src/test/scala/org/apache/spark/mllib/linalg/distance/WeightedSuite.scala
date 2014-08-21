@@ -17,23 +17,33 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.mllib.linalg.Vectors
+import breeze.linalg.{sum, Vector => BV}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.scalatest.FunSuite
 
-class WeightedEuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
+class WeightedSuite extends FunSuite {
 
+  private[this]
+  class TmpManhattanDistance extends DistanceMeasure {
+    override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
+      (v1.toBreeze - v2.toBreeze).map(Math.abs)
+    }
 
-  override def distanceFactory: DistanceMetric = {
-    val weights = Vectors.dense(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) // size should be 6
-    new WeightedEuclideanDistanceMetric(weights)
+    override def vectorToDistance(breezeVector: BV[Double]): Double = {
+      sum(breezeVector)
+    }
   }
 
-  test("the distance should be 5.9532344150") {
-    val v1 = Vectors.dense(1, 1, 1, 1, 1, 1)
-    val v2 = Vectors.dense(1.1, 2.2, 3.3, 4.4, 5.5, 6.6)
+  private[this]
+  class TmpWeightedManhattanDistance(val weights: Vector) extends TmpManhattanDistance with Weighted
 
-    val distance = distanceFactory(v1, v2)
-    val expected = 5.9532344150
-    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
-    assert(isNear, s"the distance should be nearly equal to 5.9532344150, but ${distance}")
+
+  test("a") {
+    val weights = Vectors.dense(2, 2, 2)
+    val metric = new TmpWeightedManhattanDistance(weights)
+
+    val v1 = Vectors.dense(1, 1, 1)
+    val v2 = Vectors.dense(3, 3, 3)
+    val distance = metric(v1, v2)
   }
 }

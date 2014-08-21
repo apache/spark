@@ -17,26 +17,35 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV}
+import breeze.linalg.sum
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
  * Manhattan distance (L1 distance) implementation
+ *
+ * @see http://en.wikipedia.org/wiki/Manhattan_distance
  */
 @Experimental
 class ManhattanDistanceMetric extends DistanceMetric {
 
-  /**
-   * Calculates the distance metric between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-    (v1.toBreeze - v2.toBreeze).norm(1)
+  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
+    (v1.toBreeze - v2.toBreeze).map(Math.abs)
   }
 
+  override def vectorToDistance(breezeVector: BV[Double]): Double = {
+    sum(breezeVector)
+  }
 }
+
+/**
+ * :: Experimental ::
+ * A weighted Manhattan distance metric implementation
+ * this metric is calculated by summing the absolute values of the difference
+ * between each coordinate, optionally with weights.
+ */
+@Experimental
+class WeightedManhattanDistanceMetric(val weights: Vector)
+    extends ManhattanDistanceMetric with Weighted

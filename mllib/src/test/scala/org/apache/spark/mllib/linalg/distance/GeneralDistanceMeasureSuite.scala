@@ -56,12 +56,12 @@ trait GeneralDistanceMeasureSuite extends FunSuite with Matchers {
     assert(distanceMatrix(2, 1) >= distanceMatrix(2, 2))
 
     // non-negative
-    assert(NonNegativeValidator(distanceMatrix), "not non-negative")
+    assert(NonNegativeValidator(distanceMatrix), s"not non-negative in ${getClass}")
 
     // identity of indiscernibles
-    assert(IdentityOfIndiscerniblesValidator(distanceMatrix), "not identity of indiscernibles")
+    assert(IdentityOfIndiscerniblesValidator(distanceMatrix), s"not identity of indiscernibles in ${getClass}")
 
     // symmetry
-    assert(SymmetryValidator(distanceMatrix), "not symmetry")
+    assert(SymmetryValidator(distanceMatrix), s"not symmetry in ${getClass}")
   }
 }

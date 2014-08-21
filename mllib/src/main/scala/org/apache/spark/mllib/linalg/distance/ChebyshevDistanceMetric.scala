@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV}
 import breeze.linalg.max
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
@@ -30,17 +31,11 @@ import org.apache.spark.mllib.linalg.Vector
 @Experimental
 class ChebyshevDistanceMetric extends DistanceMetric {
 
-  /**
-   * Calculates the distance metric between 2 points
-   *
-   * Find the maximum difference between each coordinate
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-    max((v1.toBreeze - v2.toBreeze).map(Math.abs))
+  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
+    (v1.toBreeze - v2.toBreeze).map(Math.abs)
+  }
+
+  override def vectorToDistance(breezeVector: BV[Double]): Double = {
+    max(breezeVector)
   }
 }

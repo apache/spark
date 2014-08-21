@@ -34,7 +34,9 @@ import org.apache.spark.mllib.linalg.Matrix
  */
 @Experimental
 private[distance]
-trait DistanceFunctionValidator extends Function1[Matrix, Boolean]
+trait DistanceFunctionValidator extends Function1[Matrix, Boolean] {
+  def EPSILON = {Math.pow(10, -10)}
+}
 
 /**
  * a validator for checking non-negative
@@ -73,8 +75,8 @@ object IdentityOfIndiscerniblesValidator extends DistanceFunctionValidator {
    * @return Boolean
    */
   override def apply(matrix: Matrix): Boolean = {
-    val tests = for (i <- 1 to (matrix.numRows - 1)) yield {
-      if(matrix(i, i) == 0.0) true else false
+    val tests = for (i <- 0 to (matrix.numRows - 1)) yield {
+      if(matrix(i, i) <= EPSILON) true else false
     }
     tests.forall(_ == true)
   }
@@ -109,8 +111,6 @@ object SymmetryValidator extends DistanceFunctionValidator {
 private[distance]
 object TriangleInequalityValidator extends DistanceFunctionValidator {
 
-  val EPSILON_EXPONENT = -10
-
   /**
    * validate triangle inequality
    * d(x, z) <= d(x, y) + d(y, z)
@@ -127,7 +127,7 @@ object TriangleInequalityValidator extends DistanceFunctionValidator {
 
       // if too small number like 8.881784197001252E-16 cannot be compare 0.0 in Scala
       val diff = matrix(i, k) - (matrix(i, j) + matrix(j, k))
-      if (diff < 0.0 || Math.log10(diff) <= EPSILON_EXPONENT) true else false
+      if (diff < 0.0 || diff <= EPSILON) true else false
     }
     tests.forall(_ == true)
   }
