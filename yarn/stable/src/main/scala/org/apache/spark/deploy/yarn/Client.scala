@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.nio.ByteBuffer
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -84,8 +86,16 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
     if (args.ha) {
-      appContext.setMaxAppAttempts(maxAppAttempts) // Set to max app attempts
-      appContext.setKeepContainersAcrossApplicationAttempts(true)
+      Try {
+        appContext.getClass.getMethod("setMaxAppAttempts", Integer.TYPE)
+          .invoke(appContext, maxAppAttempts)
+        appContext.getClass.getMethod("setKeepContainersAcrossApplicationAttempts",
+          java.lang.Boolean.TYPE).invoke(appContext, true)
+      }.recover {
+        case e: Exception =>
+          logWarning("setMaxAttempts and setKeepContainersAcrossApplicationAttempts is not " +
+            "available in the current version of YARN - HA will be disabled!")
+      }
     }
 
     // Memory for the ApplicationMaster.
