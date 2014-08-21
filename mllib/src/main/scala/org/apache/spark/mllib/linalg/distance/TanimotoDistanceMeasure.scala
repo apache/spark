@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.sum
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -27,7 +28,7 @@ import org.apache.spark.mllib.linalg.Vector
  * @see http://en.wikipedia.org/wiki/Jaccard_index
  */
 @Experimental
-class TanimotoDistanceMetric extends DistanceMetric {
+class TanimotoDistanceMeasure extends DistanceMeasure {
 
   /**
    * Calculates the tanimoto distance between 2 points
@@ -42,7 +43,7 @@ class TanimotoDistanceMetric extends DistanceMetric {
   override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
 
-    val calcSquaredSum = (vector: Vector) => vector.toBreeze.map(x => x * x).reduce(_ + _).apply(0)
+    val calcSquaredSum = (vector: Vector) => sum(vector.toBreeze.map(x => x * x))
     val dotProduct = v1.toBreeze.dot(v2.toBreeze)
     var denominator = (calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct)
 
