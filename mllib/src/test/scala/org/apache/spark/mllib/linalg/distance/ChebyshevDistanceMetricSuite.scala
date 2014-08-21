@@ -36,3 +36,10 @@ class ChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
     assert(distance == 100, s"the distance should be 100, but ${distance}")
   }
 }
+
+class WeightedChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory: DistanceMetric = {
+    val weights = Vectors.dense(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) // size should be 6
+    new WeightedChebyshevDistanceMetric(weights)
+  }
+}

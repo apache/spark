@@ -39,3 +39,10 @@ class ChebyshevDistanceMetric extends DistanceMetric {
     max(breezeVector)
   }
 }
+
+/**
+ * :: Experimental ::
+ * A weighted Chebyshev distance implementation
+ */
+@Experimental
+class WeightedChebyshevDistanceMetric(val weights: Vector) extends ChebyshevDistanceMetric with Weighted
