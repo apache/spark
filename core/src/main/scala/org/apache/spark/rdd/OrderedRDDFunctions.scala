@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, RangePartitioner}
+import org.apache.spark.{Partitioner, Logging, RangePartitioner}
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -64,4 +64,15 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     new ShuffledRDD[K, V, V](self, part)
       .setKeyOrdering(if (ascending) ordering else ordering.reverse)
   }
+
+  /**
+   * Repartition the RDD according to the given partitioner and, within each resulting partition,
+   * sort records by their keys.
+   */
+  def repartitionAndSortWithinPartition(partitioner: Partitioner, ascending: Boolean = true)
+      : RDD[(K, V)] = {
+    new ShuffledRDD[K, V, V](self, partitioner)
+      .setKeyOrdering(if (ascending) ordering else ordering.reverse)
+  }
+
 }
