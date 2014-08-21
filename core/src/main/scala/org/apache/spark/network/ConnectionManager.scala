@@ -336,7 +336,8 @@ private[spark] class ConnectionManager(
           val selectedKeys = selector.selectedKeys().iterator()
           while (selectedKeys.hasNext) {
             val key = selectedKeys.next
-            val remoteAddress = key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress
+            val remoteAddress =
+              key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress
             selectedKeys.remove()
             try {
               if (key.isValid) {
