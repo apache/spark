@@ -18,10 +18,10 @@
 package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
-import org.scalatest.{FunSuite, ShouldMatchers}
+import org.scalatest.{FunSuite, Matchers}
 
 private[distance]
-trait GeneralDistanceMetricSuite extends FunSuite with ShouldMatchers {
+trait GeneralDistanceMetricSuite extends FunSuite with Matchers {
   def distanceFactory: DistanceMetric
 
   test("the length of two vectors should be same") {
