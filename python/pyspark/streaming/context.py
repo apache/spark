@@ -72,7 +72,7 @@ class StreamingContext(object):
         # Callback sever is need only by SparkStreming; therefore the callback sever
         # is started in StreamingContext.
         SparkContext._gateway.restart_callback_server()
-        self._clean_up_trigger()
+        self._set_clean_up_trigger()
         self._jvm = self._sc._jvm
         self._jssc = self._initialize_context(self._sc._jsc, duration._jduration)
 
@@ -80,13 +80,11 @@ class StreamingContext(object):
     def _initialize_context(self, jspark_context, jduration):
         return self._jvm.JavaStreamingContext(jspark_context, jduration)
 
-    def _clean_up_trigger(self):
+    def _set_clean_up_trigger(self):
         """Kill py4j callback server properly using signal lib"""
 
         def clean_up_handler(*args):
             # Make sure stop callback server.
-            # This need improvement how to terminate callback sever properly.
-            SparkContext._gateway._shutdown_callback_server()
             SparkContext._gateway.shutdown()
             sys.exit(0)
 
@@ -132,18 +130,15 @@ class StreamingContext(object):
         Stop the execution of the streams immediately (does not wait for all received data
         to be processed).
         """
-        
         try:
             self._jssc.stop(stopSparkContext, stopGraceFully)
         finally:
-            # Stop Callback server
-            SparkContext._gateway._shutdown_callback_server()
             SparkContext._gateway.shutdown()
 
     def _testInputStream(self, test_inputs, numSlices=None):
         """
         This function is only for unittest.
-        It requires a sequence as input, and returns the i_th element at the i_th batch
+        It requires a list as input, and returns the i_th element at the i_th batch
         under manual clock.
         """
         test_rdds = list()

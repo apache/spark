@@ -207,7 +207,7 @@ class DStream(object):
         """
         Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
         If spark.default.parallelism is set, then we'll use the value from SparkContext
-        defaultParallelism, otherwise we'll use the number of partitions in this RDD.
+        defaultParallelism, otherwise we'll use the number of partitions in this RDD
 
         This mirrors the behavior of the Scala Partitioner#defaultPartitioner, intended to reduce
         the likelihood of OOMs. Once PySpark adopts Partitioner-based APIs, this behavior will
@@ -222,7 +222,8 @@ class DStream(object):
         """
         Return the number of partitions in RDD
         """
-        # TODO: remove hardcoding. RDD has NumPartitions but DStream does not have.
+        # TODO: remove hardcoding. RDD has NumPartitions. How do we get the number of partition
+        # through DStream?
         return 2
 
     def foreachRDD(self, func):
@@ -243,6 +244,10 @@ class DStream(object):
         operator, so this DStream will be registered as an output stream and there materialized.
         """
         def takeAndPrint(rdd, time):
+            """
+            Closure to take element from RDD and print first 10 elements.
+            This closure is called by py4j callback server.
+            """
             taken = rdd.take(11)
             print "-------------------------------------------"
             print "Time: %s" % (str(time))
@@ -307,17 +312,11 @@ class DStream(object):
         Mark this DStream for checkpointing. It will be saved to a file inside the
         checkpoint directory set with L{SparkContext.setCheckpointDir()}
 
-        I am not sure this part in DStream
-        and
-        all references to its parent RDDs will be removed. This function must
-        be called before any job has been executed on this RDD. It is strongly
-        recommended that this RDD is persisted in memory, otherwise saving it
-        on a file will require recomputation.
-
-        interval must be pysprak.streaming.duration
+        @param interval: Time interval after which generated RDD will be checkpointed
+               interval has to be pyspark.streaming.duration.Duration
         """
         self.is_checkpointed = True
-        self._jdstream.checkpoint(interval)
+        self._jdstream.checkpoint(interval._jduration)
         return self
 
     def groupByKey(self, numPartitions=None):
@@ -369,6 +368,10 @@ class DStream(object):
         Save this DStream as a text file, using string representations of elements.
         """
         def saveAsTextFile(rdd, time):
+            """
+            Closure to save element in RDD in DStream as Pickled data in file.
+            This closure is called by py4j callback server.
+            """
             path = rddToFileName(prefix, suffix, time)
             rdd.saveAsTextFile(path)
 
@@ -410,9 +413,10 @@ class DStream(object):
 # TODO: implement countByWindow
 # TODO: implement reduceByWindow
 
-# Following operation has dependency to transform
+# transform Operation
 # TODO: implement transform
 # TODO: implement transformWith
+# Following operation has dependency with transform
 # TODO: implement union
 # TODO: implement repertitions
 # TODO: implement cogroup
