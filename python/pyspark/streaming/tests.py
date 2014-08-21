@@ -16,15 +16,11 @@
 #
 
 """
-Unit tests for PySpark; additional tests are implemented as doctests in
+Unit tests for Python SparkStreaming; additional tests are implemented as doctests in
 individual modules.
-
-This file would be merged to tests.py after all functions are ready.
-Since python API for streaming is beta, this file is separated.
 
 Callback server is sometimes unstable sometimes, which cause error in test case.
 But this is very rare case.
-
 """
 from itertools import chain
 import time
