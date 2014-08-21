@@ -449,22 +449,5 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
         return result
 
-#TODO: add testcase for saveAs*
-
-
-class TestSaveAsFilesSuite(PySparkStreamingTestCase):
-    def setUp(self):
-        PySparkStreamingTestCase.setUp(self)
-        self.timeout = 10  # seconds
-        self.numInputPartitions = 2
-
-    def tearDown(self):
-        PySparkStreamingTestCase.tearDown(self)
-
-    @classmethod
-    def tearDownClass(cls):
-        PySparkStreamingTestCase.tearDownClass()
-
-
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()
