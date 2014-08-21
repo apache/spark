@@ -200,9 +200,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
 
 
     val knownDefMRAppCP: Seq[String] =
-      getFieldValue[String, Seq[String]](classOf[MRJobConfig],
-                                         "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
-                                         Seq[String]())(a => a.split(","))
+      ClientBase.getDefaultMRApplicationClasspath.getOrElse(Seq[String]())
 
     val knownYARNAppCP = Some(Seq("/known/yarn/path"))
 
