@@ -88,9 +88,9 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     if (args.ha) {
       Try {
         appContext.getClass.getMethod("setMaxAppAttempts", Integer.TYPE)
-          .invoke(appContext, maxAppAttempts)
+          .invoke(appContext, new Object{maxAppAttempts})
         appContext.getClass.getMethod("setKeepContainersAcrossApplicationAttempts",
-          java.lang.Boolean.TYPE).invoke(appContext, true)
+          java.lang.Boolean.TYPE).invoke(appContext, new Object{true})
       }.recover {
         case e: Exception =>
           logWarning("setMaxAttempts and setKeepContainersAcrossApplicationAttempts is not " +
