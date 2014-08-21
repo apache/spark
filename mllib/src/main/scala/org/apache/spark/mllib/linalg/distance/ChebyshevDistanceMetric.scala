@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.max
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -40,8 +41,6 @@ class ChebyshevDistanceMetric extends DistanceMetric {
    */
   override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
-    v1.toArray.zip(v2.toArray).map {
-      case(elm1: Double, elm2: Double) => math.abs(elm1 - elm2)
-    }.max
+    max((v1.toBreeze - v2.toBreeze).map(Math.abs))
   }
 }

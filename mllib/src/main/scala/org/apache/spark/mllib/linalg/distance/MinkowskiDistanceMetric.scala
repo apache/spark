@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.sum
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -44,9 +45,7 @@ class MinkowskiDistanceMetric(val exponent: Double) extends DistanceMetric {
   override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
 
-    val sum = v1.toArray.zip(v2.toArray).map {
-      case(elm1: Double, elm2: Double) => Math.pow(Math.abs(elm1 - elm2), exponent)
-    }.sum
-    Math.pow(sum, 1 / exponent)
+    val value = sum( (v1.toBreeze - v2.toBreeze).map {diff => Math.pow(Math.abs(diff), exponent)} )
+    Math.pow(value, 1 / exponent)
   }
 }

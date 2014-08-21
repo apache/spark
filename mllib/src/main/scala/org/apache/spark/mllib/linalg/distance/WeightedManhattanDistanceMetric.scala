@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.sum
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -38,10 +39,6 @@ class WeightedManhattanDistanceMetric(val weight: Vector) extends WeightedDistan
    */
   override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
-
-    val sum = v1.toArray.zip(v2.toArray).zip(weight.toArray).map {
-      case((elm1:Double, elm2:Double), w: Double) => w * Math.abs(elm1 - elm2)
-    }.sum
-    Math.sqrt(sum)
+    sum((v1.toBreeze - v2.toBreeze).map(diff => Math.abs(diff)).:*(weight.toBreeze))
   }
 }

@@ -30,8 +30,8 @@ class MinkowskiDistanceMetricSuite extends GeneralDistanceMetricSuite {
     assert(measure.exponent == 3.0, s"the default value for exponent should be ${measure.exponent}")
 
     val distance = measure(vector1, vector2)
-    val roundDistance = GeneralDistanceMetricSuite.roundValue(distance, 10)
     val expected = 4.6260650092
-    assert(roundDistance == expected, s"the distance between the vectors should be ${expected}")
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance between the vectors should be ${expected}")
   }
 }

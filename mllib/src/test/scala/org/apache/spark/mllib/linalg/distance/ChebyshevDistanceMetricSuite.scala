@@ -28,4 +28,11 @@ class ChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
     val distance = distanceFactory(vector1, vector2)
     assert(distance == 6, s"the distance should be 6, but ${distance}")
   }
+
+  test("the distance should be 100") {
+    val vector1 = Vectors.dense(1, -1, 1, -1)
+    val vector2 = Vectors.dense(101, -3, 4, 5)
+    val distance = distanceFactory(vector1, vector2)
+    assert(distance == 100, s"the distance should be 100, but ${distance}")
+  }
 }
