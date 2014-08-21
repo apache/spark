@@ -55,7 +55,7 @@ $O(n^2 k)$ time on the driver.
 compute $(A^T A)$'s top eigenvalues and eigenvectors on the driver node. This requires $O(k)$
 passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 
-## SVD Example
+### SVD Example
  
 MLlib provides SVD functionality to row-oriented matrices, provided in the
 <a href="mllib-basics.html#rowmatrix">RowMatrix</a> class. 
