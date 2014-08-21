@@ -74,8 +74,8 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     // Remove all partitions that are no longer cached in current competed stage
-    val currentComletedRddInfoIds = Set[Int]() ++ stageCompleted.stageInfo.rddInfos.map(r => r.id)
-    _rddInfoMap.retain { case (id, info) => !currentComletedRddInfoIds.contains(id) || info.numCachedPartitions > 0 }
+    val comletedRddIds = Set(stageCompleted.stageInfo.rddInfos.map(r => r.id))
+    _rddInfoMap.retain { case (id, info) => !comletedRddIds.contains(id) || info.numCachedPartitions > 0 }
   }
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
