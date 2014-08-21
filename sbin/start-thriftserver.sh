@@ -76,7 +76,7 @@ while (($#)); do
   esac
 done
 
-eval "$FWDIR"/bin/spark-submit --class $CLASS ${SUBMISSION_ARGS[*]} spark-internal ${THRIFT_SERVER_ARGS[*]}
+"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${THRIFT_SERVER_ARGS[@]}"
 exit_status=$?
 
 if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
