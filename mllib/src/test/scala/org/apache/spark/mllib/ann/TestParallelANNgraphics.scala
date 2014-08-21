@@ -63,29 +63,29 @@ class OutputCanvas2D( wd: Int, ht: Int ) extends Canvas {
 
   override def paint( g: Graphics) = {
 
-  var xmax: Double = 0.0
-  var xmin: Double = 0.0
-  var ymax: Double = 0.0
-  var ymin: Double = 0.0
+    var xmax: Double = 0.0
+    var xmin: Double = 0.0
+    var ymax: Double = 0.0
+    var ymin: Double = 0.0
 
-  if( points!=null ) {
+    if( points!=null ) {
 
-    g.setColor( Color.black )
-    val x = points.map( T => (T.toArray)(0) )
-    val y = points.map( T => (T.toArray)(1) )
+      g.setColor( Color.black )
+      val x = points.map( T => (T.toArray)(0) )
+      val y = points.map( T => (T.toArray)(1) )
 
-    xmax = x.max
-    xmin = x.min
-    ymax = y.max
-    ymin = y.min
+      xmax = x.max
+      xmin = x.min
+      ymax = y.max
+      ymin = y.min
 
-    for( i <- 0 to x.size - 1 ) {
+      for( i <- 0 to x.size - 1 ) {
 
-      val xr = (((x(i).toDouble - xmin)/(xmax - xmin))*wd + .5).toInt
-      val yr = (((y(i).toDouble - ymin)/(ymax - ymin))*ht + .5).toInt
-      plotDot( g, xr, yr )
+        val xr = (((x(i).toDouble - xmin)/(xmax - xmin))*wd + .5).toInt
+        val yr = (((y(i).toDouble - ymin)/(ymax - ymin))*ht + .5).toInt
+        plotDot( g, xr, yr )
 
-    }
+      }
 
       if( approxPoints != null ) {
 
