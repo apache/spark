@@ -101,3 +101,102 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 
   override def toString = s"$child.$fieldName"
 }
+
+/**
+ * Returns the value of fields[] in the Struct `child`.
+ * for array of structs
+ */
+
+case class GetArrayField(child: Expression, fieldName: String) extends UnaryExpression {
+  type EvaluatedType = Any
+
+  def dataType = field.dataType
+  override def nullable = child.nullable || field.nullable
+  override def foldable = child.foldable
+
+  protected def arrayType = child.dataType match {
+    case s: ArrayType => s.elementType match {
+      case t :StructType => t
+      case otherType => sys.error(s"GetArrayField is not valid on fields of type $otherType")
+    }
+    case otherType => sys.error(s"GetArrayField is not valid on fields of type $otherType")
+  }
+
+  lazy val field =
+    arrayType.fields
+      .find(_.name == fieldName)
+      .getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
+
+
+  lazy val ordinal = arrayType.fields.indexOf(field)
+
+  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[ArrayType]
+
+  override def eval(input: Row): Any = {
+    val value : Seq[Row] = child.eval(input).asInstanceOf[Seq[Row]]
+    val v = value.map{ t =>
+      if (t == null) null else t(ordinal)
+    }
+    v
+  }
+
+  override def toString = s"$child.$fieldName"
+}
+
+
+/**
+ * Returns the field at `ordinal` in the ArrayOfStruct `child`
+ */
+case class GetArrayOfStructItem(child: Expression, ordinal: Expression, field :Expression) extends Expression {
+  type EvaluatedType = Any
+
+  val fieldName = field.toString
+
+  val children = child :: ordinal :: field :: Nil
+  /** `Null` is returned for invalid ordinals. */
+  override def nullable = true
+  override def foldable = child.foldable && ordinal.foldable && field.foldable
+  override def references = children.flatMap(_.references).toSet
+  def dataType = ifield.dataType
+
+  def fieldType = child.dataType match {
+    case a :ArrayType => a.elementType match {
+      case t :StructType => t
+      case otherType => sys.error(s"GetArrayOfStructItem is not valid on fields of type $otherType")
+    }
+    case otherType => sys.error(s"GetArrayOfStructItem is not valid on fields of type $otherType")
+  }
+  override lazy val resolved =
+    childrenResolved &&
+      (child.dataType.isInstanceOf[ArrayType])
+
+  override def toString = s"$child[$ordinal].$field"
+
+  lazy val ifield = fieldType.fields.find(_.name == fieldName).getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
+
+  lazy val fordinal = fieldType.fields.indexOf(ifield)
+
+  override def eval(input: Row): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val key = ordinal.eval(input)
+      if (key == null) {
+        null
+      } else {
+
+        // TODO: consider using Array[_] for ArrayType child to avoid
+        // boxing of primitives
+        val baseValue = value.asInstanceOf[Seq[_]]
+        val o = key.asInstanceOf[Int]
+        if (o >= baseValue.size || o < 0) {
+          null
+        } else {
+          baseValue(o).asInstanceOf[Row](fordinal)
+        }
+
+      }
+    }
+  }
+}

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.{ArrayType, StructType}
 import org.apache.spark.sql.catalyst.trees
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
@@ -94,6 +94,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     // matches the name or where the first part matches the scope and the second part matches the
     // name.  Return these matches along with any remaining parts, which represent dotted access to
     // struct fields.
+
     val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
@@ -108,6 +109,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
         a.dataType match {
           case StructType(fields) =>
             Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
+          case fields :ArrayType =>
+            Some(Alias(nestedFields.foldLeft(a :Expression)(GetArrayField), nestedFields.last)())
           case _ => None // Don't know how to resolve these field references
         }
       case Seq() => None         // No matches.

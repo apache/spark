@@ -292,24 +292,29 @@ class JsonSuite extends QueryTest {
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
       (5, null) :: Nil
     )
+
+    checkAnswer(
+      sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
+      (Seq(true, false, null), Seq("str1", null, null)) :: Nil
+    )
+
+    checkAnswer(
+      sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
+      (true, "str1") :: Nil
+    )
+
   }
 
   ignore("Complex field and type inferring (Ignored)") {
     val jsonSchemaRDD = jsonRDD(complexFieldAndType)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
-    // Right now, "field1" and "field2" are treated as aliases. We should fix it.
+    // still need add filter??? I am not sure whether this function is necessary. quite complex
     checkAnswer(
-      sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
-      (true, "str1") :: Nil
+      sql("select arrayOfStruct.field1 from jsonTable where arrayOfStruct.field1 = true"),
+      (Seq(true)) :: Nil
     )
 
-    // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
-    // Getting all values of a specific field from an array of structs.
-    checkAnswer(
-      sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      (Seq(true, false), Seq("str1", null)) :: Nil
-    )
   }
 
   test("Type conflict in primitive field values") {
