@@ -45,4 +45,5 @@ class ChebyshevDistanceMetric extends DistanceMetric {
  * A weighted Chebyshev distance implementation
  */
 @Experimental
-class WeightedChebyshevDistanceMetric(val weights: Vector) extends ChebyshevDistanceMetric with Weighted
+class WeightedChebyshevDistanceMetric(val weights: Vector)
+    extends ChebyshevDistanceMetric with Weighted
