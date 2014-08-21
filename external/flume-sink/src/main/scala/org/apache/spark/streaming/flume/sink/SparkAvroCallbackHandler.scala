@@ -72,21 +72,22 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
     logDebug("Got getEventBatch call from Spark.")
     if (stopped) {
       new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
+    } else {
+      val sequenceNumber = seqBase + seqCounter.incrementAndGet()
+      val processor = new TransactionProcessor(channel, sequenceNumber,
+        n, transactionTimeout, backOffInterval, this)
+      transactionExecutorOpt.foreach(executor => {
+        executor.submit(processor)
+      })
+      processorsToShutdown.add(processor)
+      // Wait until a batch is available - will be an error if error message is non-empty
+      val batch = processor.getEventBatch
+      if (!SparkSinkUtils.isErrorBatch(batch)) {
+        processorMap.put(sequenceNumber.toString, processor)
+        logDebug("Sending event batch with sequence number: " + sequenceNumber)
+      }
+      batch
     }
-    val sequenceNumber = seqBase + seqCounter.incrementAndGet()
-    val processor = new TransactionProcessor(channel, sequenceNumber,
-      n, transactionTimeout, backOffInterval, this)
-    transactionExecutorOpt.foreach(executor => {
-      executor.submit(processor)
-    })
-    processorsToShutdown.add(processor)
-    // Wait until a batch is available - will be an error if error message is non-empty
-    val batch = processor.getEventBatch
-    if (!SparkSinkUtils.isErrorBatch(batch)) {
-      processorMap.put(sequenceNumber.toString, processor)
-      logDebug("Sending event batch with sequence number: " + sequenceNumber)
-    }
-    batch
   }
 
   /**

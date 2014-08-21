@@ -18,9 +18,7 @@ package org.apache.spark.streaming.flume
 
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{TimeUnit, LinkedBlockingQueue, Executors}
-
-import com.google.common.base.Throwables
+import java.util.concurrent.{LinkedBlockingQueue, Executors}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
@@ -29,16 +27,17 @@ import scala.util.Try
 import scala.util.control.Breaks
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import com.google.common.base.Throwables
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
+import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
-import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
-
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
@@ -130,34 +129,38 @@ private[streaming] class FlumePollingReceiver(
                       "Did not receive events from Flume agent due to error on the Flume " +
                         "agent: " + eventBatch.getErrorMsg)
                   }
+                }.recoverWith {
+                  case e: Exception =>
+                    Try {
+                      Throwables.getRootCause(e) match {
+                        // If the cause was an InterruptedException,
+                        // then check if the receiver is stopped - if yes,
+                        // just break out of the loop. Else send a Nack and
+                        // log a warning.
+                        // In the unlikely case, the cause was not an Exception,
+                        // then just throw it out and exit.
+                        case interrupted: InterruptedException =>
+                          if (isStopped()) {
+                            loop.break()
+                          } else {
+                            logWarning("Interrupted while receiving data from Flume", interrupted)
+                            sendNack(batchReceived, client, seq)
+                          }
+                        case exception: Exception =>
+                          logWarning("Error while receiving data from Flume", exception)
+                          sendNack(batchReceived, client, seq)
+                        case majorError: Throwable =>
+                          // Don't bother with Nack - exit immediately
+                          logError("Major error while receiving data from Flume.", majorError)
+                          throw majorError
+                      }
+                    }
                 }.recover {
                   case e: Exception =>
-                    Throwables.getRootCause(e) match {
-                      // If the cause was an InterruptedException,
-                      // then check if the receiver is stopped - if yes,
-                      // just break out of the loop. Else send a Nack and
-                      // log a warning.
-                      // In the unlikely case, the cause was not an Exception,
-                      // then just throw it out and exit.
-                      case interrupted: InterruptedException =>
-                        if (isStopped()) {
-                          loop.break()
-                        } else {
-                          sendNack(batchReceived, client, seq)
-                          logWarning("Interrupted while receiving data from Flume", interrupted)
-                        }
-                      case exception: Exception =>
-                        sendNack(batchReceived, client, seq)
-                        logWarning("Error while receiving data from Flume", exception)
-                      case majorError: Throwable =>
-                        // Don't bother with Nack - exit immediately
-                        logError("Major error while receiving data from Flume.", majorError)
-                        throw majorError
-                    }
+                    // Since Try handles only non-fatal exceptions, that must have come from the
+                    // sendNack call.
+                    logError("Sending Nack also failed. A Flume agent is down.", e)
                 }
-              } catch {
-                case e: Exception =>
-                  logWarning("Error while reading data from Flume", e)
               } finally {
                 connections.add(connection)
               }
@@ -168,19 +171,22 @@ private[streaming] class FlumePollingReceiver(
     }
   }
 
+  /**
+   * This method sends a Nack if a batch was received to the client with with the given sequence
+   * number. Any exceptions thrown by the RPC call is simply thrown out as is - no effort is made
+   * to handle it.
+   * @param batchReceived true if a batch was received. If this is false, no nack is sent
+   * @param client The client to which the nack should be sent
+   * @param seq The sequence number of the batch that is being nack-ed.
+   */
   private def sendNack(batchReceived: Boolean, client: SparkFlumeProtocol.Callback,
     seq: CharSequence): Unit = {
-    Try {
-      if (batchReceived) {
-        // Let Flume know that the events need to be pushed back into the channel.
-        logDebug("Sending nack for sequence number: " + seq)
-        client.nack(seq) // If the agent is down, even this could fail and throw
-        logDebug("Nack sent for sequence number: " + seq)
-      }
-    }.recover({
-      case e: Exception => logError(
-        "Sending Nack also failed. A Flume agent is down.", e)
-    })
+    if (batchReceived) {
+      // Let Flume know that the events need to be pushed back into the channel.
+      logDebug("Sending nack for sequence number: " + seq)
+      client.nack(seq) // If the agent is down, even this could fail and throw
+      logDebug("Nack sent for sequence number: " + seq)
+    }
   }
 
   override def onStop(): Unit = {
