@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on the RowMatrix class.
+MLlib provides support for dimensionality reduction on the <a href="mllib-basics.html#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -39,7 +39,8 @@ If we keep the top $k$ singular values, then the dimensions of the resulting low
 * `$\Sigma$`: `$k \times k$`,
 * `$V$`: `$n \times k$`.
  
-MLlib provides SVD functionality to row-oriented matrices, provided in the RowMatrix class. 
+MLlib provides SVD functionality to row-oriented matrices, provided in the
+<a href="mllib-basics.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
