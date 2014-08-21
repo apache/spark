@@ -57,7 +57,6 @@ object PythonRunner {
     val builder = new ProcessBuilder(Seq(pythonExec, "-u", formattedPythonFile) ++ otherArgs)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
-    env.put("PYSPARK_PYTHON", pythonExec)
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()

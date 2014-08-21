@@ -118,4 +118,5 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.sql.hive.LocalHiveContext")
     java_import(gateway.jvm, "org.apache.spark.sql.hive.TestHiveContext")
     java_import(gateway.jvm, "scala.Tuple2")
+
     return gateway
