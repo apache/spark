@@ -28,6 +28,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.SignalLogger
+import org.eclipse.jetty.server.session.{HashSessionManager, SessionHandler}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -116,6 +117,8 @@ class HistoryServer(
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     attachHandler(contextHandler)
   }
 
