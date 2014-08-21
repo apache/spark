@@ -64,7 +64,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     If the number of input element is over 3, that DStream use batach deserializer.
     If not, that DStream use unbatch deserializer.
 
-    All tests input should have list of lists. This list represents stream.
+    All tests input should have list of lists(3 lists are default). This list represents stream.
     Every batch interval, the first object of list are chosen to make DStream.
     e.g The first list in the list is input of the first batch. 
     Please see the BasicTestSuits in Scala which is close to this implementation.
@@ -82,7 +82,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         PySparkStreamingTestCase.tearDownClass()
 
     def test_map_batch(self):
-        """Basic operation test for DStream.map with batch deserializer"""
+        """Basic operation test for DStream.map with batch deserializer."""
         test_input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def test_func(dstream):
@@ -92,7 +92,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_map_unbatach(self):
-        """Basic operation test for DStream.map with unbatch deserializer"""
+        """Basic operation test for DStream.map with unbatch deserializer."""
         test_input = [range(1, 4), range(4, 7), range(7, 10)]
 
         def test_func(dstream):
@@ -102,7 +102,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_flatMap_batch(self):
-        """Basic operation test for DStream.faltMap with batch deserializer"""
+        """Basic operation test for DStream.faltMap with batch deserializer."""
         test_input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def test_func(dstream):
@@ -113,7 +113,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_flatMap_unbatch(self):
-        """Basic operation test for DStream.faltMap with unbatch deserializer"""
+        """Basic operation test for DStream.faltMap with unbatch deserializer."""
         test_input = [range(1, 4), range(4, 7), range(7, 10)]
 
         def test_func(dstream):
@@ -124,7 +124,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_filter_batch(self):
-        """Basic operation test for DStream.filter with batch deserializer"""
+        """Basic operation test for DStream.filter with batch deserializer."""
         test_input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def test_func(dstream):
@@ -134,7 +134,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_filter_unbatch(self):
-        """Basic operation test for DStream.filter with unbatch deserializer"""
+        """Basic operation test for DStream.filter with unbatch deserializer."""
         test_input = [range(1, 4), range(4, 7), range(7, 10)]
 
         def test_func(dstream):
@@ -144,7 +144,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_count_batch(self):
-        """Basic operation test for DStream.count with batch deserializer"""
+        """Basic operation test for DStream.count with batch deserializer."""
         test_input = [range(1, 5), range(1, 10), range(1, 20)]
 
         def test_func(dstream):
@@ -154,7 +154,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_count_unbatch(self):
-        """Basic operation test for DStream.count with unbatch deserializer"""
+        """Basic operation test for DStream.count with unbatch deserializer."""
         test_input = [[], [1], range(1, 3), range(1, 4)]
 
         def test_func(dstream):
@@ -164,7 +164,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_reduce_batch(self):
-        """Basic operation test for DStream.reduce with batch deserializer"""
+        """Basic operation test for DStream.reduce with batch deserializer."""
         test_input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def test_func(dstream):
@@ -174,7 +174,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_reduce_unbatch(self):
-        """Basic operation test for DStream.reduce with unbatch deserializer"""
+        """Basic operation test for DStream.reduce with unbatch deserializer."""
         test_input = [[1], range(1, 3), range(1, 4)]
 
         def test_func(dstream):
@@ -184,7 +184,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_reduceByKey_batch(self):
-        """Basic operation test for DStream.reduceByKey with batch deserializer"""
+        """Basic operation test for DStream.reduceByKey with batch deserializer."""
         test_input = [[("a", 1), ("a", 1), ("b", 1), ("b", 1)],
                       [("", 1),("", 1), ("", 1), ("", 1)],
                       [(1, 1), (1, 1), (2, 1), (2, 1), (3, 1)]]
@@ -198,7 +198,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_reduceByKey_unbatch(self):
-        """Basic operation test for DStream.reduceByKey with unbatch deserilizer"""
+        """Basic operation test for DStream.reduceByKey with unbatch deserializer."""
         test_input = [[("a", 1), ("a", 1), ("b", 1)], [("", 1), ("", 1)], []]
 
         def test_func(dstream):
@@ -210,44 +210,49 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_mapValues_batch(self):
-        """Basic operation test for DStream.mapValues with batch deserializer"""
+        """Basic operation test for DStream.mapValues with batch deserializer."""
         test_input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)], 
-                      [("", 4), (1, 1), (2, 2), (3, 3)]]
+                      [("", 4), (1, 1), (2, 2), (3, 3)],
+                      [(1, 1), (2, 1), (3, 1), (4, 1)]]
 
         def test_func(dstream):
             return dstream.mapValues(lambda x: x + 10)
         expected_output = [[("a", 12), ("b", 12), ("c", 11), ("d", 11)], 
-                           [("", 14), (1, 11), (2, 12), (3, 13)]]
+                           [("", 14), (1, 11), (2, 12), (3, 13)],
+                           [(1, 11), (2, 11), (3, 11), (4, 11)]]
         output = self._run_stream(test_input, test_func, expected_output)
         for result in (output, expected_output):
             self._sort_result_based_on_key(result)
         self.assertEqual(expected_output, output)
 
     def test_mapValues_unbatch(self):
-        """Basic operation test for DStream.mapValues with unbatch deserializer"""
-        test_input = [[("a", 2), ("b", 1)], [("", 2)], []]
+        """Basic operation test for DStream.mapValues with unbatch deserializer."""
+        test_input = [[("a", 2), ("b", 1)], [("", 2)], [], [(1, 1), (2, 2)]]
 
         def test_func(dstream):
             return dstream.mapValues(lambda x: x + 10)
-        expected_output = [[("a", 12), ("b", 11)], [("", 12)], []]
+        expected_output = [[("a", 12), ("b", 11)], [("", 12)], [], [(1, 11), (2, 12)]]
         output = self._run_stream(test_input, test_func, expected_output)
+        for result in (output, expected_output):
+            self._sort_result_based_on_key(result)
         self.assertEqual(expected_output, output)
 
     def test_flatMapValues_batch(self):
-        """Basic operation test for DStream.flatMapValues with batch deserializer"""
-        test_input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)], [("", 4), (1, 1), (2, 1), (3, 1)]]
+        """Basic operation test for DStream.flatMapValues with batch deserializer."""
+        test_input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
+                      [("", 4), (1, 1), (2, 1), (3, 1)],
+                      [(1, 1), (2, 1), (3, 1), (4, 1)]]
 
         def test_func(dstream):
             return dstream.flatMapValues(lambda x: (x, x + 10))
-        expected_output = [[("a", 2), ("a", 12), ("b", 2), ("b", 12), 
-                            ("c", 1), ("c", 11), ("d", 1), ("d", 11)], 
-                           [("", 4), ("", 14), (1, 1), (1, 11), 
-                            (2, 1), (2, 11), (3, 1), (3, 11)]]
+        expected_output = [[("a", 2), ("a", 12), ("b", 2), ("b", 12), ("c", 1), ("c", 11), ("d", 1), ("d", 11)],
+                           [("", 4), ("", 14), (1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11)],
+                           [(1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11), (4, 1), (4, 11)]]
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
 
     def test_flatMapValues_unbatch(self):
-        """Basic operation test for DStream.flatMapValues with unbatch deserializer"""
+        """Basic operation test for DStream.flatMapValues with unbatch deserializer."""
         test_input = [[("a", 2), ("b", 1)], [("", 2)], []]
 
         def test_func(dstream):
@@ -257,7 +262,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_glom_batch(self):
-        """Basic operation test for DStream.glom with batch deserializer"""
+        """Basic operation test for DStream.glom with batch deserializer."""
         test_input = [range(1, 5), range(5, 9), range(9, 13)]
         numSlices = 2
 
@@ -268,7 +273,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         self.assertEqual(expected_output, output)
 
     def test_glom_unbatach(self):
-        """Basic operation test for DStream.glom with unbatch deserialiser"""
+        """Basic operation test for DStream.glom with unbatch deserializer."""
         test_input = [range(1, 4), range(4, 7), range(7, 10)]
         numSlices = 2
 
@@ -385,7 +390,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_combineByKey_unbatch(self):
         """Basic operation test for DStream.combineByKey with unbatch deserializer."""
-        test_input = [[(1, 1), (2, 1), (3 ,1)], [(1, 1), (1, 1), ("", 1)], [("a", 1),  ("a", 1), ("b", 1)]]
+        test_input = [[(1, 1), (2, 1), (3, 1)], [(1, 1), (1, 1), ("", 1)], [("a", 1),  ("a", 1), ("b", 1)]]
 
         def test_func(dstream):
             def add(a, b): return a + str(b)
@@ -414,8 +419,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
         """
         Start stream and return the result.
         @param test_input: dataset for the test. This should be list of lists.
-        @param test_func: wrapped test_function. This function should return PythonDstream object.
-        @param expexted_output: expected output for this testcase.
+        @param test_func: wrapped test_function. This function should return PythonDStream object.
+        @param expected_output: expected output for this testcase.
         @param numSlices: the number of slices in the rdd in the dstream.
         """
         # Generate input stream with user-defined input.
@@ -436,13 +441,15 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
             if (current_time - start_time) > self.timeout:
                 break
             # StreamingContext.awaitTermination is not used to wait because 
-            # if py4j server is called every 50 milliseconds, it gets an error
+            # if py4j server is called every 50 milliseconds, it gets an error.
             time.sleep(0.05)
-            # Check if the output is the same length of expexted output.
+            # Check if the output is the same length of expected output.
             if len(expected_output) == len(result):
                 break
 
         return result
+
+#TODO: add testcase for saveAs*
 
 
 class TestSaveAsFilesSuite(PySparkStreamingTestCase):
@@ -450,7 +457,6 @@ class TestSaveAsFilesSuite(PySparkStreamingTestCase):
         PySparkStreamingTestCase.setUp(self)
         self.timeout = 10  # seconds
         self.numInputPartitions = 2
-        self.result = list()
 
     def tearDown(self):
         PySparkStreamingTestCase.tearDown(self)
