@@ -20,7 +20,8 @@ from pyspark.rdd import RDD
 
 class RDDFunction():
     """
-    This class is for py4j callback. This
+    This class is for py4j callback. This class is related with
+    org.apache.spark.streaming.api.python.PythonRDDFunction.
     """
     def __init__(self, ctx, jrdd_deserializer, func):
         self.ctx = ctx
@@ -41,10 +42,19 @@ class RDDFunction():
 
 
 def msDurationToString(ms):
-    #TODO: add doctest
     """
     Returns a human-readable string representing a duration such as "35ms"
+
+    >> msDurationToString(10)
+    '10 ms'
+    >>> msDurationToString(1000)
+    '1.0 s'
+    >>> msDurationToString(60000)
+    '1.0 m'
+    >>> msDurationToString(3600000)
+    '1.00 h'
     """
+    #TODO: add doctest
     second = 1000
     minute = 60 * second
     hour = 60 * minute
@@ -60,7 +70,15 @@ def msDurationToString(ms):
 
 
 def rddToFileName(prefix, suffix, time):
-    #TODO: add doctest
+    """
+    Return string prefix-time(.suffix)
+
+    >>> rddToFileName("spark", None, 12345678910)
+    'spark-12345678910'
+    >>> rddToFileName("spark", "tmp", 12345678910)
+    'spark-12345678910.tmp'
+
+    """
     if suffix is None:
         return prefix + "-" + str(time)
     else:

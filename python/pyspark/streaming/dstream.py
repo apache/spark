@@ -25,7 +25,7 @@ from pyspark.serializers import NoOpSerializer,\
 from pyspark.rdd import _JavaStackTrace
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
-from pyspark.streaming.utils import rddToFileName, RDDFunction
+from pyspark.streaming.util import rddToFileName, RDDFunction
 
 
 from py4j.java_collections import ListConverter, MapConverter

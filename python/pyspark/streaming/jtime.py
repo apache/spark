@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from pyspark.streaming import utils
 from pyspark.streaming.duration import Duration
 
 """
@@ -87,7 +86,7 @@ class Time(object):
         if isinstance(other, Duration):
             return Time(self._millis - other._millis)
         elif isinstance(other, Time):
-            return Duration(self._mills, other._millis)
+            return Duration(self._millis, other._millis)
         else:
             raise TypeError
 
@@ -99,7 +98,7 @@ class Time(object):
     def __le__(self, other):
         """ Time <= Time """
         Time._is_time(other)
-        return self.millis <= other._millis
+        return self._millis <= other._millis
 
     def __eq__(self, other):
         """ Time ==  Time """
@@ -121,7 +120,7 @@ class Time(object):
         Time._is_time(other)
         return self._millis >= other._millis
 
-    def isMultipbleOf(duration):
+    def isMultipbleOf(self, duration):
         """ is multiple by Duration """
         Duration._is_duration(duration)
         return self._millis % duration._millis == 0

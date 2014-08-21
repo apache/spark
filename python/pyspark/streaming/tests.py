@@ -28,8 +28,13 @@ But this is very rare case.
 """
 from itertools import chain
 import time
-import unittest
 import operator
+import sys
+
+if sys.version_info[:2] <= (2, 6):
+        import unittest2 as unittest
+    else:
+        import unittest
 
 from pyspark.context import SparkContext
 from pyspark.streaming.context import StreamingContext
@@ -451,3 +456,4 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+    SparkContext._gateway._shutdown_callback_server()

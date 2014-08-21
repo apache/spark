@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.streaming import utils
+from pyspark.streaming import util
 
 
 class Duration(object):
@@ -82,7 +82,7 @@ class Duration(object):
         >>> d_1hour.prettyPrint()
         '1.00 h'
         """
-        return utils.msDurationToString(self._millis)
+        return util.msDurationToString(self._millis)
 
     def milliseconds(self):
         """
