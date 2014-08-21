@@ -216,7 +216,7 @@ class DStream(object):
         """
         Return the number of partitions in RDD
         """
-        # TODO: remove hardcoding. RDD has NumPartitions. How do we get the number of partition
+        # TODO: remove hard coding. RDD has NumPartitions. How do we get the number of partition
         # through DStream?
         return 2
 
