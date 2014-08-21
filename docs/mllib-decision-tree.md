@@ -86,12 +86,11 @@ bins if the condition is not satisfied.
 **Categorical features**
 
 For a categorical feature with `$M$` possible values (categories), one could come up with
-`$2^{M-1}-1$` split candidates. For binary classification and regression,
+`$2^{M-1}-1$` split candidates. For binary (0/1) classification and regression,
 we can reduce the number of split candidates to `$M-1$` by ordering the
-categorical feature values by the proportion of labels falling in one of the two classes (see
-Section 9.2.4 in
+categorical feature values by the average label. (See Section 9.2.4 in
 [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
-details). For example, for a binary classification problem with one categorical feature with three
+details.) For example, for a binary classification problem with one categorical feature with three
 categories A, B and C whose corresponding proportions of label 1 are 0.2, 0.6 and 0.4, the categorical
 features are ordered as A, C, B. The two split candidates are A \| C, B
 and A , C \| B where \| denotes the split.
@@ -115,7 +114,7 @@ The recursive tree construction is stopped at a node when one of the two conditi
 
 For faster processing, the decision tree algorithm performs simultaneous histogram computations for
 all nodes at each level of the tree. This could lead to high memory requirements at deeper levels
-of the tree, leading to memory overflow errors. To alleviate this problem, a `maxMemoryInMB`
+of the tree, potentially leading to memory overflow errors. To alleviate this problem, a `maxMemoryInMB`
 training parameter specifies the maximum amount of memory at the workers (twice as much at the
 master) to be allocated to the histogram computation. The default value is conservatively chosen to
 be 128 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements
@@ -148,7 +147,7 @@ The implemented algorithm reads both sparse and dense data. However, it is not o
 The example below demonstrates how to load a
 [LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
 parse it as an RDD of `LabeledPoint` and then
-perform classification using a decision tree using Gini impurity as an impurity measure and a
+perform classification using a decision tree with Gini impurity as an impurity measure and a
 maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
@@ -274,7 +273,7 @@ to an underlying `DecisionTree` model in Scala.
 The example below demonstrates how to load a
 [LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
 parse it as an RDD of `LabeledPoint` and then
-perform regression using a decision tree using variance as an impurity measure and a maximum tree
+perform regression using a decision tree with variance as an impurity measure and a maximum tree
 depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
