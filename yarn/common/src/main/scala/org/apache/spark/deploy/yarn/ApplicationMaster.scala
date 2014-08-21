@@ -128,6 +128,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       logInfo(s"Finishing ApplicationMaster with $status"  +
         Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
       finished = true
+      finalStatus = status
       reporterThread.interrupt()
       try {
         if (Thread.currentThread() != reporterThread) {
@@ -341,6 +342,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     val t = new Thread {
       override def run() {
+        var status = FinalApplicationStatus.FAILED
         try {
           // Copy
           val mainArgs = new Array[String](args.userArgs.size)
@@ -348,10 +350,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           mainMethod.invoke(null, mainArgs)
           // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
           // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
-          finalStatus = FinalApplicationStatus.SUCCEEDED
+          status = FinalApplicationStatus.SUCCEEDED
         } finally {
           logDebug("Finishing main")
         }
+        finalStatus = status
       }
     }
     t.setName("Driver")
