@@ -412,7 +412,7 @@ class DStream(object):
 # TODO: implement countByWindow
 # TODO: implement reduceByWindow
 
-# transform Operation
+# Transform Operation
 # TODO: implement transform
 # TODO: implement transformWith
 # Following operation has dependency with transform
@@ -421,7 +421,7 @@ class DStream(object):
 # TODO: implement cogroup
 # TODO: implement join
 # TODO: implement leftOuterJoin
-# TODO: implemtnt rightOuterJoin
+# TODO: implement rightOuterJoin
 
 
 class PipelinedDStream(DStream):
