@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.io.File
 import java.util.{List => JList}
 import java.util.Collections
 
@@ -28,9 +27,12 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, Logging, SparkContext, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.util.Utils
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -111,48 +113,43 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
-    extraClassPath.foreach { cp =>
-      environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
-    }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
-
-    val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
-
-    sc.executorEnvs.foreach { case (key, value) =>
-      environment.addVariables(Environment.Variable.newBuilder()
-        .setName(key)
-        .setValue(value)
-        .build())
-    }
-    val command = CommandInfo.newBuilder()
+    val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
+      
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
+      conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
+    val args = Seq(driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores.toString)
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
+    // Start executors with a few necessary configs for registering with the scheduler
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+
+    val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+    val libraryPathEntries =
+      conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+        cp.split(java.io.File.pathSeparator)
+      }
+
+    val command = Command(
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
+      classPathEntries, libraryPathEntries, javaOpts)
 
     val uri = conf.get("spark.executor.uri", null)
-    if (uri == null) {
-      val runScript = new File(sparkHome, "./bin/spark-class").getCanonicalPath
-      command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d".format(
-          runScript, extraOpts, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+    if ( uri == null ) {
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue(
-        ("cd %s*; " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d")
-          .format(basename, extraOpts, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores))
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        basename).mkString("\"", "\" \"", "\""))
+      mesosCommand.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
-    command.build()
+    mesosCommand.build()
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
