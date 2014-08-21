@@ -34,7 +34,7 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
@@ -341,6 +341,13 @@ def launch_cluster(conn, opts, cluster_name):
         device.size = opts.ebs_vol_size
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
+
+    sdb = BlockDeviceType()
+    sdb.ephemeral_name = 'ephemeral0'
+    block_map['/dev/sdb'] = sdb
+    sdc = BlockDeviceType()
+    sdc.ephemeral_name = 'ephemeral1'
+    block_map['/dev/sdc'] = sdc
 
     # Launch slaves
     if opts.spot_price is not None:
