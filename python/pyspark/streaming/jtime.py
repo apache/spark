@@ -126,14 +126,12 @@ class Time(object):
         Duration._is_duration(duration)
         return self._millis % duration._millis == 0
 
-    def until(time, interval):
-        raise NotImplementedError
-
-    def to(time, interval):
-        raise NotImplementedError
-
     @classmethod
     def _is_time(self, instance):
         """ is instance Time """
         if not isinstance(instance, Time):
             raise TypeError
+
+# TODO: implement until
+# TODO: implement to
+
