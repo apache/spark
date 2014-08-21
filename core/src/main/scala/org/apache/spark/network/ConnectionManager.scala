@@ -306,16 +306,19 @@ private[spark] class ConnectionManager(
                 }
               }
             } else {
-              logInfo("Key not valid ? " + key)
+              logInfo("Key not valid ? key was related to " +
+                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress)
               throw new CancelledKeyException()
             }
           } catch {
             case e: CancelledKeyException => {
-              logInfo("key already cancelled ? " + key, e)
+              logInfo("key already cancelled ? key was related to " +
+                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress, e)
               triggerForceCloseByException(key, e)
             }
             case e: Exception => {
-              logError("Exception processing key " + key, e)
+              logError("Exception processing key. key was related to " +
+                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress, e)
               triggerForceCloseByException(key, e)
             }
           }
