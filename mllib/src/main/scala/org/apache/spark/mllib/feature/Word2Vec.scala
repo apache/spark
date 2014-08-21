@@ -30,7 +30,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -119,7 +118,6 @@ class Word2Vec extends Serializable with Logging {
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
   private val MAX_SENTENCE_LENGTH = 1000
-  private val layer1Size = vectorSize
 
   /** context words from [-window, window] */
   private val window = 5
@@ -131,7 +129,6 @@ class Word2Vec extends Serializable with Logging {
   private var vocabSize = 0
   private var vocab: Array[VocabWord] = null
   private var vocabHash = mutable.HashMap.empty[String, Int]
-  private var alpha = startingAlpha
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
@@ -286,13 +283,15 @@ class Word2Vec extends Serializable with Logging {
     
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
-    var syn0Global =
-      Array.fill[Float](vocabSize * layer1Size)((initRandom.nextFloat() - 0.5f) / layer1Size)
-    var syn1Global = new Array[Float](vocabSize * layer1Size)
-
+    val syn0Global =
+      Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
+    val syn1Global = new Array[Float](vocabSize * vectorSize)
+    var alpha = startingAlpha
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
+        val syn0Modify = new Array[Int](vocabSize)
+        val syn1Modify = new Array[Int](vocabSize)
         val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
@@ -317,24 +316,27 @@ class Word2Vec extends Serializable with Logging {
                   val c = pos - window + a
                   if (c >= 0 && c < sentence.size) {
                     val lastWord = sentence(c)
-                    val l1 = lastWord * layer1Size
-                    val neu1e = new Array[Float](layer1Size)
+                    val l1 = lastWord * vectorSize
+                    val neu1e = new Array[Float](vectorSize)
                     // Hierarchical softmax
                     var d = 0
                     while (d < bcVocab.value(word).codeLen) {
-                      val l2 = bcVocab.value(word).point(d) * layer1Size
+                      val inner = bcVocab.value(word).point(d)
+                      val l2 = inner * vectorSize
                       // Propagate hidden -> output
-                      var f = blas.sdot(layer1Size, syn0, l1, 1, syn1, l2, 1)
+                      var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
                         f = expTable.value(ind)
                         val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
-                        blas.saxpy(layer1Size, g, syn1, l2, 1, neu1e, 0, 1)
-                        blas.saxpy(layer1Size, g, syn0, l1, 1, syn1, l2, 1)
+                        blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                        blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
+                        syn1Modify(inner) += 1
                       }
                       d += 1
                     }
-                    blas.saxpy(layer1Size, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    syn0Modify(lastWord) += 1
                   }
                 }
                 a += 1
@@ -343,21 +345,37 @@ class Word2Vec extends Serializable with Logging {
             }
             (syn0, syn1, lwc, wc)
         }
-        Iterator(model)
+        val syn0Local = model._1
+        val syn1Local = model._2
+        // Only output modified vectors.
+        Iterator.tabulate(vocabSize) { index =>
+          if (syn0Modify(index) > 0) {
+            Some((index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize)))
+          } else {
+            None
+          }
+        }.flatten ++ Iterator.tabulate(vocabSize) { index =>
+          if (syn1Modify(index) > 0) {
+            Some((index + vocabSize, syn1Local.slice(index * vectorSize, (index + 1) * vectorSize)))
+          } else {
+            None
+          }
+        }.flatten
       }
-      val (aggSyn0, aggSyn1, _, _) =
-        partial.treeReduce { case ((syn0_1, syn1_1, lwc_1, wc_1), (syn0_2, syn1_2, lwc_2, wc_2)) =>
-          val n = syn0_1.length
-          val weight1 = 1.0f * wc_1 / (wc_1 + wc_2)
-          val weight2 = 1.0f * wc_2 / (wc_1 + wc_2)
-          blas.sscal(n, weight1, syn0_1, 1)
-          blas.sscal(n, weight1, syn1_1, 1)
-          blas.saxpy(n, weight2, syn0_2, 1, syn0_1, 1)
-          blas.saxpy(n, weight2, syn1_2, 1, syn1_1, 1)
-          (syn0_1, syn1_1, lwc_1 + lwc_2, wc_1 + wc_2)
+      val synAgg = partial.reduceByKey { case (v1, v2) =>
+          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
+          v1
+      }.collect()
+      var i = 0
+      while (i < synAgg.length) {
+        val index = synAgg(i)._1
+        if (index < vocabSize) {
+          Array.copy(synAgg(i)._2, 0, syn0Global, index * vectorSize, vectorSize)
+        } else {
+          Array.copy(synAgg(i)._2, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
         }
-      syn0Global = aggSyn0
-      syn1Global = aggSyn1
+        i += 1
+      }
     }
     newSentences.unpersist()
     
@@ -365,8 +383,8 @@ class Word2Vec extends Serializable with Logging {
     var i = 0
     while (i < vocabSize) {
       val word = bcVocab.value(i).word
-      val vector = new Array[Float](layer1Size)
-      Array.copy(syn0Global, i * layer1Size, vector, 0, layer1Size)
+      val vector = new Array[Float](vectorSize)
+      Array.copy(syn0Global, i * vectorSize, vector, 0, vectorSize)
       word2VecMap += word -> vector
       i += 1
     }
@@ -413,15 +431,6 @@ class Word2VecModel private[mllib] (
       case None =>
         throw new IllegalStateException(s"$word not in vocabulary")
     }
-  }
-  
-  /**
-   * Transforms an RDD to its vector representation
-   * @param dataset a an RDD of words 
-   * @return RDD of vector representation 
-   */
-  def transform(dataset: RDD[String]): RDD[Vector] = {
-    dataset.map(word => transform(word))
   }
   
   /**

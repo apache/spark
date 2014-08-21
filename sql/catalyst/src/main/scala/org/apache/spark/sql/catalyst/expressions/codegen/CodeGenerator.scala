@@ -78,7 +78,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     .build(
       new CacheLoader[InType, OutType]() {
         override def load(in: InType): OutType = globalLock.synchronized {
-           create(in)
+          val startTime = System.nanoTime()
+          val result = create(in)
+          val endTime = System.nanoTime()
+          def timeMs = (endTime - startTime).toDouble / 1000000
+          logInfo(s"Code generated expression $in in $timeMs ms")
+          result
         }
       })
 
@@ -413,7 +418,19 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
          """.children
       }
 
-    EvaluatedExpression(code, nullTerm, primitiveTerm, objectTerm)
+    // Only inject debugging code if debugging is turned on.
+    val debugCode =
+      if (log.isDebugEnabled) {
+        val localLogger = log
+        val localLoggerTree = reify { localLogger }
+        q"""
+          $localLoggerTree.debug(${e.toString} + ": " +  (if($nullTerm) "null" else $primitiveTerm))
+        """ :: Nil
+      } else {
+        Nil
+      }
+
+    EvaluatedExpression(code ++ debugCode, nullTerm, primitiveTerm, objectTerm)
   }
 
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
