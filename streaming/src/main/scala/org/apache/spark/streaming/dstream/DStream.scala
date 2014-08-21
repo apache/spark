@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
+
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.deprecated
@@ -30,7 +31,6 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.MetadataCleaner
-import org.apache.spark.streaming.Duration
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -557,7 +557,6 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because 
     // DStreams can't be serialized with closures, we can't proactively check 
     // it for serializability and so we pass the optional false to SparkContext.clean
-
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
       assert(rdds.length == 1)
