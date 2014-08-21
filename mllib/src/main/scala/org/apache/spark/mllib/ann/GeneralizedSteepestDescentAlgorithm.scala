@@ -35,7 +35,8 @@ import breeze.linalg.{SparseVector => BSV}
  * @param weights Weights computed for every feature.
  */
 @DeveloperApi
-abstract class GeneralizedSteepestDescendModel(val weights: Vector )
+abstract class GeneralizedSteepestDescentModel(val weights: Vector )
+
   extends Serializable {
 
   /**
@@ -127,7 +128,7 @@ abstract class GeneralizedSteepestDescendModel(val weights: Vector )
  * This class should be extended with an Optimizer to create a new GLM.
  */
 @DeveloperApi
-abstract class GeneralizedSteepestDescendAlgorithm[M <: GeneralizedSteepestDescendModel]
+abstract class GeneralizedSteepestDescentAlgorithm[M <: GeneralizedSteepestDescentModel]
   extends Logging with Serializable {
 
   /** The optimizer to solve the problem. */
@@ -157,8 +158,8 @@ abstract class GeneralizedSteepestDescendAlgorithm[M <: GeneralizedSteepestDesce
     val data = input.map( v => (
       (0.0).toDouble,
       Vectors.fromBreeze( DenseVector.vertcat(
-        v._1.toBreeze.toDenseVector, 
-        v._2.toBreeze.toDenseVector ) ) 
+        v._1.toBreeze.toDenseVector,
+        v._2.toBreeze.toDenseVector ) )
       ) )
     val weights = optimizer.optimize(data, initialWeights)
 
