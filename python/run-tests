@@ -84,6 +84,9 @@ run_test "pyspark/mllib/stat.py"
 run_test "pyspark/mllib/tests.py"
 run_test "pyspark/mllib/tree.py"
 run_test "pyspark/mllib/util.py"
+if [ -n "$_RUN_STREAMING_TESTS" ]; then
+  run_test "pyspark/streaming/tests.py"
+fi
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then

@@ -333,6 +333,7 @@ class Duration(object):
         if not isinstance(instance, Duration):
             raise TypeError("This should be Duration")
 
+
 def Milliseconds(milliseconds):
     """
     Helper function that creates instance of [[pysparkstreaming.duration]] representing
@@ -346,6 +347,7 @@ def Milliseconds(milliseconds):
     """
     return Duration(milliseconds)
 
+
 def Seconds(seconds):
     """
     Helper function that creates instance of [[pysparkstreaming.duration]] representing
@@ -358,6 +360,7 @@ def Seconds(seconds):
 
     """
     return Duration(seconds * 1000)
+
 
 def Minutes(minutes):
     """
