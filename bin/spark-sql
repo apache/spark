@@ -76,7 +76,7 @@ while (($#)); do
       CLI_ARGS+=("$1"); shift
       ;;
 
-    -s | --silent)
+    -S | --silent)
       CLI_ARGS+=("$1"); shift
       ;;
 
