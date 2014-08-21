@@ -202,7 +202,6 @@ private object TorrentBroadcast extends Logging {
   }
 
   def blockifyObject[T: ClassTag](obj: T): Array[ByteBuffer] = {
-    // so we don't need to do the extra memory copy.
     val bos = new ByteArrayChunkOutputStream(BLOCK_SIZE)
     val out: OutputStream = if (compress) compressionCodec.compressedOutputStream(bos) else bos
     val ser = SparkEnv.get.serializer.newInstance()

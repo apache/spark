@@ -24,14 +24,50 @@ import scala.collection.mutable.ArrayBuffer
 
 /**
  * An OutputStream that writes to fixed-size chunks of byte arrays.
+ *
+ * @param chunkSize size of each chunk, in bytes.
  */
 private[spark]
 class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   private val chunks = new ArrayBuffer[Array[Byte]]
 
+  /** Index of the last chunk. Starting with -1 when the chunks array is empty. */
   private var lastChunkIndex = -1
+
+  /**
+   * Next position to write in the last chunk.
+   *
+   * If this equals chunkSize, it means for next write we need to allocate a new chunk.
+   * This can also never be 0.
+   */
   private var position = chunkSize
+
+  override def write(b: Int): Unit = {
+    allocateNewChunkIfNeeded()
+    chunks(lastChunkIndex)(position) = b.toByte
+    position += 1
+  }
+
+  override def write(bytes: Array[Byte], off: Int, len: Int): Unit = {
+    var written = 0
+    while (written < len) {
+      allocateNewChunkIfNeeded()
+      val thisBatch = math.min(chunkSize - position, len - written)
+      System.arraycopy(bytes, written + off, chunks(lastChunkIndex), position, thisBatch)
+      written += thisBatch
+      position += thisBatch
+    }
+  }
+
+  @inline
+  private def allocateNewChunkIfNeeded(): Unit = {
+    if (position == chunkSize) {
+      chunks += new Array[Byte](chunkSize)
+      lastChunkIndex += 1
+      position = 0
+    }
+  }
 
   def toArrays: Array[Array[Byte]] = {
     if (lastChunkIndex == -1) {
@@ -53,35 +89,6 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
         System.arraycopy(chunks(lastChunkIndex), 0, ret(lastChunkIndex), 0, position)
       }
       ret
-    }
-  }
-
-  override def write(b: Int): Unit = {
-    allocateNewChunkIfNeeded()
-    chunks(lastChunkIndex)(position) = b.toByte
-    position += 1
-  }
-
-  override def write(bytes: Array[Byte]): Unit = write(bytes, 0, bytes.length)
-
-  override def write(bytes: Array[Byte], off: Int, len: Int): Unit = {
-    var written = off
-    val total = off + len
-    while (written < total) {
-      allocateNewChunkIfNeeded()
-      val thisBatch = math.min(chunkSize - position, total - written)
-      System.arraycopy(bytes, written, chunks(lastChunkIndex), position, thisBatch)
-      written += thisBatch
-      position += thisBatch
-    }
-  }
-
-  @inline
-  private def allocateNewChunkIfNeeded(): Unit = {
-    if (position == chunkSize) {
-      chunks += new Array[Byte](chunkSize)
-      lastChunkIndex += 1
-      position = 0
     }
   }
 }
