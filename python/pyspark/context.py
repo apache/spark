@@ -639,7 +639,25 @@ class SparkContext(object):
         SparkContext in the future.  The C{path} passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
+        
+        >>> from pyspark import SparkContext
+        >>> modules = []
+        >>> modules.append(os.path.join(CURRENT_DIRECTORY, "my_spark_module.py"))
+        >>> modules.append(os.path.join(CURRENT_DIRECTORY, "my_spark_module2.py"))
+        >>> sc = SparkContext("local", "app_name_here", pyFiles=module_path)
+        .
+        . (later)
+        .
+        >>> sc.addPyFile(os.path.join(CURRENT_DIRECTORY + "my_mod_3.py"))
+        .
+        . (later)
+        .
+        >>> import my_mod_3.py
+        >>> rdd_I_made.map(my_mod_3.custom_transformation)
         """
+        if type(path) == str:
+            # if only one module at a time is added in
+            path = [path]
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
 
