@@ -51,55 +51,57 @@ trait ANN {
   def dg( x: Double ) = beta*g(x)*(1 - g(x))
 
   /* returns the hidden layer including the -1 robonode! */
-  def computeHidden( data: Vector, weights: Vector ): Vector = {
+  def computeHidden( data: Array[Double], weights: Array[Double] ): Array[Double] = {
 
-    val brzData = data.toBreeze
-    val brzInp = DenseVector.vertcat( 
-      brzData( 0 to noInput - 1 ).toDenseVector, DenseVector[Double](-1.0) )
-    val brzWeights = weights.toBreeze
-    var hidden = DenseVector.zeros[Double]( noHidden + 1 )
+    var arrHidden = new Array[Double]( noHidden + 1 )
 
     for( j <- 0 to noHidden-1 ) {
 
-      val weightsSubset = brzWeights( 
-        j*(noInput + 1) to j*(noInput + 1) + (noInput + 1) - 1 ).toVector
-      hidden( j ) = g( weightsSubset.dot( brzInp ) )
+      val start = j*(noInput + 1)
+      var v: Double = 0;
+      for( w <- 0 to noInput-1 )
+        v = v + data(w)*weights( start + w )
+      v = v - 1.0 * weights( start + noInput ) // robonode
+      arrHidden( j ) = g( v )
 
     }
 
-    hidden( noHidden ) = -1.0
+    arrHidden( noHidden ) = -1.0
 
-    Vectors.fromBreeze( hidden )
+    arrHidden
 
   }
 
   /* returns the hidden layer including the -1 robonode, as well as the final estimation */
-  def computeValues( data: Vector, weights: Vector ): (Vector, Vector) = {
+  def computeValues( 
+      data: Array[Double], 
+      weights: Array[Double] ): 
+      (Array[Double], Array[Double]) = {
 
     var hidden = computeHidden( data, weights )
     var output = new Array[Double](noOutput)
 
     for( k <- 0 to noOutput - 1 ) {
-      val brzWeights = weights.toBreeze
-      var weightsSubset = brzWeights( noHidden*(noInput + 1) + k*(noHidden + 1) to
-            noHidden*(noInput + 1) + (k + 1)*(noHidden + 1) - 1).toVector
-      output(k) = g( weightsSubset.dot( hidden.toBreeze ) )
+      var tmp: Double = 0.0;
+      for( i <- 0 to noHidden )
+        tmp = tmp + hidden(i)*weights( noHidden * ( noInput + 1 ) + k * ( noHidden + 1 ) + i )
+      output(k) = g( tmp )
+
     }
 
-    ( hidden, Vectors.dense( output ) )
+    ( hidden, output )
 
   }
 
 }
 
-class ParallelANNModel private[mllib]
-(
+class ParallelANNModel private[mllib] (
     override val weights: Vector,
     val noInp: Integer,
     val noHid: Integer,
     val noOut: Integer,
     val b: Double )
-  extends GeneralizedSteepestDescendModel(weights) with RegressionModel with Serializable with ANN {
+  extends GeneralizedSteepestDescentModel(weights) with RegressionModel with Serializable with ANN {
 
   val noInput = noInp
   val noHidden = noHid
@@ -107,17 +109,17 @@ class ParallelANNModel private[mllib]
   val beta = b
 
   override def predictPoint( data: Vector, weights: Vector ): Double = {
-    val outp = computeValues( data, weights )._2
-    outp.toArray(0)
+    val outp = computeValues( data.toArray, weights.toArray )._2
+    outp(0)
   }
 
   def predictPointV( data: Vector, weights: Vector): Vector = {
-    computeValues( data, weights )._2
+    Vectors.dense( computeValues( data.toArray, weights.toArray )._2 )
   }
 
 }
 
-class ParallelANNWithSGD private (
+class ParallelANN private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double,
@@ -125,7 +127,7 @@ class ParallelANNWithSGD private (
     private var noHidden: Int,
     private var noOutput: Int,
     private val beta: Double )
-  extends GeneralizedSteepestDescendAlgorithm[ParallelANNModel] with Serializable {
+  extends GeneralizedSteepestDescentAlgorithm[ParallelANNModel] with Serializable {
 
   private val rand = new XORShiftRandom
 
@@ -196,6 +198,16 @@ class ParallelANNWithSGD private (
     run( rdd, model.weights )
   }
 
+  def train( rdd: RDD[(Vector,Vector)], weights: Vector ): ParallelANNModel = {
+
+    val ft = rdd.first()
+    assert( noInput == ft._1.size )
+    assert( noOutput == ft._2.size )
+    assert( weights.size == (noInput + 1) * noHidden + (noHidden + 1) * noOutput )
+    run( rdd, weights );
+
+  }
+
 }
 
 /**
@@ -222,10 +234,10 @@ class ParallelANNWithSGD private (
  */
 
 class LeastSquaresGradientANN(
-    noInp: Integer, 
-    noHid: Integer, 
-    noOut: Integer, 
-    b: Double ) 
+    noInp: Integer,
+    noHid: Integer,
+    noOut: Integer,
+    b: Double )
   extends Gradient with ANN {
 
   val noInput = noInp
@@ -233,55 +245,70 @@ class LeastSquaresGradientANN(
   val noOutput = noOut
   val beta = b
 
+  /* For verification only
+  private val rand = new XORShiftRandom
+  */
+
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
 
-    val brzData = data.toBreeze
-    val brzInp = DenseVector.vertcat( brzData( 0 to noInput - 1 ).toDenseVector,
-      DenseVector[Double](-1.0) )
+    val arrData = data.toArray
+    val arrWeights = weights.toArray
 
-    val brzOut = brzData( noInput.toInt to noInput + noOutput - 1 ).toVector
-    val brzWeights = weights.toBreeze
-    val gradient = DenseVector.zeros[Double]( (noInput + 1)*noHidden + (noHidden + 1)*noOutput )
+    var gradient = new Array[Double]( (noInput + 1) * noHidden + (noHidden + 1) * noOutput )
 
+    val (arrHidden, output) = computeValues( arrData, arrWeights )
+    val arrEst = output
 
-    val (hidden, output) = computeValues( data, weights )
-    var brzHidden = hidden.toBreeze /* already includes the robonode */
-    val brzEst = output.toBreeze
-    val diff = brzEst :- brzOut
-    val E = diff.dot(diff)
+    var diff = new Array[Double]( noOutput )
+    var E: Double = 0.0
+    for( i <-0 to noOutput-1 ) {
+      diff( i ) = arrEst( i ) - arrData( noInput.toInt + i );
+      E = E + diff(i) * diff(i)
+    }
 
     /*
-     * The following three fields are for verification only
+     * The following fields are for verification only
     val eps = .000001
-    val noInpCheck = 0
-    val noOutCheck = 0
+    val testOneVOutOf = 5000;
+    val testOneWOutOf = 2500;
+    var arrWeights_tmp = weights.toArray
+    val warnErr = 5e-7
     */
 
-    var brzWeights_tmp = weights.toBreeze
-
     /* Wjk */
-    for( j <- 0 to noHidden ) {
+    for( k <- 0 to noOutput - 1 ) {
 
-      for( k <- 0 to noOutput - 1 ) {
+      var start = noHidden*(noInput + 1) + k*(noHidden + 1)
+      var sum_l: Double = 0
+      for( w <- 0 to noHidden )
+         sum_l = sum_l +  arrHidden( w ) * arrWeights( w + start )
+      val dg_sum_l = dg( sum_l )
 
-        val brzW = brzWeights( noHidden*(noInput + 1) + k*(noHidden + 1) to
-          noHidden*(noInput + 1) + (k + 1)*(noHidden + 1) - 1 ).toVector
-        var sum_l = brzHidden.dot( brzW )
+
+      for( j <- 0 to noHidden ) {
+
         gradient( noHidden*(noInput + 1) + k*(noHidden + 1) + j )
-          = 2*(diff(k))*dg(sum_l)*brzHidden(j)
+          = 2*(diff(k))*dg_sum_l*arrHidden(j)
 
         /*
          * The following is for verification only
-        if( noInput==noInpCheck && noOutput==noOutCheck )
-        {
-        brzWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j )
-          = brzWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j ) + eps
-        val est2 = computeValues( data, Vectors.fromBreeze( brzWeights_tmp ) )._2.toBreeze
-        val diff2 = est2 - brzOut
-        val d = ( diff2.dot(diff2) - E ) / eps
-        println( "Calc/Est Wjk: "+ ( gradient( noHidden*(noInput+1)+k*(noHidden+1)+j), d ) )
-        brzWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j )
-          = brzWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j ) - eps
+        if( rand.nextInt % (testOneWOutOf>>1) == 0 ) {
+          arrWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j )
+            = arrWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j ) + eps
+          val est2 = computeValues( arrData, arrWeights_tmp )._2
+          var E2: Double = 0.0;
+          for( w <- 0 to noOutput-1 ) {
+            val diff2 = est2(w)-data( noInput+w )
+            E2 = E2 + diff2*diff2
+          }
+          val d = ( E2 - E ) / eps
+          val compErr = math.abs( gradient( noHidden*(noInput+1)+k*(noHidden+1)+j) - d )
+          if( compErr > warnErr ) {
+            println( "!!! Calc/Est Wjk: " + 
+              ( ( gradient( noHidden*(noInput+1)+k*(noHidden+1)+j), d ), compErr ) )
+          }
+          arrWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j )
+            = arrWeights_tmp( noHidden*(noInput+1)+k*(noHidden+1)+j ) - eps
         }
         */
 
@@ -289,39 +316,69 @@ class LeastSquaresGradientANN(
 
     }
 
-    /* Vij */
-    for( i <- 0 to noInput ) {
+    var start = noHidden * (noInput + 1)
+    var sum_n1: Double = 0
+    for( w <- 0 to noHidden )
+       sum_n1 = sum_n1 + arrHidden( w )*arrWeights( w + start )
+    val dg_sum_n1 = dg( sum_n1 )
 
-      for( j <- 0 to noHidden - 1 ) { /* the hidden robonode has no associated Vij */
+
+    /* Vij */
+    for( j <- 0 to noHidden - 1 ) { /* the hidden robonode has no associated Vij */
+
+      start = j * ( noInput + 1 )
+      var sum_n2: Double = 0
+      for( w <- 0 to noInput-1 ) // non-robonodes
+         sum_n2 = sum_n2 + arrData( w )*arrWeights( w + start)
+      sum_n2 = sum_n2 - arrWeights( noInput + start) // robonode
+      val dg_sum_n2 = dg( sum_n2 )
+
+      for( i <- 0 to noInput ) {
+
 
         for( k<- 0 to noOutput - 1 ) {
 
-          val brzW = brzWeights( noHidden*(noInput + 1) to
-            noHidden*(noInput + 1) + (noHidden + 1) - 1 ).toVector
-          val sum_n1 = brzHidden.dot( brzW )
-          val brzV = brzWeights( j*(noInput + 1) to j*(noInput + 1) + (noInput + 1) - 1 ).toVector
-          val sum_n2 = brzV.dot( brzInp )
-          gradient( i + j*(noInput + 1) ) =
-          gradient( i + j*(noInput + 1) ) 
-            + 2*(diff(k))*dg( sum_n1 )*brzWeights( noHidden*(noInput + 1)
-            + k*(noHidden + 1) + j )*dg( sum_n2 )*brzInp( i )
+          if( i<noInput ) { // non-robonode
+            gradient( i + j * (noInput + 1) ) =
+            gradient( i + j * (noInput + 1) ) +
+              2 * ( diff(k)  )* dg_sum_n1 *
+              arrWeights( noHidden * (noInput + 1) + k * (noHidden + 1) + j ) *
+              dg_sum_n2*arrData( i )
+
+          }
+          else { // robonode
+            gradient( i + j * (noInput + 1) ) =
+            gradient( i + j * (noInput + 1) ) -
+              2 * ( diff(k) ) * dg_sum_n1 *
+              arrWeights( noHidden * (noInput + 1) + k * (noHidden + 1) + j ) *
+              dg_sum_n2
+          }
+
         }
 
         /*
          * The following is for verification only
-        if( noInput==noInpCheck && noOutput==noOutCheck )
-        {
-          brzWeights_tmp( i+j*(noInput+1) ) = brzWeights_tmp( i+j*(noInput+1) ) + eps
-          val est2 = computeValues( data, Vectors.fromBreeze( brzWeights_tmp ) )._2.toBreeze
-          val diff2 = est2 - brzOut
-          val d = ( diff2.dot( diff2 ) - E ) / eps
-          println( "Calc/Est Vij: "+ ( gradient( i+j*(noInput+1) ), d ) )
-          brzWeights_tmp( i+j*(noInput+1) ) = brzWeights_tmp( i+j*(noInput+1) ) - eps
+        if( rand.nextInt % (testOneVOutOf>>1) == 0 ) {
+          arrWeights_tmp( i+j*(noInput+1) ) = arrWeights_tmp( i+j*(noInput+1) ) + eps
+          val est2 = computeValues( arrData, arrWeights_tmp )._2
+
+          var E2: Double = 0.0;
+          for( w <- 0 to noOutput-1 ) {
+            val diff2 = est2(w)-data( noInput+w )
+            E2 = E2 + diff2*diff2
+          }
+
+          val d = ( E2 - E ) / eps
+          val compErr = math.abs( gradient( i+j*(noInput+1) )-d )
+          if( compErr>warnErr )
+            println( "!!! Calc/Est Vij: "+ ( ( gradient( i+j*(noInput+1) ), d ), compErr ) )
+          arrWeights_tmp( i+j*(noInput+1) ) = arrWeights_tmp( i+j*(noInput+1) ) - eps
         }
         */
       }
     }
-    (Vectors.fromBreeze(gradient), E)
+
+    (Vectors.dense(gradient), E)
 
   }
 
@@ -356,35 +413,6 @@ class ANNUpdater extends Updater {
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
 
     (Vectors.fromBreeze(brzWeights), 0)
-  }
-
-}
-
-class ParallelANN (
-
-    private var stepSize: Double,
-    private var numIterations: Int,
-    private var miniBatchFraction: Double,
-    private var noInput: Int,
-    private var noHidden: Int,
-    private var noOutput: Int,
-    private val beta: Double
-
-  ) extends GeneralizedSteepestDescendAlgorithm[ParallelANNModel] with Serializable {
-
-  private val gradient = new LeastSquaresGradientANN( noInput, noHidden, noOutput, beta )
-  private val updater = new SimpleUpdater()
-  override val optimizer = new GradientDescent(gradient, updater)
-    .setStepSize(stepSize)
-    .setNumIterations(numIterations)
-    .setMiniBatchFraction(miniBatchFraction)
-
-  def this() = {
-    this( 0.001, 100, 1.0, 1, 5, 1, 1.0 )
-  }
-
-  override protected def createModel(weights: Vector) = {
-    new ParallelANNModel(weights, noInput, noHidden, noOutput, beta)
   }
 
 }
