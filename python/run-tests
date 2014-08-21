@@ -82,7 +82,9 @@ run_test "pyspark/mllib/recommendation.py"
 run_test "pyspark/mllib/regression.py"
 run_test "pyspark/mllib/tests.py"
 run_test "pyspark/mllib/util.py"
-run_test "pyspark/streaming/tests.py"
+if [ -n "$_RUN_STREAMING_TESTS" ]; then
+  run_test "pyspark/streaming/tests.py"
+fi
 
 if [[ $FAILED == 0 ]]; then
     echo -en "\033[32m"  # Green

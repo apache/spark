@@ -32,9 +32,9 @@ import operator
 import sys
 
 if sys.version_info[:2] <= (2, 6):
-        import unittest2 as unittest
-    else:
-        import unittest
+    import unittest2 as unittest
+else:
+    import unittest
 
 from pyspark.context import SparkContext
 from pyspark.streaming.context import StreamingContext
@@ -57,7 +57,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # Make sure tp shutdown the callback server 
+        # Make sure tp shutdown the callback server
         SparkContext._gateway._shutdown_callback_server()
 
 
@@ -71,7 +71,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     All tests input should have list of lists(3 lists are default). This list represents stream.
     Every batch interval, the first object of list are chosen to make DStream.
-    e.g The first list in the list is input of the first batch. 
+    e.g The first list in the list is input of the first batch.
     Please see the BasicTestSuits in Scala which is close to this implementation.
     """
     def setUp(self):
@@ -112,7 +112,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
         def test_func(dstream):
             return dstream.flatMap(lambda x: (x, x * 2))
-        expected_output = map(lambda x: list(chain.from_iterable((map(lambda y: [y, y * 2], x)))), 
+        expected_output = map(lambda x: list(chain.from_iterable((map(lambda y: [y, y * 2], x)))),
                               test_input)
         output = self._run_stream(test_input, test_func, expected_output)
         self.assertEqual(expected_output, output)
@@ -191,12 +191,12 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
     def test_reduceByKey_batch(self):
         """Basic operation test for DStream.reduceByKey with batch deserializer."""
         test_input = [[("a", 1), ("a", 1), ("b", 1), ("b", 1)],
-                      [("", 1),("", 1), ("", 1), ("", 1)],
+                      [("", 1), ("", 1), ("", 1), ("", 1)],
                       [(1, 1), (1, 1), (2, 1), (2, 1), (3, 1)]]
 
         def test_func(dstream):
             return dstream.reduceByKey(operator.add)
-        expected_output = [[("a", 2), ("b", 2)], [("", 4)], [(1, 2), (2, 2), (3 ,1)]]
+        expected_output = [[("a", 2), ("b", 2)], [("", 4)], [(1, 2), (2, 2), (3, 1)]]
         output = self._run_stream(test_input, test_func, expected_output)
         for result in (output, expected_output):
             self._sort_result_based_on_key(result)
@@ -216,13 +216,13 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_mapValues_batch(self):
         """Basic operation test for DStream.mapValues with batch deserializer."""
-        test_input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)], 
+        test_input = [[("a", 2), ("b", 2), ("c", 1), ("d", 1)],
                       [("", 4), (1, 1), (2, 2), (3, 3)],
                       [(1, 1), (2, 1), (3, 1), (4, 1)]]
 
         def test_func(dstream):
             return dstream.mapValues(lambda x: x + 10)
-        expected_output = [[("a", 12), ("b", 12), ("c", 11), ("d", 11)], 
+        expected_output = [[("a", 12), ("b", 12), ("c", 11), ("d", 11)],
                            [("", 14), (1, 11), (2, 12), (3, 13)],
                            [(1, 11), (2, 11), (3, 11), (4, 11)]]
         output = self._run_stream(test_input, test_func, expected_output)
@@ -250,7 +250,8 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
         def test_func(dstream):
             return dstream.flatMapValues(lambda x: (x, x + 10))
-        expected_output = [[("a", 2), ("a", 12), ("b", 2), ("b", 12), ("c", 1), ("c", 11), ("d", 1), ("d", 11)],
+        expected_output = [[("a", 2), ("a", 12), ("b", 2), ("b", 12),
+                            ("c", 1), ("c", 11), ("d", 1), ("d", 11)],
                            [("", 4), ("", 14), (1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11)],
                            [(1, 1), (1, 11), (2, 1), (2, 11), (3, 1), (3, 11), (4, 1), (4, 11)]]
         output = self._run_stream(test_input, test_func, expected_output)
@@ -344,7 +345,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_groupByKey_batch(self):
         """Basic operation test for DStream.groupByKey with batch deserializer."""
-        test_input = [[(1, 1), (2, 1), (3, 1), (4, 1)], 
+        test_input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
                       [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
                       [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
 
@@ -361,7 +362,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_groupByKey_unbatch(self):
         """Basic operation test for DStream.groupByKey with unbatch deserializer."""
-        test_input = [[(1, 1), (2, 1), (3, 1)], 
+        test_input = [[(1, 1), (2, 1), (3, 1)],
                       [(1, 1), (1, 1), ("", 1)],
                       [("a", 1), ("a", 1), ("b", 1)]]
 
@@ -378,12 +379,13 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_combineByKey_batch(self):
         """Basic operation test for DStream.combineByKey with batch deserializer."""
-        test_input = [[(1, 1), (2, 1), (3, 1), (4, 1)], 
-                      [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)], 
+        test_input = [[(1, 1), (2, 1), (3, 1), (4, 1)],
+                      [(1, 1), (1, 1), (1, 1), (2, 1), (2, 1), (3, 1)],
                       [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1), ("", 1)]]
 
         def test_func(dstream):
-            def add(a, b): return a + str(b)
+            def add(a, b):
+                return a + str(b)
             return dstream.combineByKey(str, add, add)
         expected_output = [[(1, "1"), (2, "1"), (3, "1"), (4, "1")],
                            [(1, "111"), (2, "11"), (3, "1")],
@@ -395,10 +397,13 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
 
     def test_combineByKey_unbatch(self):
         """Basic operation test for DStream.combineByKey with unbatch deserializer."""
-        test_input = [[(1, 1), (2, 1), (3, 1)], [(1, 1), (1, 1), ("", 1)], [("a", 1),  ("a", 1), ("b", 1)]]
+        test_input = [[(1, 1), (2, 1), (3, 1)],
+                      [(1, 1), (1, 1), ("", 1)],
+                      [("a", 1),  ("a", 1), ("b", 1)]]
 
         def test_func(dstream):
-            def add(a, b): return a + str(b)
+            def add(a, b):
+                return a + str(b)
             return dstream.combineByKey(str, add, add)
         expected_output = [[(1, "1"), (2, "1"), (3, "1")],
                            [(1, "11"), ("", "1")],
@@ -445,7 +450,7 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
             # Check time out.
             if (current_time - start_time) > self.timeout:
                 break
-            # StreamingContext.awaitTermination is not used to wait because 
+            # StreamingContext.awaitTermination is not used to wait because
             # if py4j server is called every 50 milliseconds, it gets an error.
             time.sleep(0.05)
             # Check if the output is the same length of expected output.

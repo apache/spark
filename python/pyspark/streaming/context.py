@@ -33,8 +33,8 @@ class StreamingContext(object):
     """
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-        environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
-        gateway=None, sparkContext=None, duration=None):
+                 environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
+                 gateway=None, sparkContext=None, duration=None):
         """
         Create a new StreamingContext. At least the master and app name and duration
         should be set, either through the named parameters here or through C{conf}.
@@ -63,8 +63,8 @@ class StreamingContext(object):
         if sparkContext is None:
             # Create the Python Sparkcontext
             self._sc = SparkContext(master=master, appName=appName, sparkHome=sparkHome,
-                            pyFiles=pyFiles, environment=environment, batchSize=batchSize,
-                            serializer=serializer, conf=conf, gateway=gateway)
+                                    pyFiles=pyFiles, environment=environment, batchSize=batchSize,
+                                    serializer=serializer, conf=conf, gateway=gateway)
         else:
             self._sc = sparkContext
 
@@ -107,7 +107,7 @@ class StreamingContext(object):
         else:
             self._jssc.awaitTermination(timeout)
 
-    #TODO: add storageLevel
+    # TODO: add storageLevel
     def socketTextStream(self, hostname, port):
         """
         Create an input from TCP source hostname:port. Data is received using

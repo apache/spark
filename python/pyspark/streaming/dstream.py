@@ -75,7 +75,8 @@ class DStream(object):
         """
         Return a new DStream containing only the elements that satisfy predicate.
         """
-        def func(iterator): return ifilter(f, iterator)
+        def func(iterator):
+            return ifilter(f, iterator)
         return self.mapPartitions(func)
 
     def flatMap(self, f, preservesPartitioning=False):
@@ -130,7 +131,7 @@ class DStream(object):
         return self.combineByKey(lambda x: x, func, func, numPartitions)
 
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
-                      numPartitions = None):
+                     numPartitions=None):
         """
         Count the number of elements for each key, and return the result to the
         master as a dictionary
@@ -153,7 +154,7 @@ class DStream(object):
         def _mergeCombiners(iterator):
             combiners = {}
             for (k, v) in iterator:
-                if not k in combiners:
+                if k not in combiners:
                     combiners[k] = v
                 else:
                     combiners[k] = mergeCombiners(combiners[k], v)
@@ -188,7 +189,7 @@ class DStream(object):
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.ctx) as st:
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
-                                                      id(partitionFunc))
+                                                          id(partitionFunc))
             jdstream = self.ctx._jvm.PythonPairwiseDStream(keyed._jdstream.dstream(),
                                                            partitioner).asJavaDStream()
         dstream = DStream(jdstream, self._ssc, BatchedSerializer(outputSerializer))

@@ -54,7 +54,6 @@ def msDurationToString(ms):
     >>> msDurationToString(3600000)
     '1.00 h'
     """
-    #TODO: add doctest
     second = 1000
     minute = 60 * second
     hour = 60 * minute
