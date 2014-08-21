@@ -8,13 +8,14 @@ if __name__ == "__main__":
         print >> sys.stderr, "Usage: wordcount <directory>"
         exit(-1)
 
-    ssc = StreamingContext(appName="PythonStreamingWordCount", duration=Seconds(1))
+    ssc = StreamingContext(appName="PythonStreamingWordCount",
+                           duration=Seconds(1))
 
     lines = ssc.textFileStream(sys.argv[1])
-    words = lines.flatMap(lambda line: line.split(" "))
-    mapped_words = words.map(lambda x: (x, 1))
-    count = mapped_words.reduceByKey(lambda a, b: a+b)
-    count.pyprint()
+    counts = lines.flatMap(lambda line: line.split(" "))\
+                  .map(lambda x: (x, 1))\
+                  .reduceByKey(lambda a, b: a+b)
+    counts.pyprint()
 
     ssc.start()
     ssc.awaitTermination()
