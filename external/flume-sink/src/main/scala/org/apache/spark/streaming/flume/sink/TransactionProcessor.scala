@@ -91,7 +91,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
   }
 
   private[flume] def shutdown(): Unit = {
-    logInfo("Shutting down transaction processor")
+    logDebug("Shutting down transaction processor")
     stopped = true
   }
 
