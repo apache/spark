@@ -17,20 +17,20 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
- * Chebyshev distance implementation
- *
- * @see http://en.wikipedia.org/wiki/Chebyshev_distance
+ * A Manhattan distance metric implementation
+ * this metric is calculated by summing the absolute values of the difference
+ * between each coordinate, optionally with weights.
  */
-class ChebyshevDistanceMeasure extends DistanceMeasure {
+@Experimental
+class WeightedManhattanDistanceMetric(val weight: Vector) extends WeightedDistanceMetric {
 
   /**
    * Calculates the distance metric between 2 points
-   *
-   * Find the maximum difference between each coordinate
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
@@ -38,8 +38,10 @@ class ChebyshevDistanceMeasure extends DistanceMeasure {
    */
   override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
-    v1.toArray.zip(v2.toArray).map {
-      case(elm1: Double, elm2: Double) => math.abs(elm1 - elm2)
-    }.max
+
+    val sum = v1.toArray.zip(v2.toArray).zip(weight.toArray).map {
+      case((elm1:Double, elm2:Double), w: Double) => w * Math.abs(elm1 - elm2)
+    }.sum
+    Math.sqrt(sum)
   }
 }

@@ -14,19 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.annotation.Experimental
-
-/**
- * :: Experimental ::
- * This trait is used for objects which can determine a distance metric between two points
- *
- * 1. d(x, y) >= 0 (non-negative)
- * 2. d(x, y) = 0 if and only if x = y (identity of indiscernibles)
- * 3. d(x, y) = d(y, x) (symmetry)
- * 4. d(x, z) <= d(x, y) + d(y, z) (triangle inequality)
- */
-@Experimental
-trait DistanceMetric extends DistanceMeasure
+class SquaredEuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+  override def distanceFactory = new SquaredEuclideanDistanceMeasure
+}

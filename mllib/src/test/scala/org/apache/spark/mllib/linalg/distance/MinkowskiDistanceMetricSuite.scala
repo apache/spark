@@ -17,6 +17,21 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-class ManhattanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceFactory = new ManhattanDistanceMeasure()
+import org.apache.spark.mllib.linalg.Vectors
+
+class MinkowskiDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory: DistanceMetric = new MinkowskiDistanceMetric(4.0)
+
+  test("the distance between the vectors should be expected") {
+    val vector1 = Vectors.dense(0, 0, 0)
+    val vector2 = Vectors.dense(2, 3, 4)
+
+    val measure = new MinkowskiDistanceMetric
+    assert(measure.exponent == 3.0, s"the default value for exponent should be ${measure.exponent}")
+
+    val distance = measure(vector1, vector2)
+    val roundDistance = GeneralDistanceMetricSuite.roundValue(distance, 10)
+    val expected = 4.6260650092
+    assert(roundDistance == expected, s"the distance between the vectors should be ${expected}")
+  }
 }

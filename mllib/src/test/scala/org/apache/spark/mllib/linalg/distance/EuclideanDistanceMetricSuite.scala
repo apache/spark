@@ -17,31 +17,6 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
-
-/**
- * :: Experimental ::
- * Abstract implementation of DistanceMeasure with support for weights.
- */
-@Experimental
-private[distance]
-trait WeightedDistanceMeasure extends DistanceMeasure {
-
-  val weight: Vector
-
-  /**
-   * Validates the size of the weight vector additionally
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @throws IllegalArgumentException
-   */
-  override def validate(v1: Vector, v2: Vector) {
-    super.validate(v1, v2)
-
-    if(!weight.size.equals(v1.size)) {
-      throw new IllegalArgumentException("The size of weight vector is not equal to target vectors")
-    }
-  }
+class EuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory = new EuclideanDistanceMetric()
 }

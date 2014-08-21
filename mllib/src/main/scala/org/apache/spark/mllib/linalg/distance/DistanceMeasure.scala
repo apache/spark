@@ -24,13 +24,13 @@ import scala.language.implicitConversions
 
 /**
  * :: Experimental ::
- * This trait is used for objects which can determine a distance metric between two points
+ * This trait is used for objects which can determine a distance between two points
  *
  * Classes which inherits from this class are required to satisfy the follow condition:
  * 1. d(x, y) >= 0 (non-negative)
  * 2. d(x, y) = 0 if and only if x = y (identity of indiscernibles)
  * 3. d(x, y) = d(y, x) (symmetry)
- * 4. d(x, z) <= d(x, y) + d(y, z) (triangle inequality)
+ * However, classes which inherits aren't require to satisfy triangle inequality
  */
 @Experimental
 trait DistanceMeasure extends Function2[Vector, Vector, Double] with Serializable {

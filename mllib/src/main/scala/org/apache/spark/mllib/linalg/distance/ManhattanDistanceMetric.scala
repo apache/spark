@@ -17,6 +17,26 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-class EuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceFactory = new EuclideanDistanceMeasure()
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.Vector
+
+/**
+ * :: Experimental ::
+ * Manhattan distance (L1 distance) implementation
+ */
+@Experimental
+class ManhattanDistanceMetric extends DistanceMetric {
+
+  /**
+   * Calculates the distance metric between 2 points
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return a scalar doubles of the distance
+   */
+  override def apply(v1: Vector, v2: Vector): Double = {
+    validate(v1, v2)
+    (v1.toBreeze - v2.toBreeze).norm(1)
+  }
+
 }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.{ShouldMatchers, FunSuite}
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.scalatest.{FunSuite, ShouldMatchers}
 
 private[distance]
 trait GeneralDistanceMetricSuite extends FunSuite with ShouldMatchers {
@@ -44,7 +44,7 @@ trait GeneralDistanceMetricSuite extends FunSuite with ShouldMatchers {
       Vectors.dense(-0.9, 0.8, 0.7, -0.6, 0.5, -0.4)
     )
 
-    val distanceMatrix = GeneralDistanceMeasureSuite.calcDistanceMatrix(distanceFactory, vectors)
+    val distanceMatrix = GeneralDistanceMetricSuite.calcDistanceMatrix(distanceFactory, vectors)
 
     assert(distanceMatrix(0, 0) <= distanceMatrix(0, 1))
     assert(distanceMatrix(0, 1) <= distanceMatrix(0, 2))
@@ -63,5 +63,23 @@ trait GeneralDistanceMetricSuite extends FunSuite with ShouldMatchers {
 
     // symmetry
     assert(SymmetryValidator(distanceMatrix), "not symmetry")
+
+    //  triangle inequality
+    assert(TriangleInequalityValidator(distanceMatrix), "not triangle inequality")
+  }
+}
+
+private[distance]
+object GeneralDistanceMetricSuite {
+
+  def calcDistanceMatrix(distanceMeasure: DistanceMeasure, vectors: Array[Vector]): Matrix = {
+    val denseMatrixElements = for (v1 <- vectors; v2 <- vectors) yield {
+      distanceMeasure(v2, v1)
+    }
+    Matrices.dense(vectors.size, vectors.size, denseMatrixElements)
+  }
+
+  def roundValue(value: Double, numDigits: Int): Double = {
+    Math.round(value * Math.pow(10, numDigits)) / Math.pow(10, numDigits)
   }
 }

@@ -22,26 +22,26 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
- * A Manhattan distance metric implementation
- * this metric is calculated by summing the absolute values of the difference
- * between each coordinate, optionally with weights.
+ * Abstract implementation of DistanceMeasure with support for weights.
  */
 @Experimental
-class WeightedManhattanDistanceMeasure(val weight: Vector) extends WeightedDistanceMeasure {
+private[distance]
+trait WeightedDistanceMetric extends DistanceMetric{
+
+  val weight: Vector
 
   /**
-   * Calculates the distance metric between 2 points
+   * Validates the size of the weight vector additionally
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
+   * @throws IllegalArgumentException
    */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
+  override def validate(v1: Vector, v2: Vector) {
+    super.validate(v1, v2)
 
-    val sum = v1.toArray.zip(v2.toArray).zip(weight.toArray).map {
-      case((elm1:Double, elm2:Double), w: Double) => w * Math.abs(elm1 - elm2)
-    }.sum
-    Math.sqrt(sum)
+    if(!weight.size.equals(v1.size)) {
+      throw new IllegalArgumentException("The size of weight vector is not equal to target vectors")
+    }
   }
 }

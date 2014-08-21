@@ -17,15 +17,31 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.Vector
 
-class ChebyshevDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
-  override def distanceFactory: DistanceMeasure = new ChebyshevDistanceMeasure
+/**
+ * :: Experimental ::
+ * Chebyshev distance implementation
+ *
+ * @see http://en.wikipedia.org/wiki/Chebyshev_distance
+ */
+@Experimental
+class ChebyshevDistanceMetric extends DistanceMetric {
 
-  test("the distance should be 6") {
-    val vector1 = Vectors.dense(1, -1, 1, -1)
-    val vector2 = Vectors.dense(2, -3, 4, 5)
-    val distance = distanceFactory(vector1, vector2)
-    assert(distance == 6, s"the distance should be 6, but ${distance}")
+  /**
+   * Calculates the distance metric between 2 points
+   *
+   * Find the maximum difference between each coordinate
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return a scalar doubles of the distance
+   */
+  override def apply(v1: Vector, v2: Vector): Double = {
+    validate(v1, v2)
+    v1.toArray.zip(v2.toArray).map {
+      case(elm1: Double, elm2: Double) => math.abs(elm1 - elm2)
+    }.max
   }
 }

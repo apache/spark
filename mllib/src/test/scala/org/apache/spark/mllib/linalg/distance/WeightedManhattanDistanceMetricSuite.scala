@@ -14,8 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.linalg.distance
 
-class SquaredEuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
-  override def distanceFactory = new SquaredEuclideanDistanceMetric
+import org.apache.spark.mllib.linalg.Vectors
+
+class WeightedManhattanDistanceMetricSuite extends GeneralDistanceMetricSuite {
+
+  override def distanceFactory: DistanceMetric = {
+    val weights = Vectors.dense(0.1, 0.1, 0.1, 0.1, 0.1, 0.1) // size should be 6
+    new WeightedEuclideanDistanceMetric(weights)
+  }
 }

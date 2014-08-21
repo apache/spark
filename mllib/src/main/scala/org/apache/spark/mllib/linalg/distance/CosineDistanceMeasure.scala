@@ -18,31 +18,39 @@
 package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg
 
 /**
  * :: Experimental ::
- * Euclidean distance implementation
+ * Cosine distance implementation
+ *
+ * @see http://en.wikipedia.org/wiki/Cosine_similarity
  */
 @Experimental
-class EuclideanDistanceMeasure extends DistanceMeasure {
+class CosineDistanceMeasure extends DistanceMeasure {
 
   /**
-   * Calculates the euclidean distance (L2 distance) between 2 points
-   *
-   * D(x, y) = sqrt(sum((x1-y1)^2 + (x2-y2)^2 + ... + (xn-yn)^2))
-   * or
-   * D(x, y) = sqrt((x-y) dot (x-y))
+   * Calculates the cosine distance between 2 points
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def apply(v1: Vector, v2: Vector): Double = {
+  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
     validate(v1, v2)
 
-    val diffVector = (v1.toBreeze - v2.toBreeze)
-    val squaredDistance = diffVector.dot(diffVector)
-    Math.sqrt(squaredDistance)
+    val dotProduct = v1.toBreeze.dot(v2.toBreeze)
+    var denominator = v1.toBreeze.norm(2) * v2.toBreeze.norm(2)
+
+    // correct for floating-point rounding errors
+    if (denominator < dotProduct) {
+      denominator = dotProduct
+    }
+
+    // correct for zero-vector corner case
+    if (denominator == 0 && dotProduct == 0) {
+      return 0.0
+    }
+    1.0 - (dotProduct / denominator)
   }
 }

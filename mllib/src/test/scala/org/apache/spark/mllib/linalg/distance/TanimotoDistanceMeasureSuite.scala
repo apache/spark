@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.Vectors
 
-class TanimotoDistanceMetricSuite extends GeneralDistanceMetricSuite {
+class TanimotoDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
   override def distanceFactory = new TanimotoDistanceMetric
 
   test("calculate tanimoto distance for 2-dimension") {

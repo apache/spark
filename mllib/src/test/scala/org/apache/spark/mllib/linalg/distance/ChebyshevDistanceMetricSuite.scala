@@ -19,10 +19,13 @@ package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.mllib.linalg.Vectors
 
-class WeightedEuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+class ChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
+  override def distanceFactory: DistanceMetric = new ChebyshevDistanceMetric
 
-  override def distanceFactory: DistanceMeasure = {
-    val weights = Vectors.dense(0.1, 0.1, 0.1, 0.1, 0.1, 0.1) // size should be 6
-    new WeightedEuclideanDistanceMeasure(weights)
+  test("the distance should be 6") {
+    val vector1 = Vectors.dense(1, -1, 1, -1)
+    val vector2 = Vectors.dense(2, -3, 4, 5)
+    val distance = distanceFactory(vector1, vector2)
+    assert(distance == 6, s"the distance should be 6, but ${distance}")
   }
 }

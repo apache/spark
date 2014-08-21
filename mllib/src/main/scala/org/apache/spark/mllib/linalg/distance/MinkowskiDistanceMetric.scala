@@ -18,26 +18,35 @@
 package org.apache.spark.mllib.linalg.distance
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg
+import org.apache.spark.mllib.linalg.Vector
 
 /**
- * :: Experimental ::
- * Squared euclidean distance implementation
+ * Minkowski distance Implementation
+ * The Minkowski distance is a metric on Euclidean space
+ * which can be considered as a generalization of both
+ * the Euclidean distance and the Manhattan distance.
+ *
+ * @see http://en.wikipedia.org/wiki/Minkowski_distance
  */
 @Experimental
-class SquaredEuclideanDistanceMetric extends DistanceMetric {
+class MinkowskiDistanceMetric(val exponent: Double) extends DistanceMetric {
+
+  // the default value for exponent
+  def this() = this(3.0)
 
   /**
-   * Calculates the squared euclidean distance between 2 points
+   * Calculates the distance metric between 2 points
    *
    * @param v1 a Vector defining a multidimensional point in some feature space
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
+  override def apply(v1: Vector, v2: Vector): Double = {
     validate(v1, v2)
 
-    val diffVector = (v1.toBreeze - v2.toBreeze)
-    diffVector.dot(diffVector)
+    val sum = v1.toArray.zip(v2.toArray).map {
+      case(elm1: Double, elm2: Double) => Math.pow(Math.abs(elm1 - elm2), exponent)
+    }.sum
+    Math.pow(sum, 1 / exponent)
   }
 }

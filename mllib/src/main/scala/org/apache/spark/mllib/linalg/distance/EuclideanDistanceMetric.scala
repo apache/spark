@@ -17,12 +17,32 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.Vector
 
-class WeightedManhattanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+/**
+ * :: Experimental ::
+ * Euclidean distance implementation
+ */
+@Experimental
+class EuclideanDistanceMetric extends DistanceMetric {
 
-  override def distanceFactory: DistanceMeasure = {
-    val weights = Vectors.dense(0.1, 0.1, 0.1, 0.1, 0.1, 0.1) // size should be 6
-    new WeightedEuclideanDistanceMeasure(weights)
+  /**
+   * Calculates the euclidean distance (L2 distance) between 2 points
+   *
+   * D(x, y) = sqrt(sum((x1-y1)^2 + (x2-y2)^2 + ... + (xn-yn)^2))
+   * or
+   * D(x, y) = sqrt((x-y) dot (x-y))
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return a scalar doubles of the distance
+   */
+  override def apply(v1: Vector, v2: Vector): Double = {
+    validate(v1, v2)
+
+    val diffVector = (v1.toBreeze - v2.toBreeze)
+    val squaredDistance = diffVector.dot(diffVector)
+    Math.sqrt(squaredDistance)
   }
 }

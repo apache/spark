@@ -17,26 +17,26 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.Vectors
 
-/**
- * :: Experimental ::
- * Manhattan distance (L1 distance) implementation
- */
-@Experimental
-class ManhattanDistanceMeasure extends DistanceMeasure {
+class CosineDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+  override def distanceFactory = new CosineDistanceMeasure
 
-  /**
-   * Calculates the distance metric between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-    (v1.toBreeze - v2.toBreeze).norm(1)
+  test("concreate distance check") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val distance = distanceFactory(vector1, vector2)
+
+    val coefficient = 100000
+    Math.floor(distance * coefficient) / coefficient should be(0.01613)
   }
 
+  test("two vectors have the same magnitude") {
+    val vector1 = Vectors.dense(1.0, 1.0)
+    val vector2 = Vectors.dense(2.0, 2.0)
+    val distance = distanceFactory(vector1, vector2)
+
+    val coefficient = 100000
+    Math.floor(distance * coefficient) / coefficient should be(0.0)
+  }
 }
