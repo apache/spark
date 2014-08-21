@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{sum, Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -60,26 +59,5 @@ class TanimotoDistanceMetric extends DistanceMetric {
       0.0
     }
     distance
-  }
-
-  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
-    val calcSquaredSum = (vector: Vector) => vector.toBreeze.map(x => x * x).reduce(_ + _).apply(0)
-    val dotProductElements = v1.toBreeze.:*(v2.toBreeze)
-    val dotProduct = sum(dotProductElements)
-    var denominator = (calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct)
-
-    // correct for floating-point round-off: distance >= 0
-    if (denominator < dotProduct) {
-      denominator = dotProduct
-    }
-
-    if (denominator <= 0) {
-      return dotProductElements.map(elm => 0.0)
-    }
-    dotProductElements.map(elm => elm / denominator)
-  }
-
-  override def vectorToDistance(breezeVector: BV[Double]): Double = {
-    1.0 - sum(breezeVector)
   }
 }
