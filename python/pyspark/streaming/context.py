@@ -147,7 +147,7 @@ class StreamingContext(object):
             test_rdd = self._sc.parallelize(test_input, numSlices)
             test_rdds.append(test_rdd._jrdd)
             test_rdd_deserializers.append(test_rdd._jrdd_deserializer)
-        # All deserializer has to be the same.
+        # All deserializers have to be the same.
         # TODO: add deserializer validation
         jtest_rdds = ListConverter().convert(test_rdds, SparkContext._gateway._gateway_client)
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
