@@ -25,18 +25,20 @@ class CosineDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
   test("concreate distance check") {
     val vector1 = Vectors.dense(1.0, 2.0)
     val vector2 = Vectors.dense(3.0, 4.0)
-    val distance = distanceFactory(vector1, vector2)
 
-    val coefficient = 100000
-    Math.floor(distance * coefficient) / coefficient should be(0.01613)
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.016130089
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
   }
 
   test("two vectors have the same magnitude") {
     val vector1 = Vectors.dense(1.0, 1.0)
     val vector2 = Vectors.dense(2.0, 2.0)
-    val distance = distanceFactory(vector1, vector2)
 
-    val coefficient = 100000
-    Math.floor(distance * coefficient) / coefficient should be(0.0)
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.0
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
   }
 }

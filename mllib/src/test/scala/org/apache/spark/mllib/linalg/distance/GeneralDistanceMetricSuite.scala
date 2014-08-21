@@ -81,10 +81,6 @@ object GeneralDistanceMetricSuite {
     Matrices.dense(vectors.size, vectors.size, denseMatrixElements)
   }
 
-  def roundValue(value: Double, numDigits: Int): Double = {
-    Math.round(value * Math.pow(10, numDigits)) / Math.pow(10, numDigits)
-  }
-
   def isNearlyEqual(value: Double, expected: Double): Boolean = {
     Math.abs(value - expected) < EPSILON
   }
