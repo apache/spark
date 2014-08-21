@@ -239,13 +239,13 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <!-- <dependencies> -->
-      <!--   <dependency> -->
-      <!--     <groupId>org.apache.spark</groupId> -->
-      <!--     <artifactId>spark-repl_${scala.binary.version}</artifactId> -->
-      <!--     <version>${project.version}</version> -->
-      <!--   </dependency> -->
-      <!-- </dependencies> -->
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-repl_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
     </profile>
     <profile>
       <id>deb</id>

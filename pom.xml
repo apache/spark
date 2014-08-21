@@ -1285,7 +1285,7 @@
         <!-- <module>external/zeromq</module> -->
         <!-- <module>external/kafka</module> -->
         <module>examples</module>
-        <!-- <module>repl</module> -->
+        <module>repl</module>
       </modules>
     </profile>
   </profiles>
