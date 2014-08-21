@@ -35,6 +35,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
+import org.eclipse.jetty.server.session.{HashSessionManager, SessionHandler}
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -99,6 +100,8 @@ private[spark] object JettyUtils extends Logging {
     val holder = new ServletHolder(servlet)
     contextHandler.setContextPath(prefixedPath)
     contextHandler.addServlet(holder, "/")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     contextHandler
   }
 
@@ -134,6 +137,8 @@ private[spark] object JettyUtils extends Logging {
     }
     contextHandler.setContextPath(path)
     contextHandler.addServlet(holder, "/")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     contextHandler
   }
 
