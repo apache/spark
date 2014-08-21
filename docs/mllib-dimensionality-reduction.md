@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on tall-and-skinny matrices.
+MLlib provides support for dimensionality reduction on the RowMatrix class.
 
 ## Singular value decomposition (SVD)
 
@@ -39,8 +39,7 @@ If we keep the top $k$ singular values, then the dimensions of the resulting low
 * `$\Sigma$`: `$k \times k$`,
 * `$V$`: `$n \times k$`.
  
-MLlib provides SVD functionality to row-oriented matrices that have only a few columns,
-say, less than $1000$, but many rows, i.e., *tall-and-skinny* matrices.
+MLlib provides SVD functionality to row-oriented matrices, provided in the RowMatrix class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -119,14 +118,13 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
+MLlib supports PCA for matrices stored in row-oriented format.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
-The number of columns should be small, e.g, less than 1000.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
@@ -144,7 +142,7 @@ val projected: RowMatrix = mat.multiply(pc)
 
 <div data-lang="java" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
 
