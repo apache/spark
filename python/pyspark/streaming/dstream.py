@@ -397,6 +397,10 @@ class DStream(object):
         Store data in a DStream to result to verify the result in test case
         """
         def get_output(rdd, time):
+            """
+            Closure to get element in RDD in the DStream.
+            This closure is called by py4j callback server.
+            """
             collected = rdd.collect()
             result.append(collected)
 
