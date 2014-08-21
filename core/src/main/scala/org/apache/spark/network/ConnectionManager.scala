@@ -281,7 +281,7 @@ private[spark] class ConnectionManager(
 
         while(!keyInterestChangeRequests.isEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue()
-
+          val remoteAddress = key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress
           try {
             if (key.isValid) {
               val connection = connectionsByKey.getOrElse(key, null)
@@ -306,19 +306,16 @@ private[spark] class ConnectionManager(
                 }
               }
             } else {
-              logInfo("Key not valid ? key was related to " +
-                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress)
+              logInfo("Key not valid ?")
               throw new CancelledKeyException()
             }
           } catch {
             case e: CancelledKeyException => {
-              logInfo("key already cancelled ? key was related to " +
-                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress, e)
+              logInfo("key already cancelled ? key was related to " + remoteAddress, e)
               triggerForceCloseByException(key, e)
             }
             case e: Exception => {
-              logError("Exception processing key. key was related to " +
-                key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress, e)
+              logError("Exception processing key. key was related to " + remoteAddress, e)
               triggerForceCloseByException(key, e)
             }
           }
@@ -339,6 +336,7 @@ private[spark] class ConnectionManager(
           val selectedKeys = selector.selectedKeys().iterator()
           while (selectedKeys.hasNext) {
             val key = selectedKeys.next
+            val remoteAddress = key.channel.asInstanceOf[SocketChannel].socket.getRemoteSocketAddress
             selectedKeys.remove()
             try {
               if (key.isValid) {
@@ -355,18 +353,18 @@ private[spark] class ConnectionManager(
                   triggerWrite(key)
                 }
               } else {
-                logInfo("Key not valid ? " + key)
+                logInfo("Key not valid ? ")
                 throw new CancelledKeyException()
               }
             } catch {
               // weird, but we saw this happening - even though key.isValid was true,
               // key.isAcceptable would throw CancelledKeyException.
               case e: CancelledKeyException => {
-                logInfo("key already cancelled ? " + key, e)
+                logInfo("key already cancelled ? key was related to " + remoteAddress, e)
                 triggerForceCloseByException(key, e)
               }
               case e: Exception => {
-                logError("Exception processing key " + key, e)
+                logError("Exception processing key. key was related to " + remoteAddress, e)
                 triggerForceCloseByException(key, e)
               }
             }
