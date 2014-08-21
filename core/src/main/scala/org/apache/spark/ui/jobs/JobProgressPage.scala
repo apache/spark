@@ -91,8 +91,11 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         activeStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
         completedStagesTable.toNodeSeq ++
-        <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
-        failedStagesTable.toNodeSeq
+        <h4 id="failed">Failed Stages ({failedStages.size})</h4> ++
+        failedStagesTable.toNodeSeq ++
+        <h4 id="debugger">Visual Debugger</h4> ++
+        <div id="visual-debugger"><div id="canvas-svg"></div></div> ++
+        <script src={UIUtils.prependBaseUri("/static/initialize-visual-debugger.js")}></script>
 
       UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", parent.headerTabs, parent)
     }

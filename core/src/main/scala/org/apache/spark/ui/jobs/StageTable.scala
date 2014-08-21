@@ -115,7 +115,7 @@ private[ui] class StageTableBase(
           }
           // scalastyle:on
         }}
-        <pre>{s.details}</pre>
+        <pre class="stage-detail-text" data-stage-id={"%d".format(s.stageId)}>{s.details}</pre>
       </div>
     }
 
