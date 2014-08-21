@@ -324,37 +324,7 @@ private[spark] class ConnectionManager(
           }
         }
 
-        val selectedKeysCount =
-          try {
-            selector.select()
-          } catch {
-            // Explicitly only dealing with CancelledKeyException here since other exceptions
-            // should be dealt with differently.
-            case e: CancelledKeyException => {
-              // Some keys within the selectors list are invalid/closed. clear them.
-              val allKeys = selector.keys().iterator()
-
-              while (allKeys.hasNext) {
-                val key = allKeys.next()
-                try {
-                  if (! key.isValid) {
-                    logInfo("Key not valid ? " + key)
-                    throw new CancelledKeyException()
-                  }
-                } catch {
-                  case e: CancelledKeyException => {
-                    logInfo("key already cancelled ? " + key, e)
-                    triggerForceCloseByException(key, e)
-                  }
-                  case e: Exception => {
-                    logError("Exception processing key " + key, e)
-                    triggerForceCloseByException(key, e)
-                  }
-                }
-              }
-            }
-            0
-          }
+        val selectedKeysCount = selector.select()
 
         if (selectedKeysCount == 0) {
           logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size +
