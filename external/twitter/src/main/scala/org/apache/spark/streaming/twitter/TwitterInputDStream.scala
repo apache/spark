@@ -40,12 +40,12 @@ import scala.language.higherKinds
 */
 private[streaming]
 class TwitterInputDStream(
-                           @transient ssc_ : StreamingContext,
-                           twitterAuth: Option[Authorization],
-                           keywordFilters: Seq[String],
-                           storageLevel: StorageLevel,
-                           geoLocationFilter: Seq[Seq[Double]]
-                           ) extends ReceiverInputDStream[Status](ssc_)  {
+    @transient ssc_ : StreamingContext,
+    twitterAuth: Option[Authorization],
+    keywordFilters: Seq[String],
+    storageLevel: StorageLevel,
+    geoLocationFilter: Seq[Seq[Double]]
+  ) extends ReceiverInputDStream[Status](ssc_)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
@@ -60,11 +60,11 @@ class TwitterInputDStream(
 
 private[streaming]
 class TwitterReceiver(
-                       twitterAuth: Authorization,
-                       keywordFilters: Seq[String],
-                       storageLevel: StorageLevel,
-                       geoLocationFilter: Seq[Seq[Double]]
-                       ) extends Receiver[Status](storageLevel) with Logging {
+    twitterAuth: Authorization,
+    keywordFilters: Seq[String],
+    storageLevel: StorageLevel,
+    geoLocationFilter: Seq[Seq[Double]]
+  ) extends Receiver[Status](storageLevel) with Logging {
 
   var twitterStream: TwitterStream = _
 
@@ -98,8 +98,7 @@ class TwitterReceiver(
     if(keywordFilters.size + geoLocationFilter.size > 0){
       println(query.toString())
       twitterStream.filter(query)
-    }
-    else {
+    } else {
       twitterStream.sample()
     }
     logInfo("Twitter receiver started")
