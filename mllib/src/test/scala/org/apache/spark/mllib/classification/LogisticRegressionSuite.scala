@@ -23,7 +23,7 @@ import scala.collection.JavaConversions._
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -66,6 +66,26 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     ((input.length - numOffPredictions).toDouble / input.length) should be > 0.83
   }
 
+  test("logistic output") {
+    val EPS = 1E-8
+
+    def prob2score(prob: Double) = -math.log(1.0 / prob - 1)
+
+    val expectedProbs = Seq(0.0, 0.05, 0.2, 0.5, 0.8, 1.0)
+
+    val model = new LogisticRegressionModel(Vectors.dense(Array(-1.0, 1.0)), 1.0) // first feature should cancel intercept
+    val testData = expectedProbs.map {prob =>
+      val score = prob2score(prob)
+      Vectors.dense(Array(1.0, score))
+    }.toSeq
+
+    val probs = model.predictProbability(sc.parallelize(testData)).collect().toSeq
+
+    probs.zip(expectedProbs).foreach { case (actual: Double, expected: Double) =>
+      Math.abs(actual - expected) should be < EPS
+    }
+  }
+
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
   test("logistic regression with SGD") {
     val nPoints = 10000
@@ -88,10 +108,10 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
@@ -117,10 +137,10 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("logistic regression with initial weights with SGD") {
@@ -149,10 +169,10 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("logistic regression with initial weights with LBFGS") {
@@ -180,10 +200,10 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("numerical stability of scaling features using logistic regression with LBFGS") {
@@ -257,7 +277,7 @@ class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
     // greater than 1MB and hence Spark would throw an error.
     val model = LogisticRegressionWithSGD.train(points, 2)
 
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictScore(points.map(_.features))
 
     // Materialize the RDDs
     predictions.count()
@@ -276,7 +296,7 @@ class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
     lr.optimizer.setNumIterations(2)
     val model = lr.run(points)
 
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictScore(points.map(_.features))
 
     // Materialize the RDDs
     predictions.count()

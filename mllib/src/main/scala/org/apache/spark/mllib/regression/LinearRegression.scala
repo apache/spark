@@ -32,7 +32,7 @@ class LinearRegressionModel (
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
 
-  override protected def predictPoint(
+  override protected def computeScore(
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {

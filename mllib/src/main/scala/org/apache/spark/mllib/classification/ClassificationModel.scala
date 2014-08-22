@@ -30,15 +30,15 @@ import org.apache.spark.rdd.RDD
 @Experimental
 trait ClassificationModel extends Serializable {
   /**
-   * Predict values for the given data set using the model trained.
+   * Classify the given data set using the model trained.
    *
-   * @param testData RDD representing data points to be predicted
+   * @param testData RDD representing data points to be classified
    * @return an RDD[Double] where each entry contains the corresponding prediction
    */
-  def predict(testData: RDD[Vector]): RDD[Double]
+  def predictClass(testData: RDD[Vector]): RDD[Double]
 
   /**
-   * Predict values for a single data point using the model trained.
+   * Classify a single data point using the model trained.
    *
    * @param testData array representing a single data point
    * @return predicted category from the trained model

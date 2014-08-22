@@ -56,10 +56,10 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     val validationRDD = sc.parallelize(validationData, 2).cache()
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictScore(row.features)), validationData)
   }
 
   // Test if we can correctly learn Y = 10*X1 + 10*X2
@@ -83,10 +83,10 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     val validationRDD = sc.parallelize(validationData, 2).cache()
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictScore(row.features)), validationData)
   }
 
   // Test if we can correctly learn Y = 10*X1 + 10*X10000
@@ -118,11 +118,11 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
 
       // Test prediction on RDD.
     validatePrediction(
-      model.predict(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
+      model.predictScore(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
 
     // Test prediction on Array.
     validatePrediction(
-      sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
+      sparseValidationData.map(row => model.predictScore(row.features)), sparseValidationData)
   }
 }
 
@@ -138,6 +138,6 @@ class LinearRegressionClusterSuite extends FunSuite with LocalClusterSparkContex
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
     val model = LinearRegressionWithSGD.train(points, 2)
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictScore(points.map(_.features))
   }
 }

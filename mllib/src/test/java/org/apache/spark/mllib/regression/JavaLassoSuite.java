@@ -46,7 +46,7 @@ public class JavaLassoSuite implements Serializable {
   int validatePrediction(List<LabeledPoint> validationData, LassoModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
-      Double prediction = model.predict(point.features());
+      Double prediction = model.predictScore(point.features());
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       if (Math.abs(prediction - point.label()) <= 0.5) {
         numAccurate++;
