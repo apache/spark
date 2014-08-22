@@ -1777,10 +1777,26 @@ class RDD(object):
         else:
             return self.getNumPartitions()
 
-    # TODO: `lookup` is disabled because we can't make direct comparisons based
-    # on the key; we need to compare the hash of the key to the hash of the
-    # keys in the pairs.  This could be an expensive operation, since those
-    # hashes aren't retained.
+    def lookup(self, key):
+        """
+        Return the list of values in the RDD for key `key`. This operation
+        is done efficiently if the RDD has a known partitioner by only
+        searching the partition that the key maps to.
+
+        >>> l = range(1000)
+        >>> rdd = sc.parallelize(zip(l, l), 10)
+        >>> rdd.lookup(42)  # slow
+        [42]
+        >>> sorted = rdd.sortByKey()
+        >>> sorted.lookup(42)  # fast
+        [42]
+        """
+        values = self.filter(lambda (k, v): k == key).values()
+
+        if hasattr(self, "_partitionFunc"):
+            return self.ctx.runJob(self, lambda x: x, [self._partitionFunc(key)], False)
+
+        return values.collect()
 
 
 class PipelinedRDD(RDD):
