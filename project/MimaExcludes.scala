@@ -62,6 +62,17 @@ object MimaExcludes {
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
+            // Serializer interface change. See SPARK-3045.
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.DeserializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.Serializer"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializerInstance")
+          )++
+          Seq(
             // Renamed putValues -> putArray + putIterator
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.putValues"),
@@ -117,6 +128,14 @@ object MimaExcludes {
           ) ++
           Seq( // new Vector methods in MLlib (binary compatible assuming users do not implement Vector)
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.copy")
+          ) ++
+          Seq( // synthetic methods generated in LabeledPoint
+            ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.regression.LabeledPoint$"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.regression.LabeledPoint.apply"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LabeledPoint.toString")
+          ) ++
+          Seq ( // Scala 2.11 compatibility fix
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.<init>$default$2")
           )
         case v if v.startsWith("1.0") =>
           Seq(

@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.storage
 
-import io.netty.channel.ChannelInitializer
-import io.netty.channel.socket.SocketChannel
-import io.netty.handler.codec.{DelimiterBasedFrameDecoder, Delimiters}
-import io.netty.handler.codec.string.StringDecoder
+import java.nio.ByteBuffer
 
-class FileServerChannelInitializer(pResolver: PathResolver)
-  extends ChannelInitializer[SocketChannel] {
 
-  override def initChannel(channel: SocketChannel): Unit = {
-    channel.pipeline
-      .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter : _*))
-      .addLast("stringDecoder", new StringDecoder)
-      .addLast("handler", new FileServerHandler(pResolver))
-  }
+/**
+ * An interface for providing data for blocks.
+ *
+ * getBlockData returns either a FileSegment (for zero-copy send), or a ByteBuffer.
+ *
+ * Aside from unit tests, [[BlockManager]] is the main class that implements this.
+ */
+private[spark] trait BlockDataProvider {
+  def getBlockData(blockId: String): Either[FileSegment, ByteBuffer]
 }

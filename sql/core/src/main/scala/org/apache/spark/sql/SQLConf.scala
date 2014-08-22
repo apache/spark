@@ -32,6 +32,10 @@ private[spark] object SQLConf {
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
+  val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
+
+  // This is only used for the thriftserver
+  val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -50,6 +54,7 @@ private[spark] object SQLConf {
 trait SQLConf {
   import SQLConf._
 
+  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
