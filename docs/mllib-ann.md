@@ -1,12 +1,12 @@
 layout: global
-title: Linear Methods - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
+title: Artificial Neural Networks - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Artificial Neural Networks
 ---
 
 * Table of contents
 {:toc}
 
-### Introduction
+# Introduction
 
 This document describes the MLLIB's Artificial Neural Network (ANN) implementation.
 
@@ -20,7 +20,7 @@ In addition, there is a demo/test available:
 * 'TestParallelANN.scala': tests parallel ANNs for various functions
 * 'TestParallelANNgraphics.scala': graphical output for 'TestParallelANN.scala'
 
-### Architecture and Notation
+# Architecture and Notation
 
 The file ParallelANN.scala implements a three-layer ANN with the following architecture:
 
@@ -86,7 +86,7 @@ Where g is the sigmod function
 
 and `$\beta` the learning rate.
 
-### Gradient descent
+# Gradient descent
 
 Currently, the MLLIB uses gradent descent for training. This means that the weights V_{ij} and W_{jk} are updated by adding a fraction of the gradient to V_{ij} and W_{jk} of the following function:
 
@@ -112,7 +112,7 @@ and
 
 where `$\epsilon$` is the step size.
 
-### Implementation Details
+# Implementation Details
 
 ## The 'ParallelANN' class
 
@@ -159,7 +159,7 @@ The 'GeneralizedSteepestDescendAlgorithm' class is based on the 'GeneralizedLine
 
 Science has provided many different strategies to train an ANN. Hence it is important that the optimising functions in MLLIB's ANN are interchangeable. The ParallelANN class has a variable 'optimizer', which is currently set to a 'GradientDescent' optimising class. The 'GradientDescent' optimising class implements a stochastic gradient descent method, and is also used for other optimisation technologies in Spark. It is expected that other optimising functions will be defined for Spark, and these can be stored in the 'optimizer' variable.
 
-### Demo/test
+# Demo/test
 
 Usage of MLLIB's ANN is demonstrated through the 'TestParallelANN' demo program. The program generates three functions:
 
@@ -169,7 +169,7 @@ Usage of MLLIB's ANN is demonstrated through the 'TestParallelANN' demo program.
 
 When the program is given the Java argument 'graph', it will show a graphical representation of the target function and the latest values.
 
-### Conclusion
+# Conclusion
 
 The 'ParallelANN' class implements a Artificial Neural Network (ANN), using the stochastic gradient descent method. It takes as input an RDD of input/output values of type 'Vector', and returns an object of type 'ParallelANNModel' containing the parameters of the trained ANN. The 'ParallelANNModel' object can also be used to calculate results after training.
 
