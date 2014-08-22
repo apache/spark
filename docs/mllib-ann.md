@@ -1,14 +1,12 @@
+---
 layout: global
 title: Artificial Neural Networks - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Artificial Neural Networks
 ---
 
-* Table of contents
-{:toc}
-
 # Introduction
 
-This document describes the MLLIB's Artificial Neural Network (ANN) implementation.
+This document describes the MLlib's Artificial Neural Network (ANN) implementation.
 
 The implementation currently consist of the following files:
 
@@ -88,7 +86,7 @@ and `$\beta` the learning rate.
 
 # Gradient descent
 
-Currently, the MLLIB uses gradent descent for training. This means that the weights V_{ij} and W_{jk} are updated by adding a fraction of the gradient to V_{ij} and W_{jk} of the following function:
+Currently, the MLlib uses gradent descent for training. This means that the weights V_{ij} and W_{jk} are updated by adding a fraction of the gradient to V_{ij} and W_{jk} of the following function:
 
 `$E = \sum_{k=0}^{K-1} (O_k - Y_k )^2$`
 
@@ -157,11 +155,11 @@ The 'GeneralizedSteepestDescendAlgorithm' class is based on the 'GeneralizedLine
 
 ## Training
 
-Science has provided many different strategies to train an ANN. Hence it is important that the optimising functions in MLLIB's ANN are interchangeable. The ParallelANN class has a variable 'optimizer', which is currently set to a 'GradientDescent' optimising class. The 'GradientDescent' optimising class implements a stochastic gradient descent method, and is also used for other optimisation technologies in Spark. It is expected that other optimising functions will be defined for Spark, and these can be stored in the 'optimizer' variable.
+Science has provided many different strategies to train an ANN. Hence it is important that the optimising functions in MLlib's ANN are interchangeable. The ParallelANN class has a variable 'optimizer', which is currently set to a 'GradientDescent' optimising class. The 'GradientDescent' optimising class implements a stochastic gradient descent method, and is also used for other optimisation technologies in Spark. It is expected that other optimising functions will be defined for Spark, and these can be stored in the 'optimizer' variable.
 
 # Demo/test
 
-Usage of MLLIB's ANN is demonstrated through the 'TestParallelANN' demo program. The program generates three functions:
+Usage of MLlib's ANN is demonstrated through the 'TestParallelANN' demo program. The program generates three functions:
 
 * f2d: x -> y
 * f3d: (x,y) -> z
