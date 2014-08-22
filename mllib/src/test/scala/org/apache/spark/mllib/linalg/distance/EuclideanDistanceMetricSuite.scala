@@ -21,6 +21,16 @@ import org.apache.spark.mllib.linalg.Vectors
 
 class EuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
   override def distanceFactory = new EuclideanDistanceMetric()
+
+  test("the distance should be 6.7082039325") {
+    val v1 = Vectors.dense(2, 3)
+    val v2 = Vectors.dense(5, 9)
+
+    val distance = distanceFactory(v1, v2)
+    val expected = 6.7082039325
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
 }
 
 class WeightedEuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {

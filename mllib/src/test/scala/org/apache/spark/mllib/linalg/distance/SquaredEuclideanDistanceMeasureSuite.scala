@@ -16,6 +16,17 @@
  */
 package org.apache.spark.mllib.linalg.distance
 
+import org.apache.spark.mllib.linalg.Vectors
+
 class SquaredEuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
   override def distanceFactory = new SquaredEuclideanDistanceMeasure
+
+  test("the distance should be 45.0") {
+    val v1 = Vectors.dense(2, 3)
+    val v2 = Vectors.dense(5, 9)
+
+    val distance = distanceFactory(v1, v2)
+    val expected = 45.0
+    assert(distance == 45.0, s"the distance should be nearly equal to 45.0, but ${distance}")
+  }
 }
