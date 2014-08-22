@@ -1,8 +1,9 @@
 SCALA_VERSION := 2.10
-JAR_NAME := sparkr-assembly-0.1.jar
+SPARKR_VERSION := 0.1
+JAR_NAME := sparkr-assembly-$(SPARKR_VERSION).jar
 SBT_TARGET_NAME := target/scala-$(SCALA_VERSION)/$(JAR_NAME)
 
-MAVEN_JAR_NAME := sparkr-0.1-assembly.jar
+MAVEN_JAR_NAME := sparkr-$(SPARKR_VERSION)-assembly.jar
 MAVEN_TARGET_NAME := target/$(MAVEN_JAR_NAME)
 
 SCALA_SOURCE_DIR := src/main/scala/edu/berkeley/cs/amplab/sparkr
@@ -25,11 +26,11 @@ all: $(TARGET_NAME)
 
 $(SBT_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
 	./sbt/sbt assembly
-	cp $(SBT_TARGET_NAME) ../inst/
+	cp -f $(SBT_TARGET_NAME) ../inst/
 
 $(MAVEN_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
 	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -DskipTests clean package shade:shade
-	cp $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
+	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
 
 clean:
 	$(BUILD_TOOL) clean
@@ -37,6 +38,6 @@ clean:
 	rm -rf project/target
 	rm -rf project/project
 	-rm sbt/sbt-launch-*.jar
-	rm ../inst/$(JAR_NAME)
+	rm -f ../inst/$(JAR_NAME)
 
 .PHONY: all clean
