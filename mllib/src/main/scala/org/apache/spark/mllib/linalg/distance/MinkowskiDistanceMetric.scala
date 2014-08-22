@@ -17,10 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{Vector => BV}
-import breeze.linalg.sum
+import breeze.linalg.{sum, Vector => BV}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Minkowski distance Implementation
@@ -36,11 +34,8 @@ class MinkowskiDistanceMetric(val exponent: Double) extends DistanceMetric {
   // the default value for exponent
   def this() = this(3.0)
 
-  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
-    (v1.toBreeze - v2.toBreeze).map(diff => Math.pow(Math.abs(diff), exponent))
-  }
-
-  override def vectorToDistance(breezeVector: BV[Double]): Double = {
-    Math.pow(sum(breezeVector), 1 / exponent)
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val d = (v1 - v2).map(diff => Math.pow(Math.abs(diff), exponent))
+    Math.pow(sum(d), 1 / exponent)
   }
 }

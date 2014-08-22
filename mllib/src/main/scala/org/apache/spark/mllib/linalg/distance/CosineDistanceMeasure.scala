@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{DenseVector => DBV, Vector => BV}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg
 
 /**
  * :: Experimental ::
@@ -36,11 +36,9 @@ class CosineDistanceMeasure extends DistanceMeasure {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return a scalar doubles of the distance
    */
-  override def apply(v1: linalg.Vector, v2: linalg.Vector): Double = {
-    validate(v1, v2)
-
-    val dotProduct = v1.toBreeze.dot(v2.toBreeze)
-    var denominator = v1.toBreeze.norm(2) * v2.toBreeze.norm(2)
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val dotProduct = v1 dot v2
+    var denominator = v1.norm(2) * v2.norm(2)
 
     // correct for floating-point rounding errors
     if (denominator < dotProduct) {

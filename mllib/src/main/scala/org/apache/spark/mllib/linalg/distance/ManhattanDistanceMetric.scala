@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{Vector => BV}
-import breeze.linalg.sum
+import breeze.linalg.{sum, DenseVector => DBV, Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -31,12 +30,8 @@ import org.apache.spark.mllib.linalg.Vector
 @Experimental
 class ManhattanDistanceMetric extends DistanceMetric {
 
-  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
-    (v1.toBreeze - v2.toBreeze).map(Math.abs)
-  }
-
-  override def vectorToDistance(breezeVector: BV[Double]): Double = {
-    sum(breezeVector)
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    sum((v1 - v2).map(Math.abs))
   }
 }
 
@@ -47,5 +42,11 @@ class ManhattanDistanceMetric extends DistanceMetric {
  * between each coordinate, optionally with weights.
  */
 @Experimental
-class WeightedManhattanDistanceMetric(val weights: Vector)
-    extends ManhattanDistanceMetric with Weighted
+class WeightedManhattanDistanceMetric(val weights: BV[Double]) extends DistanceMetric {
+
+  def this(v: Vector) = this(v.toBreeze)
+
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    weights dot ((v1 - v2).map(Math.abs))
+  }
+}

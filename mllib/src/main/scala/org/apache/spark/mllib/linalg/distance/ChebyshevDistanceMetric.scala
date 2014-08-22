@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{Vector => BV}
-import breeze.linalg.max
+import breeze.linalg.{max, DenseVector => DBV, Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -31,12 +30,18 @@ import org.apache.spark.mllib.linalg.Vector
 @Experimental
 class ChebyshevDistanceMetric extends DistanceMetric {
 
-  override def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
-    (v1.toBreeze - v2.toBreeze).map(Math.abs)
-  }
-
-  override def vectorToDistance(breezeVector: BV[Double]): Double = {
-    max(breezeVector)
+  /**
+   * Calculates a Chebyshev distance metric
+   *
+   * d(a, b) := max{|a(i) - b(i)|} for all i
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return Double a distance
+   */
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val diff = (v1 - v2).map(Math.abs)
+    max(diff)
   }
 }
 
@@ -45,5 +50,22 @@ class ChebyshevDistanceMetric extends DistanceMetric {
  * A weighted Chebyshev distance implementation
  */
 @Experimental
-class WeightedChebyshevDistanceMetric(val weights: Vector)
-    extends ChebyshevDistanceMetric with Weighted
+class WeightedChebyshevDistanceMetric(val weights: BV[Double]) extends DistanceMetric {
+
+  def this(v: Vector) = this(v.toBreeze)
+
+  /**
+   * Calculates a weighted Chebyshev distance metric
+   *
+   * d(a, b) := max{w(i) * |a(i) - b(i)|} for all i
+   * where w is a weighted vector
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return Double a distance
+   */
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val diff = (v1 - v2).map(Math.abs).:*(weights)
+    max(diff)
+  }
+}

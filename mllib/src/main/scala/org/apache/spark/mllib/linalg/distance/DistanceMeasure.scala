@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{Vector => BV}
+import breeze.linalg.{DenseVector => DBV, Vector => BV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -34,62 +34,14 @@ import scala.language.implicitConversions
  * However, classes which inherits aren't require to satisfy triangle inequality
  */
 @Experimental
-trait DistanceMeasure extends Function2[Vector, Vector, Double] with Serializable {
+trait DistanceMeasure extends Function2[BV[Double], BV[Double], Double] with Serializable {
 
-  /**
-   * Calculates the distance metric between 2 points
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return a scalar doubles of the distance
-   */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-    val breezeVector = mixVectors(v1, v2)
-    vectorToDistance(dotProductWithWeight(breezeVector))
-  }
+  // each measure/metric defines for itself:
+  override def apply(v1: BV[Double], v2: BV[Double]): Double
 
-  /**
-   * Mix the target vectors
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @return Breeze Vector[Doube]
-   */
-  def mixVectors(v1: Vector, v2: Vector): BV[Double] = {
-    throw new NotImplementedError("mixVectors is not implemented")
-  }
-
-  /**
-   * Calculates dot product with the weighted vector
-   *
-   * @param breezeVector Breeze Vector[Double]
-   * @return Breeze Vector[Double]
-   */
-  def dotProductWithWeight(breezeVector: BV[Double]): BV[Double] = breezeVector
-
-  /**
-   * Converts the mixed vector to distance
-   *
-   * @param breezeVector Breeze Vector[Double]
-   * @return Double
-   */
-  def vectorToDistance(breezeVector: BV[Double]): Double = {
-    throw new NotImplementedError("vectorToDistance is not implemented")
-  }
-
-  /**
-   * Checks whether both of the length are same
-   *
-   * @param v1 a Vector defining a multidimensional point in some feature space
-   * @param v2 a Vector defining a multidimensional point in some feature space
-   * @throws IllegalArgumentException if the size of both vector is not same
-   */
-  def validate(v1: Vector, v2: Vector) {
-    if(!v1.size.equals(v2.size)) {
-      throw new IllegalArgumentException("The number of features must be same")
-    }
-  }
+  // a catch-all overloading of "()" for spark vectors
+  // can also be overridden on a per-class basis, if it is advantageous
+  def apply(v1: Vector, v2: Vector): Double = this(v1.toBreeze, v2.toBreeze)
 }
 
 
@@ -104,6 +56,10 @@ object DistanceMeasure {
   implicit def functionToDistanceMeasure(f: (Vector, Vector) => Double): DistanceMeasure = new
       DistanceMeasure {
     override def apply(v1: Vector, v2: Vector): Double = f(v1, v2)
+
+    override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+      throw new NotImplementedError(s"This DistanceMeasure is made by a lambda function")
+    }
   }
 }
 

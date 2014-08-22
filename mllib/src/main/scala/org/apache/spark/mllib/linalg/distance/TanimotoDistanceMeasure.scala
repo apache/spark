@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{DenseVector => DBV, Vector => BV}
 import breeze.linalg.sum
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
@@ -40,12 +41,10 @@ class TanimotoDistanceMeasure extends DistanceMeasure {
    * @param v2 a Vector defining a multidimensional point in some feature space
    * @return 0 for perfect match, > 0 for greater distance
    */
-  override def apply(v1: Vector, v2: Vector): Double = {
-    validate(v1, v2)
-
-    val calcSquaredSum = (vector: Vector) => sum(vector.toBreeze.map(x => x * x))
-    val dotProduct = v1.toBreeze.dot(v2.toBreeze)
-    var denominator = (calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct)
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val calcSquaredSum = (bv: BV[Double]) => sum(bv.map(x => x * x))
+    val dotProduct = v1 dot v2
+    var denominator = calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct
 
     // correct for floating-point round-off: distance >= 0
     if(denominator < dotProduct) {
