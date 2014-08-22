@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
-import breeze.linalg.{DenseVector => DBV, Vector => BV}
+import breeze.linalg.{DenseVector => DBV, Vector => BV, sum}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
@@ -63,3 +63,88 @@ object DistanceMeasure {
   }
 }
 
+/**
+ * :: Experimental ::
+ * Squared euclidean distance implementation
+ */
+@Experimental
+class SquaredEuclideanDistanceMeasure extends DistanceMeasure {
+
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val d = v1 - v2
+    d dot d
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Cosine distance implementation
+ *
+ * @see http://en.wikipedia.org/wiki/Cosine_similarity
+ */
+@Experimental
+class CosineDistanceMeasure extends DistanceMeasure {
+
+  /**
+   * Calculates the cosine distance between 2 points
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return a scalar doubles of the distance
+   */
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val dotProduct = v1 dot v2
+    var denominator = v1.norm(2) * v2.norm(2)
+
+    // correct for floating-point rounding errors
+    if (denominator < dotProduct) {
+      denominator = dotProduct
+    }
+
+    // correct for zero-vector corner case
+    if (denominator == 0 && dotProduct == 0) {
+      return 0.0
+    }
+    1.0 - (dotProduct / denominator)
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Tanimoto distance implementation
+ *
+ * @see http://en.wikipedia.org/wiki/Jaccard_index
+ */
+@Experimental
+class TanimotoDistanceMeasure extends DistanceMeasure {
+
+  /**
+   * Calculates the tanimoto distance between 2 points
+   *
+   * The coefficient (a measure of similarity) is: Td(a, b) = a.b / (|a|^2 + |b|^2 - a.b)
+   * The distance d(a,b) = 1 - T(a,b)
+   *
+   * @param v1 a Vector defining a multidimensional point in some feature space
+   * @param v2 a Vector defining a multidimensional point in some feature space
+   * @return 0 for perfect match, > 0 for greater distance
+   */
+  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
+    val calcSquaredSum = (bv: BV[Double]) => sum(bv.map(x => x * x))
+    val dotProduct = v1 dot v2
+    var denominator = calcSquaredSum(v1) + calcSquaredSum(v2) - dotProduct
+
+    // correct for floating-point round-off: distance >= 0
+    if(denominator < dotProduct) {
+      denominator = dotProduct
+    }
+
+    // denominator == 0 only when dot(a,a) == dot(b,b) == dot(a,b) == 0
+    val distance = if(denominator > 0) {
+      1 - dotProduct / denominator
+    }
+    else {
+      0.0
+    }
+    distance
+  }
+}

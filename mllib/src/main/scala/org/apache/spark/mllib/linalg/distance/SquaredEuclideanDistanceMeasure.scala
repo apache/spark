@@ -18,17 +18,4 @@
 package org.apache.spark.mllib.linalg.distance
 
 import breeze.linalg.{Vector => BV}
-import org.apache.spark.annotation.Experimental
 
-/**
- * :: Experimental ::
- * Squared euclidean distance implementation
- */
-@Experimental
-class SquaredEuclideanDistanceMeasure extends DistanceMeasure {
-
-  override def apply(v1: BV[Double], v2: BV[Double]): Double = {
-    val d = v1 - v2
-    d dot d
-  }
-}
