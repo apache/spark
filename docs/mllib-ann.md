@@ -147,7 +147,7 @@ All information needed for the ANN is stored in the 'ParallelANNModel' class. Th
 
 The information in 'parallelANNModel' consist of the weights, the number of input, hidden and output nodes, as well as two functions 'predictPoint' and 'predictPointV'.
 
-The 'predictPoint' function is used to calculate a single output value as a 'Double'. If the output of the ANN actually is a vector, it returns just the first element of the vector, that is O_{0}. The output of the 'predictPointV' is of type 'Vector', and returns all K output values.
+The 'predictPoint' function is used to calculate a single output value as a 'Double'. If the output of the ANN actually is a vector, it returns just the first element of the vector, that is O_0. The output of the 'predictPointV' is of type 'Vector', and returns all K output values.
 
 ## The 'GeneralizedSteepestDescentAlgorithm' class
 
