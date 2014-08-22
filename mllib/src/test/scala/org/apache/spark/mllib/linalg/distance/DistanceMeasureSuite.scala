@@ -33,3 +33,73 @@ class DistanceMeasureSuite extends FunSuite {
   }
 }
 
+class SquaredEuclideanDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+  override def distanceFactory = new SquaredEuclideanDistanceMeasure
+
+  test("the distance should be 45.0") {
+    val v1 = Vectors.dense(2, 3)
+    val v2 = Vectors.dense(5, 9)
+
+    val distance = distanceFactory(v1, v2)
+    val expected = 45.0
+    assert(distance == 45.0, s"the distance should be nearly equal to 45.0, but ${distance}")
+  }
+}
+
+class CosineDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+  override def distanceFactory = new CosineDistanceMeasure
+
+  test("concreate distance check") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.016130089
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
+
+  test("two vectors have the same magnitude") {
+    val vector1 = Vectors.dense(1.0, 1.0)
+    val vector2 = Vectors.dense(2.0, 2.0)
+
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.0
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
+}
+
+class TanimotoDistanceMeasureSuite extends GeneralDistanceMeasureSuite {
+  override def distanceFactory = new TanimotoDistanceMeasure
+
+  test("calculate tanimoto distance for 2-dimension") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.42105263
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
+
+  test("calculate tanimoto distance for 3-dimension") {
+    val vector1 = Vectors.dense(1.0, 2.0, 3.0)
+    val vector2 = Vectors.dense(4.0, 5.0, 6.0)
+
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 0.45762711
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
+
+  test("calculate tanimoto distance for 6-dimension") {
+    val vector1 = Vectors.dense(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+    val vector2 = Vectors.dense(-1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+
+    val distance = distanceFactory(vector1, vector2)
+    val expected = 1.3333333333
+    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
+    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
+  }
+}
