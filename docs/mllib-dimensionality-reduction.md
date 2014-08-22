@@ -137,7 +137,7 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for matrices stored in row-oriented format.
+MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
