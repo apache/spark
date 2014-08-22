@@ -82,7 +82,7 @@ Where g is the sigmod function
 
 `$g(t) = \frac{e^{\beta t} }{1+e^{\beta t}}$`
 
-and `$\beta` the learning rate.
+and `$\beta$` defines the steepness of g.
 
 # Gradient descent
 
@@ -124,14 +124,14 @@ The 'ParallelANN' class has the following constructors:
 * `ParallelANN( noInput, noHidden )`: as 'ParallelANN()', but allows specification of number of 'noInput' and 'noHidden'
 * `ParallelANN( noInput, noHidden, noOutput )`: as 'ParallelANN()', but allows specification of 'noInput', 'noHidden' and 'noOutput'
 
-The number of input nodes I is stored in the variable 'noInput', the number of hidden nodes J is stored in 'noHidden' and the number of output nodes K is stored in 'noOutput'. 'beta' contains the value of '$\beta$' for the sigmoid function.
+The number of input nodes I is stored in the variable 'noInput', the number of hidden nodes J is stored in 'noHidden' and the number of output nodes K is stored in 'noOutput'. 'beta' contains the value of `$\beta$` for the sigmoid function.
 
 The parameters 'stepSize', 'numIterations' and 'miniBatchFraction' are of use for the Statistical Gradient Descent function.
 
 In addition, it has a single vector 'weights' corresponding to V_{ij} and W_{jk}. The mapping of V_{ij} and W_{jk} into 'weights' is as follows:
 
-* V_{ij} -> `weights[  i + j*(noInput+1) ]$`
-* W_{jk} -> `weights[ (noInput+1)*noHidden + j + k*(noHidden+1) ]$`
+* V_{ij} -> `weights[  i + j*(noInput+1) ]`
+* W_{jk} -> `weights[ (noInput+1)*noHidden + j + k*(noHidden+1) ]`
 
 The training function carries the name 'train'. It can take various inputs:
 
