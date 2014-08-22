@@ -121,12 +121,13 @@ class LeastSquaresGradient extends Gradient {
 
 /**
  * :: DeveloperApi ::
- * Compute gradient and loss for a M-estimation Huber objective function, as used in robust regression.
- * The Huber M-estimator corresponds to a probability distribution for the errors which is normal in the centre but like
- * a double exponential distribution in the tails (Hogg 1979: 109).
+ * Compute gradient and loss for Huber objective function, as used in robust regression.
+ * The Huber M-estimator corresponds to a probability distribution for the errors which is normal
+ * in the centre but like a double exponential distribution in the tails (Hogg 1979: 109).
  *              L = 1/2 ||A weights-y||^2       if |A weights-y| <= k
  *              L = k |A weights-y| - 1/2 K^2   if |A weights-y| > k
- * where k = 1.345 which produce 95% efficiency when the errors are normal and substantial resistance to outliers otherwise.
+ * where k = 1.345 which produce 95% efficiency when the errors are normal and
+ * substantial resistance to outliers otherwise.
  * See also the documentation for the precise formulation.
  */
 @DeveloperApi
@@ -136,8 +137,13 @@ class HuberRobustGradient extends Gradient {
     val loss = diff * diff
     val gradient = data.copy
     val k = 1.345
-    //Tuning constant is generally picked to give reasonably high efficiency in the normal case.
-    //Smaller values produce more resistance to outliers while at the expense of lower efficiency when the errors are normally distributed.
+
+    /**
+    * Tuning constant is generally picked to give reasonably high efficiency in the normal case.
+    * Smaller values produce more resistance to outliers while at the expense of
+    * lower efficiency when the errors are normally distributed.
+    */
+
     if(diff < -k){
       scal(-k, gradient)
       (gradient, (-k * diff - 1.0 / 2.0 * pow(k, 2)))

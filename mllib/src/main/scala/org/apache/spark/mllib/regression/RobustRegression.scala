@@ -42,11 +42,12 @@ class HuberRobustRegressionModel (
 }
 
 /**
- * Train a Huber M-Estimation Robust regression model with no regularization using Stochastic Gradient Descent.
+ * Train a Huber Robust regression model with no regularization using Stochastic Gradient Descent.
  * This solves the Huber objective function
  *              f(weights) = 1/2 ||A weights-y||^2       if |A weights-y| <= k
  *              f(weights) = k |A weights-y| - 1/2 K^2   if |A weights-y| > k
- * where k = 1.345 which produce 95% efficiency when the errors are normal and substantial resistance to outliers otherwise.
+ * where k = 1.345 which produce 95% efficiency when the errors are normal and
+ * substantial resistance to outliers otherwise.
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
@@ -81,8 +82,8 @@ class HuberRobustRegressionWithSGD private[mllib] (
 object HuberRobustRegressionWithSGD {
 
   /**
-   * Train a HuberRobust Regression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * Train a HuberRobust Regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
    * in gradient descent are initialized using the initial weights provided.
    *
@@ -105,8 +106,8 @@ object HuberRobustRegressionWithSGD {
   }
 
   /**
-   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
    *
    * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
@@ -124,9 +125,9 @@ object HuberRobustRegressionWithSGD {
   }
 
   /**
-   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. We use the entire data set to
-   * compute the true gradient in each iteration.
+   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. We use the entire
+   * data set to compute the true gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
    *              matrix A as well as the corresponding right hand side label y
@@ -142,9 +143,9 @@ object HuberRobustRegressionWithSGD {
   }
 
   /**
-   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
-   * compute the true gradient in each iteration.
+   * Train a HuberRobustRegression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using a step size of 1.0. We use the entire data
+   * set to compute the true gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
    *              matrix A as well as the corresponding right hand side label y
