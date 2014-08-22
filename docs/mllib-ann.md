@@ -1,223 +1,179 @@
----
 layout: global
-title: Artificial Neural Networks - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Artificial Neural Networks
+title: Linear Methods - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 ---
 
-# Introduction
+* Table of contents
+{:toc}
 
-This document describes the MLlib's Artificial Neural Network (ANN) implementation.
+### Introduction
+
+This document describes the MLLIB's Artificial Neural Network (ANN) implementation.
 
 The implementation currently consist of the following files:
 
-* 'ArtificialNeuralNetwork.scala': implements the ANN
-* 'ANNSuite': implements automated tests for the ANN and its gradient
-* 'ANNDemo': a demo that approximates three functions and shows a graphical representation of
-the result
+* 'ParallelANN.scala': implements the ANN
+* 'GeneralizedSteepestDescentAlgorithm.scala': provides an abstract class and model as basis for 'ParallelANN'.
 
-# Summary of usage
+In addition, there is a demo/test available:
 
-The "ArtificialNeuralNetwork" object is used as an interface to the neural network. It is
-called as follows:
+* 'TestParallelANN.scala': tests parallel ANNs for various functions
+* 'TestParallelANNgraphics.scala': graphical output for 'TestParallelANN.scala'
 
-```
-val annModel = ArtificialNeuralNetwork.train(rdd, hiddenLayersTopology, maxNumIterations)
-```
+### Architecture and Notation
 
-where
+The file ParallelANN.scala implements a three-layer ANN with the following architecture:
 
-* `rdd` is an RDD of type (Vector,Vector), the first element containing the input vector and
-the second the associated output vector.
-* `hiddenLayersTopology` is an array of integers (Array[Int]), which contains the number of
-nodes per hidden layer, starting with the layer that takes inputs from the input layer, and
-finishing with the layer that outputs to the output layer. The bias nodes are not counted.
-* `maxNumIterations` is an upper bound to the number of iterations to be performed.
-* `ANNmodel` contains the trained ANN parameters, and can be used to calculated the ANNs
-approximation to arbitrary input values.
 
-The approximations can be calculated as follows:
-
-val v_out = annModel.predict(v_in)
-
-where v_in is either a Vector or an RDD of Vectors, and v_out respectively a Vector or RDD of
-(Vector,Vector) pairs, corresponding to input and output values.
-
-Further details and other calling options will be elaborated upon below.
-
-# Architecture and Notation
-
-The file ArtificialNeuralNetwork.scala implements the ANN. The following picture shows the
-architecture of a 3-layer ANN:
-
-```
  +-------+
  |       |
- | N_0,0 |
+ |  X_0  |
  |       | 
- +-------+        +-------+
-                  |       |
- +-------+        | N_0,1 |       +-------+
- |       |        |       |       |       |
- | N_1,0 |-       +-------+     ->| N_0,2 |
- |       | \ Wij1              /  |       |
- +-------+  --    +-------+  --   +-------+
-               \  |       | / Wjk2
-     :          ->| N_1,1 |-      +-------+
-     :            |       |       |       |
-     :            +-------+       | N_1,2 |
-     :                            |       |
-     :                :           +-------+
-     :                :
-     :                :                :
-     :                : 
-     :                :           +-------+
-     :                :           |       |
-     :                :           |N_K-1,2|
-     :                            |       |
-     :            +-------+       +-------+
-     :            |       |
-     :            |N_J-1,1|
-                  |       |
- +-------+        +-------+
+ +-------+       +-------+
+                 |       |
+ +-------+       |  H_0  |      +-------+
+ |       |       |       |      |       |
+ |  X_1  |-      +-------+    ->|  O_0  |
+ |       | \ Vij             /  |       |
+ +-------+  -    +-------+  -   +-------+
+              \  |       | / Wjk
+     :         ->|  H_1  |-     +-------+
+     :           |       |      |       |
+     :           +-------+      |  O_1  |
+     :                          |       |
+     :               :          +-------+
+     :               :
+     :               :              :
+     :               : 
+     :               :          +-------+
+     :               :          |       |
+     :               :          | O_K-1 |
+     :                          |       |
+     :           +-------+      +-------+
+     :           |       |
+     :           | H_J-1 |
+                 |       |
+ +-------+       +-------+
  |       | 
- |N_I-1,0|  
+ | X_I-1 |  
  |       |
  +-------+
 
- +-------+        +--------+
- |       |        |        |
- |   -1  |        |   -1   |
- |       |        |        |
- +-------+        +--------+
+ +-------+      +--------+
+ |       |      |        |
+ |   -1  |      |   -1   |
+ |       |      |        |
+ +-------+      +--------+
 
-INPUT LAYER      HIDDEN LAYER    OUTPUT LAYER
-```
+INPUT LAYER     HIDDEN LAYER    OUTPUT LAYER
 
-The i-th node in layer l is denoted by N_{i,l}, both i and l starting with 0. The weight
-between node i in layer l-1 and node j in layer l is denoted by Wijl. Layer 0 is the input
-layer, whereas layer L is the output layer.
 
-The ANN also implements bias units. These are nodes that always output the value -1. The bias
-units are in all layers except the output layer. They act similar to other nodes, but do not
-have input.
+The nodes '$X_0$' to '$X_{I-1}$' are the '$I$' input nodes. The nodes '$H_0$' to '$H_{J-1}$' are the '$J$' hidden nodes and the nodes '$O_0$' to '$O_{K-1}$' are the '$K$' output nodes. Between each input node '$X_i$' and hidden node '$H_j$' there is a weight '$V_{ij}$'. Likewise, between each hidden node '$H_j$' and each output node '$O_k$' is a weight '$W_{jk}$'. 
 
-The "hiddenLayersTopology" array is converted into the "topology" array by adding the number of
-input nodes in front, and the number of output nodes at the end.
+The ANN also implements two bias units. These are nodes that always output the value -1. The bias units are in the input and in the hidden layer. They act as normal nodes, except that the bias unit in the hidden layer has no input. The bias units can also be denoted by '$X_I$' and '$H_J$'.
 
-The value of node N_{j,l} is calculated  as follows:
+The value of a hidden node '$H_j$' is calculated as follows:
 
-`$N_{j,l} = g( \sum_{i=0}^{topology_l} W_{i,j,l)*N_{i,l-1} )$`
+'$H_j = g ( \sum_{i=0}^{I} X_i*V_{i,j} )$'
 
-Where g is the sigmoid function
+Likewise, the value of the output node '$O_k$' is calculated as follows:
 
-`$g(t) = \frac{e^{\beta t} }{1+e^{\beta t}}$`
+'$O_k = g( \sum_{j=0}^{J} H_j*W_{j,k} )$'
 
-# LBFGS
+Where '$g$' is the sigmod function
 
-MLlib's ANN implementation uses the LBFGS optimisation algorithm for training. It minimises the
-following error function:
+'$g(t) = \frac{e^{\beta t} }{1+e^{\beta t}}$'
 
-`$E = \sum_{k=0}^{K-1} (N_{k,L} - Y_k)^2$`
+and '$\beta' the learning rate.
 
-where Y_k is the target output given inputs N_{0,0} ... N_{I-1,0}.
+### Gradient descent
 
-# Implementation Details
+Currently, the MLLIB uses gradent descent for training. This means that the weights '$V_{ij}$' and '$W_{jk}$' are updated by adding a fraction of the gradient to '$V_{ij}$' and '$W_{jk}$' of the following function:
 
-## The "ArtificialNeuralNetwork" class
+'$E = \sum_{k=0}^{K-1} (O_k - Y_k )^2$'
 
-The "ArtificialNeuralNetwork" class has the following constructor:
+where '$Y_k$' is the target output given inputs '$X_0$' ... '$X_{I-1}$'
 
-```
-class ArtificialNeuralNetwork private(topology: Array[Int], maxNumIterations: Int,
-convergenceTol: Double)
-```
+Calculations provide that:
 
-* `topology` is an array of integers indicating then number of nodes per layer. For example, if
-"topology" holds (3, 5, 1), it means that there are three input nodes, five nodes in a single
-hidden layer and 1 output node.
-* `maxNumIterations` indicates the number of iterations after which the LBFGS algorithm must
-have stopped.
-* `convergenceTol` indicates the acceptable error, and if reached the LBFGS algorithm will
-stop. A lower value of "convergenceTol" will give a higher precision.
+'$\frac{\partial E}{\partial W_{jk}} = 2 (O_k-Y_k) \cdot H_j \cdot g' \left( \sum_{m=0}^{J} W_{mk} H_m \right)$'
 
-## The "ArtificialNeuralNetwork" object
+and
 
-The object "ArtificialNeuralNetwork" is the interface to the "ArtificialNeuralNetwork" class.
-The object contains the training function. There are four different instances of the training
-function, each for use with different parameters. All take as the first parameter the RDD
-"input", which contains pairs of input and output vectors.
+'$\frac{\partial E}{\partial V_{ij}} = 2 \sum_{k=0}^{K-1} \left( (O_k - Y_k)  \cdot X_i \cdot W_{jk} \cdot g'\left( \sum_{n=0}^{J} W_{nk} H_n \right) g'\left( \sum_{m=0}^{I} V_{mj} X_i \right) \right)$'
 
-* `def train(input: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
-Int): ArtificialNeuralNetworkModel`: starts training with random initial weights, and a default
-convergenceTol=1e-4.
-* `def train(input: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
-maxNumIterations: Int): ArtificialNeuralNetworkModel`: resumes training given an earlier
-calculated model, and a default convergenceTol=1e-4.
-* `def train(input: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
-Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: starts training with random
-initial weights. Allows setting a customised "convergenceTol".
-* `def train(input: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
-maxNumIterations: Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: resumes training
-given an earlier calculated model. Allows setting a customised "convergenceTol".
+The training step consists of the two operations
 
-Notice that the "hiddenLayersTopology" differs from the "topology" array. The
-"hiddenLayersTopology" does not include the number of nodes in the input and output layers. The
-number of nodes in input and output layers is calculated from the first element of the training
-RDD. For example, the "topology" array (3, 5, 7, 1) would have a "hiddenLayersTopology" (5, 7),
-the values 3 and 1 are deduced from the training data. The rationale for having these different
-arrays is that future methods may have a different mapping between input values and input nodes
-or output values and output nodes.
+'$V_{ij} = V_{ij} - \epsilon \frac{\partial E}{\partial V_{ij}}$'
 
-## The "ArtificialNeuralNetworkModel" class
+and
 
-All training functions return the trained ANN using the class "ArtificialNeuralNetworkModel".
-This class has the following function:
+'$W_{jk} = W_{jk} - \epsilon \frac{\partial E}{\partial W_{jk}}$'
 
-* `predict(testData: Vector): Vector` calculates the output vector given input vector
-"testData".
-* `predict(testData: RDD[Vector]): RDD[(Vector,Vector)]` returns (input, output) vector pairs,
-using input vector pairs in "testData".
+where '$\epsilon$' is the step size.
 
-The weights used by "predict" come from the model.
+### Implementation Details
+
+## The 'ParallelANN' class
+
+The 'ParallelANN' class is the main class of the ANN. This class uses a trait 'ANN', which includes functions for calculating the hidden layer ('computeHidden') and calculation of the output ('computeValues'). The output of 'computeHidden' includes the bias node in the hidden layer, such that it does not need to handle the hidden bias node differently.
+
+The 'ParallelANN' class has the following constructors:
+
+'ParallelANN( stepSize, numIterations, miniBatchFraction, noInput, noHidden, noOutput, beta )'
+'ParallelANN()': assumes 'stepSize'=1.0, 'numIterations'=100, 'miniBatchFraction'=1.0, 'noInput'=1, 'noHidden'=5, 'noOutput'=1, 'beta'=1.0.
+'ParallelANN( noHidden )': as 'ParallelANN()', but allows specification of 'noHidden'
+'ParallelANN( noInput, noHidden )': as 'ParallelANN()', but allows specification of number of 'noInput' and 'noHidden'
+'ParallelANN( noInput, noHidden, noOutput )': as 'ParallelANN()', but allows specification of 'noInput', 'noHidden' and 'noOutput'
+
+The number of input nodes '$I$' is stored in the variable 'noInput', the number of hidden nodes '$J$' is stored in 'noHidden' and the number of output nodes '$K$' is stored in 'noOutput'. 'beta' contains the value of '$\beta$' for the sigmoid function.
+
+The parameters 'stepSize', 'numIterations' and 'miniBatchFraction' are of use for the Statistical Gradient Descent function.
+
+In addition, it has a single vector 'weights' corresponding to $V_{ij}$ and $W_{jk}$. The mapping of '$V_{ij}$' and '$W_{jk}$' into 'weights' is as follows:
+
+'$V_{ij}$' -> 'weights[  i + j*(noInput+1) ]$'
+
+'$W_{jk}$' -> 'weights[ (noInput+1)*noHidden + j + k*(noHidden+1) ]$'
+
+The training function carries the name 'train'. It can take various inputs:
+
+'def train( rdd: RDD[(Vector,Vector)] )': starts a complete new training session and generates a new ANN.
+'def train( rdd: RDD[(Vector,Vector)], model: ParallelANNModel )': continues a training session with an existing ANN.
+'def train( rdd: RDD[(Vector,Vector)], weights: Vector )': starts a training session using initial weights as indicated by 'weights'.
+
+The input of the training function is an RDD with (input/output) training pairs, each input and output being stored as a 'Vector'. The training function returns a variable of from class 'ParallelANNModel', as described below.
+
+## The 'ParallelANNModel' class
+
+All information needed for the ANN is stored in the 'ParallelANNModel' class. The training function 'train' from 'ParallelANN' returns an object from the 'ParallelANNModel' class.
+
+The information in 'parallelANNModel' consist of the weights, the number of input, hidden and output nodes, as well as two functions 'predictPoint' and 'predictPointV'.
+
+The 'predictPoint' function is used to calculate a single output value as a 'Double'. If the output of the ANN actually is a vector, it returns just the first element of the vector, that is '$O_{0}$'. The output of the 'predictPointV' is of type 'Vector', and returns all '$K$' output values.
+
+## The 'GeneralizedSteepestDescentAlgorithm' class
+
+The 'GeneralizedSteepestDescendAlgorithm' class is based on the 'GeneralizedLinearAlgorithm' class. The main difference is that the 'GeneralizedSteepestDescentAlgorithm' is based on output values of type 'Vector', whereas 'GeneralizedLinearAlgorithm' is based of output values of type 'Double'. The new class was needed, because an ANN ideally outputs multiple values, hence a 'Vector'.
 
 ## Training
 
-We have chosen to implement the ANN with LBFGS as optimiser function. We compared it with
-Statistical Gradient Descent. LBGFS was much faster, but in accordance is also earlier with
-overfitting.
+Science has provided many different strategies to train an ANN. Hence it is important that the optimising functions in MLLIB's ANN are interchangeable. The ParallelANN class has a variable 'optimizer', which is currently set to a 'GradientDescent' optimising class. The 'GradientDescent' optimising class implements a stochastic gradient descent method, and is also used for other optimisation technologies in Spark. It is expected that other optimising functions will be defined for Spark, and these can be stored in the 'optimizer' variable.
 
-Science has provided many different strategies to train an ANN. Hence it is important that the
-optimising functions in MLlib's ANN are interchangeable. A new optimisation strategy can be
-implemented by creating a new class descending from ArtificialNeuralNetwork, and replacing the
-optimiser, updater and possibly gradient as required.
+### Demo/test
 
-# Demo and tests
-
-Usage of MLlib's ANN is demonstrated through the "ANNDemo" demo program. The program generates
-three functions:
+Usage of MLLIB's ANN is demonstrated through the 'TestParallelANN' demo program. The program generates three functions:
 
 * f2d: x -> y
 * f3d: (x,y) -> z
 * f4d: t -> (x,y,z)
 
-It will calculate approximations of the target functions, and show a graphical representation
-of the training set and the results after applying the testing set.
+When the program is given the Java argument 'graph', it will show a graphical representation of the target function and the latest values.
 
-In addition, there are the following automated tests:
+### Conclusion
 
-* "ANN learns XOR function": tests that the ANN can properly approximate an XOR function.
-* "Gradient of ANN": tests that the output of the ANN gradient is roughly equal to an
-approximated gradient.
+The 'ParallelANN' class implements a Artificial Neural Network (ANN), using the stochastic gradient descent method. It takes as input an RDD of input/output values of type 'Vector', and returns an object of type 'ParallelANNModel' containing the parameters of the trained ANN. The 'ParallelANNModel' object can also be used to calculate results after training.
 
-# Conclusion
+The training of an ANN can be interrupted and later continued, allowing intermediate inspection of the results.
 
-The "ArtificialNeuralNetwork" class implements a Artificial Neural Network (ANN), using the
-LBFGS algorithm. It takes as input an RDD of input/output values of type "(Vector,Vector)", and
-returns an object of type "ArtificialNeuralNetworkModel" containing the parameters of the
-trained ANN. The "ArtificialNeuralNetworkModel" object can also be used to calculate results
-after training.
-
-The training of an ANN can be interrupted and later continued, allowing intermediate inspection
-of the results.
-
-A demo program and tests for ANN are provided.
+A demo program for ANN is provided.
