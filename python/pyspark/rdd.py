@@ -810,23 +810,45 @@ class RDD(object):
 
         return self.mapPartitions(func).fold(zeroValue, combOp)
 
-    def max(self):
+    def max(self, comp=None):
         """
         Find the maximum item in this RDD.
 
-        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
-        43.0
-        """
-        return self.reduce(max)
+        @param comp: A function used to compare two elements, the builtin `cmp`
+                     will be used by default.
 
-    def min(self):
+        >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
+        >>> rdd.max()
+        43.0
+        >>> rdd.max(lambda a, b: cmp(str(a), str(b)))
+        5.0
+        """
+        if comp is not None:
+            func = lambda a, b: a if comp(a, b) >= 0 else b
+        else:
+            func = max
+
+        return self.reduce(func)
+
+    def min(self, comp=None):
         """
         Find the minimum item in this RDD.
 
-        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
-        1.0
+        @param comp: A function used to compare two elements, the builtin `cmp`
+                     will be used by default.
+
+        >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
+        >>> rdd.min()
+        2.0
+        >>> rdd.min(lambda a, b: cmp(str(a), str(b)))
+        10.0
         """
-        return self.reduce(min)
+        if comp is not None:
+            func = lambda a, b: a if comp(a, b) <= 0 else b
+        else:
+            func = min
+
+        return self.reduce(func)
 
     def sum(self):
         """
