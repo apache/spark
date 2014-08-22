@@ -53,13 +53,9 @@ object DistanceMeasure {
    * @param f calculating distance function (Vector, Vector) => Double
    * @return DistanceMeasure
    */
-  implicit def functionToDistanceMeasure(f: (Vector, Vector) => Double): DistanceMeasure = new
+  implicit def functionToDistanceMeasure(f: (BV[Double], BV[Double]) => Double): DistanceMeasure = new
       DistanceMeasure {
-    override def apply(v1: Vector, v2: Vector): Double = f(v1, v2)
-
-    override def apply(v1: BV[Double], v2: BV[Double]): Double = {
-      throw new NotImplementedError(s"This DistanceMeasure is made by a lambda function")
-    }
+    override def apply(v1: BV[Double], v2: BV[Double]): Double = f(v1, v2)
   }
 }
 

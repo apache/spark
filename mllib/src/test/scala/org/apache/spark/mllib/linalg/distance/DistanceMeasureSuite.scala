@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{DenseVector => DBV, Vector => BV}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.scalatest.FunSuite
 
@@ -26,7 +27,7 @@ class DistanceMeasureSuite extends FunSuite {
     val vector1 = Vectors.dense(1, 1, 1, 1, 1)
     val vector2 = Vectors.dense(2, 2, 2, 2, 2)
 
-    val fun = (v1: Vector, v2: Vector) => (v1.toBreeze - v2.toBreeze).norm(1)
+    val fun = (v1: BV[Double], v2: BV[Double]) => (v1 - v2).norm(1)
     val measure: DistanceMeasure = fun
     val distance = measure(vector1, vector2)
     assert(distance == 5)
