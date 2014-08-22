@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
@@ -54,7 +55,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   private val metastorePath = getTempFilePath("metastore")
   private val metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
-  def startThriftServerWithin(timeout: FiniteDuration)(f: Statement => Unit) {
+  def startThriftServerWithin(timeout: FiniteDuration = 30.seconds)(f: Statement => Unit) {
     val serverScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
 
     val command =
@@ -67,29 +68,31 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
          |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$listeningPort
        """.stripMargin.split("\\s+").toSeq
 
-    logInfo(s"Starting Spark SQL Thrift server with command: $command")
-
     val serverStarted = Promise[Unit]()
-    val process = Process(command) run ProcessLogger { line =>
-      logInfo(s"> $line")
+    val buffer = new ArrayBuffer[String]()
+
+    def captureOutput(source: String)(line: String): Unit = {
+      buffer += s"$source> $line"
       if (line.contains("ThriftBinaryCLIService listening on")) {
         serverStarted.success(())
       }
     }
+
+    val process = Process(command).run(
+      ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
     Future {
       val exitValue = process.exitValue()
       logInfo(s"Spark SQL Thrift server process exit value: $exitValue")
     }
 
+    val jdbcUri = s"jdbc:hive2://$listeningHost:$listeningPort/"
+    val user = System.getProperty("user.name")
+
     try {
       Await.result(serverStarted.future, timeout)
 
-      val jdbcUri = s"jdbc:hive2://$listeningHost:$listeningPort/"
-      val user = System.getProperty("user.name")
       val connection = DriverManager.getConnection(jdbcUri, user, "")
-      logInfo(s"Connecting to Thrift server with JDBC URI $jdbcUri and user $user.")
-
       val statement = connection.createStatement()
 
       try {
@@ -99,8 +102,26 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
         connection.close()
       }
     } catch {
-      case cause: TimeoutException =>
-        throw new SparkException(s"Failed to start Hive Thrift server within $timeout", cause)
+      case cause: Exception =>
+        cause match {
+          case _: TimeoutException =>
+            logError(s"Failed to start Hive Thrift server within $timeout", cause)
+          case _ =>
+        }
+        logError(
+          s"""
+             |=====================================
+             |HiveThriftServer2Suite failure output
+             |=====================================
+             |HiveThriftServer2 command line: ${command.mkString(" ")}
+             |JDBC URI: $jdbcUri
+             |User: $user
+             |
+             |${buffer.mkString("\n")}
+             |=========================================
+             |End HiveThriftServer2Suite failure output
+             |=========================================
+           """.stripMargin, cause)
     } finally {
       warehousePath.delete()
       metastorePath.delete()
@@ -109,7 +130,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("Test JDBC query execution") {
-    startThriftServerWithin(5.minutes) { statement =>
+    startThriftServerWithin() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
@@ -129,7 +150,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-3004 regression: result set containing NULL") {
-    startThriftServerWithin(5.minutes) { statement =>
+    startThriftServerWithin() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource(
           "data/files/small_kv_with_null.txt")

@@ -18,6 +18,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
@@ -52,23 +53,25 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
-    logInfo(s"Starting Spark SQL CLI with command: $command")
-
     // AtomicInteger is needed because stderr and stdout of the forked process are handled in
     // different threads.
     val next = new AtomicInteger(0)
     val foundAllExpectedAnswers = Promise.apply[Unit]()
     val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
+    val buffer = new ArrayBuffer[String]()
 
-    // Searching expected output line from both stdout and stderr of the CLI process
-    val process = Process(command) #< queryStream run ProcessLogger { line =>
-      logInfo(s"> $line")
+    def captureOutput(source: String)(line: String): Unit = {
+      buffer += s"$source> $line"
       if (line.contains(expectedAnswers(next.get()))) {
         if (next.incrementAndGet() == expectedAnswers.size) {
           foundAllExpectedAnswers.trySuccess(())
         }
       }
     }
+
+    // Searching expected output line from both stdout and stderr of the CLI process
+    val process = (Process(command) #< queryStream).run(
+      ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
     Future {
       val exitValue = process.exitValue()
@@ -78,16 +81,21 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     try {
       Await.result(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
-      val message =
-        s"""Executed query ${next.get()}:
-           |  ${queries(next.get())}
+      logError(
+        s"""
+           |=======================
+           |CliSuite failure output
+           |=======================
+           |Spark SQL CLI command line: ${command.mkString(" ")}
            |
-           |But failed to capture expected answer within $timeout:
-           |  ${expectedAnswers(next.get())}
+           |Executed query ${next.get()} "${queries(next.get())}",
+           |But failed to capture expected output ${expectedAnswers(next.get())} within $timeout.
            |
-         """.stripMargin
-      logError(message, cause)
-      throw new SparkException(message, cause)
+           |${buffer.mkString("\n")}
+           |===========================
+           |End CliSuite failure output
+           |===========================
+         """.stripMargin, cause)
     } finally {
       warehousePath.delete()
       metastorePath.delete()
@@ -99,7 +107,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
-    runCliWithin(5.minutes)(
+    runCliWithin(1.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
@@ -116,6 +124,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Single command with -e") {
-    runCliWithin(10.seconds, Seq("-e", "SHOW TABLES;"))("" -> "OK")
+    runCliWithin(1.minute, Seq("-e", "SHOW TABLES;"))("" -> "OK")
   }
 }
