@@ -938,7 +938,7 @@ class RDD(object):
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
 
-    def top(self, num):
+    def top(self, num, key=None):
         """
         Get the top N elements from a RDD.
 
@@ -947,20 +947,16 @@ class RDD(object):
         [12]
         >>> sc.parallelize([2, 3, 4, 5, 6], 2).top(2)
         [6, 5]
+        >>> sc.parallelize([10, 4, 2, 12, 3]).top(3, key=str)
+        [4, 3, 2]
         """
         def topIterator(iterator):
-            q = []
-            for k in iterator:
-                if len(q) < num:
-                    heapq.heappush(q, k)
-                else:
-                    heapq.heappushpop(q, k)
-            yield q
+            yield heapq.nlargest(num, iterator, key=key)
 
         def merge(a, b):
-            return next(topIterator(a + b))
+            return heapq.nlargest(num, a + b, key=key)
 
-        return sorted(self.mapPartitions(topIterator).reduce(merge), reverse=True)
+        return self.mapPartitions(topIterator).reduce(merge)
 
     def takeOrdered(self, num, key=None):
         """
