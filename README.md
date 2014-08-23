@@ -24,9 +24,7 @@ To develop SparkR, you can build the scala package and the R package using
 
     ./install-dev.sh
 
-If you wish to try out the package directly from github, you can use `install_github` from `devtools`. Note that you can specify which branch, tag etc to install from. See links below.
-[install_github](http://www.inside-r.org/packages/cran/devtools/docs/install_github)
-[devtools](http://www.inside-r.org/packages/cran/devtools)
+If you wish to try out the package directly from github, you can use [`install_github`](http://www.inside-r.org/packages/cran/devtools/docs/install_github) from [`devtools`](http://www.inside-r.org/packages/cran/devtools). Note that you can specify which branch, tag etc to install from.
 
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
