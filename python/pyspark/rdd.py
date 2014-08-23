@@ -871,7 +871,7 @@ class RDD(object):
         Buckets must be sorted and not contain any duplicates, must be
         at least two elements.
 
-        If `buckets` is a number, it will generates buckets which is
+        If `buckets` is a number, it will generates buckets which are
         evenly spaced between the minimum and maximum of the RDD. For
         example, if the min value is 0 and the max is 100, given buckets
         as 2, the resulting buckets will be [0,50) [50,100]. buckets must
@@ -892,7 +892,7 @@ class RDD(object):
 
         if isinstance(buckets, (int, long)):
             if buckets < 1:
-                raise ValueError("buckets should not less than 1")
+                raise ValueError("number of buckets must be >= 1")
 
             # filter out non-comparable elements
             self = self.filter(lambda x: x is not None and not isnan(x))
