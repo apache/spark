@@ -100,6 +100,10 @@ mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -Dski
 
 Spark SQL supports Thrift JDBC server and CLI. See sql-programming-guide.md for 
 more information about the JDBC server.
+You can use those features by setting `-Phive` when building Spark as follows.
+{% highlight bash %}
+mvn -Phive assembly
+{% endhighlight %}
 
 # Spark Tests in Maven
 
