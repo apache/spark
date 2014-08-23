@@ -42,7 +42,7 @@ If we keep the top $k$ singular values, then the dimensions of the resulting low
 ### Performance
 We assume $n$ is smaller than $m$. The singular values and the right singular vectors are derived
 from the eigenvalues and the eigenvectors of the Gramian matrix $A^T A$. The matrix
-storing the right singular vectors $U$, is computed via matrix multiplication as
+storing the left singular vectors $U$, is computed via matrix multiplication as
 $U = A (V S^{-1})$, if requested by the user via the computeU parameter. 
 The actual method to use is determined automatically based on the computational cost:
 
