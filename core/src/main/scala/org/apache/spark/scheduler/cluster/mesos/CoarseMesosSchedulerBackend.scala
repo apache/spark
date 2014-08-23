@@ -140,13 +140,9 @@ private[spark] class CoarseMesosSchedulerBackend(
       classPathEntries, libraryPathEntries, javaOpts)
 
     val uri = conf.get("spark.executor.uri", null)
-    if ( uri == null ) {
-      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
-        sparkHome).mkString("\"", "\" \"", "\""))
-    } else {
-      val basename = uri.split('/').last.split('.').head
-      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
-        basename).mkString("\"", "\" \"", "\""))
+    mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+      sparkHome).mkString("\"", "\" \"", "\""))
+    if (uri != null) {
       mesosCommand.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     mesosCommand.build()
