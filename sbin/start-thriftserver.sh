@@ -27,6 +27,7 @@ set -o posix
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+CLASS_NOT_FOUND_EXIT_STATUS=1
 
 function usage {
   echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
@@ -75,4 +76,13 @@ while (($#)); do
   esac
 done
 
-exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${THRIFT_SERVER_ARGS[@]}"
+"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${THRIFT_SERVER_ARGS[@]}"
+exit_status=$?
+
+if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
+  echo
+  echo "Failed to load Hive Thrift server main class $CLASS."
+  echo "You need to build Spark with -Phive."
+fi
+
+exit $exit_status

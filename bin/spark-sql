@@ -24,6 +24,7 @@
 set -o posix
 
 CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
+CLASS_NOT_FOUND_EXIT_STATUS=1
 
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
@@ -75,7 +76,7 @@ while (($#)); do
       CLI_ARGS+=("$1"); shift
       ;;
 
-    -s | --silent)
+    -S | --silent)
       CLI_ARGS+=("$1"); shift
       ;;
 
@@ -91,4 +92,13 @@ while (($#)); do
   esac
 done
 
-exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${CLI_ARGS[@]}"
+"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${CLI_ARGS[@]}"
+exit_status=$?
+
+if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
+  echo
+  echo "Failed to load Spark SQL CLI main class $CLASS."
+  echo "You need to build Spark with -Phive."
+fi
+
+exit $exit_status
