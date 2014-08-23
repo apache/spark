@@ -30,10 +30,7 @@ import scala.collection.JavaConversions._
 class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
   // MINOR HACK: You must run a query before calling reset the first time.
   TestHive.sql("SHOW TABLES")
-
-  override def beforeAll() = {
-    TestHive.cacheTables = false
-  }
+  TestHive.cacheTables = false
 
   // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset
   // the environment to ensure all referenced tables in this suites are not cached in-memory.

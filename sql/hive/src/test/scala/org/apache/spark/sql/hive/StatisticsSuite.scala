@@ -29,15 +29,8 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
 class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
-
-  override def beforeAll() = {
-    // HACK: Cached tables do not currently preserve statistics...
-    TestHive.cacheTables = false
-  }
-
-  override def afterAll() = {
-    TestHive.cacheTables = true
-  }
+  TestHive.reset()
+  TestHive.cacheTables = false
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
