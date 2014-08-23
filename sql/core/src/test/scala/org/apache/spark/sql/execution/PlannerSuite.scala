@@ -45,16 +45,16 @@ class PlannerSuite extends FunSuite {
     assert(aggregations.size === 2)
   }
 
-  test("count distinct is not partially aggregated") {
+  test("count distinct is partially aggregated") {
     val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
     val planned = HashAggregation(query)
-    assert(planned.isEmpty)
+    assert(planned.nonEmpty)
   }
 
-  test("mixed aggregates are not partially aggregated") {
+  test("mixed aggregates are partially aggregated") {
     val query =
       testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
     val planned = HashAggregation(query)
-    assert(planned.isEmpty)
+    assert(planned.nonEmpty)
   }
 }

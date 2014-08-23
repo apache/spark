@@ -17,10 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.sql.hive.test.TestHive
+
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest {
+class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
+
+  override def beforeAll() = {
+    TestHive.cacheTables = false
+  }
+
   createQueryTest(
     "Read and write with LazySimpleSerDe (tab separated)",
     "SELECT * from serdeins")

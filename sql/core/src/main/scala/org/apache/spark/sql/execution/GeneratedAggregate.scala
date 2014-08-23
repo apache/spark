@@ -103,6 +103,40 @@ case class GeneratedAggregate(
           updateCount :: updateSum :: Nil,
           result
         )
+
+      case m @ Max(expr) =>
+        val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
+        val initialValue = Literal(null, expr.dataType)
+        val updateMax = MaxOf(currentMax, expr)
+
+        AggregateEvaluation(
+          currentMax :: Nil,
+          initialValue :: Nil,
+          updateMax :: Nil,
+          currentMax)
+
+      case CollectHashSet(Seq(expr)) =>
+        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val initialValue = NewSet(expr.dataType)
+        val addToSet = AddItemToSet(expr, set)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          addToSet :: Nil,
+          set)
+
+      case CombineSetsAndCount(inputSet) =>
+        val ArrayType(inputType, _) = inputSet.dataType
+        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
+        val initialValue = NewSet(inputType)
+        val collectSets = CombineSets(set, inputSet)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          collectSets :: Nil,
+          CountSet(set))
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)
@@ -151,7 +185,7 @@ case class GeneratedAggregate(
           (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
-      val joinedRow = new JoinedRow
+      val joinedRow = new JoinedRow3
 
       if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.

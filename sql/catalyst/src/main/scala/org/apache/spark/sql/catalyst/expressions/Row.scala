@@ -127,7 +127,7 @@ object EmptyRow extends Row {
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
   def this() = this(null)
 

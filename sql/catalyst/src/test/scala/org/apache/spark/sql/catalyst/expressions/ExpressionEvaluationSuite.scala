@@ -136,6 +136,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("MaxOf") {
+    checkEvaluation(MaxOf(1, 2), 2)
+    checkEvaluation(MaxOf(2, 1), 2)
+    checkEvaluation(MaxOf(1L, 2L), 2L)
+    checkEvaluation(MaxOf(2L, 1L), 2L)
+
+    checkEvaluation(MaxOf(Literal(null, IntegerType), 2), 2)
+    checkEvaluation(MaxOf(2, Literal(null, IntegerType)), 2)
+  }
+
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal(null, StringType).like("a"), null)
     checkEvaluation(Literal("a", StringType).like(Literal(null, StringType)), null)
