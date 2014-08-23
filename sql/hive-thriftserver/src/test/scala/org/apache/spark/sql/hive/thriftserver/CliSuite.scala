@@ -30,8 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.{Logging, SparkException}
 
 class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   def runCliWithin(
@@ -60,7 +60,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
     val buffer = new ArrayBuffer[String]()
 
-    def captureOutput(source: String)(line: String): Unit = {
+    def captureOutput(source: String)(line: String) {
       buffer += s"$source> $line"
       if (line.contains(expectedAnswers(next.get()))) {
         if (next.incrementAndGet() == expectedAnswers.size) {
@@ -89,7 +89,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
            |Spark SQL CLI command line: ${command.mkString(" ")}
            |
            |Executed query ${next.get()} "${queries(next.get())}",
-           |But failed to capture expected output ${expectedAnswers(next.get())} within $timeout.
+           |But failed to capture expected output "${expectedAnswers(next.get())}" within $timeout.
            |
            |${buffer.mkString("\n")}
            |===========================

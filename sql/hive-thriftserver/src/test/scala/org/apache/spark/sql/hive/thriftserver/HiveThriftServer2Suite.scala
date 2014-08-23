@@ -32,8 +32,8 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.scalatest.FunSuite
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.{Logging, SparkException}
 
 /**
  * Tests for the HiveThriftServer2 using JDBC.
@@ -71,7 +71,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     val serverStarted = Promise[Unit]()
     val buffer = new ArrayBuffer[String]()
 
-    def captureOutput(source: String)(line: String): Unit = {
+    def captureOutput(source: String)(line: String) {
       buffer += s"$source> $line"
       if (line.contains("ThriftBinaryCLIService listening on")) {
         serverStarted.success(())
