@@ -1711,6 +1711,8 @@ class RDD(object):
         >>> sorted = rdd.sortByKey()
         >>> sorted.lookup(42)  # fast
         [42]
+        >>> sorted.lookup(1024)
+        []
         """
         self = self.filter(lambda (k, v): k == key).values()
 
