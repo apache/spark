@@ -822,6 +822,8 @@ class RDD(object):
         >>> rdd.max(key=str)
         5.0
         """
+        if key is None:
+            return self.reduce(max)
         return self.reduce(lambda a, b: max(a, b, key=key))
 
     def min(self, key=None):
@@ -836,6 +838,8 @@ class RDD(object):
         >>> rdd.min(key=str)
         10.0
         """
+        if key is None:
+            return self.reduce(min)
         return self.reduce(lambda a, b: min(a, b, key=key))
 
     def sum(self):
