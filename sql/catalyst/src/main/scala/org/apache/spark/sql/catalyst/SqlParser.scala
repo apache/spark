@@ -344,7 +344,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
 
   protected lazy val baseExpression: PackratParser[Expression] =
     expression ~ "[" ~ expression ~ "]" ~ expression ^^ {
-      case base ~ _ ~ ordinal ~ _ ~ field => GetArrayOfStructItem(base, ordinal, field)
+      case base ~ _ ~ ordinal ~ _ ~ field => GetField(GetItem(base, ordinal), field.toString)
     } |
     expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
@@ -378,8 +378,10 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
   override lazy val token: Parser[Token] = (
        identChar ~ rep( identChar | digit ) ^^
       {
-        case first ~ rest if(first != '.') => processIdent(first :: rest mkString "")
-        case first ~ rest if(first == '.') => StringLit(rest mkString "")
+        case first ~ rest => first match {
+          case '.' => StringLit(rest mkString "")
+          case _ => processIdent(first :: rest mkString "")
+        }
       }
       | rep1(digit) ~ opt('.' ~> rep(digit)) ^^ {
       case i ~ None    => NumericLit(i mkString "")

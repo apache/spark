@@ -109,8 +109,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
         a.dataType match {
           case StructType(fields) =>
             Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
-          case fields :ArrayType =>
-            Some(Alias(nestedFields.foldLeft(a :Expression)(GetArrayField), nestedFields.last)())
+          case ArrayType(fields, _) => nestedFields.length match {
+            case 1 => Some(Alias(GetArrayField(a, nestedFields.head), nestedFields.last)())
+            case _ => None // can't resolve arrayOfStruct.field1._
+          }
           case _ => None // Don't know how to resolve these field references
         }
       case Seq() => None         // No matches.
