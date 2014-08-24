@@ -85,3 +85,34 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
+
+case class MaxOf(left: Expression, right: Expression) extends Expression {
+  type EvaluatedType = Any
+
+  override def nullable = left.nullable && right.nullable
+
+  override def children = left :: right :: Nil
+
+  override def references = left.references ++ right.references
+
+  override def dataType = left.dataType
+
+  override def eval(input: Row): Any = {
+    val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
+    if (leftEval == null) {
+      rightEval
+    } else if (rightEval == null) {
+      leftEval
+    } else {
+      val numeric = left.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+      if (numeric.compare(leftEval, rightEval) < 0) {
+        rightEval
+      } else {
+        leftEval
+      }
+    }
+  }
+
+  override def toString = s"MaxOf($left, $right)"
+}

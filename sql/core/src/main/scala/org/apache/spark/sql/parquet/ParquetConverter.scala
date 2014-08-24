@@ -23,7 +23,7 @@ import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
 /**
@@ -278,14 +278,14 @@ private[parquet] class CatalystGroupConverter(
  */
 private[parquet] class CatalystPrimitiveRowConverter(
     protected[parquet] val schema: Array[FieldType],
-    protected[parquet] var current: ParquetRelation.RowType)
+    protected[parquet] var current: MutableRow)
   extends CatalystConverter {
 
   // This constructor is used for the root converter only
   def this(attributes: Array[Attribute]) =
     this(
       attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)),
-      new ParquetRelation.RowType(attributes.length))
+      new SpecificMutableRow(attributes.map(_.dataType)))
 
   protected [parquet] val converters: Array[Converter] =
     schema.zipWithIndex.map {
@@ -299,7 +299,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override val parent = null
 
   // Should be only called in root group converter!
-  override def getCurrentRecord: ParquetRelation.RowType = current
+  override def getCurrentRecord: Row = current
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 

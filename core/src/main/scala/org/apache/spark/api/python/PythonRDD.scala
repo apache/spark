@@ -62,7 +62,7 @@ private[spark] class PythonRDD(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
-    envVars += ("SPARK_LOCAL_DIR" -> localdir) // it's also used in monitor thread
+    envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
@@ -748,6 +748,23 @@ private[spark] object PythonRDD extends Logging {
         pickle.dumps(row)
       }
     }
+  }
+
+  /**
+    * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+    */
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]]
+        } else {
+          Seq(obj)
+        }
+      }
+    }.toJavaRDD()
   }
 }
 
