@@ -22,7 +22,7 @@
 
 cygwin=false
 case "`uname`" in
-    CYGWIN*) cygwin=true;;
+  CYGWIN*) cygwin=true;;
 esac
 
 # Enter posix mode for bash
@@ -32,9 +32,9 @@ set -o posix
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 function usage() {
-    echo "Usage: ./bin/spark-shell [options]"
-    $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-    exit 0
+  echo "Usage: ./bin/spark-shell [options]"
+  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
 }
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -46,20 +46,20 @@ SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 
 function main() {
-    if $cygwin; then
-        # Workaround for issue involving JLine and Cygwin
-        # (see http://sourceforge.net/p/jline/bugs/40/).
-        # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-        # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-        # (see https://github.com/sbt/sbt/issues/562).
-        stty -icanon min 1 -echo > /dev/null 2>&1
-        export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
-        stty icanon echo > /dev/null 2>&1
-    else
-        export SPARK_SUBMIT_OPTS
-        $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
-    fi
+  if $cygwin; then
+    # Workaround for issue involving JLine and Cygwin
+    # (see http://sourceforge.net/p/jline/bugs/40/).
+    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+    # (see https://github.com/sbt/sbt/issues/562).
+    stty -icanon min 1 -echo > /dev/null 2>&1
+    export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
+    $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+    stty icanon echo > /dev/null 2>&1
+  else
+    export SPARK_SUBMIT_OPTS
+    $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+  fi
 }
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
