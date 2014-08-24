@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
-  def references = projectList.flatMap(_.references).toSet
+  def references = projectList.flatMap(_.references.iterator).toSet
 }
 
 /**
@@ -61,12 +61,12 @@ case class Generate(
     if (join) child.output ++ generatorOutput else generatorOutput
 
   override def references =
-    if (join) child.outputSet else generator.references
+    if (join) child.outputSet.iterator.toSet else generator.references.iterator.toSet
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
-  override def references = condition.references
+  override def references = condition.references.iterator.toSet
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -86,7 +86,7 @@ case class Join(
   joinType: JoinType,
   condition: Option[Expression]) extends BinaryNode {
 
-  override def references = condition.map(_.references).getOrElse(Set.empty)
+  override def references = condition.map(_.references.iterator.toSet).getOrElse(Set.empty)
 
   override def output = {
     joinType match {
@@ -143,7 +143,7 @@ case class WriteToFile(
 
 case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
   override def output = child.output
-  override def references = order.flatMap(_.references).toSet
+  override def references = order.flatMap(_.references.iterator).toSet
 }
 
 case class Aggregate(
@@ -154,12 +154,12 @@ case class Aggregate(
 
   override def output = aggregateExpressions.map(_.toAttribute)
   override def references =
-    (groupingExpressions ++ aggregateExpressions).flatMap(_.references).toSet
+    (groupingExpressions ++ aggregateExpressions).flatMap(_.references.iterator).toSet
 }
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
-  override def references = limitExpr.references
+  override def references = limitExpr.references.iterator.toSet
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
@@ -204,7 +204,7 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
 
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output = child.output
-  override def references = child.outputSet
+  override def references = child.outputSet.iterator.toSet
 }
 
 case object NoRelation extends LeafNode {

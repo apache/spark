@@ -139,7 +139,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   with Partitioning {
 
   override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 
@@ -179,7 +178,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   with Partitioning {
 
   override def children = ordering
-  override def references = ordering.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 

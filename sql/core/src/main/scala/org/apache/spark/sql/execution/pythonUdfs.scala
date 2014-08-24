@@ -49,7 +49,6 @@ private[spark] case class PythonUDF(
   override def toString = s"PythonUDF#$name(${children.mkString(",")})"
 
   def nullable: Boolean = true
-  def references: Set[Attribute] = children.flatMap(_.references).toSet
 
   override def eval(input: Row) = sys.error("PythonUDFs can not be directly evaluated.")
 }
