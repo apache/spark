@@ -112,7 +112,6 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
 case class EvaluatePython(udf: PythonUDF, child: LogicalPlan) extends logical.UnaryNode {
   val resultAttribute = AttributeReference("pythonUDF", udf.dataType, nullable=true)()
 
-  def references = Set.empty
   def output = child.output :+ resultAttribute
 }
 
