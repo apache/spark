@@ -62,38 +62,51 @@ object Variance extends Impurity {
 
 }
 
-private[tree] class VarianceAggregator extends ImpurityAggregator(3) with Serializable {
+private[tree] class VarianceAggregator()
+  extends ImpurityAggregator(statsSize = 3) with Serializable {
 
-  def calculate(): Double = {
-    Variance.calculate(counts(0), counts(1), counts(2))
+  /**
+   * Update stats for one (node, feature, bin) with the given label.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def update(allStats: Array[Double], offset: Int, label: Double): Unit = {
+    allStats(offset) += 1
+    allStats(offset + 1) += label
+    allStats(offset + 2) += label * label
   }
 
-  def copy: VarianceAggregator = {
-    val tmp = new VarianceAggregator()
-    tmp.counts = this.counts.clone()
-    tmp
+  /**
+   * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
+    new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
 
-  def add(label: Double): Unit = {
-    counts(0) += 1
-    counts(1) += label
-    counts(2) += label * label
-  }
+}
 
-  def count: Long = counts(0).toLong
+private[tree] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+
+  require(stats.size == 3,
+    s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
+    s" but was given array of length ${stats.size}.")
+
+  def copy: VarianceCalculator = new VarianceCalculator(stats.clone())
+
+  def calculate(): Double = Variance.calculate(stats(0), stats(1), stats(2))
+
+  def count: Long = stats(0).toLong
 
   def predict: Double = if (count == 0) {
     0
   } else {
-    counts(1) / count
+    stats(1) / count
   }
 
   override def toString: String = {
-    s"VarianceAggregator(cnt = ${counts(0)}, sum = ${counts(1)}, sum2 = ${counts(2)})"
-  }
-
-  def newAggregator: VarianceAggregator = {
-    new VarianceAggregator()
+    s"VarianceAggregator(cnt = ${stats(0)}, sum = ${stats(1)}, sum2 = ${stats(2)})"
   }
 
 }

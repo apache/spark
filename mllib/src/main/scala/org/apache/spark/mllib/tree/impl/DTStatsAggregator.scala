@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impl
 
+import org.apache.spark.mllib.tree.impurity._
+
 import scala.collection.mutable
 
 
@@ -28,15 +30,24 @@ import scala.collection.mutable
  * TODO: Allow views of Vector types to replace some of the code in here.
  */
 private[tree] class DTStatsAggregator(
-    val numNodes: Int,
-    val numBins: Array[Int],
-    unorderedFeatures: Set[Int],
-    val statsSize: Int) {
+    metadata: DecisionTreeMetadata,
+    val numNodes: Int) extends Serializable {
 
-  val numFeatures: Int = numBins.size
+  val impurityAggregator: ImpurityAggregator = metadata.impurity match {
+    case Gini => new GiniAggregator(metadata.numClasses)
+    case Entropy => new EntropyAggregator(metadata.numClasses)
+    case Variance => new VarianceAggregator()
+    case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+  }
+
+  val statsSize: Int = impurityAggregator.statsSize
+
+  val numFeatures: Int = metadata.numFeatures
+
+  val numBins: Array[Int] = metadata.numBins
 
   val isUnordered: Array[Boolean] =
-    Range(0, numFeatures).map(f => unorderedFeatures.contains(f)).toArray
+    Range(0, numFeatures).map(f => metadata.unorderedFeatures.contains(f)).toArray
 
   private val featureOffsets: Array[Int] = {
     def featureOffsetsCalc(total: Int, featureIndex: Int): Int = {
@@ -69,40 +80,87 @@ private[tree] class DTStatsAggregator(
   val allStats: Array[Double] = new Array[Double](allStatsSize)
 
   /**
-   * Get a view of the stats for a given (node, feature, bin) for ordered features.
-   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
+   * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getNodeFeatureOffset]].
+   *                           For unordered features, this is a pre-computed
+   *                           (node, feature, left/right child) offset from
+   *                           [[getLeftRightNodeFeatureOffsets]].
    */
-  def view(nodeIndex: Int, featureIndex: Int, binIndex: Int): (Array[Double], Int) = {
-    (allStats, nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize)
+  def getImpurityCalculator(nodeFeatureOffset: Int, binIndex: Int): ImpurityCalculator = {
+    impurityAggregator.getCalculator(allStats, nodeFeatureOffset + binIndex * statsSize)
   }
 
   /**
-   * Pre-compute node offset for use with [[nodeView]].
+   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
+   */
+  def update(nodeIndex: Int, featureIndex: Int, binIndex: Int, label: Double): Unit = {
+    val i = nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize
+    impurityAggregator.update(allStats, i, label)
+  }
+
+  /**
+   * Pre-compute node offset for use with [[nodeUpdate]].
    */
   def getNodeOffset(nodeIndex: Int): Int = nodeIndex * nodeStride
 
   /**
-   * Get a view of the stats for a given (node, feature, bin) for ordered features.
+   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
    * This uses a pre-computed node offset from [[getNodeOffset]].
-   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
    */
-  def nodeView(nodeOffset: Int, featureIndex: Int, binIndex: Int): (Array[Double], Int) = {
-    (allStats, nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize)
+  def nodeUpdate(nodeOffset: Int, featureIndex: Int, binIndex: Int, label: Double): Unit = {
+    val i = nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize
+    impurityAggregator.update(allStats, i, label)
   }
 
   /**
-   * Pre-compute (node, feature) offset for use with [[nodeFeatureView]].
+   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
+   * For ordered features only.
    */
-  def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int =
+  def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int = {
+    require(!isUnordered(featureIndex),
+      s"DTStatsAggregator.getNodeFeatureOffset is for ordered features only, but was called" +
+      s" for unordered feature $featureIndex.")
     nodeIndex * nodeStride + featureOffsets(featureIndex)
+  }
 
   /**
-   * Get a view of the stats for a given (node, feature, bin) for ordered features.
-   * This uses a pre-computed (node, feature) offset from [[getNodeFeatureOffset]].
-   * @return  (flat stats array, start index of stats)  The stats are contiguous in the array.
+   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
+   * For unordered features only.
    */
-  def nodeFeatureView(nodeFeatureOffset: Int, binIndex: Int): (Array[Double], Int) = {
-    (allStats, nodeFeatureOffset + binIndex * statsSize)
+  def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int) = {
+    require(isUnordered(featureIndex),
+      s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
+        s" but was called for ordered feature $featureIndex.")
+    val baseOffset = nodeIndex * nodeStride + featureOffsets(featureIndex)
+    (baseOffset, baseOffset + numBins(featureIndex) * statsSize)
+  }
+
+  /**
+   * Update the stats for a given (node, feature, bin), using the given label.
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getNodeFeatureOffset]].
+   *                           For unordered features, this is a pre-computed
+   *                           (node, feature, left/right child) offset from
+   *                           [[getLeftRightNodeFeatureOffsets]].
+   */
+  def nodeFeatureUpdate(nodeFeatureOffset: Int, binIndex: Int, label: Double): Unit = {
+    impurityAggregator.update(allStats, nodeFeatureOffset + binIndex * statsSize, label)
+  }
+
+  /**
+   * For a given (node, feature), merge the stats for two bins.
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getNodeFeatureOffset]].
+   *                           For unordered features, this is a pre-computed
+   *                           (node, feature, left/right child) offset from
+   *                           [[getLeftRightNodeFeatureOffsets]].
+   * @param binIndex  The other bin is merged into this bin.
+   * @param otherBinIndex  This bin is not modified.
+   */
+  def mergeForNodeFeature(nodeFeatureOffset: Int, binIndex: Int, otherBinIndex: Int): Unit = {
+    impurityAggregator.merge(allStats, nodeFeatureOffset + binIndex * statsSize,
+      nodeFeatureOffset + otherBinIndex * statsSize)
   }
 
   /**
@@ -110,22 +168,29 @@ private[tree] class DTStatsAggregator(
    * This method modifies this aggregator in-place.
    */
   def merge(other: DTStatsAggregator): DTStatsAggregator = {
-    //TODO
+    require(allStatsSize == other.allStatsSize,
+      s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
+      + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
+    var i = 0
+    // TODO: Test BLAS.axpy
+    while (i < allStatsSize) {
+      allStats(i) += other.allStats(i)
+      i += 1
+    }
+    this
   }
 
-  // TODO: Make views
-  /*
-  VIEWS TO MAKE:
-  random access
-    impurityAggregator.update(statsAggregator.view(nodeIndex, featureIndex, binIndex), label)
-  random access for fixed nodeIndex
-    statsAggregator.getNodeOffset(nodeIndex) = nodeIndex * nodeStride
-    impurityAggregator.update(statsAggregator.nodeView(nodeOffset, featureIndex, binIndex), label)
-  loop over bins, with rightChildOffset, for fixed node, feature (for unordered categorical)
-    statsAggregator.getNodeFeatureOffset(nodeIndex, featureIndex) = nodeIndex * nodeStride + featureOffsets(featureIndex)
-    impurityAggregator.update(statsAggregator.nodeFeatureView(nodeFeatureOffset, binIndex, isLeft), label)
+}
 
-  complete sum
+private[tree] object DTStatsAggregator extends Serializable {
+
+  /**
+   * Combines two aggregates (modifying the first) and returns the combination.
    */
+  def binCombOp(
+      agg1: DTStatsAggregator,
+      agg2: DTStatsAggregator): DTStatsAggregator = {
+    agg1.merge(agg2)
+  }
 
 }

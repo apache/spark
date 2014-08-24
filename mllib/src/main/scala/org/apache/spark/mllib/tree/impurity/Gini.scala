@@ -74,50 +74,56 @@ object Gini extends Impurity {
 private[tree] class GiniAggregator(numClasses: Int)
   extends ImpurityAggregator(numClasses) with Serializable {
 
-  def calculate(): Double = {
-    Gini.calculate(counts, counts.sum)
-  }
-
-  def copy: GiniAggregator = {
-    val tmp = new GiniAggregator(counts.size)
-    tmp.counts = this.counts.clone()
-    tmp
-  }
-
-  def add(label: Double): Unit = {
-    if (label >= counts.size) {
+  /**
+   * Update stats for one (node, feature, bin) with the given label.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def update(allStats: Array[Double], offset: Int, label: Double): Unit = {
+    if (label >= statsSize) {
       throw new IllegalArgumentException(s"GiniAggregator given label $label" +
-        s" but requires label < numClasses (= ${counts.size}).")
+        s" but requires label < numClasses (= $statsSize).")
     }
-    counts(label.toInt) += 1
+    allStats(offset + label.toInt) += 1
   }
 
-  def count: Long = counts.sum.toLong
+  /**
+   * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def getCalculator(allStats: Array[Double], offset: Int): GiniCalculator = {
+    new GiniCalculator(allStats.view(offset, offset + statsSize).toArray)
+  }
+
+}
+
+private[tree] class GiniCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+
+  def copy: GiniCalculator = new GiniCalculator(stats.clone())
+
+  def calculate(): Double = Gini.calculate(stats, stats.sum)
+
+  def count: Long = stats.sum.toLong
 
   def predict: Double = if (count == 0) {
     0
   } else {
-    indexOfLargestArrayElement(counts)
+    indexOfLargestArrayElement(stats)
   }
 
   override def prob(label: Double): Double = {
     val lbl = label.toInt
-    require(lbl < counts.length,
-      s"GiniAggregator.prob given invalid label: $lbl (should be < ${counts.length}")
+    require(lbl < stats.length,
+      s"GiniCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
     val cnt = count
     if (cnt == 0) {
       0
     } else {
-      counts(lbl) / cnt
+      stats(lbl) / cnt
     }
   }
 
-  override def toString: String = {
-    s"GiniAggregator(counts = [${counts.mkString(", ")}])"
-  }
-
-  def newAggregator: GiniAggregator = {
-    new GiniAggregator(counts.size)
-  }
+  override def toString: String = s"GiniCalculator(stats = [${stats.mkString(", ")}])"
 
 }

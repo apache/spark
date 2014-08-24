@@ -49,72 +49,92 @@ trait Impurity extends Serializable {
 }
 
 /**
- * This class holds a set of sufficient statistics for computing impurity from a sample.
+ * Interface for updating views of a vector of sufficient statistics,
+ * in order to compute impurity from a sample.
+ * Note: Instances of this class do not hold the data itself.
  * @param statsSize  Length of the vector of sufficient statistics.
  */
-private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializable {
+private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
 
   /**
-   * Sufficient statistics for calculating impurity.
+   * Merge the stats from one bin into another.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for (node, feature, bin) which is modified by the merge.
+   * @param otherOffset  Start index of stats for (node, feature, other bin) which is not modified.
    */
-  var counts: Array[Double] = new Array[Double](statsSize)
-
-  def copy: ImpurityAggregator
+  def merge(allStats: Array[Double], offset: Int, otherOffset: Int): Unit = {
+    var i = 0
+    while (i < statsSize) {
+      allStats(offset + i) += allStats(otherOffset + i)
+      i += 1
+    }
+  }
 
   /**
-   * Add the given label to this aggregator.
+   * Update stats for one (node, feature, bin) with the given label.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def add(label: Double): Unit
+  def update(allStats: Array[Double], offset: Int, label: Double): Unit
 
   /**
-   * Compute the impurity for the samples given so far.
-   * If no samples have been collected, return 0.
+   * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
    */
+  def getCalculator(allStats: Array[Double], offset: Int): ImpurityCalculator
+
+}
+
+/**
+ * Stores statistics for one (node, feature, bin) for calculating impurity.
+ * Unlike [[ImpurityAggregator]], this class stores its own data and is for a single
+ * (node, feature, bin).
+ * @param stats  Array of sufficient statistics.
+ */
+private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
+
+  def copy: ImpurityCalculator
+
   def calculate(): Double
 
   /**
-   * Merge another aggregator into this one, modifying this aggregator.
-   * @param other  Aggregator of the same type.
-   * @return  merged aggregator
+   * Add the stats from another calculator into this one, modifying and returning this calculator.
    */
-  def merge(other: ImpurityAggregator): ImpurityAggregator = {
-    require(counts.size == other.counts.size,
-      s"Two ImpurityAggregator instances cannot be merged with different counts sizes." +
-      s"  Sizes are ${counts.size} and ${other.counts.size}.")
+  def add(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.size == other.stats.size,
+      s"Two ImpurityCalculator instances cannot be added with different counts sizes." +
+        s"  Sizes are ${stats.size} and ${other.stats.size}.")
     var i = 0
-    while (i < other.counts.size) {
-      counts(i) += other.counts(i)
+    while (i < other.stats.size) {
+      stats(i) += other.stats(i)
       i += 1
     }
     this
   }
 
   /**
-   * Number of samples added to this aggregator.
+   * Subtract the stats from another calculator from this one, modifying and returning this
+   * calculator.
    */
+  def subtract(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.size == other.stats.size,
+      s"Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
+      s"  Sizes are ${stats.size} and ${other.stats.size}.")
+    var i = 0
+    while (i < other.stats.size) {
+      stats(i) -= other.stats(i)
+      i += 1
+    }
+    this
+  }
+
   def count: Long
 
-  /**
-   * Create a new (empty) aggregator of the same type as this one.
-   */
-  def newAggregator: ImpurityAggregator
-
-  /**
-   * Return the prediction corresponding to the set of labels given to this aggregator.
-   */
   def predict: Double
 
-  /**
-   * Return the probability of the prediction returned by [[predict]],
-   * or -1 if no probability is available.
-   */
   def prob(label: Double): Double = -1
 
-  /**
-   * Return the index of the largest element in this array.
-   * If there are ties, the first maximal element is chosen.
-   * TODO: Move this elsewhere in Spark?
-   */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
     val result = array.foldLeft(-1, Double.MinValue, 0) {
       case ((maxIndex, maxValue, currentIndex), currentValue) =>
@@ -125,7 +145,7 @@ private[tree] abstract class ImpurityAggregator(statsSize: Int) extends Serializ
         }
     }
     if (result._1 < 0) {
-      throw new RuntimeException("ImpurityAggregator internal error:" +
+      throw new RuntimeException("ImpurityCalculator internal error:" +
         " indexOfLargestArrayElement failed")
     }
     result._1
