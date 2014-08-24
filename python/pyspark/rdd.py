@@ -655,12 +655,14 @@ class RDD(object):
         >>> def f(iterator):
         ...      for x in iterator:
         ...           print x
-        ...      yield None
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
         def func(it):
-            f(it)
-            return iter([])
+            r = f(it)
+            try:
+                return iter(r)
+            except TypeError:
+                return iter([])
         self.mapPartitions(func).count()  # Force evaluation
 
     def collect(self):
