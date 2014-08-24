@@ -160,7 +160,7 @@ object HuberRobustRegressionWithSGD {
 }
 
 /**
- * Regression model trained using Turkey bisquare (Biweight) M-Estimation RobustRegression.
+ * Regression model trained using Tukey bisquare (Biweight) M-Estimation RobustRegression.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
@@ -204,9 +204,9 @@ class BiweightRobustRegressionWithSGD private[mllib] (
 
   /**
    * Construct a Biweight M-Estimation RobustRegression object with default parameters:
-   * {stepSize: 1.0, numIterations: 100, miniBatchFraction: 1.0}.
+   * {stepSize: 1.0, numIterations: 5000, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0)
+  def this() = this(1.0, 5000, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new BiweightRobustRegressionModel(weights, intercept)

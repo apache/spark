@@ -181,7 +181,7 @@ class HuberRobustGradient extends Gradient {
 
 /**
  * :: DeveloperApi ::
- * Compute gradient and loss for Turkey bisquare weight function, as used in robust regression.
+ * Compute gradient and loss for Tukey bisquare weight function, as used in robust regression.
  * The biweight function produces and M-estimator that is more resistant to regression
  * outliers than the Huber M-estimator (Andersen 2008: 19). Especially on the extreme tails.
  *              L = k^2 / 6 * (1 - (1 - ||A weights-y||^2 / k^2)^3)     if |A weights-y| <= k
@@ -195,7 +195,6 @@ class BiweightRobustGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val diff = dot(data, weights) - label
     val loss = diff * diff
-    val gradient = data.copy
     val k = 4.685
     /**
      * Tuning constant is generally picked to give reasonably high efficiency in the normal case.
@@ -203,11 +202,11 @@ class BiweightRobustGradient extends Gradient {
      * lower efficiency when the errors are normally distributed.
      */
     if(diff >= -k && diff <= k){
+      val gradient = data.copy
       scal(pow((1 - loss / pow(k, 2)), 2) * diff, gradient)
       (gradient, (pow(k, 2) / 6.0 * (1 - pow((1 - loss / pow(k, 2)), 3))))
     }else {
-      scal(0.0, gradient)
-      (gradient, pow(k, 2) / 6.0)
+      (Vectors.sparse(weights.size, Array.empty, Array.empty), (pow(k, 2) / 6.0))
     }
   }
 
@@ -220,12 +219,8 @@ class BiweightRobustGradient extends Gradient {
     val loss = diff * diff
     val k = 4.685
     if(diff >= -k && diff <= k){
-      axpy(pow((1 - loss / pow(k, 2)), 2) * diff, data, cumGradient)
-    }else {
-      axpy(0.0, data, cumGradient)
-    }
-    if(diff >= -k && diff <= k){
-      pow(k, 2) / 6.0 * (1 - pow((1 - loss / pow(k, 2)), 3))
+      axpy((pow((1.0 - loss / pow(k, 2)), 2) * diff), data, cumGradient)
+      pow(k, 2) / 6.0 * (1.0 - pow((1.0 - loss / pow(k, 2)), 3))
     }else {
       pow(k, 2) / 6.0
     }

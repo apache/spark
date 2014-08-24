@@ -130,7 +130,7 @@ class RobustRegressionSuite extends FunSuite with LocalSparkContext {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linReg = new BiweightRobustRegressionWithSGD().setIntercept(true)
-    linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
+    linReg.optimizer.setNumIterations(3000).setStepSize(1.0) //Default numIterations: 5000
 
     val model = linReg.run(testRDD)
     assert(model.intercept >= 2.5 && model.intercept <= 3.5)
@@ -156,7 +156,7 @@ class RobustRegressionSuite extends FunSuite with LocalSparkContext {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
       0.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linReg = new BiweightRobustRegressionWithSGD().setIntercept(false)
-    linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
+    linReg.optimizer.setNumIterations(4000).setStepSize(1.0) //Default numIterations: 5000
 
     val model = linReg.run(testRDD)
 
@@ -187,7 +187,7 @@ class RobustRegressionSuite extends FunSuite with LocalSparkContext {
       LabeledPoint(label, sv)
     }.cache()
     val linReg = new BiweightRobustRegressionWithSGD().setIntercept(false)
-    linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
+    linReg.optimizer.setNumIterations(4000).setStepSize(1.0) //Default numIterations: 5000
 
     val model = linReg.run(sparseRDD)
 
@@ -197,6 +197,7 @@ class RobustRegressionSuite extends FunSuite with LocalSparkContext {
     assert(weights.size === 10000)
     assert(weights(0) >= 9.0 && weights(0) <= 11.0)
     assert(weights(9999) >= 9.0 && weights(9999) <= 11.0)
+
 
     val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
     val sparseValidationData = validationData.map { case LabeledPoint(label, v) =>
