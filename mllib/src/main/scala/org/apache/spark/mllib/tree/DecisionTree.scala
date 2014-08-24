@@ -813,15 +813,9 @@ object DecisionTree extends Serializable with Logging {
     logDebug("node impurity = " + nodeImpurity)
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
-    // Initialize with infeasible values.
-    var bestFeatureIndex = Int.MinValue
-    var bestSplitIndex = Int.MinValue
-    var bestGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, -1.0)
-    var featureIndex = 0
-    // TODO: Change loops over splits into iterators.
-    while (featureIndex < metadata.numFeatures) {
+    Range(0, metadata.numFeatures).map { featureIndex =>
       val numSplits = metadata.numSplits(featureIndex)
-      if (metadata.isContinuous(featureIndex)) {
+      val (bestSplitIndex, bestGainStats) = if (metadata.isContinuous(featureIndex)) {
         //println(s"binsToBestSplit: feature $featureIndex (continuous)")
         // Cumulative sum (scanLeft) of bin statistics.
         // Afterwards, binAggregates for a bin is the sum of aggregates for
@@ -833,39 +827,26 @@ object DecisionTree extends Serializable with Logging {
           splitIndex += 1
         }
         // Find best split.
-        splitIndex = 0
-        while (splitIndex < numSplits) {
-          val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIndex)
+        Range(0, numSplits).map { case splitIdx =>
+          val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
           val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
           rightChildStats.subtract(leftChildStats)
           val gainStats =
             calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
-          if (gainStats.gain > bestGainStats.gain) {
-            bestGainStats = gainStats
-            bestFeatureIndex = featureIndex
-            bestSplitIndex = splitIndex
-          }
-          splitIndex += 1
-        }
+          (splitIdx, gainStats)
+        }.maxBy(_._2.gain)
       } else if (metadata.isUnordered(featureIndex)) {
         //println(s"binsToBestSplit: feature $featureIndex (unordered cat)")
         // Unordered categorical feature
         val (leftChildOffset, rightChildOffset) =
           binAggregates.getLeftRightNodeFeatureOffsets(nodeIndex, featureIndex)
-        var splitIndex = 0
-        while (splitIndex < numSplits) {
+        Range(0, numSplits).map { splitIndex =>
           val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
           val rightChildStats = binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
           val gainStats =
             calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
-          //println(s"\t split $splitIndex: gain: ${bestGainStats.gain}")
-          if (gainStats.gain > bestGainStats.gain) {
-            bestGainStats = gainStats
-            bestFeatureIndex = featureIndex
-            bestSplitIndex = splitIndex
-          }
-          splitIndex += 1
-        }
+          (splitIndex, gainStats)
+        }.maxBy(_._2.gain)
       } else {
         //println(s"binsToBestSplit: feature $featureIndex (ordered cat)")
         // Ordered categorical feature
@@ -880,25 +861,17 @@ object DecisionTree extends Serializable with Logging {
           splitIndex += 1
         }
         // Find best split.
-        splitIndex = 0
-        while (splitIndex < numSplits) {
+        Range(0, numSplits).map { splitIndex =>
           val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIndex)
           val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
           rightChildStats.subtract(leftChildStats)
           val gainStats =
             calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
-          //println(s"\t split $splitIndex: gain: ${bestGainStats.gain}")
-          if (gainStats.gain > bestGainStats.gain) {
-            bestGainStats = gainStats
-            bestFeatureIndex = featureIndex
-            bestSplitIndex = splitIndex
-          }
-          splitIndex += 1
-        }
+          (splitIndex, gainStats)
+        }.maxBy(_._2.gain)
       }
-      featureIndex += 1
-    }
-    (bestFeatureIndex, bestSplitIndex, bestGainStats)
+      (featureIndex, bestSplitIndex, bestGainStats)
+    }.maxBy(_._3.gain)
   }
 
   /**
