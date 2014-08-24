@@ -137,19 +137,17 @@ class HuberRobustGradient extends Gradient {
     val loss = diff * diff
     val gradient = data.copy
     val k = 1.345
-
     /**
     * Tuning constant is generally picked to give reasonably high efficiency in the normal case.
     * Smaller values produce more resistance to outliers while at the expense of
     * lower efficiency when the errors are normally distributed.
     */
-
     if(diff < -k){
       scal(-k, gradient)
       (gradient, (-k * diff - 1.0 / 2.0 * pow(k, 2)))
     }else if(diff >= -k && diff <= k){
       scal(diff, gradient)
-      (gradient, (1.0 / 2.0 * pow(diff, 2)))
+      (gradient, (1.0 / 2.0 * loss))
     }else {
       scal(k, gradient)
       (gradient, (k * diff - 1.0 / 2.0 * pow(k, 2)))
@@ -163,7 +161,6 @@ class HuberRobustGradient extends Gradient {
                         cumGradient: Vector): Double = {
     val diff = dot(data, weights) - label
     val k = 1.345
-    //
     if(diff < -k){
       axpy(-k, data, cumGradient)
     }else if(diff >= -k && diff <= k){
@@ -171,13 +168,65 @@ class HuberRobustGradient extends Gradient {
     }else {
       axpy(k, data, cumGradient)
     }
-
     if(diff < -k){
       -k * diff - 1.0 / 2.0 * pow(k, 2)
     }else if(diff >= -k && diff <= k){
-      1.0 / 2.0 * pow(diff, 2)
+      1.0 / 2.0 * loss
     }else {
       k * diff - 1.0 /2.0 * pow(k, 2)
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Compute gradient and loss for Turkey bisquare weight function, as used in robust regression.
+ * The biweight function produces and M-estimator that is more resistant to regression
+ * outliers than the Huber M-estimator (Andersen 2008: 19). Especially on the extreme tails.
+ *              L = k^2 / 6 * (1 - (1 - ||A weights-y||^2 / k^2)^3)     if |A weights-y| <= k
+ *              L = k^2 / 6                                             if |A weights-y| > k
+ * where k = 4.685 which produce 95% efficiency when the errors are normal and
+ * substantial resistance to outliers otherwise.
+ * See also the documentation for the precise formulation.
+ */
+@DeveloperApi
+class BiweightRobustGradient extends Gradient {
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val diff = dot(data, weights) - label
+    val loss = diff * diff
+    val gradient = data.copy
+    val k = 4.685
+    /**
+     * Tuning constant is generally picked to give reasonably high efficiency in the normal case.
+     * Smaller values produce more resistance to outliers while at the expense of
+     * lower efficiency when the errors are normally distributed.
+     */
+    if(diff >= -k && diff <= k){
+      scal(pow((1 - loss / pow(k, 2)), 2) * diff, gradient)
+      (gradient, (pow(k, 2) / 6.0 * (1 - pow((1 - loss / pow(k, 2)), 3))))
+    }else {
+      scal(0.0, gradient)
+      (gradient, pow(k, 2) / 6.0)
+    }
+  }
+
+  override def compute(
+                        data: Vector,
+                        label: Double,
+                        weights: Vector,
+                        cumGradient: Vector): Double = {
+    val diff = dot(data, weights) - label
+    val loss = diff * diff
+    val k = 4.685
+    if(diff >= -k && diff <= k){
+      axpy(pow((1 - loss / pow(k, 2)), 2) * diff, data, cumGradient)
+    }else {
+      axpy(0.0, data, cumGradient)
+    }
+    if(diff >= -k && diff <= k){
+      pow(k, 2) / 6.0 * (1 - pow((1 - loss / pow(k, 2)), 3))
+    }else {
+      pow(k, 2) / 6.0
     }
   }
 }

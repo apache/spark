@@ -158,3 +158,140 @@ object HuberRobustRegressionWithSGD {
     train(input, numIterations, 1.0, 1.0)
   }
 }
+
+/**
+ * Regression model trained using Turkey bisquare (Biweight) M-Estimation RobustRegression.
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
+ */
+class BiweightRobustRegressionModel (
+                                   override val weights: Vector,
+                                   override val intercept: Double)
+  extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
+
+  override protected def predictPoint(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double): Double = {
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+  }
+}
+
+/**
+ * Train a Biweight Robust regression model with no regularization using SGD.
+ * This solves the Biweight objective function
+ *              L = k^2 / 6 * (1 - (1 - ||A weights-y||^2 / k^2)^3)     if |A weights-y| <= k
+ *              L = k^2 / 6                                             if |A weights-y| > k
+ * where k = 4.685 which produce 95% efficiency when the errors are normal and
+ * substantial resistance to outliers otherwise.
+ * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+ * its corresponding right hand side label y.
+ * See also the documentation for the precise formulation.
+ */
+class BiweightRobustRegressionWithSGD private[mllib] (
+                                                    private var stepSize: Double,
+                                                    private var numIterations: Int,
+                                                    private var miniBatchFraction: Double)
+  extends GeneralizedLinearAlgorithm[BiweightRobustRegressionModel] with Serializable {
+
+  private val gradient = new BiweightRobustGradient()
+  private val updater = new SimpleUpdater()
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setMiniBatchFraction(miniBatchFraction)
+
+  /**
+   * Construct a Biweight M-Estimation RobustRegression object with default parameters:
+   * {stepSize: 1.0, numIterations: 100, miniBatchFraction: 1.0}.
+   */
+  def this() = this(1.0, 100, 1.0)
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new BiweightRobustRegressionModel(weights, intercept)
+  }
+}
+
+/**
+ * Top-level methods for calling BiweightRobustRegression.
+ */
+object BiweightRobustRegressionWithSGD {
+
+  /**
+   * Train a BiweightRobust Regression model given an RDD of (label, features) pairs. We run a
+   * fixed number of iterations of gradient descent using the specified step size. Each iteration
+   * uses `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights
+   * used in gradient descent are initialized using the initial weights provided.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double,
+             miniBatchFraction: Double,
+             initialWeights: Vector): BiweightRobustRegressionModel = {
+    new BiweightRobustRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+      .run(input, initialWeights)
+  }
+
+  /**
+   * Train a BiweightRobustRegression model given an RDD of (label,features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double,
+             miniBatchFraction: Double): BiweightRobustRegressionModel = {
+    new BiweightRobustRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
+  }
+
+  /**
+   * Train a BiweightRobustRegression model given an RDD of (label,features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. We use the entire
+   * data set to compute the true gradient in each iteration.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param stepSize Step size to be used for each iteration of Gradient Descent.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a BiweightRobustRegressionModel which has the weights and offset from training.
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double): BiweightRobustRegressionModel = {
+    train(input, numIterations, stepSize, 1.0)
+  }
+
+  /**
+   * Train a BiweightRobustRegression model given an RDD of (label,features) pairs. We run a fixed
+   * number of iterations of gradient descent using a step size of 1.0. We use the entire data
+   * set to compute the true gradient in each iteration.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a BiweightRobustRegressionModel which has the weights and offset from training.
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numIterations: Int): BiweightRobustRegressionModel = {
+    train(input, numIterations, 1.0, 1.0)
+  }
+}
