@@ -79,9 +79,9 @@ private[hive] trait HiveStrategies {
              hiveContext.convertMetastoreParquet =>
 
         // Filter out all predicates that only deal with partition keys
-        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
+        val partitionsKeys = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.exprId).subsetOf(partitionKeyIds)
+          _.references.subsetOf(partitionsKeys)
         }
 
         // We are going to throw the predicates and projection back at the whole optimization

@@ -71,6 +71,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  // TODO: This is not really valid...
   def clustering = ordering.map(_.child).toSet
 }
 

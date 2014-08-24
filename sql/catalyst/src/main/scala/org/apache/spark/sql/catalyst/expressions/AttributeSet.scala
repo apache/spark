@@ -36,6 +36,12 @@ object AttributeSet {
 }
 
 class AttributeSet(val baseSet: Set[AttributeEquals]) extends Traversable[Attribute] {
+
+  override def equals(other: Any) = other match {
+    case otherSet: AttributeSet => baseSet.map(_.a).forall(otherSet.contains)
+    case _ => false
+  }
+
   def contains(elem: NamedExpression): Boolean =
     baseSet.contains(new AttributeEquals(elem.toAttribute))
 
