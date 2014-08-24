@@ -44,7 +44,7 @@ object BiweightRobustRegression extends App {
 
   case class Params(
                      input: String = null,
-                     numIterations: Int = 100,
+                     numIterations: Int = 5000,
                      stepSize: Double = 1.0,
                      regType: RegType = L2,
                      regParam: Double = 0.1)
