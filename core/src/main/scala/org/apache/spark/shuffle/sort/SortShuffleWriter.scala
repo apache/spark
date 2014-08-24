@@ -17,12 +17,11 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, DataOutputStream}
+import java.io.File
 
 import org.apache.spark.{MapOutputTracker, SparkEnv, Logging, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
@@ -37,10 +36,6 @@ private[spark] class SortShuffleWriter[K, V, C](
   private val numPartitions = dep.partitioner.numPartitions
 
   private val blockManager = SparkEnv.get.blockManager
-  private val ser = Serializer.getSerializer(dep.serializer.orNull)
-
-  private val conf = SparkEnv.get.conf
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   private var sorter: ExternalSorter[K, V, _] = null
   private var outputFile: File = null
