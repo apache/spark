@@ -681,7 +681,7 @@ class RDD(object):
         >>> sc.parallelize([]).reduce(add)
         Traceback (most recent call last):
             ...
-        ValueError: Can not reduce() of empty RDD
+        ValueError: Can not reduce() empty RDD
         """
         def func(iterator):
             iterator = iter(iterator)
@@ -694,7 +694,7 @@ class RDD(object):
         vals = self.mapPartitions(func).collect()
         if vals:
             return reduce(f, vals)
-        raise ValueError("Can not reduce() of empty RDD")
+        raise ValueError("Can not reduce() empty RDD")
 
     def fold(self, zeroValue, op):
         """
@@ -1536,7 +1536,6 @@ class RDD(object):
         """
         def filter_func((key, vals)):
             return vals[0] and not vals[1]
-        map_func = lambda (key, vals): [(key, val) for val in vals[0]]
         return self.cogroup(other, numPartitions).filter(filter_func).flatMapValues(lambda x: x[0])
 
     def subtract(self, other, numPartitions=None):
@@ -1714,12 +1713,12 @@ class RDD(object):
         >>> sorted.lookup(1024)
         []
         """
-        self = self.filter(lambda (k, v): k == key).values()
+        values = self.filter(lambda (k, v): k == key).values()
 
         if self._partitionFunc is not None:
-            return self.ctx.runJob(self, lambda x: x, [self._partitionFunc(key)], False)
+            return self.ctx.runJob(values, lambda x: x, [self._partitionFunc(key)], False)
 
-        return self.collect()
+        return values.collect()
 
 
 class PipelinedRDD(RDD):
