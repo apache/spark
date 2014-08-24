@@ -32,7 +32,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with TestUtils {
     val commands =
       s"""../../bin/spark-sql
          |  --master local
-         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}="$jdbcUrl"
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$WAREHOUSE_PATH
        """.stripMargin.split("\\s+")
 

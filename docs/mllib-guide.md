@@ -9,7 +9,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 
 * [Data types](mllib-basics.html)
 * [Basic statistics](mllib-stats.html)
-  * data generators  
+  * random data generation  
   * stratified sampling
   * summary statistics
   * hypothesis testing
