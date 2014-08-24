@@ -1727,8 +1727,8 @@ class RDD(object):
         This method needs to trigger a spark job when this RDD contains
         more than one partitions.
 
-        >>> sc.parallelize(range(4), 2).zipWithIndex().collect()
-        [(0, 0), (1, 1), (2, 2), (3, 3)]
+        >>> sc.parallelize(["a", "b", "c", "d"], 3).zipWithIndex().collect()
+        [('a', 0), ('b', 1), ('c', 2), ('d', 3)]
         """
         starts = [0]
         if self.getNumPartitions() > 1:
@@ -1737,7 +1737,8 @@ class RDD(object):
                 starts.append(starts[-1] + nums[i])
 
         def func(k, it):
-            return enumerate(it, starts[k])
+            for i, v in enumerate(it, starts[k]):
+                yield v, i
 
         return self.mapPartitionsWithIndex(func)
 
@@ -1750,14 +1751,14 @@ class RDD(object):
         method won't trigger a spark job, which is different from
         L{zipWithIndex}
 
-        >>> sc.parallelize(range(4), 2).zipWithUniqueId().collect()
-        [(0, 0), (2, 1), (1, 2), (3, 3)]
+        >>> sc.parallelize(["a", "b", "c", "d", "e"], 3).zipWithUniqueId().collect()
+        [('a', 0), ('b', 1), ('c', 4), ('d', 2), ('e', 5)]
         """
         n = self.getNumPartitions()
 
         def func(k, it):
             for i, v in enumerate(it):
-                yield i * n + k, v
+                yield v, i * n + k
 
         return self.mapPartitionsWithIndex(func)
 
