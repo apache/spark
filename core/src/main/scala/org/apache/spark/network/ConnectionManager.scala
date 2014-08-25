@@ -851,8 +851,8 @@ private[spark] class ConnectionManager(
         messageStatuses.synchronized {
           messageStatuses.remove(message.id).foreach ( s => {
             promise.failure(
-              new IOException(s"sendMessageReliably failed because ack " +
-                "was not received within ${ackTimeout} sec"))
+              new IOException("sendMessageReliably failed because ack " +
+                s"was not received within $ackTimeout sec"))
           })
         }
       }
