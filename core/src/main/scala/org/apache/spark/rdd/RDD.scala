@@ -1068,7 +1068,7 @@ abstract class RDD[T: ClassTag](
         // Otherwise, interpolate the number of partitions we need to try, but overestimate it
         // by 50%.
         if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
+          numPartsToTry = partsScanned * 2
         } else {
           numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
         }
