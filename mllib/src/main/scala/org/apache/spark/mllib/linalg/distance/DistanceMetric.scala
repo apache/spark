@@ -95,7 +95,7 @@ class ChebyshevDistanceMetric extends DistanceMetric {
    * @return Double a distance
    */
   override def apply(v1: BV[Double], v2: BV[Double]): Double = {
-    val diff = (v1 - v2).map(elm => abs(elm))
+    val diff = abs((v1 - v2).toArray)
     max(diff)
   }
 }
