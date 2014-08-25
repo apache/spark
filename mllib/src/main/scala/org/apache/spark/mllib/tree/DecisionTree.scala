@@ -892,45 +892,6 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Get an empty instance of bin aggregates.
-   * For ordered features, aggregate is indexed by: (nodeIndex)(featureIndex)(binIndex).
-   * For unordered features, aggregate is indexed by: (nodeIndex)(featureIndex)(2 * binIndex),
-   *  where the bins are ordered as (numBins left bins, numBins right bins).
-   */
-  /*
-  private def getEmptyBinAggregates(
-      metadata: DecisionTreeMetadata,
-      numNodes: Int): Array[Array[Array[ImpurityAggregator]]] = {
-    val impurityAggregator: ImpurityAggregator = metadata.impurity match {
-      case Gini => new GiniAggregator(metadata.numClasses)
-      case Entropy => new EntropyAggregator(metadata.numClasses)
-      case Variance => new VarianceAggregator()
-      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
-    }
-
-    val agg = Array.fill[Array[ImpurityAggregator]](numNodes, metadata.numFeatures)(
-      new Array[ImpurityAggregator](0))
-    var nodeIndex = 0
-    while (nodeIndex < numNodes) {
-      var featureIndex = 0
-      while (featureIndex < metadata.numFeatures) {
-        val binMultiplier = if (metadata.isUnordered(featureIndex)) 2 else 1
-        val effNumBins = metadata.numBins(featureIndex) * binMultiplier
-        agg(nodeIndex)(featureIndex) = new Array[ImpurityAggregator](effNumBins)
-        var binIndex = 0
-        while (binIndex < effNumBins) {
-          agg(nodeIndex)(featureIndex)(binIndex) = impurityAggregator.newAggregator
-          binIndex += 1
-        }
-        featureIndex += 1
-      }
-      nodeIndex += 1
-    }
-    agg
-  }
-  */
-
-  /**
    * Returns splits and bins for decision tree calculation.
    * Continuous and categorical features are handled differently.
    *
