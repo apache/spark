@@ -53,8 +53,8 @@ object DistanceMeasure {
    * @param f calculating distance function (Vector, Vector) => Double
    * @return DistanceMeasure
    */
-  implicit def functionToDistanceMeasure(f: (BV[Double], BV[Double]) => Double): DistanceMeasure = new
-      DistanceMeasure {
+  implicit def functionToDistanceMeasure(f: (BV[Double], BV[Double]) => Double): DistanceMeasure =
+      new DistanceMeasure {
     override def apply(v1: BV[Double], v2: BV[Double]): Double = f(v1, v2)
   }
 }
