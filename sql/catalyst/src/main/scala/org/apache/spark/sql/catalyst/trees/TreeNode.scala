@@ -38,7 +38,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * Unlike `equals`, `id` can be used to differentiate distinct but structurally
    * identical branches of a tree.
    */
-  val id = TreeNode.nextId()
+  @transient lazy val id = TreeNode.nextId()
 
   /**
    * Returns true if other is the same [[catalyst.trees.TreeNode TreeNode]] instance.  Unlike
