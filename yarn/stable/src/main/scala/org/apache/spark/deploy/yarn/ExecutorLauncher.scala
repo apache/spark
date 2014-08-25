@@ -55,7 +55,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
   private var yarnAllocator: YarnAllocationHandler = _
   private var driverClosed: Boolean = false
-  private var isFinished: Boolean = false
+  @volatile private var isFinished: Boolean = false
   private var registered: Boolean = false
 
   private var amClient: AMRMClient[ContainerRequest] = _
