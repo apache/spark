@@ -120,43 +120,6 @@ private[tree] object TreePoint {
       -1
     }
 
-    /**
-     * Sequential search helper method to find bin for categorical feature in multiclass
-     * classification. The category is returned since each category can belong to multiple
-     * splits. The actual left/right child allocation per split is performed in the
-     * sequential phase of the bin aggregate operation.
-     */
-    def sequentialBinSearchForUnorderedCategoricalFeatureInClassification(): Int = {
-      labeledPoint.features(featureIndex).toInt
-    }
-
-    /**
-     * Sequential search helper method to find bin for categorical feature
-     * (for classification and regression).
-     */
-    def sequentialBinSearchForOrderedCategoricalFeature(): Int = {
-      val featureCategories = categoricalFeaturesInfo(featureIndex)
-      val featureValue = labeledPoint.features(featureIndex)
-      var binIndex = 0
-      while (binIndex < featureCategories) {
-        val bin = bins(featureIndex)(binIndex)
-        val categories = bin.highSplit.categories
-        if (categories.contains(featureValue)) {
-          return binIndex
-        }
-        binIndex += 1
-      }
-      if (featureValue < 0 || featureValue >= featureCategories) {
-        throw new IllegalArgumentException(
-          s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureCategories - 1}," +
-            s" but a data point gives it value $featureValue.\n" +
-            "  Bad data point: " + labeledPoint.toString)
-      }
-      -1
-    }
-
     if (isFeatureContinuous) {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
@@ -167,19 +130,18 @@ private[tree] object TreePoint {
       }
       binIndex
     } else {
-      // Perform sequential search to find bin for categorical features.
-      val binIndex = if (isUnorderedFeature) {
-          sequentialBinSearchForUnorderedCategoricalFeatureInClassification()
-        } else {
-          sequentialBinSearchForOrderedCategoricalFeature()
-        }
-      if (binIndex == -1) {
-        throw new RuntimeException("No bin was found for categorical feature." +
-          " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex. isUnorderedFeature = $isUnorderedFeature." +
-          s" Feature value: ${labeledPoint.features(featureIndex)}")
+      // Categorical feature bins are indexed by feature values.
+      val featureCategories = categoricalFeaturesInfo(featureIndex)
+      val featureValue = labeledPoint.features(featureIndex)
+      if (featureValue < 0 || featureValue >= featureCategories) {
+        throw new IllegalArgumentException(
+          s"DecisionTree given invalid data:" +
+            s" Feature $featureIndex is categorical with values in" +
+            s" {0,...,${featureCategories - 1}," +
+            s" but a data point gives it value $featureValue.\n" +
+            "  Bad data point: " + labeledPoint.toString)
       }
-      binIndex
+      featureValue.toInt
     }
   }
 }
