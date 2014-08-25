@@ -913,7 +913,7 @@ class RDD(object):
             try:
                 minv, maxv = filtered.map(lambda x: (x, x)).reduce(minmax)
             except TypeError as e:
-                if " empty " in e.message:
+                if " empty " in str(e):
                     raise ValueError("can not generate buckets from empty RDD")
                 raise
 
