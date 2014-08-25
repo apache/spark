@@ -22,7 +22,7 @@ import java.io.{BufferedReader, IOException, InputStreamReader}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FSDataInputStream
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
@@ -105,11 +105,15 @@ private[input] class EscapedTextRecordReader extends RecordReader[Long, Array[St
       throw new IOException(s"Do not support compressed files but found $file.")
     }
     val fs = file.getFileSystem(conf)
-    val in = fs.open(file)
-    start = findNext(in, split.getStart)
-    end = findNext(in, split.getStart + split.getLength)
+    val size = fs.getFileStatus(file).getLen
+    start = findNext(fs, file, size, split.getStart)
+    end = findNext(fs, file, size, split.getStart + split.getLength)
     cur = start
-    in.seek(cur)
+    val in = fs.open(file)
+    if (cur > 0L) {
+      in.seek(cur - 1L)
+      in.read()
+    }
     reader = new BufferedReader(new InputStreamReader(in), defaultBufferSize)
   }
 
@@ -147,9 +151,11 @@ private[input] class EscapedTextRecordReader extends RecordReader[Long, Array[St
    * position that is not escaped.
    * @return the start position of the next record
    */
-  private def findNext(in: FSDataInputStream, start: Long): Long = {
-    if (start == 0L) return 0L
-    var pos = start
+  private def findNext(fs: FileSystem, file: Path, size: Long, offset: Long): Long = {
+    if (offset == 0L) return 0L
+    if (offset >= size) return size
+    var pos = offset
+    val in = fs.open(file)
     in.seek(pos)
     val br = new BufferedReader(new InputStreamReader(in), defaultBufferSize)
     var escaped = true
@@ -183,6 +189,7 @@ private[input] class EscapedTextRecordReader extends RecordReader[Long, Array[St
         }
       }
     }
+    in.close()
     pos
   }
 
