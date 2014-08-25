@@ -102,17 +102,11 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
   test("mergeFunc") {
     // test to see if the mergeFunc is working correctly
     withSpark { sc =>
-      // VertexRDD default constructor: Duplicate entries are removed arbitrarily.
-      // val verts = VertexRDD(sc.parallelize(List((0L, 1), (0L, 2), (1L, 3), (1L, 3), (1L, 3))))
-      // ensure constructor preserve duplicate vertex
-      // assert(verts.collect.toSet == Set((0L, 1), (0L, 2), (1L, 3), (1L, 3), (1L, 3)))
-      // won't pass
-
-      val verts = sc.parallelize(List((0L, 1), (0L, 2), (1L, 3), (1L, 3), (1L, 3)))
+      val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
       val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
       val rdd = VertexRDD(verts, edges, 0, (a: Int, b: Int) => a + b)
       // test merge function
-      assert(rdd.collect.toSet == Set((0L, 3), (1L, 9)))
+      assert(rdd.collect.toSet == Set((0L, 0), (1L, 3), (2L, 9)))
     }
   }
 
