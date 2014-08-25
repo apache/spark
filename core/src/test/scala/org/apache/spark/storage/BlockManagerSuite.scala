@@ -91,7 +91,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus(conf)))),
       conf)
 
     val initialize = PrivateMethod[Unit]('initialize)

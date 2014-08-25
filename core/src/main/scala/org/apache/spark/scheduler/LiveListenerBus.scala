@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.{LinkedBlockingQueue, Semaphore}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 
 /**
@@ -29,11 +29,11 @@ import org.apache.spark.util.Utils
  * has started will events be actually propagated to all attached listeners. This listener bus
  * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
  */
-private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
+private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus with Logging {
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
-  private val EVENT_QUEUE_CAPACITY = 10000
+  private val EVENT_QUEUE_CAPACITY = conf.getInt("spark.liveListenerBus.eventQueueCapacity", 10000)
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
   private var started = false

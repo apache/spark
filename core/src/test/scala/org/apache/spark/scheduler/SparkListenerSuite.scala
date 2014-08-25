@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.Matchers
 
-import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.apache.spark.{SparkConf, LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
@@ -33,7 +33,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
-
+  val conf = new SparkConf()
   before {
     sc = new SparkContext("local", "SparkListenerSuite")
   }
@@ -44,7 +44,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
   test("basic creation and shutdown of LiveListenerBus") {
     val counter = new BasicJobCounter
-    val bus = new LiveListenerBus
+    val bus = new LiveListenerBus(conf)
     bus.addListener(counter)
 
     // Listener bus hasn't started yet, so posting events should not increment counter
@@ -63,14 +63,14 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
     // Listener bus must not be started twice
     intercept[IllegalStateException] {
-      val bus = new LiveListenerBus
+      val bus = new LiveListenerBus(conf)
       bus.start()
       bus.start()
     }
 
     // ... or stopped before starting
     intercept[IllegalStateException] {
-      val bus = new LiveListenerBus
+      val bus = new LiveListenerBus(conf)
       bus.stop()
     }
   }
@@ -98,7 +98,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       }
     }
 
-    val bus = new LiveListenerBus
+    val bus = new LiveListenerBus(conf)
     val blockingListener = new BlockingListener
 
     bus.addListener(blockingListener)
@@ -339,7 +339,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     val badListener = new BadListener
     val jobCounter1 = new BasicJobCounter
     val jobCounter2 = new BasicJobCounter
-    val bus = new LiveListenerBus
+    val bus = new LiveListenerBus(conf)
 
     // Propagate events to bad listener first
     bus.addListener(badListener)

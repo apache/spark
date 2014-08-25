@@ -197,7 +197,7 @@ class SparkContext(config: SparkConf) extends Logging {
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus
+  private[spark] val listenerBus = new LiveListenerBus(conf)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(

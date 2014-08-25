@@ -98,7 +98,7 @@ private[spark] object ThreadingTest {
     val conf = new SparkConf()
     val serializer = new KryoSerializer(conf)
     val blockManagerMaster = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus(conf)))),
       conf)
     val blockManager = new BlockManager(
       "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024, conf,
