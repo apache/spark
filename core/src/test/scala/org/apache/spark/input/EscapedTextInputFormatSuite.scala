@@ -23,29 +23,16 @@ import scala.language.implicitConversions
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{SparkContext, LocalSparkContext, Logging}
 import org.apache.spark.SparkContext._
 import org.apache.spark.input.EscapedTextInputFormat._
 import org.apache.spark.util.Utils
 
-class EscapedTextInputFormatSuite extends FunSuite with BeforeAndAfterAll with Logging {
+class EscapedTextInputFormatSuite extends FunSuite with LocalSparkContext with Logging {
 
   import EscapedTextInputFormatSuite._
-
-  private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-
-    // Set the block size of local file system to test whether files are split right or not.
-    sc.hadoopConfiguration.setLong("fs.local.block.size", 4)
-  }
-
-  override def afterAll() {
-    sc.stop()
-  }
 
   private def writeToFile(contents: String, file: File) = {
     val bytes = contents.getBytes
@@ -65,6 +52,8 @@ class EscapedTextInputFormatSuite extends FunSuite with BeforeAndAfterAll with L
     }.mkString("", "\n", "\n")
   }
 
+  private final val KEY_BLOCK_SIZE = "fs.local.block.size"
+
   private final val TAB = '\t'
 
   private val records = Set(
@@ -81,33 +70,41 @@ class EscapedTextInputFormatSuite extends FunSuite with BeforeAndAfterAll with L
   }
 
   test("default delimiter") {
+    sc = new SparkContext("local", "test default delimiter")
     withTempDir { dir =>
       val escaped = escape(records, DEFAULT_DELIMITER)
       writeToFile(escaped, new File(dir, "part-00000"))
 
-      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[EscapedTextInputFormat],
-        classOf[Long], classOf[Array[String]])
-      assert(rdd.partitions.size > 3) // so there will be empty partitions
+      val conf = new Configuration
+      conf.setLong(KEY_BLOCK_SIZE, 4)
 
-      val actual = rdd.values.map(_.toSeq).collect().toSet
-      assert(actual === records)
+      val rdd = sc.newAPIHadoopFile(dir.toString, classOf[EscapedTextInputFormat],
+        classOf[Long], classOf[Array[String]], conf)
+      assert(rdd.partitions.size > records.size) // so there exist at least one empty partition
+
+      val actual = rdd.values.map(_.toSeq).collect()
+      assert(actual.size === records.size)
+      assert(actual.toSet === records)
     }
   }
 
   test("customized delimiter") {
+    sc = new SparkContext("local", "test customized delimiter")
     withTempDir { dir =>
       val escaped = escape(records, TAB)
       writeToFile(escaped, new File(dir, "part-00000"))
 
       val conf = new Configuration
+      conf.setLong(KEY_BLOCK_SIZE, 4)
       conf.set(KEY_DELIMITER, TAB)
 
       val rdd = sc.newAPIHadoopFile(dir.toString, classOf[EscapedTextInputFormat],
         classOf[Long], classOf[Array[String]], conf)
-      assert(rdd.partitions.size > 3) // so their will be empty partitions
+      assert(rdd.partitions.size > records.size) // so there exist at least one empty partitions
 
-      val actual = rdd.values.map(_.toSeq).collect().toSet
-      assert(actual === records)
+      val actual = rdd.values.map(_.toSeq).collect()
+      assert(actual.size === records.size)
+      assert(actual.toSet === records)
     }
   }
 }
