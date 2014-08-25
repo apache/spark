@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.{List => JList}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -24,7 +25,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records.{Container, ContainerId}
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
@@ -36,8 +37,19 @@ object AllocationType extends Enumeration {
   val HOST, RACK, ANY = Value
 }
 
+// TODO:
+// Too many params.
+// Needs to be mt-safe
+// Need to refactor this to make it 'cleaner' ... right now, all computation is reactive - should
+// make it more proactive and decoupled.
+
+// Note that right now, we assume all node asks as uniform in terms of capabilities and priority
+// Refer to http://developer.yahoo.com/blogs/hadoop/posts/2011/03/mapreduce-nextgen-scheduler/ for
+// more info on how we are requesting for containers.
+
 /**
- * Interface that defines a Yarn allocator.
+ * Common code for the Yarn container allocator. Contains all the version-agnostic code to
+ * manage container allocation for a running Spark application.
  */
 private[yarn] abstract class YarnAllocator(
     conf: Configuration,
@@ -412,9 +424,23 @@ private[yarn] abstract class YarnAllocator(
    *              If zero, should still contact RM (as a heartbeat).
    * @return Response to the allocation request.
    */
-  protected def allocateContainers(count: Int): AllocateResponse
+  protected def allocateContainers(count: Int): YarnAllocateResponse
 
   /** Called to release a previously allocated container. */
   protected def releaseContainer(container: Container): Unit
+
+  /**
+   * Defines the interface for an allocate response from the RM. This is needed since the alpha
+   * and stable interfaces differ here in ways that cannot be fixed using other routes.
+   */
+  protected trait YarnAllocateResponse {
+
+    def getAllocatedContainers(): JList[Container]
+
+    def getAvailableResources(): Resource
+
+    def getCompletedContainersStatuses(): JList[ContainerStatus]
+
+  }
 
 }

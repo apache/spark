@@ -24,23 +24,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SplitInfo
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
-import org.apache.hadoop.yarn.api.records.Container
-import org.apache.hadoop.yarn.api.records.{Priority, Resource, ResourceRequest}
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.Records
-
-// TODO:
-// Too many params.
-// Needs to be mt-safe
-// Need to refactor this to make it 'cleaner' ... right now, all computation is reactive - should
-// make it more proactive and decoupled.
-
-// Note that right now, we assume all node asks as uniform in terms of capabilities and priority
-// Refer to http://developer.yahoo.com/blogs/hadoop/posts/2011/03/mapreduce-nextgen-scheduler/ for
-// more info on how we are requesting for containers.
 
 /**
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
@@ -64,7 +52,7 @@ private[yarn] class YarnAllocationHandler(
     // We have already set the container request. Poll the ResourceManager for a response.
     // This doubles as a heartbeat if there are no pending container requests.
     val progressIndicator = 0.1f
-    amClient.allocate(progressIndicator)
+    new StableAllocateResponse(amClient.allocate(progressIndicator))
   }
 
   private def createRackResourceRequests(
@@ -210,6 +198,12 @@ private[yarn] class YarnAllocationHandler(
       requests += new ContainerRequest(resource, hosts, racks, prioritySetting)
     }
     requests
+  }
+
+  class StableAllocateResponse(response: AllocateResponse) extends YarnAllocateResponse {
+    override def getAllocatedContainers() = response.getAllocatedContainers()
+    override def getAvailableResources() = response.getAvailableResources()
+    override def getCompletedContainersStatuses() = response.getCompletedContainersStatuses()
   }
 
 }
