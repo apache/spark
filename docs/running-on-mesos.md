@@ -107,7 +107,7 @@ cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooK
 
 The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
-1. In `spark.env.sh` set some environment variables:
+1. In `spark-env.sh` set some environment variables:
  * `export MESOS_NATIVE_LIBRARY=<path to libmesos.so>`. This path is typically
    `<prefix>/lib/libmesos.so` where the prefix is `/usr/local` by default. See Mesos installation
    instructions above. On Mac OS X, the library is called `libmesos.dylib` instead of
