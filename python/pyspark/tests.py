@@ -368,26 +368,25 @@ class TestRDDFunctions(PySparkTestCase):
         # empty
         rdd = self.sc.parallelize([])
         self.assertEquals([0], rdd.histogram([0, 10])[1])
-        self.assertEquals([0], rdd.histogram([0, 10], True)[1])
+        self.assertEquals([0, 0], rdd.histogram([0, 4, 10])[1])
+        self.assertRaises(ValueError, lambda: rdd.histogram(1))
 
         # out of range
         rdd = self.sc.parallelize([10.01, -0.01])
         self.assertEquals([0], rdd.histogram([0, 10])[1])
-        self.assertEquals([0], rdd.histogram([0, 10], True)[1])
+        self.assertEquals([0, 0], rdd.histogram((0, 4, 10))[1])
 
         # in range with one bucket
         rdd = self.sc.parallelize(range(1, 5))
         self.assertEquals([4], rdd.histogram([0, 10])[1])
-        self.assertEquals([4], rdd.histogram([0, 10], True)[1])
+        self.assertEquals([3, 1], rdd.histogram([0, 4, 10])[1])
 
         # in range with one bucket exact match
         self.assertEquals([4], rdd.histogram([1, 4])[1])
-        self.assertEquals([4], rdd.histogram([1, 4], True)[1])
 
         # out of range with two buckets
         rdd = self.sc.parallelize([10.01, -0.01])
         self.assertEquals([0, 0], rdd.histogram([0, 5, 10])[1])
-        self.assertEquals([0, 0], rdd.histogram([0, 5, 10], True)[1])
 
         # out of range with two uneven buckets
         rdd = self.sc.parallelize([10.01, -0.01])
@@ -396,12 +395,10 @@ class TestRDDFunctions(PySparkTestCase):
         # in range with two buckets
         rdd = self.sc.parallelize([1, 2, 3, 5, 6])
         self.assertEquals([3, 2], rdd.histogram([0, 5, 10])[1])
-        self.assertEquals([3, 2], rdd.histogram([0, 5, 10], True)[1])
 
         # in range with two bucket and None
         rdd = self.sc.parallelize([1, 2, 3, 5, 6, None, float('nan')])
         self.assertEquals([3, 2], rdd.histogram([0, 5, 10])[1])
-        self.assertEquals([3, 2], rdd.histogram([0, 5, 10], True)[1])
 
         # in range with two uneven buckets
         rdd = self.sc.parallelize([1, 2, 3, 5, 6])
@@ -421,12 +418,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals([4, 2, 1, 3], rdd.histogram([0.0, 5.0, 11.0, 12.0, 200.0])[1])
 
         # out of range with infinite buckets
-        rdd = self.sc.parallelize([10.01, -0.01, float('nan')])
-        self.assertEquals([1, 1], rdd.histogram([float('-inf'), 0, float('inf')])[1])
+        rdd = self.sc.parallelize([10.01, -0.01, float('nan'), float("inf")])
+        self.assertEquals([1, 2], rdd.histogram([float('-inf'), 0, float('inf')])[1])
 
         # invalid buckets
         self.assertRaises(ValueError, lambda: rdd.histogram([]))
         self.assertRaises(ValueError, lambda: rdd.histogram([1]))
+        self.assertRaises(ValueError, lambda: rdd.histogram(0))
+        self.assertRaises(TypeError, lambda: rdd.histogram({}))
 
         # without buckets
         rdd = self.sc.parallelize(range(1, 5))
@@ -455,6 +454,19 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertRaises(ValueError, lambda: rdd.histogram(2))
         rdd = self.sc.parallelize([float('nan')])
         self.assertRaises(ValueError, lambda: rdd.histogram(2))
+
+        # string
+        rdd = self.sc.parallelize(["ab", "ac", "b", "bd", "ef"], 2)
+        self.assertEquals([2, 2], rdd.histogram(["a", "b", "c"])[1])
+        self.assertEquals((["ab", "ef"], [5]), rdd.histogram(1))
+        self.assertRaises(TypeError, lambda: rdd.histogram(2))
+
+        # mixed RDD
+        rdd = self.sc.parallelize([1, 4, "ab", "ac", "b"], 2)
+        self.assertEquals([1, 1], rdd.histogram([0, 4, 10])[1])
+        self.assertEquals([2, 1], rdd.histogram(["a", "b", "c"])[1])
+        self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
+        self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
 
 class TestIO(PySparkTestCase):

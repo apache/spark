@@ -856,7 +856,7 @@ class RDD(object):
 
         return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
 
-    def histogram(self, buckets, evenBuckets=False):
+    def histogram(self, buckets):
         """
         Compute a histogram using the provided buckets. The buckets
         are all open to the right except for the last which is closed.
@@ -866,7 +866,7 @@ class RDD(object):
 
         If your histogram is evenly spaced (e.g. [0, 10, 20, 30]),
         this can be switched from an O(log n) inseration to O(1) per
-        element(where n = # buckets), if you set `even` to True.
+        element(where n = # buckets).
 
         Buckets must be sorted and not contain any duplicates, must be
         at least two elements.
@@ -886,8 +886,11 @@ class RDD(object):
         ([0, 25, 50], [25, 26])
         >>> rdd.histogram([0, 5, 25, 50])
         ([0, 5, 25, 50], [5, 20, 26])
-        >>> rdd.histogram([0, 15, 30, 45, 60], True)
+        >>> rdd.histogram([0, 15, 30, 45, 60])  # evenly spaced buckets
         ([0, 15, 30, 45, 60], [15, 15, 15, 6])
+        >>> rdd = sc.parallelize(["ab", "ac", "b", "bd", "ef"])
+        >>> rdd.histogram(("a", "b", "c"))
+        (('a', 'b', 'c'), [2, 2])
         """
 
         if isinstance(buckets, (int, long)):
@@ -895,22 +898,33 @@ class RDD(object):
                 raise ValueError("number of buckets must be >= 1")
 
             # filter out non-comparable elements
-            self = self.filter(lambda x: x is not None and not isnan(x))
+            def comparable(x):
+                if x is None:
+                    return False
+                if type(x) is float and isnan(x):
+                    return False
+                return True
+
+            filtered = self.filter(comparable)
 
             # faster than stats()
             def minmax(a, b):
                 return min(a[0], b[0]), max(a[1], b[1])
             try:
-                minv, maxv = self.map(lambda x: (x, x)).reduce(minmax)
+                minv, maxv = filtered.map(lambda x: (x, x)).reduce(minmax)
             except TypeError as e:
-                if e.message == "reduce() of empty sequence with no initial value":
+                if " empty " in e.message:
                     raise ValueError("can not generate buckets from empty RDD")
                 raise
 
             if minv == maxv or buckets == 1:
-                return [minv, maxv], [self.count()]
+                return [minv, maxv], [filtered.count()]
 
-            inc = (maxv - minv) / buckets
+            try:
+                inc = (maxv - minv) / buckets
+            except TypeError:
+                raise TypeError("Can not generate buckets with non-number in RDD")
+
             if isinf(inc):
                 raise ValueError("Can not generate buckets with infinite value")
 
@@ -920,28 +934,43 @@ class RDD(object):
 
             buckets = [i * inc + minv for i in range(buckets)]
             buckets.append(maxv)  # fix accumulated error
-            evenBuckets = True
+            even = True
 
-        else:
+        elif isinstance(buckets, (list, tuple)):
             if len(buckets) < 2:
                 raise ValueError("buckets should have more than one value")
 
-            if any(i is None or isnan(i) for i in buckets):
+            if any(i is None or isinstance(i, float) and isnan(i) for i in buckets):
                 raise ValueError("can not have None or NaN in buckets")
 
-            if sorted(buckets) != buckets:
+            if sorted(buckets) != list(buckets):
                 raise ValueError("buckets should be sorted")
+
+            if len(set(buckets)) != len(buckets):
+                raise ValueError("buckets should not contain duplicated values")
 
             minv = buckets[0]
             maxv = buckets[-1]
-            inc = buckets[1] - buckets[0] if evenBuckets else None
+            even = False
+            inc = None
+            try:
+                steps = [buckets[i + 1] - buckets[i] for i in range(len(buckets) - 1)]
+            except TypeError:
+                pass  # objects in buckets do not support '-'
+            else:
+                if max(steps) - min(steps) < 1e-10:  # handle precision errors
+                    even = True
+                    inc = (maxv - minv) / (len(buckets) - 1)
+
+        else:
+            raise TypeError("buckets should be a list or tuple or number(int or long)")
 
         def histogram(iterator):
             counters = [0] * len(buckets)
             for i in iterator:
-                if i is None or isnan(i) or i > maxv or i < minv:
+                if i is None or (type(i) is float and isnan(i)) or i > maxv or i < minv:
                     continue
-                t = (int((i - minv) / inc) if evenBuckets
+                t = (int((i - minv) / inc) if even
                      else bisect.bisect_right(buckets, i) - 1)
                 counters[t] += 1
             # add last two together
