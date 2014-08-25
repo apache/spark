@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction 
+title: Feature Extraction and Transformation - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction and Transformation
 ---
 
 * Table of contents
@@ -145,6 +145,111 @@ val synonyms = model.findSynonyms("china", 40)
 for((synonym, cosineSimilarity) <- synonyms) {
   println(s"$synonym $cosineSimilarity")
 }
+{% endhighlight %}
+</div>
+</div>
+
+## StandardScaler
+
+Standardizes features by scaling to unit variance and/or removing the mean using column summary
+statistics on the samples in the training set. This is a very common pre-processing step.
+
+For example, RBF kernel of Support Vector Machines or the L1 and L2 regularized linear models
+typically work better when all features have unit variance and/or zero mean.
+
+Standardization can improve the convergence rate during the optimization process, and also prevents
+against features with very large variances exerting an overly large influence during model training.
+
+### Model Fitting
+
+[`StandardScaler`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) has the
+following parameters in the constructor:
+
+* `withMean` False by default. Centers the data with mean before scaling. It will build a dense
+output, so this does not work on sparse input and will raise an exception.
+* `withStd` True by default. Scales the data to unit variance.
+
+We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
+`StandardScaler` which can take an input of `RDD[Vector]`, learn the summary statistics, and then
+return a model which can transform the input dataset into unit variance and/or zero mean features
+depending how we configure the `StandardScaler`.
+
+This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+which can apply the standardization on a `Vector` to produce a transformed `Vector` or on
+an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+
+Note that if the variance of a feature is zero, it will return default `0.0` value in the `Vector`
+for that feature.
+
+### Example
+
+The example below demonstrates how to load a dataset in libsvm format, and standardize the features
+so that the new features have unit variance and/or zero mean.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.feature.StandardScaler
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+
+val scaler1 = new StandardScaler().fit(data.map(x => x.features))
+val scaler2 = new StandardScaler(withMean = true, withStd = true).fit(data.map(x => x.features))
+
+// data1 will be unit variance.
+val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
+
+// Without converting the features into dense vectors, transformation with zero mean will raise
+// exception on sparse vector.
+// data2 will be unit variance and zero mean.
+val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.toArray))))
+{% endhighlight %}
+</div>
+</div>
+
+## Normalizer
+
+Normalizer scales individual samples to have unit $L^p$ norm. This is a common operation for text
+classification or clustering. For example, the dot product of two $L^2$ normalized TF-IDF vectors
+is the cosine similarity of the vectors.
+
+[`Normalizer`](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) has the following
+parameter in the constructor:
+
+* `p` Normalization in $L^p$ space, $p = 2$ by default.
+
+`Normalizer` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+which can apply the normalization on a `Vector` to produce a transformed `Vector` or on
+an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+
+Note that if the norm of the input is zero, it will return the input vector.
+
+### Example
+
+The example below demonstrates how to load a dataset in libsvm format, and normalizes the features
+with $L^2$ norm, and $L^\infty$ norm.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.feature.Normalizer
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+
+val normalizer1 = new Normalizer()
+val normalizer2 = new Normalizer(p = Double.PositiveInfinity)
+
+// Each sample in data1 will be normalized using $L^2$ norm.
+val data1 = data.map(x => (x.label, normalizer1.transform(x.features)))
+
+// Each sample in data2 will be normalized using $L^\infty$ norm.
+val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
 {% endhighlight %}
 </div>
 </div>
