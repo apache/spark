@@ -193,14 +193,14 @@ object YarnSparkHadoopUtil {
     }
   }
 
-  def lookupRack(conf: Configuration, host: String): String = {
+  private[spark] def lookupRack(conf: Configuration, host: String): String = {
     if (!hostToRack.contains(host)) {
       populateRackInfo(conf, host)
     }
     hostToRack.get(host)
   }
 
-  def populateRackInfo(conf: Configuration, hostname: String) {
+  private[spark] def populateRackInfo(conf: Configuration, hostname: String) {
     Utils.checkHost(hostname)
 
     if (!hostToRack.containsKey(hostname)) {

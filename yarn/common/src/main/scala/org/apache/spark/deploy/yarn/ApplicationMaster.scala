@@ -190,7 +190,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       conf = sparkConf, securityManager = securityMgr)._1
     actor = waitForSparkDriver()
     addAmIpFilter()
-    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), "")
+    registerAM(sparkConf.get("spark.driver.appUIAddress", ""),
+      sparkConf.get("spark.driver.appUIHistoryAddress", ""))
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()

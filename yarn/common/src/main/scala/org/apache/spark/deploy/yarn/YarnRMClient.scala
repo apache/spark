@@ -50,8 +50,8 @@ trait YarnRMClient {
   /**
    * Shuts down the AM. Guaranteed to only be called once.
    *
-   * @param registered Whether the AM was successfully registered with the RM.
    * @param status The final status of the AM.
+   * @param diagnostics Diagnostics message to include in the final status.
    */
   def shutdown(status: FinalApplicationStatus, diagnostics: String = ""): Unit
 
