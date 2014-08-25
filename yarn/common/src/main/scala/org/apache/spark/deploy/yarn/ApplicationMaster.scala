@@ -254,7 +254,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  // Note: this needs to happen before allocateExecutors.
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     try {
