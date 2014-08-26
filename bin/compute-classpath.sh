@@ -43,6 +43,7 @@ if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   echo "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark"\
     "classes ahead of assembly." >&2
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/classes"
