@@ -99,6 +99,11 @@ private[spark] class MesosSchedulerBackend(
         .setValue(value)
         .build())
     }
+    environment.addVariables(Environment.Variable.newBuilder()
+      .setName("PYTHONPATH")
+      .setValue(sys.env.getOrElse("PYTHONPATH", ""))
+      .build())
+
     val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
       
