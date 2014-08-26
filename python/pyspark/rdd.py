@@ -17,22 +17,24 @@
 
 from base64 import standard_b64encode as b64enc
 import copy
-from collections import defaultdict
-from collections import namedtuple
-from itertools import chain, ifilter, imap
 import operator
 import os
 import sys
 import shlex
 import traceback
+import warnings
+import heapq
+import array
+import bisect
+import math
+from collections import defaultdict, namedtuple
+from itertools import chain, ifilter, imap
+from random import Random
+from math import sqrt, log
+from bisect import bisect_right
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
-import warnings
-import heapq
-import bisect
-from random import Random
-from math import sqrt, log
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
@@ -1741,6 +1743,13 @@ class RDD(object):
                                         other._jrdd_deserializer)
         return RDD(pairRDD, self.ctx, deserializer)
 
+    # TODO
+    # def zipPartitions(self, other, f, preservesPartitioning=False):
+    #     """
+    #     Zip this RDD's partitions with one (or more) RDD(s) and return a
+    #     new RDD by applying a function to the zipped partitions.
+    #     """
+
     def zipWithIndex(self):
         """
         Zips this RDD with its element indices.
@@ -1850,10 +1859,28 @@ class RDD(object):
         else:
             return self.getNumPartitions()
 
-    # TODO: `lookup` is disabled because we can't make direct comparisons based
-    # on the key; we need to compare the hash of the key to the hash of the
-    # keys in the pairs.  This could be an expensive operation, since those
-    # hashes aren't retained.
+    # TODO
+    # def countApproxDistinctByKey(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental ::
+    #     Return approximate number of distinct values for each key in this RDD.
+    #     """
+
+    # TODO
+    # def countByKeyApprox(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental ::
+    #     Approximate version of countByKey that can return a partial result
+    #     if it does not finish within a timeout.
+    #     """
+    #
+    # def countByValueApprox(self, timeout, confidence=0.95):
+    #     """
+    #     :: Experimental::
+    #     Approximate version of countByValue().
+    #
+    #     """
+    #     return self.map(lambda x: (x, None)).countByKeyApprox(timeout, confidence)
 
     def _is_pickled(self):
         """ Return this RDD is serialized by Pickle or not. """

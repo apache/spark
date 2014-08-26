@@ -153,6 +153,7 @@ class SparkContext(object):
 
         # Create the Java SparkContext through Py4J
         self._jsc = self._initialize_context(self._conf._jconf)
+        self._conf._readonly = True
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -259,6 +260,22 @@ class SparkContext(object):
         Default min number of partitions for Hadoop RDDs when not given by user
         """
         return self._jsc.sc().defaultMinPartitions()
+
+    @property
+    def isLocal(self):
+        """
+        Whether the context run locally
+        """
+        return self._jsc.isLocal()
+
+    @property
+    def conf(self):
+        """
+        The L{SparkConf} object
+
+        Configuration can not be changed after initialization.
+        """
+        return self._conf
 
     def stop(self):
         """
@@ -733,6 +750,13 @@ class SparkContext(object):
         """
         return self._jsc.sc().sparkUser()
 
+    @property
+    def startTime(self):
+        """
+        Return the start time of context in millis seconds
+        """
+        return self._jsc.startTime()
+
     def cancelJobGroup(self, groupId):
         """
         Cancel active jobs for the specified group. See L{SparkContext.setJobGroup}
@@ -771,6 +795,13 @@ class SparkContext(object):
         mappedRDD = rdd.mapPartitions(partitionFunc)
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
+
+    # TODO
+    # def runApproximateJob(self, rdd, func, evaluator, timeout):
+    #     """
+    #     :: DeveloperApi ::
+    #     Run a job that can return approximate results.
+    #     """
 
 
 def _test():

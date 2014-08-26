@@ -54,6 +54,17 @@ spark.home=/path
 (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
 
+import functools
+
+
+def check_readonly(f):
+    @functools.wraps(f)
+    def func(self, *a, **kw):
+        if self._readonly:
+            raise Exception("Configuration can not be changed after initialization")
+        return f(self, *a, **kw)
+    return func
+
 
 class SparkConf(object):
 
@@ -96,32 +107,41 @@ class SparkConf(object):
             _jvm = _jvm or SparkContext._jvm
             self._jconf = _jvm.SparkConf(loadDefaults)
 
+        # Configuration can not be changed after initialization
+        self._readonly = False
+
+    @check_readonly
     def set(self, key, value):
         """Set a configuration property."""
         self._jconf.set(key, unicode(value))
         return self
 
+    @check_readonly
     def setIfMissing(self, key, value):
         """Set a configuration property, if not already set."""
         if self.get(key) is None:
             self.set(key, value)
         return self
 
+    @check_readonly
     def setMaster(self, value):
         """Set master URL to connect to."""
         self._jconf.setMaster(value)
         return self
 
+    @check_readonly
     def setAppName(self, value):
         """Set application name."""
         self._jconf.setAppName(value)
         return self
 
+    @check_readonly
     def setSparkHome(self, value):
         """Set path where Spark is installed on worker nodes."""
         self._jconf.setSparkHome(value)
         return self
 
+    @check_readonly
     def setExecutorEnv(self, key=None, value=None, pairs=None):
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
@@ -133,6 +153,7 @@ class SparkConf(object):
                 self._jconf.setExecutorEnv(k, v)
         return self
 
+    @check_readonly
     def setAll(self, pairs):
         """
         Set multiple parameters, passed as a list of key-value pairs.

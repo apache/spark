@@ -35,7 +35,7 @@ import org.apache.hadoop.mapred.{InputFormat, OutputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.{JavaDoubleRDD, JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -738,7 +738,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.
    */
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
