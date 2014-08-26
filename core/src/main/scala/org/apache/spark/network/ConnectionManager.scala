@@ -418,7 +418,7 @@ private[spark] class ConnectionManager(
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
-        logInfo("Accepted connection from [" + newConnection.remoteAddress.getAddress + "]")
+        logInfo("Accepted connection from [" + newConnection.remoteAddress + "]")
       } catch {
         // might happen in case of issues with registering with selector
         case e: Exception => logError("Error in accept loop", e)
@@ -851,8 +851,8 @@ private[spark] class ConnectionManager(
         messageStatuses.synchronized {
           messageStatuses.remove(message.id).foreach ( s => {
             promise.failure(
-              new IOException(s"sendMessageReliably failed because ack " +
-                "was not received within ${ackTimeout} sec"))
+              new IOException("sendMessageReliably failed because ack " +
+                s"was not received within $ackTimeout sec"))
           })
         }
       }

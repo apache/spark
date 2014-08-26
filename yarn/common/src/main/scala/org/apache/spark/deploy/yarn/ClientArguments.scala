@@ -38,7 +38,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var amQueue = sparkConf.get("QUEUE", "default")
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
-  var inputFormatInfo: List[InputFormatInfo] = null
   var priority = 0
 
   parseArgs(args.toList)
@@ -57,8 +56,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
-    val inputFormatMap: HashMap[String, InputFormatInfo] = new HashMap[String, InputFormatInfo]()
-
+  
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -138,7 +136,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     }
 
     userArgs = userArgsBuffer.readOnly
-    inputFormatInfo = inputFormatMap.values.toList
   }
 
 
