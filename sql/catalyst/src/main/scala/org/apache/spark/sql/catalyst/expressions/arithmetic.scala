@@ -89,6 +89,8 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 case class MaxOf(left: Expression, right: Expression) extends Expression {
   type EvaluatedType = Any
 
+  override def foldable = left.foldable && right.foldable
+
   override def nullable = left.nullable && right.nullable
 
   override def children = left :: right :: Nil
