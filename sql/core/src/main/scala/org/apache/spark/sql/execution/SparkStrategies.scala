@@ -301,8 +301,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.SetCommand(key, value) =>
         Seq(execution.SetCommand(key, value, plan.output)(context))
-      case logical.ExplainCommand(logicalPlan) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output)(context))
+      case logical.ExplainCommand(logicalPlan, extended) =>
+        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
       case logical.CacheCommand(tableName, cache) =>
         Seq(execution.CacheCommand(tableName, cache)(context))
       case _ => Nil

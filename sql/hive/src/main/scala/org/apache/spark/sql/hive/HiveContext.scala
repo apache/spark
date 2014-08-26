@@ -424,7 +424,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       logical match {
         case _: NativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => executedPlan.toString
+        case _ => super.simpleString
       }
   }
 }
