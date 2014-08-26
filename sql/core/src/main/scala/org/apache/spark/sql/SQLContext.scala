@@ -408,10 +408,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = stringOrError(executedPlan)
+    def simpleString: String = 
+      s"""== Physical Plan ==
+         |${stringOrError(executedPlan)}
+      """
 
     override def toString: String =
-      s"""== Logical Plan ==
+      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
+      // however, the `toRdd` will cause the real execution, which is not what we want.
+      // We need to think about how to avoid the side effect.
+      s"""== Parsed Logical Plan ==
+         |${stringOrError(logical)}
+         |== Analyzed Logical Plan ==
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
@@ -419,7 +427,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(executedPlan)}
          |Code Generation: ${executedPlan.codegenEnabled}
          |== RDD ==
-         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 
