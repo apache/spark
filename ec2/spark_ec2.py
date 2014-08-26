@@ -141,6 +141,12 @@ def parse_args():
     parser.add_option(
         "--security-group-prefix", type="string", default=None,
         help="Use this prefix for the security group rather than the cluster name.")
+    parser.add_option(
+        "--authorized-address", type="string", default="0.0.0.0/0",
+        help="Address to authorize on created security groups (default: 0.0.0.0/0)")
+    parser.add_option(
+        "--additional-security-group", type="string", default="",
+        help="Additional security group to place the machines in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -293,28 +299,29 @@ def launch_cluster(conn, opts, cluster_name):
     else:
         master_group = get_or_make_group(conn, opts.security_group_prefix + "-master")
         slave_group = get_or_make_group(conn, opts.security_group_prefix + "-slaves")
+    authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
         master_group.authorize(src_group=master_group)
         master_group.authorize(src_group=slave_group)
-        master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        master_group.authorize('tcp', 18080, 18080, '0.0.0.0/0')
-        master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
-        master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-        master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-        master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-        master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+        master_group.authorize('tcp', 22, 22, authorized_address)
+        master_group.authorize('tcp', 8080, 8081, authorized_address)
+        master_group.authorize('tcp', 18080, 18080, authorized_address)
+        master_group.authorize('tcp', 19999, 19999, authorized_address)
+        master_group.authorize('tcp', 50030, 50030, authorized_address)
+        master_group.authorize('tcp', 50070, 50070, authorized_address)
+        master_group.authorize('tcp', 60070, 60070, authorized_address)
+        master_group.authorize('tcp', 4040, 4045, authorized_address)
         if opts.ganglia:
-            master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+            master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
         slave_group.authorize(src_group=master_group)
         slave_group.authorize(src_group=slave_group)
-        slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+        slave_group.authorize('tcp', 22, 22, authorized_address)
+        slave_group.authorize('tcp', 8080, 8081, authorized_address)
+        slave_group.authorize('tcp', 50060, 50060, authorized_address)
+        slave_group.authorize('tcp', 50075, 50075, authorized_address)
+        slave_group.authorize('tcp', 60060, 60060, authorized_address)
+        slave_group.authorize('tcp', 60075, 60075, authorized_address)
 
     # Check if instances are already running with the cluster name
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
@@ -326,6 +333,13 @@ def launch_cluster(conn, opts, cluster_name):
     # Figure out Spark AMI
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
+
+
+    additional_groups = []
+    if opts.additional_security_group:
+        additional_groups = [sg
+                             for sg in conn.get_all_security_groups()
+                             if opts.additional_security_group in (sg.name, sg.id)]
     print "Launching instances..."
 
     try:
@@ -360,7 +374,7 @@ def launch_cluster(conn, opts, cluster_name):
                 placement=zone,
                 count=num_slaves_this_zone,
                 key_name=opts.key_pair,
-                security_groups=[slave_group],
+                security_groups=[slave_group] + additional_groups,
                 instance_type=opts.instance_type,
                 block_device_map=block_map,
                 user_data=user_data_content)
@@ -413,7 +427,7 @@ def launch_cluster(conn, opts, cluster_name):
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
                 slave_res = image.run(key_name=opts.key_pair,
-                                      security_groups=[slave_group],
+                                      security_groups=[slave_group] + additional_groups,
                                       instance_type=opts.instance_type,
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
@@ -439,7 +453,7 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
         master_res = image.run(key_name=opts.key_pair,
-                               security_groups=[master_group],
+                               security_groups=[master_group] + additional_groups,
                                instance_type=master_type,
                                placement=opts.zone,
                                min_count=1,
