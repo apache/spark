@@ -965,12 +965,12 @@ private[spark] class ConnectionManager(
     ackTimeoutMonitor.cancel()
     selectorThread.interrupt()
     selectorThread.join()
-    selector.close()
     val connections = connectionsByKey.values
     connections.foreach(_.close())
     if (connectionsByKey.size != 0) {
       logWarning("All connections not cleaned up")
     }
+    selector.close()
     handleMessageExecutor.shutdown()
     handleReadWriteExecutor.shutdown()
     handleConnectExecutor.shutdown()
