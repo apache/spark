@@ -195,7 +195,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
       .map(i => TestRDDEntry(i, s"val_$i"))
 
-    // test default compression codec (gzip)
+    // test default compression codec
     rdd.saveAsParquetFile(path)
     var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
