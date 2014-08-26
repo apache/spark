@@ -1046,6 +1046,7 @@ class DAGScheduler(
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         val failedStage = stageIdToStage(task.stageId)
+        val mapStage = shuffleToMapStage(shuffleId)
         // It is likely that we receive multiple FetchFailed for a single stage (because we have
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the executor.
@@ -1055,13 +1056,6 @@ class DAGScheduler(
           // TODO: Cancel running tasks in the stage
           logInfo("Marking " + failedStage + " (" + failedStage.name +
             ") for resubmision due to a fetch failure")
-
-          // Mark the map whose fetch failed as broken in the map stage
-          val mapStage = shuffleToMapStage(shuffleId)
-          if (mapId != -1) {
-            mapStage.removeOutputLoc(mapId, bmAddress)
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-          }
 
           logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
             "); marking it for resubmission")
@@ -1076,6 +1070,13 @@ class DAGScheduler(
           failedStages += failedStage
           failedStages += mapStage
         }
+
+        // Mark the map whose fetch failed as broken in the map stage
+        if (mapId != -1) {
+          mapStage.removeOutputLoc(mapId, bmAddress)
+          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
+
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
