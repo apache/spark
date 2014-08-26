@@ -122,7 +122,9 @@ private[spark] class Executor(
     env.metricsSystem.report()
     isStopped = true
     threadPool.shutdown()
-    env.stop()
+    if (!isLocal) {
+      env.stop()
+    }
   }
 
   class TaskRunner(
