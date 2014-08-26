@@ -1864,7 +1864,7 @@ class RDD(object):
             return True
         return False
 
-    def _to_jrdd(self):
+    def _to_java_object_rdd(self):
         """ Return an JavaRDD of Object by unpickling
 
         It will convert each Python object into Java object by Pyrolite, whenever the
@@ -1899,7 +1899,7 @@ class RDD(object):
         >>> (rdd.sumApprox(1000) - r) / r < 0.05
         True
         """
-        jrdd = self.mapPartitions(lambda it: [float(sum(it))])._to_jrdd()
+        jrdd = self.mapPartitions(lambda it: [float(sum(it))])._to_java_object_rdd()
         jdrdd = self.ctx._jvm.JavaDoubleRDD.fromRDD(jrdd.rdd())
         r = jdrdd.sumApprox(timeout, confidence).getFinalValue()
         return BoundedFloat(r.mean(), r.confidence(), r.low(), r.high())
@@ -1915,10 +1915,37 @@ class RDD(object):
         >>> (rdd.meanApprox(1000) - r) / r < 0.05
         True
         """
-        jrdd = self.map(float)._to_jrdd()
+        jrdd = self.map(float)._to_java_object_rdd()
         jdrdd = self.ctx._jvm.JavaDoubleRDD.fromRDD(jrdd.rdd())
         r = jdrdd.meanApprox(timeout, confidence).getFinalValue()
         return BoundedFloat(r.mean(), r.confidence(), r.low(), r.high())
+
+    def countApproxDistinct(self, relativeSD=0.05):
+        """
+        :: Experimental ::
+        Return approximate number of distinct elements in the RDD.
+
+        The algorithm used is based on streamlib's implementation of
+        "HyperLogLog in Practice: Algorithmic Engineering of a State
+        of The Art Cardinality Estimation Algorithm", available
+        <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+
+        This support all the types of objects, which is supported by
+        Pyrolite, nearly all builtin types.
+
+        @param relativeSD Relative accuracy. Smaller values create
+                           counters that require more space.
+                           It must be greater than 0.000017.
+
+        >>> n = sc.parallelize(range(1000)).map(str).countApproxDistinct()
+        >>> 950 < n < 1050
+        True
+        """
+        if relativeSD < 0.000017:
+            raise ValueError("relativeSD should be greater than 0.000017")
+        if relativeSD > 0.37:
+            raise ValueError("relativeSD should be smaller than 0.37")
+        return self._to_java_object_rdd().countApproxDistinct(relativeSD)
 
 
 class PipelinedRDD(RDD):
