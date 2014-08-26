@@ -8,7 +8,7 @@ including classification, regression, clustering, collaborative
 filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
 
 * [Data types](mllib-basics.html)
-* [Basic statistics](mllib-stats.html)
+* [Basic statistics](mllib-statistics.html)
   * random data generation  
   * stratified sampling
   * summary statistics
