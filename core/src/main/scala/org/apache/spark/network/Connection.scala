@@ -119,13 +119,13 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
   def close() {
     closed = true
+    disposeSasl()
+    callOnCloseCallback()
     val k = key()
     if (k != null) {
       k.cancel()
     }
     channel.close()
-    disposeSasl()
-    callOnCloseCallback()
   }
 
   protected def isClosed: Boolean = closed
