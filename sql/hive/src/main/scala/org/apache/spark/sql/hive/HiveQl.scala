@@ -772,6 +772,7 @@ private[hive] object HiveQl {
 
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
+        case "TOK_CROSSJOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter

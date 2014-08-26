@@ -310,6 +310,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
+    "cross_join",
     "ct_case_insensitive",
     "database_location",
     "database_properties",
