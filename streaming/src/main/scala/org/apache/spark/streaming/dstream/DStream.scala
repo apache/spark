@@ -771,8 +771,10 @@ abstract class DStream[T: ClassTag] (
    */
   def saveAsObjectFiles(prefix: String, suffix: String = "") {
     val saveFunc = (rdd: RDD[T], time: Time) => {
-      val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsObjectFile(file)
+      if(rdd.partitions.size>0) {
+        val file = rddToFileName(prefix, suffix, time)
+        rdd.saveAsObjectFile(file)
+      }
     }
     this.foreachRDD(saveFunc)
   }
@@ -784,8 +786,10 @@ abstract class DStream[T: ClassTag] (
    */
   def saveAsTextFiles(prefix: String, suffix: String = "") {
     val saveFunc = (rdd: RDD[T], time: Time) => {
-      val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsTextFile(file)
+      if(rdd.partitions.size>0){
+        val file = rddToFileName(prefix, suffix, time)
+        rdd.saveAsTextFile(file)
+      }
     }
     this.foreachRDD(saveFunc)
   }
