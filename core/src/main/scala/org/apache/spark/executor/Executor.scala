@@ -292,8 +292,8 @@ private[spark] class Executor(
       } finally {
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
-        // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
+        // cleanup maintained memory infomation for this thread
+        env.blockManager.memoryStore.cleanupForThisThread()
         // Release memory used by this thread for accumulators
         Accumulators.clear()
         runningTasks.remove(taskId)
