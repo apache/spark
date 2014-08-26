@@ -388,11 +388,13 @@ trait ClientBase extends Logging {
     for ((k, v) <- sparkConf.getAll) {
       javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
-
+    
+    // Set the extra java opts(like "-X") in "spark.driver.extraJavaOptions" or "SPARK_JAVA_OPTS".
+    sparkConf.getOption("spark.driver.extraJavaOptions").orElse(sys.env.get("SPARK_JAVA_OPTS"))
+      .foreach(opts => javaOpts += opts)
+      
+    // No need to set the "spark.driver.libraryPath" in yarn-client mode.
     if (args.amClass == classOf[ApplicationMaster].getName) {
-      sparkConf.getOption("spark.driver.extraJavaOptions")
-        .orElse(sys.env.get("SPARK_JAVA_OPTS"))
-        .foreach(opts => javaOpts += opts)
       sparkConf.getOption("spark.driver.libraryPath")
         .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
