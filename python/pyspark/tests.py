@@ -38,6 +38,7 @@ else:
     import unittest
 
 
+from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
@@ -138,6 +139,15 @@ class TestSorter(unittest.TestCase):
         self.assertEquals(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
         self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
                           list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
+
+    def test_external_sort_in_rdd(self):
+        conf = SparkConf().set("spark.python.worker.memory", "1m")
+        sc = SparkContext(conf=conf)
+        l = range(10240)
+        random.shuffle(l)
+        rdd = sc.parallelize(l, 10)
+        self.assertEquals(sorted(l), rdd.sortBy(lambda x: x).collect())
+        sc.stop()
 
 
 class SerializationTestCase(unittest.TestCase):
