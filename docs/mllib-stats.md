@@ -25,6 +25,87 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Statistics Functionality
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
+## Summary Statistics 
+
+### Multivariate summary statistics
+
+We provide column summary statistics for `RDD[Vector]` through the function `colStats` 
+available in `Statistics`.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`colStats()`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) returns an instance of
+[`MultivariateStatisticalSummary`](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+
+val observations: RDD[Vector] = ... // an RDD of Vectors
+
+// Compute column summary statistics.
+val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
+println(summary.mean) // a dense vector containing the mean value for each column
+println(summary.variance) // column-wise variance
+println(summary.numNonzeros) // number of nonzeros in each column
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`colStats()`](api/java/org/apache/spark/mllib/stat/Statistics.html) returns an instance of
+[`MultivariateStatisticalSummary`](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
+
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
+import org.apache.spark.mllib.stat.Statistics;
+
+JavaSparkContext jsc = ...
+
+JavaRDD<Vector> mat = ... // an RDD of Vectors
+
+// Compute column summary statistics.
+MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
+System.out.println(summary.mean()); // a dense vector containing the mean value for each column
+System.out.println(summary.variance()); // column-wise variance
+System.out.println(summary.numNonzeros()); // number of nonzeros in each column
+
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+[`colStats()`](api/python/pyspark.mllib.stat.Statistics-class.html) returns an instance of
+[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.stat.MultivariateStatisticalSummary-class.html),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
+
+{% highlight python %}
+from pyspark.mllib.stat import Statistics
+
+sc = ... # SparkContext
+
+mat = ... # an RDD of Vectors
+
+# Compute column summary statistics.
+summary = Statistics.colStats(mat)
+print summary.mean()
+print summary.variance()
+print summary.numNonzeros()
+
+{% endhighlight %}
+</div>
+
+</div>
+
 ## Random data generation
 
 Random data generation is useful for randomized algorithms, prototyping, and performance testing.
@@ -99,11 +180,11 @@ v = u.map(lambda x: 1.0 + 2.0 * x)
 
 </div>
 
-## Correlation Calculation
+## Correlations calculation
 
 Calculating the correlation between two series of data is a common operation in Statistics. In MLlib
-we provide the flexibility to calculate correlation between many series. The supported correlation
-methods are currently Pearson's and Spearman's correlation.
+we provide the flexibility to calculate pairwise correlations among many series. The supported 
+correlation methods are currently Pearson's and Spearman's correlation.
  
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -164,12 +245,9 @@ Matrix correlMatrix = Statistics.corr(data.rdd(), "pearson");
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to 
+[`Statistics`](api/python/pyspark.mllib.stat.Statistics-class.html) provides methods to 
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or 
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
-
-Support for `RowMatrix` operations in python currently don't exist, but will be added in future 
-releases.  
 
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
@@ -193,14 +271,15 @@ print Statistics.corr(data, method="pearson")
 
 </div>
 
-## Stratified Sampling
+## Stratified sampling
 
 Unlike the other statistics functions, which reside in MLLib, stratified sampling methods, 
-`sampleByKey` and `sampleByKeyExact`, can be accessed in `PairRDDFunctions` in core, as stratified 
-sampling is tightly coupled with the PairRDD data type, and the function signature conforms to the 
-other *ByKey* methods in PairRDDFunctions. A separate method for exact sample size support exists 
-as it requires significant more resources than the per-stratum simple random sampling used in 
-`sampleByKey`.
+`sampleByKey` and `sampleByKeyExact`, can be performed on RDD's of key-value pairs. For stratified
+sampling, the keys can be thought of as a label and the value as a specific attribute. For example 
+the key can be man or woman, or document ids, and the respective values can be the list of ages 
+of the people in the population or the list of words in the documents. A separate method for exact 
+sample size support exists as it requires significant more resources than the per-stratum simple 
+random sampling used in `sampleByKey`. `sampleByKeyExact` is currently not supported in python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -212,15 +291,16 @@ size, whereas sampling with replacement requires two additional passes.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.PairRDDFunctions
 
 val sc: SparkContext = ...
 
-val data = ... // an RDD[(K,V)] of any key value pairs
+val data = ... // an RDD[(K, V)] of any key value pairs
 val fractions: Map[K, Double] = ... // specify the exact fraction desired from each key
 
 // Get an exact sample from each stratum
-val sample = data.sampleByKeyExact(withReplacement=false, fractions)
+val sample = data.sampleByKeyExact(withReplacement = false, fractions)
 
 {% endhighlight %}
 </div>
@@ -233,107 +313,48 @@ Sampling without replacement requires one additional pass over the RDD to guaran
 size, whereas sampling with replacement requires two additional passes.
 
 {% highlight java %}
+import java.util.Map;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
 JavaSparkContext jsc = ...
 
-JavaPairRDD<K,V> data = ... // an RDD of any key value pairs
-java.util.Map<K,Object> fractions = ... // specify the exact fraction desired from each key
+JavaPairRDD<K, V> data = ... // an RDD of any key value pairs
+Map<K, Object> fractions = ... // specify the exact fraction desired from each key
 
 // Get an exact sample from each stratum
-JavaPairRDD<K,V> sample = data.sampleByKeyExact(false, fractions);
+JavaPairRDD<K, V> sample = data.sampleByKeyExact(false, fractions);
 
 {% endhighlight %}
 </div>
-
-</div>
-
-## Summary Statistics 
-
-### Multivariate summary statistics
-
-We provide column summary statistics for `RDD[Vector]` through the static function `colStats` 
-available in `Statistics`.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-[`colStats()`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) returns an instance of
-[`MultivariateStatisticalSummary`](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
-which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
-total count.
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
-
-val mat: RDD[Vector] = ... // an RDD of Vectors
-
-// Compute column summary statistics.
-val summary: MultivariateStatisticalSummary = Statistics.colStats(mat)
-println(summary.mean) // a dense vector containing the mean value for each column
-println(summary.variance) // column-wise variance
-println(summary.numNonzeros) // number of nonzeros in each column
-
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-[`colStats()`](api/java/org/apache/spark/mllib/stat/Statistics.html) returns an instance of
-[`MultivariateStatisticalSummary`](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html),
-which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
-total count.
-
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
-import org.apache.spark.mllib.stat.Statistics;
-
-JavaSparkContext jsc = ...
-
-JavaRDD<Vector> mat = ... // an RDD of Vectors
-
-// Compute column summary statistics.
-MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
-System.out.println(summary.mean()); // a dense vector containing the mean value for each column
-System.out.println(summary.variance()); // column-wise variance
-System.out.println(summary.numNonzeros()); // number of nonzeros in each column
-
-{% endhighlight %}
-</div>
-
 <div data-lang="python" markdown="1">
-[`colStats()`](api/python/index.html#org.apache.spark.mllib.stat.Statistics$) returns an instance of
-[`MultivariateStatisticalSummary`](api/python/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary$),
-which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
-total count.
+[`sampleByKey()`](api/python/pyspark.rdd.RDD-class.html#sampleByKey) allows users to
+sample approximately $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the 
+desired fraction for key $k$, and $n_k$ is the number of key-value pairs for key $k$. 
+Sampling without replacement requires one additional pass over the RDD to guarantee sample 
+size, whereas sampling with replacement requires two additional passes.
+
+*Note:* `sampleByKeyExact()` is currently not supported in Python.
+
 
 {% highlight python %}
-from pyspark.mllib.stat import Statistics
 
 sc = ... # SparkContext
 
-mat = ... # an RDD of Vectors
+data = ... # an RDD of any key value pairs
+fractions = ... # specify the exact fraction desired from each key as a dictionary
 
-# Compute column summary statistics.
-summary = Statistics.colStats(mat)
-print summary.mean()
-print summary.variance()
-print summary.numNonzeros()
+sample = data.sampleByKeyExact(False, fractions);
 
 {% endhighlight %}
 </div>
 
 </div>
 
+## Hypothesis testing
 
-## Hypothesis Testing
-
-Hypothesis testing is a power tool in statistics to determine whether a result is statistically 
+Hypothesis testing is a powerful tool in statistics to determine whether a result is statistically 
 significant, whether this result occurred by chance or not. MLlib currently supports Pearson's 
 chi-squared ( $\chi^2$) tests for goodness of fit and independence. The input data types determine 
 whether the goodness of fit or the independence test is conducted. The goodness of fit test requires 
@@ -376,9 +397,9 @@ val obs: RDD[LabeledPoint] = ... // (feature, label) pairs.
 // the independence test. Returns an array containing the ChiSquaredTestResult for every feature 
 // against the label.
 val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
-var i: Integer = 1
-featureTestResults.foreach{ result =>
-    println(s"Column $i: \n$result")
+var i = 1
+featureTestResults.foreach { result =>
+    println(s"Column $i:\n$result")
     i += 1
 } // summary of the test 
 
@@ -416,16 +437,17 @@ ChiSqTestResult independenceTestResult = Statistics.chiSqTest(mat);
 // summary of the test including the p-value, degrees of freedom...
 System.out.println(independenceTestResult);
 
-JavaRDD<LabeledPoint> obs = ... // (feature, label) pairs.
+JavaRDD<LabeledPoint> obs = ... // an RDD of labeled points
 
 // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
 // the independence test. Returns an array containing the ChiSquaredTestResult for every feature 
 // against the label.
 ChiSqTestResult[] featureTestResults = Statistics.chiSqTest(obs.rdd());
 int i = 1;
-for (ChiSqTestResult individualSummary:featureTestResults){
-    System.out.println("Column " + i++ + ":");
-    System.out.println(individualSummary); // summary of the test 
+for (ChiSqTestResult result : featureTestResults) {
+    System.out.println("Column " + i + ":");
+    System.out.println(result); // summary of the test
+    i++;
 }
 
 {% endhighlight %}
