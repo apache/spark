@@ -52,7 +52,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable = true
   def nullable = value == null
-  def references = Set.empty
+
 
   override def toString = if (value != null) value.toString else "null"
 
@@ -65,8 +65,6 @@ case class MutableLiteral(var value: Any, nullable: Boolean = true) extends Leaf
   type EvaluatedType = Any
 
   val dataType = Literal(value).dataType
-
-  def references = Set.empty
 
   def update(expression: Expression, input: Row) = {
     value = expression.eval(input)

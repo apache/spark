@@ -95,8 +95,6 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 
   override def children = left :: right :: Nil
 
-  override def references = left.references ++ right.references
-
   override def dataType = left.dataType
 
   override def eval(input: Row): Any = {

@@ -226,8 +226,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
-  def references = children.flatMap(_.references).toSet
-
   override def children = str :: pos :: len :: Nil
 
   @inline

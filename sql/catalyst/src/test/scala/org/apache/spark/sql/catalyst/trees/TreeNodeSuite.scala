@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.types.{StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
   def children = optKey.toSeq
-  def references = Set.empty[Attribute]
   def nullable = true
   def dataType = NullType
   override lazy val resolved = true

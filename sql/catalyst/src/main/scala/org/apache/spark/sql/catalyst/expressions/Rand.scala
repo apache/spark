@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.types.DoubleType
 case object Rand extends LeafExpression {
   override def dataType = DoubleType
   override def nullable = false
-  override def references = Set.empty
 
   private[this] lazy val rand = new Random
 

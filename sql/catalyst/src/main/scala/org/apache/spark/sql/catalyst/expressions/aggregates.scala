@@ -78,7 +78,7 @@ abstract class AggregateFunction
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression
-  override def references = base.references
+
   override def nullable = base.nullable
   override def dataType = base.dataType
 
@@ -89,7 +89,7 @@ abstract class AggregateFunction
 }
 
 case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MIN($child)"
@@ -119,7 +119,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
 }
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MAX($child)"
@@ -149,7 +149,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
 }
 
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = LongType
   override def toString = s"COUNT($child)"
@@ -166,7 +166,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate 
   def this() = this(null)
 
   override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
+
   override def nullable = false
   override def dataType = LongType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
@@ -184,7 +184,6 @@ case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpress
   def this() = this(null)
 
   override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = ArrayType(expressions.head.dataType)
   override def toString = s"AddToHashSet(${expressions.mkString(",")})"
@@ -219,7 +218,6 @@ case class CombineSetsAndCount(inputSet: Expression) extends AggregateExpression
   def this() = this(null)
 
   override def children = inputSet :: Nil
-  override def references = inputSet.references
   override def nullable = false
   override def dataType = LongType
   override def toString = s"CombineAndCount($inputSet)"
@@ -248,7 +246,7 @@ case class CombineSetsAndCountFunction(
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = child.dataType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
@@ -257,7 +255,7 @@ case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
 
 case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
@@ -266,7 +264,7 @@ case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
 
 case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
@@ -284,7 +282,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 }
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = DoubleType
   override def toString = s"AVG($child)"
@@ -304,7 +302,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 }
 
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
+
   override def nullable = false
   override def dataType = child.dataType
   override def toString = s"SUM($child)"
@@ -322,7 +320,7 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class SumDistinct(child: Expression)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
-  override def references = child.references
+
   override def nullable = false
   override def dataType = child.dataType
   override def toString = s"SUM(DISTINCT $child)"
@@ -331,7 +329,6 @@ case class SumDistinct(child: Expression)
 }
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  override def references = child.references
   override def nullable = true
   override def dataType = child.dataType
   override def toString = s"FIRST($child)"

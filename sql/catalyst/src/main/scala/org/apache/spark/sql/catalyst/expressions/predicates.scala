@@ -85,7 +85,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate {
  */
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   def children = value +: list
-  def references = children.flatMap(_.references).toSet
+
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
 
@@ -197,7 +197,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   def children = predicate :: trueValue :: falseValue :: Nil
   override def nullable = trueValue.nullable || falseValue.nullable
-  def references = children.flatMap(_.references).toSet
+
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
     if (!resolved) {
@@ -239,7 +239,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
   type EvaluatedType = Any
   def children = branches
-  def references = children.flatMap(_.references).toSet
+
   def dataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")

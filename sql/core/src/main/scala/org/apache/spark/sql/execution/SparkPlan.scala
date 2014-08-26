@@ -141,10 +141,9 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQ
   extends LogicalPlan with MultiInstanceRelation {
 
   def output = alreadyPlanned.output
-  override def references = Set.empty
   override def children = Nil
 
-  override final def newInstance: this.type = {
+  override final def newInstance(): this.type = {
     SparkLogicalPlan(
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
