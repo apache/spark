@@ -242,10 +242,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.2</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
+    <code>spark.shuffle.spill</code> is true. A limit is defined by this value multiplied by
+    <code>spark.shuffle.safetyFraction</code> and at any given time, 
+    the collective size of all in-memory maps used for shuffles is bounded by the limit, 
+    beyond which the contents will begin to spill to disk. If spills are often, 
+    consider increasing this value at the expense of <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.safetyFraction</code></td>
+  <td>0.8</td>
+  <td>
+    Safety fraction related to <code>spark.shuffle.memoryFraction</code>.
+    This value is used for margin of in-memory maps used for shuffle.
   </td>
 </tr>
 <tr>
@@ -483,9 +492,19 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.storage.memoryFraction</code></td>
   <td>0.6</td>
   <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
-    increase it if you configure your own old generation size.
+    Fraction of Java heap to use for Spark's memory cache. This should not be larger 
+    than the "old" generation of objects in the JVM, which by default is given 0.6 of the heap, 
+    but you can increase it if you configure your own old generation size.
+    In practice, the ratio of the space obtained is this value multiplied by 
+    <code>spark.storage.safetyFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.safetyFraction</code></td>
+  <td>0.9</td>
+  <td>
+    Safety fraction related to <code>spark.storage.memoryFraction</code>.
+    This value is used for margin of space of Spark's memory cache.
   </td>
 </tr>
 <tr>
