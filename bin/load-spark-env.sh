@@ -27,6 +27,9 @@ if [ -z "$SPARK_ENV_LOADED" ]; then
   # Returns the parent of the directory this script lives in.
   parent_dir="$(cd `dirname $0`/..; pwd)"
 
+  export PYTHONPATH=$parent_dir/python:$PYTHONPATH
+  export PYTHONPATH=$parent_dir/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH
+
   use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
 
   if [ -f "${use_conf_dir}/spark-env.sh" ]; then
