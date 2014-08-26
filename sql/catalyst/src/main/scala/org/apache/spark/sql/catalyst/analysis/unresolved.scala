@@ -39,7 +39,6 @@ case class UnresolvedRelation(
     alias: Option[String] = None) extends LeafNode {
   override def output = Nil
   override lazy val resolved = false
-  def reference = Set.empty
 }
 
 /**

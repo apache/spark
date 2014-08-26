@@ -37,6 +37,11 @@ object AttributeSet {
  * expression id instead of standard java equality.  Using expression id means that these
  * sets will correctly test for membership, even when the AttributeReferences in question differ
  * cosmetically (e.g., the names have different capitalizations).
+ *
+ * Note that we do not override equality for Attribute references as it is really weird when
+ * `AttributeReference("a"...) == AttrributeReference("b", ...)`. This tactic leads to broken tests,
+ * and also makes doing transformations hard (we always try keep older trees instead of new ones
+ * when the transformation was a no-op).
  */
 class AttributeSet protected (val baseSet: Set[AttributeEquals]) extends Traversable[Attribute] {
 
