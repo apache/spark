@@ -76,6 +76,20 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private val blockOnCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking", true)
 
+  /**
+   * Whether to disable blocking on shuffle tasks. This override is effective only when
+   * blocking on cleanup tasks is enabled.
+   *
+   * When context cleaner is configured to block on every delete request, it can throw timeout
+   * exceptions on cleanup of shuffle blocks, as reported in SPARK-3139. To avoid that, this
+   * parameter disables blocking on shuffle cleanups when when `blockOnCleanupTasks` is true).
+   * Note that this does not affect the cleanup of RDDs and broadcasts.
+   * This is intended to be a temporary workaround, until the real Akka issue (referred to in
+   * the comment above `blockOnCleanupTasks`) is resolved.
+   */
+  private val disableBlockOnShuffleCleanupTasks = sc.conf.getBoolean(
+    "spark.cleaner.referenceTracking.disableBlockingForShuffles", true)
+
   @volatile private var stopped = false
 
   /** Attach a listener object to get information of when objects are cleaned. */
@@ -128,7 +142,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
             case CleanRDD(rddId) =>
               doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
             case CleanShuffle(shuffleId) =>
-              doCleanupShuffle(shuffleId, blocking = blockOnCleanupTasks)
+              doCleanupShuffle(shuffleId,
+                blocking = (blockOnCleanupTasks && !disableBlockOnShuffleCleanupTasks))
             case CleanBroadcast(broadcastId) =>
               doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
           }
