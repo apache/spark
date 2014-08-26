@@ -378,7 +378,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
     val children = fs.listStatus(path).filterNot { status =>
       val name = status.getPath.getName
-      name(0) == '.' || name == FileOutputCommitter.SUCCEEDED_FILE_NAME
+      (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
     }
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
