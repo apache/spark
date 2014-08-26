@@ -129,9 +129,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
       finished = true
       finalStatus = status
-      reporterThread.interrupt()
       try {
         if (Thread.currentThread() != reporterThread) {
+          reporterThread.interrupt()
           reporterThread.join()
         }
       } finally {
@@ -213,12 +213,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       override def run() {
         while (!finished) {
           checkNumExecutorsFailed()
-          logDebug("Sending progress")
-          allocator.allocateResources()
-          try {
-            Thread.sleep(interval)
-          } catch {
-            case e: InterruptedException =>
+          if (!finished) {
+            logDebug("Sending progress")
+            allocator.allocateResources()
+            try {
+              Thread.sleep(interval)
+            } catch {
+              case e: InterruptedException =>
+            }
           }
         }
       }
