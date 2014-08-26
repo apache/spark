@@ -88,7 +88,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * resolved.
    */
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking.shuffle", blockOnCleanupTasks)
+    "spark.cleaner.referenceTracking.blocking.shuffle", false)
 
   @volatile private var stopped = false
 
