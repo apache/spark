@@ -35,18 +35,23 @@ and the migration guide below will explain all changes between releases.
 
 # Dependencies
 
-MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on
-[netlib-java](https://github.com/fommil/netlib-java), and
-[jblas](https://github.com/mikiobraun/jblas). 
+MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/),
+which depends on [netlib-java](https://github.com/fommil/netlib-java),
+and [jblas](https://github.com/mikiobraun/jblas). 
 `netlib-java` and `jblas` depend on native Fortran routines.
 You need to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries) if it is not
-already present on your nodes. MLlib will throw a linking error if it cannot detect these libraries
-automatically.  Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
-dependency set. If no native library is available at runtime, you will see a warning message.  To
-use native libraries from `netlib-java`, please include artifact
-`com.github.fommil.netlib:all:1.1.2` as a dependency of your project or build your own (see
-[instructions](https://github.com/fommil/netlib-java/blob/master/README.md#machine-optimised-system-libraries)).
+[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
+if it is not already present on your nodes.
+MLlib will throw a linking error if it cannot detect these libraries automatically.
+Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
+dependency set under default settings.
+If no native library is available at runtime, you will see a warning message.
+To use native libraries from `netlib-java`, please build Spark with `-Pnetlib-lgpl` or
+include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
+If you want to use optimized BLAS/LAPACK libraries such as
+[OpenBLAS](http://www.openblas.net/), please link its shared libraries to
+`/usr/lib/libblas.so.3` and `/usr/lib/liblapack.so.3`, respectively.
+BLAS/LAPACK libraries on worker nodes should be built without multithreading.
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
