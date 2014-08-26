@@ -27,8 +27,6 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Statistics Functionality
 
 ## Summary Statistics 
 
-### Multivariate summary statistics
-
 We provide column summary statistics for `RDD[Vector]` through the function `colStats` 
 available in `Statistics`.
 
@@ -277,16 +275,19 @@ Unlike the other statistics functions, which reside in MLLib, stratified samplin
 `sampleByKey` and `sampleByKeyExact`, can be performed on RDD's of key-value pairs. For stratified
 sampling, the keys can be thought of as a label and the value as a specific attribute. For example 
 the key can be man or woman, or document ids, and the respective values can be the list of ages 
-of the people in the population or the list of words in the documents. A separate method for exact 
-sample size support exists as it requires significant more resources than the per-stratum simple 
-random sampling used in `sampleByKey`. `sampleByKeyExact` is currently not supported in python.
+of the people in the population or the list of words in the documents. The `sampleByKey` method 
+will flip a coin to decide whether an observation will be sampled or not, therefore requires one 
+pass over the data, and provides an *expected* sample size. `sampleByKeyExact` requires significant 
+more resources than the per-stratum simple random sampling used in `sampleByKey`, but will provide
+the exact sampling size with 99.99% confidence. `sampleByKeyExact` is currently not supported in 
+python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 [`sampleByKeyExact()`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) allows users to
 sample exactly $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the desired 
-fraction for key $k$, and $n_k$ is the number of key-value pairs for key $k$. 
-Sampling without replacement requires one additional pass over the RDD to guarantee sample 
+fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the set of
+keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
 {% highlight scala %}
@@ -300,7 +301,8 @@ val data = ... // an RDD[(K, V)] of any key value pairs
 val fractions: Map[K, Double] = ... // specify the exact fraction desired from each key
 
 // Get an exact sample from each stratum
-val sample = data.sampleByKeyExact(withReplacement = false, fractions)
+val approxSample = data.sampleByKey(withReplacement = false, fractions)
+val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
 
 {% endhighlight %}
 </div>
@@ -308,8 +310,8 @@ val sample = data.sampleByKeyExact(withReplacement = false, fractions)
 <div data-lang="java" markdown="1">
 [`sampleByKeyExact()`](api/java/org/apache/spark/api/java/JavaPairRDD.html) allows users to
 sample exactly $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the desired 
-fraction for key $k$, and $n_k$ is the number of key-value pairs for key $k$. 
-Sampling without replacement requires one additional pass over the RDD to guarantee sample 
+fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the set of
+keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
 {% highlight java %}
@@ -324,19 +326,18 @@ JavaPairRDD<K, V> data = ... // an RDD of any key value pairs
 Map<K, Object> fractions = ... // specify the exact fraction desired from each key
 
 // Get an exact sample from each stratum
-JavaPairRDD<K, V> sample = data.sampleByKeyExact(false, fractions);
+JavaPairRDD<K, V> approxSample = data.sampleByKey(false, fractions);
+JavaPairRDD<K, V> exactSample = data.sampleByKeyExact(false, fractions);
 
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
 [`sampleByKey()`](api/python/pyspark.rdd.RDD-class.html#sampleByKey) allows users to
 sample approximately $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the 
-desired fraction for key $k$, and $n_k$ is the number of key-value pairs for key $k$. 
-Sampling without replacement requires one additional pass over the RDD to guarantee sample 
-size, whereas sampling with replacement requires two additional passes.
+desired fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the 
+set of keys.
 
 *Note:* `sampleByKeyExact()` is currently not supported in Python.
-
 
 {% highlight python %}
 
@@ -345,7 +346,7 @@ sc = ... # SparkContext
 data = ... # an RDD of any key value pairs
 fractions = ... # specify the exact fraction desired from each key as a dictionary
 
-sample = data.sampleByKeyExact(False, fractions);
+approxSample = data.sampleByKey(False, fractions);
 
 {% endhighlight %}
 </div>
