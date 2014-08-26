@@ -20,6 +20,7 @@ package org.apache.spark.network
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
 
@@ -45,7 +46,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   channel.socket.setKeepAlive(true)
   /* channel.socket.setReceiveBufferSize(32768) */
 
-  @volatile private var closed = false
+  @volatile private var closed = new AtomicBoolean(false)
   var onCloseCallback: Connection => Unit = null
   var onExceptionCallback: (Connection, Exception) => Unit = null
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
@@ -118,17 +119,18 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   }
 
   def close() {
-    closed = true
-    disposeSasl()
-    callOnCloseCallback()
-    val k = key()
-    if (k != null) {
-      k.cancel()
+    if (closed.compareAndSet(false, true)) {
+      disposeSasl()
+      callOnCloseCallback()
+      val k = key()
+      if (k != null) {
+        k.cancel()
+      }
+      channel.close()
     }
-    channel.close()
   }
 
-  protected def isClosed: Boolean = closed
+  protected def isClosed: Boolean = closed.get
 
   def onClose(callback: Connection => Unit) {
     onCloseCallback = callback
