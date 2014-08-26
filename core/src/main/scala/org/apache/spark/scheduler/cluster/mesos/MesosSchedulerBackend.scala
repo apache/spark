@@ -86,6 +86,7 @@ private[spark] class MesosSchedulerBackend(
     }
   }
 
+  // TODO Extract common code from this method and CoarseMesosSchedulerBackend.createCommand
   def createExecutorInfo(execId: String): ExecutorInfo = {
     val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
       "Spark home is not set; set it through the spark.home system " +
@@ -112,17 +113,27 @@ private[spark] class MesosSchedulerBackend(
       Seq.empty, sc.executorEnvs, classPathEntries, libraryPathEntries, extraJavaOpts)
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
+    // We have to use "sbin/mesos-pyenv.sh" to setup the PYTHONPATH environment variable instead of
+    // setting it from the Scala code here. Because there's no way to figure out Mesos executor side
+    // Spark home in advance on driver side.
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
       val pyEnv = new File(sparkHome, "sbin/mesos-pyenv.sh").getCanonicalPath
       command.setValue(s"$pyEnv; " + CommandUtils.buildCommandSeq(
         mesosCommand, sc.executorMemory, sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
+      // Grab everything to the first '.'. We'll use that and '*' to glob the directory "correctly".
+      // For example, let the URI be:
+      //
+      //   hdfs://localhost:9000/tmp/mesos/spark-1.1.0-bin-hadoop2.tgz
+      //
+      // then "basename" is "spark-1". When the Mesos executor is started, the working directory is
+      // set to the root directory of the sandbox (one level up to the directory uncompressed from
+      // the Spark distribution tarball), so "cd spark-1*" brings us to the correct executor side
+      // Spark home.
       val basename = uri.split('/').last.split('.').head
       command.setValue(s"cd $basename*; ./sbin/mesos-pyenv.sh; " +
-        CommandUtils.buildCommandSeq(mesosCommand, sc.executorMemory, sparkHome)
+        CommandUtils.buildCommandSeq(mesosCommand, sc.executorMemory, ".")
           .mkString("\"", "\" \"", "\""))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }

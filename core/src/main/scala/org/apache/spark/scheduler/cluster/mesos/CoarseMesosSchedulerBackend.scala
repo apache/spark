@@ -148,11 +148,18 @@ private[spark] class CoarseMesosSchedulerBackend(
       command.setValue(CommandUtils.buildCommandSeq(
         mesosCommand, sc.executorMemory, sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
+      // Grab everything to the first '.'. We'll use that and '*' to glob the directory "correctly".
+      // For example, let the URI be:
+      //
+      //   hdfs://localhost:9000/tmp/mesos/spark-1.1.0-bin-hadoop2.tgz
+      //
+      // then "basename" is "spark-1". When the Mesos executor is started, the working directory is
+      // set to the root directory of the sandbox (one level up to the directory uncompressed from
+      // the Spark distribution tarball), so "cd spark-1*" brings us to the correct executor side
+      // Spark home.
       val basename = uri.split('/').last.split('.').head
       command.setValue(s"cd $basename*; " + CommandUtils.buildCommandSeq(
-        mesosCommand, sc.executorMemory, sparkHome).mkString("\"", "\" \"", "\""))
+        mesosCommand, sc.executorMemory, ".").mkString("\"", "\" \"", "\""))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()
