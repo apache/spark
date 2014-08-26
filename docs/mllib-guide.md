@@ -9,10 +9,11 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 
 * [Data types](mllib-data-types.html)
 * [Basic statistics](mllib-statistics.html)
-  * random data generation  
-  * stratified sampling
   * summary statistics
+  * correlations
+  * stratified sampling
   * hypothesis testing
+  * random data generation  
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
   * [decision trees](mllib-decision-tree.html)
