@@ -79,8 +79,6 @@ private[sql] case class InMemoryRelation(
 
   override def children = Seq.empty
 
-  override def references = Set.empty
-
   override def newInstance() = {
     new InMemoryRelation(
       output.map(_.newInstance),
