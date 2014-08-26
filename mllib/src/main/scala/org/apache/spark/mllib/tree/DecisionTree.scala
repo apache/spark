@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impl.{DecisionTreeMetadata, DTStatsAggregator, TimeTracker, TreePoint}
+import org.apache.spark.mllib.tree.impl._
 import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
@@ -122,7 +122,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     var break = false
     while (level <= maxDepth && !break) {
 
-      //println(s"LEVEL $level")
       logDebug("#####################################")
       logDebug("level = " + level)
       logDebug("#####################################")
@@ -198,13 +197,11 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
-    println(s"$timer")
 
     new DecisionTreeModel(topNode, strategy.algo)
   }
 
 }
-
 
 object DecisionTree extends Serializable with Logging {
 
@@ -456,13 +453,21 @@ object DecisionTree extends Serializable with Logging {
    * This function mimics prediction, passing an example from the root node down to a node
    * at the current level being trained; that node's index is returned.
    *
+   * @param node  Node in tree from which to classify the given data point.
+   * @param binnedFeatures  Binned feature vector for data point.
+   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
+   * @param unorderedFeatures  Set of indices of unordered features.
    * @return  Leaf index if the data point reaches a leaf.
    *          Otherwise, last node reachable in tree matching this example.
    *          Note: This is the global node index, i.e., the index used in the tree.
    *                This index is different from the index used during training a particular
    *                set of nodes in a (level, group).
    */
-  def predictNodeIndex(node: Node, binnedFeatures: Array[Int], bins: Array[Array[Bin]], unorderedFeatures: Set[Int]): Int = {
+  def predictNodeIndex(
+      node: Node,
+      binnedFeatures: Array[Int],
+      bins: Array[Array[Bin]],
+      unorderedFeatures: Set[Int]): Int = {
     if (node.isLeaf) {
       node.id
     } else {
@@ -499,15 +504,18 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Helper for binSeqOp.
+   * Helper for binSeqOp, for data containing some unordered (categorical) features.
    *
-   * @param agg  Array storing aggregate calculation.
-   *             For ordered features, this is of size:
-   *               numClasses * numBins * numFeatures * numNodes.
-   *             For unordered features, this is of size:
-   *               2 * numClasses * numBins * numFeatures * numNodes.
-   * @param treePoint   Data point being aggregated.
+   * For ordered features, a single bin is updated.
+   * For unordered features, bins correspond to subsets of categories; either the left or right bin
+   * for each subset is updated.
+   *
+   * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
+   *             each (node, feature, bin).
+   * @param treePoint  Data point being aggregated.
    * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
+   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
+   * @param unorderedFeatures  Set of indices of unordered features.
    */
   def someUnorderedBinSeqOp(
       agg: DTStatsAggregator,
@@ -547,15 +555,13 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Helper for binSeqOp: for regression and for classification with only ordered features.
+   * Helper for binSeqOp, for regression and for classification with only ordered features.
    *
-   * Performs a sequential aggregation over a partition for regression.
-   * For l nodes, k features,
-   * the count, sum, sum of squares of one of the p bins is incremented.
+   * For each feature, the sufficient statistics of one bin are updated.
    *
-   * @param agg Array storing aggregate calculation, updated by this function.
-   *            Size: 3 * numBins * numFeatures * numNodes
-   * @param treePoint   Data point being aggregated.
+   * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
+   *             each (node, feature, bin).
+   * @param treePoint  Data point being aggregated.
    * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
    * @return agg
    */
@@ -582,6 +588,7 @@ object DecisionTree extends Serializable with Logging {
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
+   * @param nodes Array of all nodes in the tree.  Used for matching data points to nodes.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param numGroups total number of node groups at the current level. Default value is set to 1.
@@ -663,19 +670,12 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Performs a sequential aggregation over a partition.
-     * For l nodes, k features,
-     *   For classification:
-     *     Either the left count or the right count of one of the bins is
-     *     incremented based upon whether the feature is classified as 0 or 1.
-     *   For regression:
-     *     The count, sum, sum of squares of one of the bins is incremented.
      *
-     * @param agg Array storing aggregate calculation, updated by this function.
-     *            Size for classification:
-     *              Ordered features: numNodes * numFeatures * numBins.
-     *              Unordered features: (2 * numNodes) * numFeatures * numBins.
-     *            Size for regression:
-     *              numNodes * numFeatures * numBins.
+     * Each data point contributes to one node. For each feature,
+     * the aggregate sufficient statistics are updated for the relevant bins.
+     *
+     * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
+     *             each (node, feature, bin).
      * @param treePoint   Data point being aggregated.
      * @return  agg
      */
@@ -883,8 +883,10 @@ object DecisionTree extends Serializable with Logging {
         val (bestFeatureSplitIndex, bestFeatureGainStats) =
           Range(0, numSplits).map { splitIndex =>
             val featureValue = categoriesSortedByCentroid(splitIndex)._1
-            val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-            val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
+            val leftChildStats =
+              binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
+            val rightChildStats =
+              binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
             rightChildStats.subtract(leftChildStats)
             val gainStats =
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)

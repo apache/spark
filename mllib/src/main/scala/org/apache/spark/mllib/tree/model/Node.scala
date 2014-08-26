@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vector
  * Node in a decision tree.
  *
  * About node indexing:
- *   Nodes are indexed from 1.  Node 1 is the root; nodes 2,3 are the left,right children.
+ *   Nodes are indexed from 1.  Node 1 is the root; nodes 2, 3 are the left, right children.
  *   Node index 0 is not used.
  *
  * @param id integer node id, from 1

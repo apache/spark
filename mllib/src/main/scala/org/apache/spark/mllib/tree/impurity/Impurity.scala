@@ -22,6 +22,9 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 /**
  * :: Experimental ::
  * Trait for calculating information gain.
+ * This trait is used for
+ *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
+ *  (b) calculating impurity values from sufficient statistics.
  */
 @Experimental
 trait Impurity extends Serializable {
@@ -51,8 +54,8 @@ trait Impurity extends Serializable {
 /**
  * Interface for updating views of a vector of sufficient statistics,
  * in order to compute impurity from a sample.
- * Note: Instances of this class do not hold the data itself.
- * @param statsSize  Length of the vector of sufficient statistics.
+ * Note: Instances of this class do not hold the data; they operate on views of the data.
+ * @param statsSize  Length of the vector of sufficient statistics for one bin.
  */
 private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
 
@@ -88,14 +91,20 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
 
 /**
  * Stores statistics for one (node, feature, bin) for calculating impurity.
- * Unlike [[ImpurityAggregator]], this class stores its own data and is for a single
+ * Unlike [[ImpurityAggregator]], this class stores its own data and is for a specific
  * (node, feature, bin).
- * @param stats  Array of sufficient statistics.
+ * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
 private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
 
+  /**
+   * Make a deep copy of this [[ImpurityCalculator]].
+   */
   def copy: ImpurityCalculator
 
+  /**
+   * Calculate the impurity from the stored sufficient statistics.
+   */
   def calculate(): Double
 
   /**
@@ -129,12 +138,25 @@ private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
     this
   }
 
+  /**
+   * Number of data points accounted for in the sufficient statistics.
+   */
   def count: Long
 
+  /**
+   * Prediction which should be made based on the sufficient statistics.
+   */
   def predict: Double
 
+  /**
+   * Probability of the label given by [[predict]], or -1 if no probability is available.
+   */
   def prob(label: Double): Double = -1
 
+  /**
+   * Return the index of the largest array element.
+   * Fails if the array is empty.
+   */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
     val result = array.foldLeft(-1, Double.MinValue, 0) {
       case ((maxIndex, maxValue, currentIndex), currentValue) =>

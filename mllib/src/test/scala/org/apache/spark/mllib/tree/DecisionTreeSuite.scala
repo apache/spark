@@ -333,7 +333,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(!metadata.isUnordered(featureIndex = 1))
 
     val model = DecisionTree.train(rdd, strategy)
-    println(model)
     validateRegressor(model, arr, 0.0)
     assert(model.numNodes === 3)
     assert(model.depth === 1)
@@ -666,7 +665,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     assert(bestSplits.length === 1)
     val bestSplit = bestSplits(0)._1
-    println(s"bestSplit: $bestSplit")
     assert(bestSplit.feature === 0)
     assert(bestSplit.categories.length === 1)
     assert(bestSplit.categories.contains(1.0))

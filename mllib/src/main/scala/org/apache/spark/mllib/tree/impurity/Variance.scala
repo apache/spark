@@ -62,6 +62,11 @@ object Variance extends Impurity {
 
 }
 
+/**
+ * Class for updating views of a vector of sufficient statistics,
+ * in order to compute impurity from a sample.
+ * Note: Instances of this class do not hold the data; they operate on views of the data.
+ */
 private[tree] class VarianceAggregator()
   extends ImpurityAggregator(statsSize = 3) with Serializable {
 
@@ -87,18 +92,36 @@ private[tree] class VarianceAggregator()
 
 }
 
+/**
+ * Stores statistics for one (node, feature, bin) for calculating impurity.
+ * Unlike [[GiniAggregator]], this class stores its own data and is for a specific
+ * (node, feature, bin).
+ * @param stats  Array of sufficient statistics for a (node, feature, bin).
+ */
 private[tree] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   require(stats.size == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
     s" but was given array of length ${stats.size}.")
 
+  /**
+   * Make a deep copy of this [[ImpurityCalculator]].
+   */
   def copy: VarianceCalculator = new VarianceCalculator(stats.clone())
 
+  /**
+   * Calculate the impurity from the stored sufficient statistics.
+   */
   def calculate(): Double = Variance.calculate(stats(0), stats(1), stats(2))
 
+  /**
+   * Number of data points accounted for in the sufficient statistics.
+   */
   def count: Long = stats(0).toLong
 
+  /**
+   * Prediction which should be made based on the sufficient statistics.
+   */
   def predict: Double = if (count == 0) {
     0
   } else {

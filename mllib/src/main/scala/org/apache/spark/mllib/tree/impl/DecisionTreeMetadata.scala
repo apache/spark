@@ -24,30 +24,17 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.Impurity
-import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.rdd.RDD
-
-
-/*
- * TODO: Add doc about ordered vs. unordered features.
- * Ensure numBins is always greater than the categories. For multiclass classification,
- * numBins should be greater than math.pow(2, maxCategories - 1) - 1.
- * It's a limitation of the current implementation but a reasonable trade-off since features
- * with large number of categories get favored over continuous features.
- *
- * This needs to be checked here instead of in Strategy since numBins can be determined
- * by the number of training examples.
- */
-
 
 /**
  * Learning and dataset metadata for DecisionTree.
  *
  * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
  *                      For regression: fixed at 0 (no meaning).
+ * @param maxBins  Maximum number of bins, for all features.
  * @param featureArity  Map: categorical feature index --> arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
- * @param numBins  numBins(featureIndex) = number of bins for feature
+ * @param numBins  Number of bins for each feature.
  */
 private[tree] class DecisionTreeMetadata(
     val numFeatures: Int,
@@ -82,6 +69,11 @@ private[tree] class DecisionTreeMetadata(
 
 private[tree] object DecisionTreeMetadata {
 
+  /**
+   * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
+   * This computes which categorical features will be ordered vs. unordered,
+   * as well as the number of splits and bins for each feature.
+   */
   def buildMetadata(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeMetadata = {
 
     val numFeatures = input.take(1)(0).features.size
@@ -94,6 +86,9 @@ private[tree] object DecisionTreeMetadata {
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
     val log2MaxPossibleBinsp1 = math.log(maxPossibleBins + 1) / math.log(2.0)
 
+    // We check the number of bins here against maxPossibleBins.
+    // This needs to be checked here instead of in Strategy since maxPossibleBins can be modified
+    // based on the number of training examples.
     val unorderedFeatures = new mutable.HashSet[Int]()
     val numBins = Array.fill[Int](numFeatures)(maxPossibleBins)
     if (numClasses > 2) {
@@ -104,11 +99,6 @@ private[tree] object DecisionTreeMetadata {
           unorderedFeatures.add(f)
           numBins(f) = numUnorderedBins(k)
         } else {
-          // TODO: Check the below k <= maxBins.
-          //       Checking k <= maxPossibleBins should work.
-          //       However, there may have been a 1-off error later on allocating 1 extra
-          //       (unused) bin.
-          // TODO: Allow this case, where we simply will know nothing about some categories?
           require(k <= maxPossibleBins,
             s"maxBins (= $maxPossibleBins) should be greater than max categories " +
             s"in categorical features (>= $k)")

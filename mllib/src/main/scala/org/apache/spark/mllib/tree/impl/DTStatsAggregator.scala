@@ -19,20 +19,18 @@ package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.tree.impurity._
 
-import scala.collection.mutable
-
-
 /**
- * :: Experimental ::
  * DecisionTree statistics aggregator.
  * This holds a flat array of statistics for a set of (nodes, features, bins)
  * and helps with indexing.
- * TODO: Allow views of Vector types to replace some of the code in here.
  */
 private[tree] class DTStatsAggregator(
     metadata: DecisionTreeMetadata,
     val numNodes: Int) extends Serializable {
 
+  /**
+   * [[ImpurityAggregator]] instance specifying the impurity type.
+   */
   val impurityAggregator: ImpurityAggregator = metadata.impurity match {
     case Gini => new GiniAggregator(metadata.numClasses)
     case Entropy => new EntropyAggregator(metadata.numClasses)
@@ -40,15 +38,27 @@ private[tree] class DTStatsAggregator(
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
   }
 
+  /**
+   * Number of elements (Double values) used for the sufficient statistics of each bin.
+   */
   val statsSize: Int = impurityAggregator.statsSize
 
   val numFeatures: Int = metadata.numFeatures
 
+  /**
+   * Number of bins for each feature.  This is indexed by the feature index.
+   */
   val numBins: Array[Int] = metadata.numBins
 
-  val isUnordered: Array[Boolean] =
-    Range(0, numFeatures).map(f => metadata.unorderedFeatures.contains(f)).toArray
+  /**
+   * Indicator for each feature of whether that feature is an unordered feature.
+   * TODO: Is Array[Boolean] any faster?
+   */
+  def isUnordered(featureIndex: Int): Boolean = metadata.isUnordered(featureIndex)
 
+  /**
+   * Offset for each feature for calculating indices into the [[allStats]] array.
+   */
   private val featureOffsets: Array[Int] = {
     def featureOffsetsCalc(total: Int, featureIndex: Int): Int = {
       if (isUnordered(featureIndex)) {
@@ -105,8 +115,9 @@ private[tree] class DTStatsAggregator(
   def getNodeOffset(nodeIndex: Int): Int = nodeIndex * nodeStride
 
   /**
+   * Faster version of [[update]].
    * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
-   * This uses a pre-computed node offset from [[getNodeOffset]].
+   * @param nodeOffset  Pre-computed node offset from [[getNodeOffset]].
    */
   def nodeUpdate(nodeOffset: Int, featureIndex: Int, binIndex: Int, label: Double): Unit = {
     val i = nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize
@@ -137,6 +148,7 @@ private[tree] class DTStatsAggregator(
   }
 
   /**
+   * Faster version of [[update]].
    * Update the stats for a given (node, feature, bin), using the given label.
    * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
    *                           from [[getNodeFeatureOffset]].
