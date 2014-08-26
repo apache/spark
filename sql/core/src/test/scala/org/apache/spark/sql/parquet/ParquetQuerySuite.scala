@@ -186,6 +186,100 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
   }
 
+  test("Compression options for writing to a Parquetfile") {
+    val defaultParquetCompressionCodec = TestSQLContext.parquetCompressionCodec
+    import scala.collection.JavaConversions._
+
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+
+    // test default compression codec
+    rdd.saveAsParquetFile(path)
+    var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "UNCOMPRESSED"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "UNCOMPRESSED")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "none"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "none")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === "UNCOMPRESSED" :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test gzip compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test snappy compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "snappy")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // TODO: Lzo requires additional external setup steps so leave it out for now
+    // ref.: https://github.com/Parquet/parquet-mr/blob/parquet-1.5.0/parquet-hadoop/src/test/java/parquet/hadoop/example/TestInputOutputFormat.java#L169
+
+    // Set it back.
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, defaultParquetCompressionCodec)
+  }
+
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
