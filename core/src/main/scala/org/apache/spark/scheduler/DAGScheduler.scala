@@ -1045,31 +1045,37 @@ class DAGScheduler(
         stage.pendingTasks += task
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
-        // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        markStageAsFinished(failedStage, Some("Fetch failure"))
-        runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
-        logInfo("Marking " + failedStage + " (" + failedStage.name +
-          ") for resubmision due to a fetch failure")
-        // Mark the map whose fetch failed as broken in the map stage
-        val mapStage = shuffleToMapStage(shuffleId)
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        // It is likely that we receive multiple FetchFailed for a single stage (because we have
+        // multiple tasks running concurrently on different executors). In that case, it is possible
+        // the fetch failure has already been handled by the executor.
+        if (runningStages.contains(failedStage)) {
+          markStageAsFinished(failedStage, Some("Fetch failure"))
+          runningStages -= failedStage
+          // TODO: Cancel running tasks in the stage
+          logInfo("Marking " + failedStage + " (" + failedStage.name +
+            ") for resubmision due to a fetch failure")
+
+          // Mark the map whose fetch failed as broken in the map stage
+          val mapStage = shuffleToMapStage(shuffleId)
+          if (mapId != -1) {
+            mapStage.removeOutputLoc(mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+
+          logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
+            "); marking it for resubmission")
+          if (failedStages.isEmpty && eventProcessActor != null) {
+            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+            // in that case the event will already have been scheduled. eventProcessActor may be
+            // null during unit tests.
+            import env.actorSystem.dispatcher
+            env.actorSystem.scheduler.scheduleOnce(
+              RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+          }
+          failedStages += failedStage
+          failedStages += mapStage
         }
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
-          "); marking it for resubmission")
-        if (failedStages.isEmpty && eventProcessActor != null) {
-          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled. eventProcessActor may be
-          // null during unit tests.
-          import env.actorSystem.dispatcher
-          env.actorSystem.scheduler.scheduleOnce(
-            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
-        }
-        failedStages += failedStage
-        failedStages += mapStage
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
