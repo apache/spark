@@ -174,7 +174,8 @@ class PythonForeachDStream(
  * returns the i_th element at the i_th batch under manual clock.
  */
 
-class PythonTestInputStream(ssc_ : JavaStreamingContext, inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
+class PythonTestInputStream(ssc_ : JavaStreamingContext,
+      inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
   extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
 
   def start() {}
