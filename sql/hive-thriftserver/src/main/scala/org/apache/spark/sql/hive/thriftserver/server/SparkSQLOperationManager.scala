@@ -151,7 +151,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
       }
 
       def getResultSetSchema: TableSchema = {
-        logWarning(s"Result Schema: ${result.queryExecution.analyzed.output}")
+        logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
         if (result.queryExecution.analyzed.output.size == 0) {
           new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
         } else {
