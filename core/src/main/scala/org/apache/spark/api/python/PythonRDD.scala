@@ -751,8 +751,8 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
-   */
+    * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+    */
   def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler

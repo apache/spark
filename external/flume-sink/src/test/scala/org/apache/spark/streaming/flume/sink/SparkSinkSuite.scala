@@ -30,14 +30,14 @@ import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.event.EventBuilder
-import org.apache.spark.streaming.TestSuiteBase
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+import org.scalatest.FunSuite
 
-class SparkSinkSuite extends TestSuiteBase {
+class SparkSinkSuite extends FunSuite {
   val eventsPerBatch = 1000
   val channelCapacity = 5000
 
-  test("Success") {
+  test("Success with ack") {
     val (channel, sink) = initializeChannelAndSink()
     channel.start()
     sink.start()
@@ -57,7 +57,7 @@ class SparkSinkSuite extends TestSuiteBase {
     transceiver.close()
   }
 
-  test("Nack") {
+  test("Failure with nack") {
     val (channel, sink) = initializeChannelAndSink()
     channel.start()
     sink.start()
@@ -76,7 +76,7 @@ class SparkSinkSuite extends TestSuiteBase {
     transceiver.close()
   }
 
-  test("Timeout") {
+  test("Failure with timeout") {
     val (channel, sink) = initializeChannelAndSink(Map(SparkSinkConfig
       .CONF_TRANSACTION_TIMEOUT -> 1.toString))
     channel.start()
