@@ -51,7 +51,7 @@ class AttributeSet protected (val baseSet: Set[AttributeEquals]) extends Travers
     baseSet.contains(new AttributeEquals(elem.toAttribute))
 
   /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements. */
-  def +(elem: Attribute): AttributeSet =
+  def +(elem: Attribute): AttributeSet =  // scalastyle:ignore
     new AttributeSet(baseSet + new AttributeEquals(elem))
 
   /** Returns a new [[AttributeSet]] that does not contain `elem`. */

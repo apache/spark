@@ -59,14 +59,16 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Eliminate attributes that are not needed to calculate the specified aggregates.
-    case a @ Aggregate(_, _, child) if (child.outputSet -- AttributeSet(a.references.toSeq)).nonEmpty =>
+    case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
 
     // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
       // Collect the list of all references required either above or to evaluate the condition.
       val allReferences: AttributeSet =
-        AttributeSet(projectList.flatMap(_.references.iterator)) ++ condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
+        AttributeSet(
+          projectList.flatMap(_.references.iterator)) ++
+          condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       /** Applies a projection only when the child is producing unnecessary attributes */
       def pruneJoinChild(c: LogicalPlan) = prunedChild(c, allReferences)
