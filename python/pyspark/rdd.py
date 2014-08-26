@@ -1859,29 +1859,6 @@ class RDD(object):
         else:
             return self.getNumPartitions()
 
-    def countApproxDistinct(self, relativeSD=0.05):
-        """
-        :: Experimental ::
-        Return approximate number of distinct elements in the RDD.
-
-        The algorithm used is based on streamlib's implementation of
-        "HyperLogLog in Practice: Algorithmic Engineering of a State
-        of The Art Cardinality Estimation Algorithm", available
-        <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
-
-        This support all the types of objects, which is supported by
-        Pyrolite, nearly all builtin types.
-
-        :param: relativeSD Relative accuracy. Smaller values create
-                           counters that require more space.
-                           It must be greater than 0.000017.
-
-        >>> n = sc.parallelize(range(1000)).map(str).countApproxDistinct()
-        >>> 950 < n < 1050
-        True
-        """
-        return self._to_jrdd().countApproxDistinct(relativeSD)
-
     # TODO
     # def countApproxDistinctByKey(self, timeout, confidence=0.95):
     #     """

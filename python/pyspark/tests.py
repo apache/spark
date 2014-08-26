@@ -332,13 +332,6 @@ class TestRDDFunctions(PySparkTestCase):
         theDoes = self.sc.parallelize([jon, jane])
         self.assertEquals([jon, jane], theDoes.collect())
 
-    def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(range(1000))
-        self.assertTrue(950 < rdd.countApproxDistinct() < 1050)
-        self.assertTrue(950 < rdd.map(float).countApproxDistinct() < 1050)
-        self.assertTrue(950 < rdd.map(str).countApproxDistinct() < 1050)
-        self.assertTrue(950 < rdd.map(lambda x: (x, -x)).countApproxDistinct() < 1050)
-
     def test_large_broadcast(self):
         N = 100000
         data = [[float(i) for i in range(300)] for i in range(N)]
