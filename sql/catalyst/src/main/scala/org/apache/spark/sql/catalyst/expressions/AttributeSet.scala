@@ -43,7 +43,8 @@ object AttributeSet {
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */
-class AttributeSet protected (val baseSet: Set[AttributeEquals]) extends Traversable[Attribute] {
+class AttributeSet private (val baseSet: Set[AttributeEquals])
+  extends Traversable[Attribute] with Serializable {
 
   /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any) = other match {
@@ -98,4 +99,8 @@ class AttributeSet protected (val baseSet: Set[AttributeEquals]) extends Travers
   def intersect(other: AttributeSet) = new AttributeSet(baseSet.intersect(other.baseSet))
 
   override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
+
+  // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all
+  // sorts of things in its closure.
+  override def toSeq: Seq[Attribute] = baseSet.map(_.a).toArray.toSeq
 }
