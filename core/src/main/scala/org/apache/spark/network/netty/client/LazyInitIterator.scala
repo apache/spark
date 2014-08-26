@@ -15,17 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.network.netty.client
 
-import io.netty.channel.ChannelInitializer
-import io.netty.channel.socket.SocketChannel
-import io.netty.handler.codec.string.StringEncoder
+/**
+ * A simple iterator that lazily initializes the underlying iterator.
+ *
+ * The use case is that sometimes we might have many iterators open at the same time, and each of
+ * the iterator might initialize its own buffer (e.g. decompression buffer, deserialization buffer).
+ * This could lead to too many buffers open. If this iterator is used, we lazily initialize those
+ * buffers.
+ */
+private[spark]
+class LazyInitIterator(createIterator: => Iterator[Any]) extends Iterator[Any] {
 
+  lazy val proxy = createIterator
 
-class FileClientChannelInitializer(handler: FileClientHandler)
-  extends ChannelInitializer[SocketChannel] {
-
-  def initChannel(channel: SocketChannel) {
-    channel.pipeline.addLast("encoder", new StringEncoder).addLast("handler", handler)
+  override def hasNext: Boolean = {
+    val gotNext = proxy.hasNext
+    if (!gotNext) {
+      close()
+    }
+    gotNext
   }
+
+  override def next(): Any = proxy.next()
+
+  def close(): Unit = Unit
 }

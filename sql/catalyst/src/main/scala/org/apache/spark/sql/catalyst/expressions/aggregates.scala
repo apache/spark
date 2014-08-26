@@ -22,6 +22,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.util.collection.OpenHashSet
 
 abstract class AggregateExpression extends Expression {
   self: Product =>
@@ -161,13 +162,88 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def newInstance() = new CountFunction(child, this)
 }
 
-case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpression {
+case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate {
+  def this() = this(null)
+
   override def children = expressions
   override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = LongType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
   override def newInstance() = new CountDistinctFunction(expressions, this)
+
+  override def asPartial = {
+    val partialSet = Alias(CollectHashSet(expressions), "partialSets")()
+    SplitEvaluation(
+      CombineSetsAndCount(partialSet.toAttribute),
+      partialSet :: Nil)
+  }
+}
+
+case class CollectHashSet(expressions: Seq[Expression]) extends AggregateExpression {
+  def this() = this(null)
+
+  override def children = expressions
+  override def references = expressions.flatMap(_.references).toSet
+  override def nullable = false
+  override def dataType = ArrayType(expressions.head.dataType)
+  override def toString = s"AddToHashSet(${expressions.mkString(",")})"
+  override def newInstance() = new CollectHashSetFunction(expressions, this)
+}
+
+case class CollectHashSetFunction(
+    @transient expr: Seq[Expression],
+    @transient base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new OpenHashSet[Any]()
+
+  @transient
+  val distinctValue = new InterpretedProjection(expr)
+
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = distinctValue(input)
+    if (!evaluatedExpr.anyNull) {
+      seen.add(evaluatedExpr)
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    seen
+  }
+}
+
+case class CombineSetsAndCount(inputSet: Expression) extends AggregateExpression {
+  def this() = this(null)
+
+  override def children = inputSet :: Nil
+  override def references = inputSet.references
+  override def nullable = false
+  override def dataType = LongType
+  override def toString = s"CombineAndCount($inputSet)"
+  override def newInstance() = new CombineSetsAndCountFunction(inputSet, this)
+}
+
+case class CombineSetsAndCountFunction(
+    @transient inputSet: Expression,
+    @transient base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new OpenHashSet[Any]()
+
+  override def update(input: Row): Unit = {
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputIterator = inputSetEval.iterator
+    while (inputIterator.hasNext) {
+      seen.add(inputIterator.next)
+    }
+  }
+
+  override def eval(input: Row): Any = seen.size.toLong
 }
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
@@ -379,17 +455,22 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
     seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
 }
 
-case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
+case class CountDistinctFunction(
+    @transient expr: Seq[Expression],
+    @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
 
-  val seen = new scala.collection.mutable.HashSet[Any]()
+  val seen = new OpenHashSet[Any]()
+
+  @transient
+  val distinctValue = new InterpretedProjection(expr)
 
   override def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.eval(input))
-    if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
-      seen += evaluatedExpr
+    val evaluatedExpr = distinctValue(input)
+    if (!evaluatedExpr.anyNull) {
+      seen.add(evaluatedExpr)
     }
   }
 

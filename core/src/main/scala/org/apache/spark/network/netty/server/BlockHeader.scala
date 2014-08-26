@@ -15,14 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.network.netty.server
 
 /**
- * Filter specifying a split and type of comparison to be applied on features
- * @param split split specifying the feature index, type and threshold
- * @param comparison integer specifying <,=,>
+ * Header describing a block. This is used only in the server pipeline.
+ *
+ * [[BlockServerHandler]] creates this, and [[BlockHeaderEncoder]] encodes it.
+ *
+ * @param blockSize length of the block content, excluding the length itself.
+ *                 If positive, this is the header for a block (not part of the header).
+ *                 If negative, this is the header and content for an error message.
+ * @param blockId block id
+ * @param error some error message from reading the block
  */
-private[tree] case class Filter(split: Split, comparison: Int) {
-  // Comparison -1,0,1 signifies <.=,>
-  override def toString = " split = " + split + "comparison = " + comparison
-}
+private[server]
+class BlockHeader(val blockSize: Int, val blockId: String, val error: Option[String] = None)

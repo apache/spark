@@ -27,7 +27,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{SparkConf, Logging, SparkContext, SparkException}
+import org.apache.spark._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.deploy.Command
@@ -115,10 +115,13 @@ private[spark] class CoarseMesosSchedulerBackend(
     val environment = Environment.newBuilder()
     val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
-      
-    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      conf.get("spark.driver.host"), conf.get("spark.driver.port"),
+
+    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+      SparkEnv.driverActorSystemName,
+      conf.get("spark.driver.host"),
+      conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
+
     val args = Seq(driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores.toString)
     val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)

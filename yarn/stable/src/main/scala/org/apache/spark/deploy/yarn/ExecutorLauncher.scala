@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import akka.actor._
 import akka.remote._
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
@@ -94,11 +94,6 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   }
 
   def run() {
-
-    // Setup the directories so things go to yarn approved directories rather
-    // then user specified and /tmp.
-    System.setProperty("spark.local.dir", getLocalDirs())
-
     amClient = AMRMClient.createAMRMClient()
     amClient.init(yarnConf)
     amClient.start()
@@ -141,20 +136,6 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     System.exit(0)
   }
 
-  /** Get the Yarn approved local directories. */
-  private def getLocalDirs(): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .orElse(Option(System.getenv("LOCAL_DIRS")))
-
-    localDirs match {
-      case None => throw new Exception("Yarn Local dirs can't be empty")
-      case Some(l) => l
-    }
-  }
-
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
     val appUIAddress = sparkConf.get("spark.driver.appUIAddress", "")
     logInfo(s"Registering the ApplicationMaster with appUIAddress: $appUIAddress")
@@ -193,8 +174,11 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
+    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+      SparkEnv.driverActorSystemName,
+      driverHost,
+      driverPort.toString,
+      CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
   }
@@ -217,7 +201,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // Wait until all containers have launched
     yarnAllocator.addResourceRequests(args.numExecutors)
     yarnAllocator.allocateResources()
-    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed) &&
+        !isFinished) {
       checkNumExecutorsFailed()
       allocateMissingExecutor()
       yarnAllocator.allocateResources()
@@ -249,7 +234,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     val t = new Thread {
       override def run() {
-        while (!driverClosed) {
+        while (!driverClosed && !isFinished) {
           checkNumExecutorsFailed()
           allocateMissingExecutor()
           logDebug("Sending progress")

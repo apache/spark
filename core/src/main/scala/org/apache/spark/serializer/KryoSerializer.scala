@@ -91,7 +91,7 @@ class KryoSerializer(conf: SparkConf)
         Thread.currentThread.setContextClassLoader(classLoader)
         reg.registerClasses(kryo)
       } catch {
-        case e: Exception => 
+        case e: Exception =>
           throw new SparkException(s"Failed to invoke $regCls", e)
       } finally {
         Thread.currentThread.setContextClassLoader(oldClassLoader)
@@ -106,7 +106,7 @@ class KryoSerializer(conf: SparkConf)
     kryo
   }
 
-  def newInstance(): SerializerInstance = {
+  override def newInstance(): SerializerInstance = {
     new KryoSerializerInstance(this)
   }
 }
@@ -115,20 +115,20 @@ private[spark]
 class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends SerializationStream {
   val output = new KryoOutput(outStream)
 
-  def writeObject[T: ClassTag](t: T): SerializationStream = {
+  override def writeObject[T: ClassTag](t: T): SerializationStream = {
     kryo.writeClassAndObject(output, t)
     this
   }
 
-  def flush() { output.flush() }
-  def close() { output.close() }
+  override def flush() { output.flush() }
+  override def close() { output.close() }
 }
 
 private[spark]
 class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends DeserializationStream {
-  val input = new KryoInput(inStream)
+  private val input = new KryoInput(inStream)
 
-  def readObject[T: ClassTag](): T = {
+  override def readObject[T: ClassTag](): T = {
     try {
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
@@ -138,31 +138,31 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
     }
   }
 
-  def close() {
+  override def close() {
     // Kryo's Input automatically closes the input stream it is using.
     input.close()
   }
 }
 
 private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
-  val kryo = ks.newKryo()
+  private val kryo = ks.newKryo()
 
   // Make these lazy vals to avoid creating a buffer unless we use them
-  lazy val output = ks.newKryoOutput()
-  lazy val input = new KryoInput()
+  private lazy val output = ks.newKryoOutput()
+  private lazy val input = new KryoInput()
 
-  def serialize[T: ClassTag](t: T): ByteBuffer = {
+  override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
     kryo.writeClassAndObject(output, t)
     ByteBuffer.wrap(output.toBytes)
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     input.setBuffer(bytes.array)
     kryo.readClassAndObject(input).asInstanceOf[T]
   }
 
-  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     val oldClassLoader = kryo.getClassLoader
     kryo.setClassLoader(loader)
     input.setBuffer(bytes.array)
@@ -171,11 +171,11 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     obj
   }
 
-  def serializeStream(s: OutputStream): SerializationStream = {
+  override def serializeStream(s: OutputStream): SerializationStream = {
     new KryoSerializationStream(kryo, s)
   }
 
-  def deserializeStream(s: InputStream): DeserializationStream = {
+  override def deserializeStream(s: InputStream): DeserializationStream = {
     new KryoDeserializationStream(kryo, s)
   }
 }
