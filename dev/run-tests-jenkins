@@ -138,7 +138,7 @@ function post_message () {
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
-    fail_message="**Tests timed out** after a configured wait of \`${TESTS_TIMEOUT}\`."
+    fail_message="**[Tests timed out](${BUILD_URL}consoleFull)** after a configured wait of \`${TESTS_TIMEOUT}\`."
     post_message "$fail_message"
     exit $test_result
   else
