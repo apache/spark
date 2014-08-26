@@ -124,7 +124,9 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
       callOnCloseCallback()
       val k = key()
       if (k != null) {
-        k.cancel()
+        k.synchronized {
+          k.cancel()
+        }
       }
       channel.close()
     }
