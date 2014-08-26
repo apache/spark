@@ -255,6 +255,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry
 
@@ -423,7 +424,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       logical match {
         case _: NativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => executedPlan.toString
+        case _ => super.simpleString
       }
   }
 }
