@@ -46,7 +46,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   channel.socket.setKeepAlive(true)
   /* channel.socket.setReceiveBufferSize(32768) */
 
-  @volatile private var closed = new AtomicBoolean(false)
+  private val closed = new AtomicBoolean(false)
   var onCloseCallback: Connection => Unit = null
   var onExceptionCallback: (Connection, Exception) => Unit = null
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
@@ -130,7 +130,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     }
   }
 
-  protected def isClosed: Boolean = closed.get
+  def isClosed: Boolean = closed.get
 
   def onClose(callback: Connection => Unit) {
     onCloseCallback = callback

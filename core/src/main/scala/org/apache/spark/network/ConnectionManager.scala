@@ -280,33 +280,36 @@ private[spark] class ConnectionManager(
         }
 
         while(!keyInterestChangeRequests.isEmpty) {
+          // Expect key interested in OP_ACCEPT is not change its interest
           val (key, ops) = keyInterestChangeRequests.dequeue()
           try {
-            if (key.isValid) {
-              val connection = connectionsByKey.getOrElse(key, null)
-              if (connection != null) {
-                val lastOps = key.interestOps()
-                key.interestOps(ops)
+            val connection = connectionsByKey.getOrElse(key, null)
+            if (connection != null && !connection.isClosed) {
+              if (key.isValid) {
+                if (connection != null) {
+                  val lastOps = key.interestOps()
+                  key.interestOps(ops)
 
-                // hot loop - prevent materialization of string if trace not enabled.
-                if (isTraceEnabled()) {
-                  def intToOpStr(op: Int): String = {
-                    val opStrs = ArrayBuffer[String]()
-                    if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
-                    if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
-                    if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
-                    if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
-                    if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
-                  }
+                  // hot loop - prevent materialization of string if trace not enabled.
+                  if (isTraceEnabled()) {
+                    def intToOpStr(op: Int): String = {
+                      val opStrs = ArrayBuffer[String]()
+                      if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
+                      if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
+                      if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
+                      if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
+                      if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
+                    }
 
-                  logTrace("Changed key for connection to [" +
-                    connection.getRemoteConnectionManagerId()  + "] changed from [" +
+                    logTrace("Changed key for connection to [" +
+                      connection.getRemoteConnectionManagerId() + "] changed from [" +
                       intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+                  }
                 }
+              } else {
+                logInfo("Key not valid ?" + key)
+                throw new CancelledKeyException()
               }
-            } else {
-              logInfo("Key not valid ?" + key)
-              throw new CancelledKeyException()
             }
           } catch {
             case e: CancelledKeyException => {
@@ -333,9 +336,13 @@ private[spark] class ConnectionManager(
               while (allKeys.hasNext) {
                 val key = allKeys.next()
                 try {
-                  if (! key.isValid) {
-                    logInfo("Key not valid ? " + key)
-                    throw new CancelledKeyException()
+                  val connection = connectionsByKey.getOrElse(key, null)
+                  if (key.channel.isInstanceOf[ServerSocketChannel] ||
+                    connection != null && !connection.isClosed) {
+                    if (!key.isValid) {
+                      logInfo("Key not valid ? " + key)
+                      throw new CancelledKeyException()
+                    }
                   }
                 } catch {
                   case e: CancelledKeyException => {
@@ -367,22 +374,26 @@ private[spark] class ConnectionManager(
             val key = selectedKeys.next
             selectedKeys.remove()
             try {
-              if (key.isValid) {
-                if (key.isAcceptable) {
-                  acceptConnection(key)
-                } else
-                if (key.isConnectable) {
-                  triggerConnect(key)
-                } else
-                if (key.isReadable) {
-                  triggerRead(key)
-                } else
-                if (key.isWritable) {
-                  triggerWrite(key)
+              val connection = connectionsByKey.getOrElse(key, null)
+              if (key.channel.isInstanceOf[ServerSocketChannel] ||
+                connection != null && !connection.isClosed) {
+                if (key.isValid) {
+                  if (key.isAcceptable) {
+                    acceptConnection(key)
+                  } else
+                  if (key.isConnectable) {
+                    triggerConnect(key)
+                  } else
+                  if (key.isReadable) {
+                    triggerRead(key)
+                  } else
+                  if (key.isWritable) {
+                      triggerWrite(key)
+                  }
+                } else {
+                  logInfo("Key not valid ? " + key)
+                  throw new CancelledKeyException()
                 }
-              } else {
-                logInfo("Key not valid ? " + key)
-                throw new CancelledKeyException()
               }
             } catch {
               // weird, but we saw this happening - even though key.isValid was true,
@@ -945,6 +956,7 @@ private[spark] class ConnectionManager(
     if (connectionsByKey.size != 0) {
       logWarning("All connections not cleaned up")
     }
+    serverChannel.close()
     selector.close()
     handleMessageExecutor.shutdown()
     handleReadWriteExecutor.shutdown()
