@@ -66,7 +66,8 @@ class SparkEnv (
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
-    val conf: SparkConf) extends Logging {
+    val conf: SparkConf,
+    val isDriver : Boolean) extends Logging {
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -81,7 +82,9 @@ class SparkEnv (
     shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
-    blockManager.master.stop()
+    if (isDriver) {
+      blockManager.master.stop()
+    }
     metricsSystem.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
@@ -282,7 +285,8 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       shuffleMemoryManager,
-      conf)
+      conf,
+      isDriver)
   }
 
   /**

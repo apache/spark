@@ -122,6 +122,7 @@ private[spark] class Executor(
     env.metricsSystem.report()
     isStopped = true
     threadPool.shutdown()
+    env.stop()
   }
 
   class TaskRunner(
