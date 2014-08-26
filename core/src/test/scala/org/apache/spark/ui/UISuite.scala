@@ -141,4 +141,33 @@ class UISuite extends FunSuite {
       assert(splitUIAddress(2).toInt == sc.ui.boundPort)
     }
   }
+  
+  test("verity StorageTab contains all cached rdds") {
+    import org.apache.spark.Success
+    val storageListener = new StorageListener(new StorageStatusListener)
+    val taskInfo1 = new TaskInfo(0, 0, 0, "big", "dog", TaskLocality.ANY)
+    val taskInfo2 = new TaskInfo(1, 1, 1, "small", "cat", TaskLocality.ANY)
+    val rddInfo1 = new RDDInfo(1, "rdd1", 1, StorageLevel.MEMORY_ONLY)
+    val rddInfo2 = new RDDInfo(2, "rdd2", 1 ,StorageLevel.MEMORY_ONLY)
+    val stageInfo1 = new StageInfo(0, "stage1", 1, Seq(rddInfo1))
+    val stageInfo2 = new StageInfo(1, "stage2", 1, Seq(rddInfo2))
+    val taskMetrics1 = new TaskMetrics
+    val taskMetrics2 = new TaskMetrics
+    val block1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.MEMORY_ONLY, 100L, 0L, 0L))
+    val block2 = (RDDBlockId(2, 1), BlockStatus(StorageLevel.MEMORY_ONLY, 200L, 0L, 0L))
+    taskMetrics1.updatedBlocks = Some(Seq(block1))
+    taskMetrics2.updatedBlocks = Some(Seq(block2))
+    storageListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo1))
+    assert(storageListener.rddInfoList.size == 0)
+    storageListener.onTaskEnd(SparkListenerTaskEnd(0, "big", Success, taskInfo1, taskMetrics1))
+    assert(storageListener.rddInfoList.size == 1)
+    storageListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo2))
+    assert(storageListener.rddInfoList.size == 1)
+    storageListener.onStageCompleted(SparkListenerStageCompleted(stageInfo1))
+    assert(storageListener.rddInfoList.size == 1)
+    storageListener.onTaskEnd(SparkListenerTaskEnd(1, "small", Success, taskInfo2, taskMetrics2))
+    assert(storageListener.rddInfoList.size == 2)
+    storageListener.onStageCompleted(SparkListenerStageCompleted(stageInfo2))
+    assert(storageListener.rddInfoList.size == 2)
+  }
 }
