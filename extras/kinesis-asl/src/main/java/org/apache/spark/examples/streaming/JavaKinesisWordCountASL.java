@@ -130,10 +130,10 @@ public final class JavaKinesisWordCountASL {
         /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
-        	streamsList.add(
-                KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
-                InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
-            );
+          streamsList.add(
+            KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
+            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
+          );
         }
 
         /* Union all the streams if there is more than 1 stream */

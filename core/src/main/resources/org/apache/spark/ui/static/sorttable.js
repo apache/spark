@@ -81,15 +81,15 @@ sorttable = {
       if (!headrow[i].className.match(/\bsorttable_nosort\b/)) { // skip this col
         mtch = headrow[i].className.match(/\bsorttable_([a-z0-9]+)\b/);
         if (mtch) { override = mtch[1]; }
-	      if (mtch && typeof sorttable["sort_"+override] == 'function') {
-	        headrow[i].sorttable_sortfunction = sorttable["sort_"+override];
-	      } else {
-	        headrow[i].sorttable_sortfunction = sorttable.guessType(table,i);
-	      }
-	      // make it clickable to sort
-	      headrow[i].sorttable_columnindex = i;
-	      headrow[i].sorttable_tbody = table.tBodies[0];
-	      dean_addEvent(headrow[i],"click", function(e) {
+        if (mtch && typeof sorttable["sort_"+override] == 'function') {
+          headrow[i].sorttable_sortfunction = sorttable["sort_"+override];
+        } else {
+          headrow[i].sorttable_sortfunction = sorttable.guessType(table,i);
+        }
+        // make it clickable to sort
+        headrow[i].sorttable_columnindex = i;
+        headrow[i].sorttable_tbody = table.tBodies[0];
+        dean_addEvent(headrow[i],"click", function(e) {
 
           if (this.className.search(/\bsorttable_sorted\b/) != -1) {
             // if we're already sorted by this column, just 
@@ -109,7 +109,7 @@ sorttable = {
             // re-reverse the table, which is quicker
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted_reverse',
-                                                    'sorttable_sorted');
+                                                  'sorttable_sorted');
             this.removeChild(document.getElementById('sorttable_sortrevind'));
             sortfwdind = document.createElement('span');
             sortfwdind.id = "sorttable_sortfwdind";
@@ -117,7 +117,7 @@ sorttable = {
             this.appendChild(sortfwdind);
             return;
           }
-          
+
           // remove sorttable_sorted classes
           theadrow = this.parentNode;
           forEach(theadrow.childNodes, function(cell) {
@@ -130,36 +130,36 @@ sorttable = {
           if (sortfwdind) { sortfwdind.parentNode.removeChild(sortfwdind); }
           sortrevind = document.getElementById('sorttable_sortrevind');
           if (sortrevind) { sortrevind.parentNode.removeChild(sortrevind); }
-          
+
           this.className += ' sorttable_sorted';
           sortfwdind = document.createElement('span');
           sortfwdind.id = "sorttable_sortfwdind";
           sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25BE;';
           this.appendChild(sortfwdind);
 
-	        // build an array to sort. This is a Schwartzian transform thing,
-	        // i.e., we "decorate" each row with the actual sort key,
-	        // sort based on the sort keys, and then put the rows back in order
-	        // which is a lot faster because you only do getInnerText once per row
-	        row_array = [];
-	        col = this.sorttable_columnindex;
-	        rows = this.sorttable_tbody.rows;
-	        for (var j=0; j<rows.length; j++) {
-	          row_array[row_array.length] = [sorttable.getInnerText(rows[j].cells[col]), rows[j]];
-	        }
-	        /* If you want a stable sort, uncomment the following line */
-	        //sorttable.shaker_sort(row_array, this.sorttable_sortfunction);
-	        /* and comment out this one */
-	        row_array.sort(this.sorttable_sortfunction);
-	        
-	        tb = this.sorttable_tbody;
-	        for (var j=0; j<row_array.length; j++) {
-	          tb.appendChild(row_array[j][1]);
-	        }
-	        
-	        delete row_array;
-	      });
-	    }
+          // build an array to sort. This is a Schwartzian transform thing,
+          // i.e., we "decorate" each row with the actual sort key,
+          // sort based on the sort keys, and then put the rows back in order
+          // which is a lot faster because you only do getInnerText once per row
+          row_array = [];
+          col = this.sorttable_columnindex;
+          rows = this.sorttable_tbody.rows;
+          for (var j=0; j<rows.length; j++) {
+            row_array[row_array.length] = [sorttable.getInnerText(rows[j].cells[col]), rows[j]];
+          }
+          /* If you want a stable sort, uncomment the following line */
+          //sorttable.shaker_sort(row_array, this.sorttable_sortfunction);
+          /* and comment out this one */
+          row_array.sort(this.sorttable_sortfunction);
+        
+          tb = this.sorttable_tbody;
+          for (var j=0; j<row_array.length; j++) {
+            tb.appendChild(row_array[j][1]);
+          }
+        
+          delete row_array;
+        });
+      }
     }
   },
   
@@ -310,25 +310,24 @@ sorttable = {
     var swap = true;
 
     while(swap) {
-        swap = false;
-        for(var i = b; i < t; ++i) {
-            if ( comp_func(list[i], list[i+1]) > 0 ) {
-                var q = list[i]; list[i] = list[i+1]; list[i+1] = q;
-                swap = true;
-            }
-        } // for
-        t--;
+      swap = false;
+      for(var i = b; i < t; ++i) {
+          if ( comp_func(list[i], list[i+1]) > 0 ) {
+              var q = list[i]; list[i] = list[i+1]; list[i+1] = q;
+              swap = true;
+          }
+      } // for
+      t--;
 
-        if (!swap) break;
+      if (!swap) break;
 
-        for(var i = t; i > b; --i) {
-            if ( comp_func(list[i], list[i-1]) < 0 ) {
-                var q = list[i]; list[i] = list[i-1]; list[i-1] = q;
-                swap = true;
-            }
-        } // for
-        b++;
-
+      for(var i = t; i > b; --i) {
+        if ( comp_func(list[i], list[i-1]) < 0 ) {
+          var q = list[i]; list[i] = list[i-1]; list[i-1] = q;
+          swap = true;
+          }
+      } // for
+      b++;
     } // while(swap)
   }  
 }
@@ -358,11 +357,11 @@ if (document.addEventListener) {
 
 /* for Safari */
 if (/WebKit/i.test(navigator.userAgent)) { // sniff
-    var _timer = setInterval(function() {
-        if (/loaded|complete/.test(document.readyState)) {
-            sorttable.init(); // call the onload handler
-        }
-    }, 10);
+  var _timer = setInterval(function() {
+    if (/loaded|complete/.test(document.readyState)) {
+      sorttable.init(); // call the onload handler
+    }
+  }, 10);
 }
 
 /* for other browsers */
@@ -374,66 +373,66 @@ window.onload = sorttable.init;
 // http://dean.edwards.name/weblog/2005/10/add-event/
 
 function dean_addEvent(element, type, handler) {
-	if (element.addEventListener) {
-		element.addEventListener(type, handler, false);
-	} else {
-		// assign each event handler a unique ID
-		if (!handler.$$guid) handler.$$guid = dean_addEvent.guid++;
-		// create a hash table of event types for the element
-		if (!element.events) element.events = {};
-		// create a hash table of event handlers for each element/event pair
-		var handlers = element.events[type];
-		if (!handlers) {
-			handlers = element.events[type] = {};
-			// store the existing event handler (if there is one)
-			if (element["on" + type]) {
-				handlers[0] = element["on" + type];
-			}
-		}
-		// store the event handler in the hash table
-		handlers[handler.$$guid] = handler;
-		// assign a global event handler to do all the work
-		element["on" + type] = handleEvent;
-	}
+  if (element.addEventListener) {
+    element.addEventListener(type, handler, false);
+  } else {
+    // assign each event handler a unique ID
+    if (!handler.$$guid) handler.$$guid = dean_addEvent.guid++;
+    // create a hash table of event types for the element
+    if (!element.events) element.events = {};
+    // create a hash table of event handlers for each element/event pair
+    var handlers = element.events[type];
+    if (!handlers) {
+      handlers = element.events[type] = {};
+      // store the existing event handler (if there is one)
+      if (element["on" + type]) {
+        handlers[0] = element["on" + type];
+      }
+    }
+    // store the event handler in the hash table
+    handlers[handler.$$guid] = handler;
+    // assign a global event handler to do all the work
+   element["on" + type] = handleEvent;
+    }
 };
 // a counter used to create unique IDs
 dean_addEvent.guid = 1;
 
 function removeEvent(element, type, handler) {
-	if (element.removeEventListener) {
-		element.removeEventListener(type, handler, false);
-	} else {
-		// delete the event handler from the hash table
-		if (element.events && element.events[type]) {
-			delete element.events[type][handler.$$guid];
-		}
-	}
+  if (element.removeEventListener) {
+  element.removeEventListener(type, handler, false);
+  } else {
+    // delete the event handler from the hash table
+    if (element.events && element.events[type]) {
+      delete element.events[type][handler.$$guid];
+    }
+  }
 };
 
 function handleEvent(event) {
-	var returnValue = true;
-	// grab the event object (IE uses a global event object)
-	event = event || fixEvent(((this.ownerDocument || this.document || this).parentWindow || window).event);
-	// get a reference to the hash table of event handlers
-	var handlers = this.events[event.type];
-	// execute each event handler
-	for (var i in handlers) {
-		this.$$handleEvent = handlers[i];
-		if (this.$$handleEvent(event) === false) {
-			returnValue = false;
-		}
-	}
-	return returnValue;
+  var returnValue = true;
+  // grab the event object (IE uses a global event object)
+  event = event || fixEvent(((this.ownerDocument || this.document || this).parentWindow || window).event);
+  // get a reference to the hash table of event handlers
+  var handlers = this.events[event.type];
+  // execute each event handler
+  for (var i in handlers) {
+    this.$$handleEvent = handlers[i];
+    if (this.$$handleEvent(event) === false) {
+      returnValue = false;
+    }
+  }
+  return returnValue;
 };
 
 function fixEvent(event) {
-	// add W3C standard event methods
-	event.preventDefault = fixEvent.preventDefault;
-	event.stopPropagation = fixEvent.stopPropagation;
-	return event;
+  // add W3C standard event methods
+  event.preventDefault = fixEvent.preventDefault;
+  event.stopPropagation = fixEvent.stopPropagation;
+  return event;
 };
 fixEvent.preventDefault = function() {
-	this.returnValue = false;
+  this.returnValue = false;
 };
 fixEvent.stopPropagation = function() {
   this.cancelBubble = true;
@@ -441,55 +440,55 @@ fixEvent.stopPropagation = function() {
 
 // Dean's forEach: http://dean.edwards.name/base/forEach.js
 /*
-	forEach, version 1.0
-	Copyright 2006, Dean Edwards
-	License: http://www.opensource.org/licenses/mit-license.php
+forEach, version 1.0
+Copyright 2006, Dean Edwards
+License: http://www.opensource.org/licenses/mit-license.php
 */
 
 // array-like enumeration
 if (!Array.forEach) { // mozilla already supports this
-	Array.forEach = function(array, block, context) {
-		for (var i = 0; i < array.length; i++) {
-			block.call(context, array[i], i, array);
-		}
-	};
+  Array.forEach = function(array, block, context) {
+    for (var i = 0; i < array.length; i++) {
+      block.call(context, array[i], i, array);
+    }
+  };
 }
 
 // generic enumeration
 Function.prototype.forEach = function(object, block, context) {
-	for (var key in object) {
-		if (typeof this.prototype[key] == "undefined") {
-			block.call(context, object[key], key, object);
-		}
-	}
+  for (var key in object) {
+    if (typeof this.prototype[key] == "undefined") {
+      block.call(context, object[key], key, object);
+    }
+  }
 };
 
 // character enumeration
 String.forEach = function(string, block, context) {
-	Array.forEach(string.split(""), function(chr, index) {
-		block.call(context, chr, index, string);
-	});
+  Array.forEach(string.split(""), function(chr, index) {
+    block.call(context, chr, index, string);
+  });
 };
 
 // globally resolve forEach enumeration
 var forEach = function(object, block, context) {
-	if (object) {
-		var resolve = Object; // default
-		if (object instanceof Function) {
-			// functions have a "length" property
-			resolve = Function;
-		} else if (object.forEach instanceof Function) {
-			// the object implements a custom forEach method so use that
-			object.forEach(block, context);
-			return;
-		} else if (typeof object == "string") {
-			// the object is a string
-			resolve = String;
-		} else if (typeof object.length == "number") {
-			// the object is array-like
-			resolve = Array;
-		}
-		resolve.forEach(object, block, context);
-	}
+  if (object) {
+    var resolve = Object; // default
+    if (object instanceof Function) {
+    // functions have a "length" property
+    resolve = Function;
+  } else if (object.forEach instanceof Function) {
+    // the object implements a custom forEach method so use that
+    object.forEach(block, context);
+    return;
+  } else if (typeof object == "string") {
+    // the object is a string
+    resolve = String;
+  } else if (typeof object.length == "number") {
+    // the object is array-like
+    resolve = Array;
+  }
+  resolve.forEach(object, block, context);
+  }
 };
 
