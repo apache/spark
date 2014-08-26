@@ -1049,7 +1049,11 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         markStageAsFinished(failedStage, Some("Fetch failure"))
         runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
+        val job = jobIdToActiveJob(failedStage.jobId)
+        val shouldInterruptThread =
+          if (job.properties == null) false
+          else job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
+        taskScheduler.cancelTasks(task.stageId, shouldInterruptThread)
         logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
         // Mark the map whose fetch failed as broken in the map stage
