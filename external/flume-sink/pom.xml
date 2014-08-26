@@ -25,19 +25,20 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume-sink_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming-flume-sink</sbt.project.name>
   </properties>
-
   <packaging>jar</packaging>
   <name>Spark Project External Flume Sink</name>
   <url>http://spark.apache.org/</url>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-sdk</artifactId>
-      <version>1.4.0</version>
+      <version>${flume.version}</version>
       <exclusions>
         <exclusion>
           <groupId>io.netty</groupId>
@@ -52,7 +53,7 @@
     <dependency>
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-core</artifactId>
-      <version>1.4.0</version>
+      <version>${flume.version}</version>
       <exclusions>
         <exclusion>
           <groupId>io.netty</groupId>
@@ -62,11 +63,7 @@
           <groupId>org.apache.thrift</groupId>
           <artifactId>libthrift</artifactId>
         </exclusion>
-    </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -97,7 +94,7 @@
       <plugin>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-maven-plugin</artifactId>
-        <version>1.7.3</version>
+        <version>${avro.version}</version>
         <configuration>
           <!-- Generate the output in the same directory as the sbt-avro-plugin -->
           <outputDirectory>${project.basedir}/target/scala-${scala.binary.version}/src_managed/main/compiled_avro</outputDirectory>
