@@ -92,7 +92,7 @@ trait HashJoin {
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
-      private[this] val joinRow = new JoinedRow
+      private[this] val joinRow = new JoinedRow2
 
       private[this] val joinKeys = streamSideKeyGenerator()
 
