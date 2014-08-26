@@ -186,15 +186,15 @@ class ArrayType(DataType):
 
     """
 
-    def __init__(self, elementType, containsNull=False):
+    def __init__(self, elementType, containsNull=True):
         """Creates an ArrayType
 
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains None values.
 
-        >>> ArrayType(StringType) == ArrayType(StringType, False)
+        >>> ArrayType(StringType) == ArrayType(StringType, True)
         True
-        >>> ArrayType(StringType, True) == ArrayType(StringType)
+        >>> ArrayType(StringType, False) == ArrayType(StringType)
         False
         """
         self.elementType = elementType
