@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types.DataType
 
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
@@ -43,11 +44,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     }
 
   */
-
-  def convert(a: Any): Any = a match {
-    case p: Product => Row.fromSeq(p.productIterator.map(convert).toSeq)
-    case other => other
-  }
 
   // scalastyle:off
   override def eval(input: Row): Any = {
@@ -351,6 +347,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     }
     // scalastyle:on
 
-    convert(result)
+    ScalaReflection.convertToCatalyst(result)
   }
 }
