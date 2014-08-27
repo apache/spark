@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
@@ -33,6 +33,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
 
   var originalTimeZone: TimeZone = _
+  var originalLocale: Locale = _
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
@@ -41,11 +42,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     originalTimeZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    
+    // Add Locale setting
+    originalLocale = Locale.getDefault
+    Locale.setDefault(Locale.US)
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
