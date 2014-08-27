@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# NOTE: Any changes in this file must be reflected in SparkClassLauncher.scala!
+# NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
 
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
 ORIG_ARGS=("$@")

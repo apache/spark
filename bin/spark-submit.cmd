@@ -17,23 +17,28 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+rem NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
+
 set SPARK_HOME=%~dp0..
 set ORIG_ARGS=%*
 
-rem Clear the values of all variables used
-set DEPLOY_MODE=
-set DRIVER_MEMORY=
+rem Reset the values of all variables used
+set SPARK_SUBMIT_DEPLOY_MODE=client
+set SPARK_SUBMIT_PROPERTIES_FILE=%SPARK_HOME%\conf\spark-defaults.conf
+set SPARK_SUBMIT_DRIVER_MEMORY=
 set SPARK_SUBMIT_LIBRARY_PATH=
 set SPARK_SUBMIT_CLASSPATH=
 set SPARK_SUBMIT_OPTS=
-set SPARK_DRIVER_MEMORY=
+set SPARK_SUBMIT_BOOTSTRAP_DRIVER=
 
 :loop
 if [%1] == [] goto continue
   if [%1] == [--deploy-mode] (
-    set DEPLOY_MODE=%2
+    set SPARK_SUBMIT_DEPLOY_MODE=%2
+  ) else if [%1] == [--properties-file] (
+    set SPARK_SUBMIT_PROPERTIES_FILE=%2
   ) else if [%1] == [--driver-memory] (
-    set DRIVER_MEMORY=%2
+    set SPARK_SUBMIT_DRIVER_MEMORY=%2
   ) else if [%1] == [--driver-library-path] (
     set SPARK_SUBMIT_LIBRARY_PATH=%2
   ) else if [%1] == [--driver-class-path] (
@@ -45,12 +50,19 @@ if [%1] == [] goto continue
 goto loop
 :continue
 
-if [%DEPLOY_MODE%] == [] (
-  set DEPLOY_MODE=client
-)
+rem For client mode, the driver will be launched in the same JVM that launches
+rem SparkSubmit, so we may need to read the properties file for any extra class
+rem paths, library paths, java options and memory early on. Otherwise, it will
+rem be too late by the time the driver JVM has started.
 
-if not [%DRIVER_MEMORY%] == [] if [%DEPLOY_MODE%] == [client] (
-  set SPARK_DRIVER_MEMORY=%DRIVER_MEMORY%
+if [%SPARK_SUBMIT_DEPLOY_MODE%] == [client] (
+  if exist %SPARK_SUBMIT_PROPERTIES_FILE% (
+    rem Parse the properties file only if the special configs exist
+    for /f %%i in ('findstr /r /c:"^[\t ]*spark.driver.memory" /c:"^[\t ]*spark.driver.extra" ^
+      %SPARK_SUBMIT_PROPERTIES_FILE%') do (
+      set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+    )
+  )
 )
 
 cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.spark.deploy.SparkSubmit %ORIG_ARGS%

@@ -17,6 +17,8 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+rem Any changes to this file must be reflected in SparkSubmitDriverBootstrapper.scala!
+
 setlocal enabledelayedexpansion
 
 set SCALA_VERSION=2.10
@@ -38,7 +40,7 @@ if not "x%1"=="x" goto arg_given
 
 if not "x%SPARK_MEM%"=="x" (
   echo Warning: SPARK_MEM is deprecated, please use a more specific config option
-  echo e.g., spark.executor.memory or SPARK_DRIVER_MEMORY.
+  echo e.g., spark.executor.memory or spark.driver.memory.
 )
 
 rem Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
@@ -67,10 +69,18 @@ rem Executors use SPARK_JAVA_OPTS + SPARK_EXECUTOR_MEMORY.
   set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_EXECUTOR_OPTS%
   if not "x%SPARK_EXECUTOR_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_EXECUTOR_MEMORY%
 
-rem All drivers use SPARK_JAVA_OPTS + SPARK_DRIVER_MEMORY. The repl also uses SPARK_REPL_OPTS.
-) else if "%1"=="org.apache.spark.repl.Main" (
-  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_REPL_OPTS%
+rem Spark submit uses SPARK_JAVA_OPTS + SPARK_SUBMIT_OPTS +
+rem SPARK_DRIVER_MEMORY + SPARK_SUBMIT_DRIVER_MEMORY.
+rem The repl also uses SPARK_REPL_OPTS.
+) else if "%1"=="org.apache.spark.deploy.SparkSubmit" (
+  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_SUBMIT_OPTS% %SPARK_REPL_OPTS%
+  if not "x%SPARK_SUBMIT_LIBRARY_PATH%"=="x" (
+    set OUR_JAVA_OPTS=!OUR_JAVA_OPTS! -Djava.library.path=%SPARK_SUBMIT_LIBRARY_PATH%
+  ) else if not "x%SPARK_LIBRARY_PATH%"=="x" (
+    set OUR_JAVA_OPTS=!OUR_JAVA_OPTS! -Djava.library.path=%SPARK_LIBRARY_PATH%
+  )
   if not "x%SPARK_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DRIVER_MEMORY%
+  if not "x%SPARK_SUBMIT_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_SUBMIT_DRIVER_MEMORY%
 ) else (
   set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS%
   if not "x%SPARK_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DRIVER_MEMORY%
@@ -80,9 +90,9 @@ rem Set JAVA_OPTS to be able to load native libraries and to set heap size
 for /f "tokens=3" %%i in ('java -version 2^>^&1 ^| find "version"') do set jversion=%%i
 for /f "tokens=1 delims=_" %%i in ("%jversion:~1,-1%") do set jversion=%%i
 if "%jversion%" geq "1.8.0" (
-  set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
+  set JAVA_OPTS=%OUR_JAVA_OPTS% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
 ) else (
-  set JAVA_OPTS=-XX:MaxPermSize=128m %OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
+  set JAVA_OPTS=-XX:MaxPermSize=128m %OUR_JAVA_OPTS% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
 )
 rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
@@ -115,5 +125,27 @@ rem Figure out where java is.
 set RUNNER=java
 if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
-"%RUNNER%" -cp "%CLASSPATH%" %JAVA_OPTS% %*
+rem In Spark submit client mode, the driver is launched in the same JVM as Spark submit itself.
+rem Here we must parse the properties file for relevant "spark.driver.*" configs before launching
+rem the driver JVM itself. Instead of handling this complexity here, we launch a separate JVM
+rem to prepare the launch environment of this driver JVM.
+
+rem In this case, leave out the main class (org.apache.spark.deploy.SparkSubmit) and use our own.
+rem Leaving out the first argument is surprisingly difficult to do in Windows. Note that this must
+rem be done here because the Windows "shift" command does not work in a conditional block.
+set BOOTSTRAP_ARGS=
+shift
+:start_parse
+if "%~1" == "" goto end_parse
+set BOOTSTRAP_ARGS=%BOOTSTRAP_ARGS% %~1
+shift
+goto start_parse
+:end_parse
+
+if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
+  set SPARK_CLASS=1
+  "%RUNNER%" org.apache.spark.deploy.SparkSubmitDriverBootstrapper %BOOTSTRAP_ARGS%
+) else (
+  "%RUNNER%" -cp "%CLASSPATH%" %JAVA_OPTS% %*
+)
 :exit
