@@ -32,6 +32,8 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   var split: Partition = _
   /** An RDD which returns the values [1, 2, 3, 4]. */
   var rdd: RDD[Int] = _
+  var rdd2: RDD[Int] = _
+  var rdd3: RDD[Int] = _
 
   before {
     sc = new SparkContext("local", "test")
@@ -43,6 +45,16 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
       override val getDependencies = List[Dependency[_]]()
       override def compute(split: Partition, context: TaskContext) = Array(1, 2, 3, 4).iterator
     }
+    rdd2 = new RDD[Int](sc, List(new OneToOneDependency(rdd))) {
+      override def getPartitions: Array[Partition] = firstParent[Int].partitions
+      override def compute(split: Partition, context: TaskContext) =
+        firstParent[Int].iterator(split, context)
+    }.cache()
+    rdd3 = new RDD[Int](sc, List(new OneToOneDependency(rdd2))) {
+      override def getPartitions: Array[Partition] = firstParent[Int].partitions
+      override def compute(split: Partition, context: TaskContext) =
+        firstParent[Int].iterator(split, context)
+    }.cache()
   }
 
   after {
@@ -86,5 +98,12 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }
+  }
+
+  test("verify task metrics updated correctly") {
+    cacheManager = sc.env.cacheManager
+    val context = new TaskContext(0, 0, 0)
+    cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
+    assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
   }
 }
