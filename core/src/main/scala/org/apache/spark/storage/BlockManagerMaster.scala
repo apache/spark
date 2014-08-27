@@ -101,7 +101,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
-      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -112,7 +113,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   def removeShuffle(shuffleId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
-      case e: Throwable => logError("Failed to remove shuffle " + shuffleId, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -124,9 +126,9 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     val future = askDriverWithReply[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.onFailure {
-      case e: Throwable =>
-        logError("Failed to remove broadcast " + broadcastId +
-          " with removeFromMaster = " + removeFromMaster, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove broadcast $broadcastId" +
+          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)

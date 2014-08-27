@@ -52,6 +52,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[Ha
     .setMaster("local[2]")
     .setAppName("ContextCleanerSuite")
     .set("spark.cleaner.referenceTracking.blocking", "true")
+    .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
     .set("spark.shuffle.manager", shuffleManager.getName)
 
   before {
@@ -243,6 +244,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       .setMaster("local-cluster[2, 1, 512]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
+      .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
       .set("spark.shuffle.manager", shuffleManager.getName)
     sc = new SparkContext(conf2)
 
@@ -319,6 +321,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
       .setMaster("local-cluster[2, 1, 512]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
+      .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
       .set("spark.shuffle.manager", shuffleManager.getName)
     sc = new SparkContext(conf2)
 
