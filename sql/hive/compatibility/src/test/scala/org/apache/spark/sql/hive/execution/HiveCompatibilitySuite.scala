@@ -22,6 +22,7 @@ import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -38,6 +39,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   override def beforeAll() {
     TestHive.cacheTables = true
+    TestHive.set(SQLConf.SHUFFLE_PARTITIONS, "2")
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     originalTimeZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
