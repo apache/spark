@@ -77,14 +77,14 @@ def launch_gateway():
         # with any opportunity to read an EOF from the parent. Note that this is only best
         # effort and will not take effect if the python process is violently terminated.
         if on_windows:
-          # In Windows, the child process here is "spark-submit.cmd", not the JVM itself
-          # (because the UNIX "exec" command is not available). This means we cannot simply
-          # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
-          # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
-          # child processes.
-          def killChild():
-            Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
-          atexit.register(killChild)
+            # In Windows, the child process here is "spark-submit.cmd", not the JVM itself
+            # (because the UNIX "exec" command is not available). This means we cannot simply
+            # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
+            # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
+            # child processes.
+            def killChild():
+              Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+            atexit.register(killChild)
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
