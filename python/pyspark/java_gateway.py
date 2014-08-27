@@ -83,7 +83,7 @@ def launch_gateway():
             # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
             # child processes.
             def killChild():
-              Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+                Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
             atexit.register(killChild)
 
         # Create a thread to echo output from the GatewayServer, which is required
