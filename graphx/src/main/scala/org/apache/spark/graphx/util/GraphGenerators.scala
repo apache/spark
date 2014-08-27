@@ -50,13 +50,17 @@ object GraphGenerators {
    *
    * @param sc
    * @param numVertices
+   * @param numEParts
    * @param mu
    * @param sigma
    * @return
    */
-  def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int,
+  def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int = 0,
                      mu: Double = 4.0, sigma: Double = 1.3): Graph[Long, Int] = {
-    val vertices = sc.parallelize(0 until numVertices, numEParts).map { src =>
+
+    val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts		         
+
+    val vertices = sc.parallelize(0 until numVertices, evalNumEParts).map { src =>
       // Initialize the random number generator with the source vertex id
       val rand = new Random(src)
       val degree = math.min(numVertices.toLong, math.exp(rand.nextGaussian() * sigma + mu).toLong)
