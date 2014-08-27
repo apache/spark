@@ -90,6 +90,20 @@ private[spark] class MesosSchedulerBackend(
       "Spark home is not set; set it through the spark.home system " +
       "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraLibraryPath = sc.conf.getOption("spark.executor.extraLibraryPath").map { lp =>
+      s"-Djava.library.path=$lp"
+    }
+    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("SPARK_EXECUTOR_OPTS")
+        .setValue(extraOpts)
+        .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
