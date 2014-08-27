@@ -85,7 +85,7 @@ private[streaming] class FlumePollingReceiver(
       connections.add(new FlumeConnection(transceiver, client))
     })
     for (i <- 0 until parallelism) {
-      logInfo("Starting Flume Polling Receiver worker threads starting..")
+      logInfo("Starting Flume Polling Receiver worker threads..")
       // Threads that pull data from Flume.
       receiverExecutor.submit(new FlumeBatchFetcher(this))
     }

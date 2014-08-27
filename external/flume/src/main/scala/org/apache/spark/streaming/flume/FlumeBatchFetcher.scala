@@ -108,19 +108,19 @@ private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends R
 
   /**
    * Send an ack to the client for the sequence number. This method does not handle any exceptions
-   * which will be propogated to the caller.
+   * which will be propagated to the caller.
    * @param client client to send the ack to
    * @param seq sequence number of the batch to be ack-ed.
    * @return
    */
   private def sendAck(client: SparkFlumeProtocol.Callback, seq: CharSequence): Unit = {
-    logDebug("Sending Nack for sequence number: " + seq)
+    logDebug("Sending ack for sequence number: " + seq)
     client.ack(seq)
     logDebug("Ack sent for sequence number: " + seq)
   }
 
   /**
-   * This method sends a Nack if a batch was received to the client with with the given sequence
+   * This method sends a Nack if a batch was received to the client with the given sequence
    * number. Any exceptions thrown by the RPC call is simply thrown out as is - no effort is made
    * to handle it.
    * @param batchReceived true if a batch was received. If this is false, no nack is sent
