@@ -49,7 +49,6 @@ private[spark] case class PythonUDF(
   override def toString = s"PythonUDF#$name(${children.mkString(",")})"
 
   def nullable: Boolean = true
-  def references: Set[Attribute] = children.flatMap(_.references).toSet
 
   override def eval(input: Row) = sys.error("PythonUDFs can not be directly evaluated.")
 }
@@ -113,7 +112,6 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
 case class EvaluatePython(udf: PythonUDF, child: LogicalPlan) extends logical.UnaryNode {
   val resultAttribute = AttributeReference("pythonUDF", udf.dataType, nullable=true)()
 
-  def references = Set.empty
   def output = child.output :+ resultAttribute
 }
 
