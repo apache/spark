@@ -61,33 +61,23 @@ object GraphGenerators {
    * @return
    */
   def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int = 0,
-                     mu: Double = 4.0, sigma: Double = 1.3, seed: Int = 0): Graph[Long, Int] = {
+                     mu: Double = 4.0, sigma: Double = 1.3, seed: Long = -1): Graph[Long, Int] = {
 
     val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts
 
-    val evalSeed = if (seed == -1) (new Random().nextInt()) else seed
-		         
-    val vertices = sc.parallelize(0 until numVertices, evalNumEParts).map { src =>
-      // Initialize the random number generator with the source vertex id
-      // if seed == 0
-      val rand = new Random(evalSeed ^ src)
-      val degree = math.min(numVertices.toLong, math.exp(rand.nextGaussian() * sigma + mu).toLong)
-      (src.toLong, degree)
+    // Enable deterministic seeding    
+    val seedRand = if (seed == -1) new Random() else new Random(seed)
+    val seed1 = seedRand.nextInt()
+    val seed2 = seedRand.nextInt()
+    
+    val vertices : RDD[(VertexId, Long)] = sc.parallelize(0 until numVertices, evalNumEParts).map {
+      src => (src, sampleLogNormal(mu, sigma, numVertices, seed=(seed1 ^ src)))
     }
+
     val edges = vertices.flatMap { case (src, degree) =>
-      new Iterator[Edge[Int]] {
-        // Initialize the random number generator with the source vertex id
-        // if seed == 0
-        val rand = new Random(evalSeed ^ src)
-        var i = 0
-        override def hasNext(): Boolean = { i < degree }
-        override def next(): Edge[Int] = {
-          val nextEdge = Edge[Int](src, rand.nextInt(numVertices), i)
-          i += 1
-          nextEdge
-        }
-      }
+      generateRandomEdges(src.toInt, degree.toInt, numVertices, seed=(seed2 ^ src))
     }
+
     Graph(vertices, edges, 0)
   }
 
@@ -95,8 +85,8 @@ object GraphGenerators {
   // the edge data is the weight (default 1)
   val RMATc = 0.15
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int, seed: Int = 0): Array[Edge[Int]] = {
-    val rand = new Random()
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int, seed: Long = -1): Array[Edge[Int]] = {
+    val rand = if (seed == -1) new Random() else new Random(seed)
     Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
 
@@ -110,9 +100,11 @@ object GraphGenerators {
    * @param mu the mean of the normal distribution
    * @param sigma the standard deviation of the normal distribution
    * @param maxVal exclusive upper bound on the value of the sample
+   * @param seed optional seed
    */
-  private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
-    val rand = new Random()
+  private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int, seed: Long = -1): Int = {
+    val rand = if (seed == -1) new Random() else new Random(seed)
+
     val sigmaSq = sigma * sigma
     val m = math.exp(mu + sigmaSq / 2.0)
     // expm1 is exp(m)-1 with better accuracy for tiny m
