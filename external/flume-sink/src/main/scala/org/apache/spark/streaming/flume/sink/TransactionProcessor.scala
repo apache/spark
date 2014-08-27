@@ -143,6 +143,11 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         }
       })
     } catch {
+      case interrupted: InterruptedException =>
+        // Don't pollute logs if the InterruptedException came from this being stopped
+        if (!stopped) {
+          logWarning("Error while processing transaction.", interrupted)
+        }
       case e: Exception =>
         logWarning("Error while processing transaction.", e)
         eventBatch.setErrorMsg(e.getMessage)
