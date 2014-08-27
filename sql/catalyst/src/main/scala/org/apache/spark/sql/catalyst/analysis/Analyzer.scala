@@ -132,7 +132,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolveChildren)
-        val requiredAttributes = resolved.collect { case a: Attribute => a }.toSet
+        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
@@ -152,8 +152,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         )
 
         logDebug(s"Grouping expressions: $groupingRelation")
-        val resolved = unresolved.flatMap(groupingRelation.resolve).toSet
-        val missingInAggs = resolved -- a.outputSet
+        val resolved = unresolved.flatMap(groupingRelation.resolve)
+        val missingInAggs = resolved.filterNot(a.outputSet.contains)
         logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
         if (missingInAggs.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
