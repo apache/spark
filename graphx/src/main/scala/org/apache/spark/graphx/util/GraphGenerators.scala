@@ -48,28 +48,37 @@ object GraphGenerators {
    * Ilan Horn, Naty Leiser, and Grzegorz Czajkowski. 2010.
    * Pregel: a system for large-scale graph processing. SIGMOD '10.
    *
+   * If the seed is set to 0 (default), the seeds are set deterministically
+   * based on source vertex IDs. If the seed is -1, a random seed is chosen.
+   * Otherwise, use the user-specified seed.
+   *
    * @param sc
    * @param numVertices
    * @param numEParts
    * @param mu
    * @param sigma
+   * @param seed
    * @return
    */
   def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int = 0,
-                     mu: Double = 4.0, sigma: Double = 1.3): Graph[Long, Int] = {
+                     mu: Double = 4.0, sigma: Double = 1.3, seed: Int = 0): Graph[Long, Int] = {
 
-    val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts		         
+    val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts
 
+    val evalSeed = if (seed == -1) (new Random().nextInt()) else seed
+		         
     val vertices = sc.parallelize(0 until numVertices, evalNumEParts).map { src =>
       // Initialize the random number generator with the source vertex id
-      val rand = new Random(src)
+      // if seed == 0
+      val rand = new Random(evalSeed ^ src)
       val degree = math.min(numVertices.toLong, math.exp(rand.nextGaussian() * sigma + mu).toLong)
       (src.toLong, degree)
     }
     val edges = vertices.flatMap { case (src, degree) =>
       new Iterator[Edge[Int]] {
         // Initialize the random number generator with the source vertex id
-        val rand = new Random(src)
+        // if seed == 0
+        val rand = new Random(evalSeed ^ src)
         var i = 0
         override def hasNext(): Boolean = { i < degree }
         override def next(): Edge[Int] = {
@@ -86,7 +95,7 @@ object GraphGenerators {
   // the edge data is the weight (default 1)
   val RMATc = 0.15
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int): Array[Edge[Int]] = {
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int, seed: Int = 0): Array[Edge[Int]] = {
     val rand = new Random()
     Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
