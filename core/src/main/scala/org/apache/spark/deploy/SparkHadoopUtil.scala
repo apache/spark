@@ -25,12 +25,15 @@ import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 
 import scala.collection.JavaConversions._
 
 /**
+ * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
  */
+@DeveloperApi
 class SparkHadoopUtil extends Logging {
   val conf: Configuration = newConfiguration(new SparkConf())
   UserGroupInformation.setConfiguration(conf)
