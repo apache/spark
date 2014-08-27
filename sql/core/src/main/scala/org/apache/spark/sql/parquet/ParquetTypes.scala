@@ -119,7 +119,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+          if (field.getName == CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME) {
+            val bag = field.asGroupType()
+            assert(bag.getFieldCount == 1)
+            ArrayType(toDataType(bag.getFields.apply(0), isBinaryAsString), containsNull = true)
+          } else {
+            ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+          }
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -129,28 +135,32 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(
             keyValueGroup.getFieldCount == 2,
             "Parquet Map type malformatted: nested group should have 2 (key, value) fields!")
-          val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
+
+          val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
           val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
-          assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-          // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
-          // at here.
-          MapType(keyType, valueType)
+          MapType(keyType, valueType,
+            keyValueGroup.getFields.apply(1).getRepetition != Repetition.REQUIRED)
         }
         case _ => {
           // Note: the order of these checks is important!
           if (correspondsToMap(groupType)) { // MapType
             val keyValueGroup = groupType.getFields.apply(0).asGroupType()
-            val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
+
+            val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
             val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
-            assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-            // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
-            // at here.
-            MapType(keyType, valueType)
+            MapType(keyType, valueType,
+              keyValueGroup.getFields.apply(1).getRepetition != Repetition.REQUIRED)
           } else if (correspondsToArray(groupType)) { // ArrayType
-            val elementType = toDataType(groupType.getFields.apply(0), isBinaryAsString)
-            ArrayType(elementType, containsNull = false)
+            val field = groupType.getFields.apply(0)
+            if (field.getName == CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME) {
+              val bag = field.asGroupType()
+              assert(bag.getFieldCount == 1)
+              ArrayType(toDataType(bag.getFields.apply(0), isBinaryAsString), containsNull = true)
+            } else {
+              ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+            }
           } else { // everything else: StructType
             val fields = groupType
               .getFields
@@ -249,13 +259,27 @@ private[parquet] object ParquetTypesConverter extends Logging {
             inArray = true)
           ConversionPatterns.listType(repetition, name, parquetElementType)
         }
+        case ArrayType(elementType, true) => {
+          val parquetElementType = fromDataType(
+            elementType,
+            CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+            nullable = true,
+            inArray = false)
+          ConversionPatterns.listType(
+            repetition,
+            name,
+            new ParquetGroupType(
+              Repetition.REPEATED,
+              CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME,
+              parquetElementType))
+        }
         case StructType(structFields) => {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
           new ParquetGroupType(repetition, name, fields)
         }
-        case MapType(keyType, valueType, _) => {
+        case MapType(keyType, valueType, valueContainsNull) => {
           val parquetKeyType =
             fromDataType(
               keyType,
@@ -266,7 +290,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             fromDataType(
               valueType,
               CatalystConverter.MAP_VALUE_SCHEMA_NAME,
-              nullable = false,
+              nullable = valueContainsNull,
               inArray = false)
           ConversionPatterns.mapType(
             repetition,
