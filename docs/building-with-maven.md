@@ -96,10 +96,13 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-# Building Thrift JDBC server and CLI for Spark SQL
-
-Spark SQL supports Thrift JDBC server and CLI. See sql-programming-guide.md for 
-more information about the JDBC server.
+# Building With Hive and JDBC Support
+To enable Hive integration for Spark SQL along with its JDBC server and CLI,
+add the `-Phive` profile to your existing build options.
+{% highlight bash %}
+# Apache Hadoop 2.4.X with Hive support
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
+{% endhighlight %}
 
 # Spark Tests in Maven
 

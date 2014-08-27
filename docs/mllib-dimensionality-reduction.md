@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on tall-and-skinny matrices.
+MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -39,8 +39,26 @@ If we keep the top $k$ singular values, then the dimensions of the resulting low
 * `$\Sigma$`: `$k \times k$`,
 * `$V$`: `$n \times k$`.
  
-MLlib provides SVD functionality to row-oriented matrices that have only a few columns,
-say, less than $1000$, but many rows, i.e., *tall-and-skinny* matrices.
+### Performance
+We assume $n$ is smaller than $m$. The singular values and the right singular vectors are derived
+from the eigenvalues and the eigenvectors of the Gramian matrix $A^T A$. The matrix
+storing the left singular vectors $U$, is computed via matrix multiplication as
+$U = A (V S^{-1})$, if requested by the user via the computeU parameter. 
+The actual method to use is determined automatically based on the computational cost:
+
+* If $n$ is small ($n < 100$) or $k$ is large compared with $n$ ($k > n / 2$), we compute the Gramian matrix
+first and then compute its top eigenvalues and eigenvectors locally on the driver.
+This requires a single pass with $O(n^2)$ storage on each executor and on the driver, and
+$O(n^2 k)$ time on the driver.
+* Otherwise, we compute $(A^T A) v$ in a distributive way and send it to
+<a href="http://www.caam.rice.edu/software/ARPACK/">ARPACK</a> to
+compute $(A^T A)$'s top eigenvalues and eigenvectors on the driver node. This requires $O(k)$
+passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
+
+### SVD Example
+ 
+MLlib provides SVD functionality to row-oriented matrices, provided in the
+<a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -124,9 +142,8 @@ MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
-The number of columns should be small, e.g, less than 1000.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
@@ -144,7 +161,7 @@ val projected: RowMatrix = mat.multiply(pc)
 
 <div data-lang="java" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
 
