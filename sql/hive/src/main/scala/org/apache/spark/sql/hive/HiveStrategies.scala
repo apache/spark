@@ -135,7 +135,7 @@ private[hive] trait HiveStrategies {
             .fakeOutput(projectList.map(_.toAttribute)):: Nil
         } else {
           hiveContext
-            .parquetFile(relation.hiveQlTable.getDataLocation.getPath)
+            .parquetFile(relation.hiveQlTable.getDataLocation.toString)
             .lowerCase
             .where(unresolvedOtherPredicates)
             .select(unresolvedProjection:_*)
