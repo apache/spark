@@ -54,6 +54,8 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
 
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 1
+
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
   private[spark] var printStream: PrintStream = System.err
@@ -311,8 +313,18 @@ object SparkSubmit {
       System.setProperty(key, value)
     }
 
-    val mainClass = Class.forName(childMainClass, true, loader)
+    var mainClass: Class[_] = null
+
+    try {
+      mainClass = Class.forName(childMainClass, true, loader)
+    } catch {
+      case e: ClassNotFoundException =>
+        e.printStackTrace(printStream)
+        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+    }
+
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {

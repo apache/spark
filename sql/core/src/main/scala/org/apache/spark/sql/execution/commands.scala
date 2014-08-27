@@ -108,15 +108,19 @@ case class SetCommand(
  */
 @DeveloperApi
 case class ExplainCommand(
-    logicalPlan: LogicalPlan, output: Seq[Attribute])(
+    logicalPlan: LogicalPlan, output: Seq[Attribute], extended: Boolean)(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
   override protected[sql] lazy val sideEffectResult: Seq[String] = try {
-    "Physical execution plan:" +: context.executePlan(logicalPlan).executedPlan.toString.split("\n")
+    // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
+    val queryExecution = context.executePlan(logicalPlan)
+    val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
+
+    outputString.split("\n")
   } catch { case cause: TreeNodeException[_] =>
-    "Error occurred during query planning: " +: cause.getMessage.split("\n")
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
   }
 
   def execute(): RDD[Row] = {
