@@ -36,7 +36,6 @@ import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -153,12 +152,6 @@ object YarnSparkHadoopUtil {
     } else {
       "\\$([A-Za-z_][A-Za-z0-9_]*)"
     }
-  }
-
-  def getUIHistoryAddress(conf: SparkConf, appId: String): String = {
-    conf.getOption("spark.yarn.historyServer.address")
-      .map { address => s"$address${HistoryServer.UI_PATH_PREFIX}/${appId}" }
-      .getOrElse("")
   }
 
   /**

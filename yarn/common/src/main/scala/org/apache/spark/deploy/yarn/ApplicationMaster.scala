@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -70,6 +71,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
   final def run(): Int = {
+    val appAttemptId = client.getAttemptId()
+
     if (isDriver) {
       // Set the web ui port to be ephemeral for yarn so we don't conflict with
       // other spark processes running on the same box
@@ -77,9 +80,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
       // Set the master property to match the requested mode.
       System.setProperty("spark.master", "yarn-cluster")
+
+      // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+      System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
     }
 
-    logInfo("ApplicationAttemptId: " + client.getAttemptId())
+    logInfo("ApplicationAttemptId: " + appAttemptId)
 
     val cleanupHook = new Runnable {
       override def run() {
@@ -153,8 +159,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def registerAM(uiAddress: String) = {
     val sc = sparkContextRef.get()
-    val historyAddress = YarnSparkHadoopUtil.getUIHistoryAddress(sparkConf,
-      client.getAttemptId().getApplicationId().toString())
+
+    val appId = client.getAttemptId().getApplicationId().toString()
+    val historyAddress =
+      sparkConf.getOption("spark.yarn.historyServer.address")
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .getOrElse("")
 
     allocator = client.register(yarnConf,
       if (sc != null) sc.getConf else sparkConf,
