@@ -17,32 +17,32 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.GeneralizedLinearModel
+import org.apache.spark.api.java.JavaRDD
+import scala.deprecated
 
 /**
- * :: Experimental ::
  * Represents a classification model that predicts to which of a set of categories an example
  * belongs. The categories are represented by double values: 0.0, 1.0
  */
-@Experimental
 class BinaryClassificationModel (
      override val weights: Vector,
      override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel[Double] with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
 
   protected var threshold: Double = 0.0
+  @deprecated
+  protected var useThreshold: Boolean = true
 
   /**
-   * :: Experimental ::
    * Setter and getter for the threshold. The threshold separates positive predictions from
    * negative predictions. An example with prediction score greater than or equal to this
    * threshold is identified as an positive, and negative otherwise. The default value is 0.5.
    */
-  @Experimental
   def setThreshold(threshold: Double): this.type = {
+    this.useThreshold = true
     this.threshold = threshold
     this
   }
@@ -59,4 +59,50 @@ class BinaryClassificationModel (
   def predictClass(testData: Vector): Double = {
     compareWithThreshold(predictScore(testData))
   }
+
+  /**
+   * :: Deprecated ::
+   * Clears the threshold so that `predict` will output raw prediction scores.
+   */
+  @Deprecated
+  def clearThreshold(): this.type = {
+    this.useThreshold = false
+    this
+  }
+
+  /**
+   * :: Deprecated ::
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return an RDD[Double] where each entry contains the corresponding prediction
+   */
+  @deprecated
+  override def predict(testData: RDD[Vector]): RDD[Double] = {
+    if (useThreshold) predictClass(testData)
+    else predictScore(testData)
+  }
+
+  /**
+   * :: Deprecated ::
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return predicted category from the trained model
+   */
+  @deprecated
+  def predict(testData: Vector): Double = {
+    if (useThreshold) predictClass(testData)
+    else predictScore(testData)
+  }
+
+  /**
+   * :: Deprecated ::
+   * Predict values for examples stored in a JavaRDD.
+   * @param testData JavaRDD representing data points to be predicted
+   * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
+   */
+  @deprecated
+  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
+    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }

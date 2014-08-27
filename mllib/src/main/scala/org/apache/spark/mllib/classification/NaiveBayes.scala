@@ -65,6 +65,11 @@ class NaiveBayesModel private[mllib] (
   override def predictClass(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
   }
+
+  @deprecated
+  def predict(testData: RDD[Vector]): RDD[Double] = predictClass(testData)
+  @deprecated
+  def predict(testData: Vector): Double = predictClass(testData)
 }
 
 /**

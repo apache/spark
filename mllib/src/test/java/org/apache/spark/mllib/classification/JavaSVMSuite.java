@@ -43,10 +43,10 @@ public class JavaSVMSuite implements Serializable {
     sc = null;
   }
 
-  int validatePrediction(List<LabeledPoint> validationData, SVMModel model) {
+  int validatePrediction(List<LabeledPoint> validationData, BinaryClassificationModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
-      Double prediction = model.predict(point.features());
+      Double prediction = model.predictClass(point.features());
       if (prediction == point.label()) {
         numAccurate++;
       }
@@ -70,7 +70,7 @@ public class JavaSVMSuite implements Serializable {
     svmSGDImpl.optimizer().setStepSize(1.0)
                           .setRegParam(1.0)
                           .setNumIterations(100);
-    SVMModel model = svmSGDImpl.run(testRDD.rdd());
+    BinaryClassificationModel model = svmSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
@@ -87,7 +87,7 @@ public class JavaSVMSuite implements Serializable {
     List<LabeledPoint> validationData =
         SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
 
-    SVMModel model = SVMWithSGD.train(testRDD.rdd(), 100, 1.0, 1.0, 1.0);
+    BinaryClassificationModel model = SVMWithSGD.train(testRDD.rdd(), 100, 1.0, 1.0, 1.0);
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

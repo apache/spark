@@ -24,6 +24,27 @@ import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
+ * Model for Support Vector Machines (SVMs).
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
+ */
+class SVMModel (
+                 override val weights: Vector,
+                 override val intercept: Double)
+  extends BinaryClassificationModel(weights, intercept) {
+
+  @deprecated
+  override protected def predictPoint(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double) = {
+    if (useThreshold) predictClass(dataMatrix)
+    else predictScore(dataMatrix)
+  }
+}
+
+/**
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
  * NOTE: Labels used in SVM should be {0, 1}.
  */
@@ -32,7 +53,7 @@ class SVMWithSGD private (
     private var numIterations: Int,
     private var regParam: Double,
     private var miniBatchFraction: Double)
-  extends GeneralizedLinearAlgorithm[BinaryClassificationModel] with Serializable {
+  extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
@@ -49,7 +70,7 @@ class SVMWithSGD private (
   def this() = this(1.0, 100, 1.0, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new BinaryClassificationModel(weights, intercept)
+    new SVMModel(weights, intercept)
   }
 }
 
@@ -80,7 +101,7 @@ object SVMWithSGD {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): BinaryClassificationModel = {
+      initialWeights: Vector): SVMModel = {
     new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
       .run(input, initialWeights)
   }
@@ -102,7 +123,7 @@ object SVMWithSGD {
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
-      miniBatchFraction: Double): BinaryClassificationModel = {
+      miniBatchFraction: Double): SVMModel = {
     new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
@@ -122,7 +143,7 @@ object SVMWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      regParam: Double): BinaryClassificationModel = {
+      regParam: Double): SVMModel = {
     train(input, numIterations, stepSize, regParam, 1.0)
   }
 
@@ -136,7 +157,7 @@ object SVMWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
    */
-  def train(input: RDD[LabeledPoint], numIterations: Int): BinaryClassificationModel = {
+  def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
   }
 }

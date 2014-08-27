@@ -45,13 +45,21 @@ class LogisticRegressionModel (
   def predictProbability(testData: Vector): Double = {
     computeProbability(predictScore(testData))
   }
+
+  @deprecated
+  override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+                                      intercept: Double) = {
+    if (useThreshold) predictClass(dataMatrix)
+    else predictProbability(dataMatrix)
+  }
 }
 
 /**
- * Train a classification model for Logistic Regression using limited-memory Broyden–Fletcher–Goldfarb–Shanno algorithm.
+ * Train a classification model for Logistic Regression using limited-memory
+ * Broyden–Fletcher–Goldfarb–Shanno algorithm.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  *
- * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
+ * Using [[org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,

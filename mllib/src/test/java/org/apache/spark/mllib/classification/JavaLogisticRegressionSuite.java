@@ -47,7 +47,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   int validatePrediction(List<LabeledPoint> validationData, LogisticRegressionModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
-      Double prediction = model.predictScore(point.features());
+      Double prediction = model.predictClass(point.features());
       if (prediction == point.label()) {
         numAccurate++;
       }

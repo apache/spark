@@ -43,13 +43,13 @@ trait ClassificationModel extends Serializable {
    * @param testData array representing a single data point
    * @return predicted category from the trained model
    */
-  def predict(testData: Vector): Double
+  def predictClass(testData: Vector): Double
 
   /**
    * Predict values for examples stored in a JavaRDD.
    * @param testData JavaRDD representing data points to be predicted
    * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
    */
-  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
-    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+  def predictClass(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
+    predictClass(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }

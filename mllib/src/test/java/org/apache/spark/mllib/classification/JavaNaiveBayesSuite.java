@@ -58,7 +58,7 @@ public class JavaNaiveBayesSuite implements Serializable {
   private int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {
     int correct = 0;
     for (LabeledPoint p: points) {
-      if (model.predict(p.features()) == p.label()) {
+      if (model.predictClass(p.features()) == p.label()) {
         correct += 1;
       }
     }
@@ -98,7 +98,7 @@ public class JavaNaiveBayesSuite implements Serializable {
       public Vector call(LabeledPoint v) throws Exception {
         return v.features();
       }});
-    JavaRDD<Double> predictions = model.predict(vectors);
+    JavaRDD<Double> predictions = model.predictClass(vectors);
     // Should be able to get the first prediction.
     predictions.first();
   }

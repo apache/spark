@@ -45,7 +45,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  protected def computeScore(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double = {
+  protected def computeScore(
+      dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double = {
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
@@ -75,6 +76,49 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    */
   def predictScore(testData: Vector): Double = {
     computeScore(testData, weights, intercept)
+  }
+
+  /**
+   * : Deprecated :
+   * Predict the result given a data point and the weights learned.
+   *
+   * @param dataMatrix Row vector containing the features for this data point
+   * @param weightMatrix Column vector containing the weights of the model
+   * @param intercept Intercept of the model.
+   */
+  @deprecated
+  protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
+
+  /**
+   * : Deprecated :
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  @deprecated
+  def predict(testData: RDD[Vector]): RDD[Double] = {
+    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
+    // and intercept is needed.
+    val localWeights = weights
+    val bcWeights = testData.context.broadcast(localWeights)
+    val localIntercept = intercept
+    testData.mapPartitions { iter =>
+      val w = bcWeights.value
+      iter.map(v => predictPoint(v, w, localIntercept))
+    }
+  }
+
+  /**
+   * : Deprecated :
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  @deprecated
+  def predict(testData: Vector): Double = {
+    predictPoint(testData, weights, intercept)
   }
 }
 

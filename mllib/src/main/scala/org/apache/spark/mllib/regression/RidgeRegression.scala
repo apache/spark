@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.Vector
@@ -34,12 +33,13 @@ class RidgeRegressionModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
-  override protected def computeScore(
-      dataMatrix: Vector,
-      weightMatrix: Vector,
-      intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-  }
+  @deprecated
+  override protected def predictPoint(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double) =
+    predictScore(dataMatrix)
+
 }
 
 /**
