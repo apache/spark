@@ -715,6 +715,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
         addedClasspath = ClassPath.join(addedClasspath, f.path)
         totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
         intp.addUrlsToClassPath(f.toURI.toURL)
+        sparkContext.addJar(f.toURI.toURL.getPath)
       }
     }
   }
@@ -724,6 +725,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     if (f.exists) {
       addedClasspath = ClassPath.join(addedClasspath, f.path)
       intp.addUrlsToClassPath(f.toURI.toURL)
+      sparkContext.addJar(f.toURI.toURL.getPath)
       echo("Added '%s'.  Your new classpath is:\n\"%s\"".format(f.path, intp.global.classPath.asClasspathString))
     }
     else echo("The path '" + f + "' doesn't seem to exist.")
