@@ -75,9 +75,9 @@ rem The repl also uses SPARK_REPL_OPTS.
 ) else if "%1"=="org.apache.spark.deploy.SparkSubmit" (
   set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_SUBMIT_OPTS% %SPARK_REPL_OPTS%
   if not "x%SPARK_SUBMIT_LIBRARY_PATH%"=="x" (
-    set OUR_JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_SUBMIT_LIBRARY_PATH%
+    set OUR_JAVA_OPTS=!OUR_JAVA_OPTS! -Djava.library.path=%SPARK_SUBMIT_LIBRARY_PATH%
   ) else if not "x%SPARK_LIBRARY_PATH%"=="x" (
-    set OUR_JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH%
+    set OUR_JAVA_OPTS=!OUR_JAVA_OPTS! -Djava.library.path=%SPARK_LIBRARY_PATH%
   )
   if not "x%SPARK_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DRIVER_MEMORY%
   if not "x%SPARK_SUBMIT_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_SUBMIT_DRIVER_MEMORY%
