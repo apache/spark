@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import atexit
 import os
 import sys
 import signal
@@ -68,6 +69,13 @@ def launch_gateway():
                 error_msg += gateway_port + stdout
                 error_msg += "--------------------------------------------------------------\n"
             raise Exception(error_msg)
+
+        # Ensure the Java subprocess does not linger after python exists. Note that this is best
+        # effort and intended mainly for Windows. In UNIX-based systems, the child process can kill
+        # itself on broken pipe (i.e. when the parent process' stdin sends an EOF). In Windows,
+        # however, this is not possible because java.lang.Process reads directly from the parent
+        # process' stdin, contending with any opportunity to read an EOF from the parent.
+        atexit.register(lambda: proc.kill())
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
