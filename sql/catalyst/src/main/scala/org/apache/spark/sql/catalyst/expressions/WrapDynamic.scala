@@ -35,7 +35,7 @@ case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   type EvaluatedType = DynamicRow
 
   def nullable = false
-  def references = children.toSet
+
   def dataType = DynamicType
 
   override def eval(input: Row): DynamicRow = input match {

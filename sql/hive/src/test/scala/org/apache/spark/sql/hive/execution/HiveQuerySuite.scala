@@ -32,6 +32,71 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("count distinct 0 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 0) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value strings",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 'b' AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values including null",
+    """
+      |SELECT COUNT(DISTINCT a, 1) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null",
+  """
+    |SELECT COUNT(DISTINCT a) FROM (
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT null AS a FROM src LIMIT 1) table
+  """.stripMargin)
+
+  createQueryTest("count distinct 1 value long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
 
@@ -262,7 +327,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
+    explanation.exists(_ == "== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
