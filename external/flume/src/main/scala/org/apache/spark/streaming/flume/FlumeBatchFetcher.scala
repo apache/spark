@@ -24,12 +24,12 @@ import com.google.common.base.Throwables
 import org.apache.spark.Logging
 import org.apache.spark.streaming.flume.sink._
 
-private[flume] class FlumePollingRunnable(val parent: FlumePollingReceiver) extends Runnable with
-Logging {
+private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends Runnable with
+  Logging {
 
   def run(): Unit = {
-    while (!parent.isStopped()) {
-      val connection = parent.getConnections.poll()
+    while (!receiver.isStopped()) {
+      val connection = receiver.getConnections.poll()
       val client = connection.client
       var batchReceived = false
       var seq: CharSequence = null
@@ -39,10 +39,8 @@ Logging {
             batchReceived = true
             seq = eventBatch.getSequenceNumber
             val events = toSparkFlumeEvents(eventBatch.getEvents)
-            logDebug(
-              "Received batch of " + events.size + " events with sequence number: " + seq)
             if (store(events)) {
-              ack(client, seq)
+              sendAck(client, seq)
             } else {
               sendNack(batchReceived, client, seq)
             }
@@ -56,7 +54,7 @@ Logging {
             // In the unlikely case, the cause was not an Exception,
             // then just throw it out and exit.
             case interrupted: InterruptedException =>
-              if (!parent.isStopped()) {
+              if (!receiver.isStopped()) {
                 logWarning("Interrupted while receiving data from Flume", interrupted)
                 sendNack(batchReceived, client, seq)
               }
@@ -65,7 +63,7 @@ Logging {
               sendNack(batchReceived, client, seq)
           }
       } finally {
-        parent.getConnections.add(connection)
+        receiver.getConnections.add(connection)
       }
     }
   }
@@ -77,9 +75,11 @@ Logging {
    * @return [[Some]] which contains the event batch if Flume sent any events back, else [[None]]
    */
   private def getBatch(client: SparkFlumeProtocol.Callback): Option[EventBatch] = {
-    val eventBatch = client.getEventBatch(parent.getMaxBatchSize)
+    val eventBatch = client.getEventBatch(receiver.getMaxBatchSize)
     if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
       // No error, proceed with processing data
+      logDebug("Received batch of " + eventBatch.getEvents.size + " events with sequence number: "
+        + eventBatch.getSequenceNumber)
       Some(eventBatch)
     } else {
       logWarning(
@@ -97,7 +97,7 @@ Logging {
    */
   private def store(buffer: ArrayBuffer[SparkFlumeEvent]): Boolean = {
     try {
-      parent.store(buffer)
+      receiver.store(buffer)
       true
     } catch {
       case e: Exception =>
@@ -113,10 +113,10 @@ Logging {
    * @param seq sequence number of the batch to be ack-ed.
    * @return
    */
-  private def ack(client: SparkFlumeProtocol.Callback, seq: CharSequence): Unit = {
-    logDebug("Sending nack for sequence number: " + seq)
+  private def sendAck(client: SparkFlumeProtocol.Callback, seq: CharSequence): Unit = {
+    logDebug("Sending Nack for sequence number: " + seq)
     client.ack(seq)
-    logDebug("Nack sent for sequence number: " + seq)
+    logDebug("Ack sent for sequence number: " + seq)
   }
 
   /**
@@ -136,7 +136,6 @@ Logging {
       logDebug("Nack sent for sequence number: " + seq)
     }
   }
-
 
   /**
    * Utility method to convert [[SparkSinkEvent]]s to [[SparkFlumeEvent]]s
@@ -158,6 +157,4 @@ Logging {
     }
     buffer
   }
-
-
 }

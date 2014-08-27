@@ -87,11 +87,9 @@ private[streaming] class FlumePollingReceiver(
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads starting..")
       // Threads that pull data from Flume.
-      receiverExecutor.submit(new FlumePollingRunnable(this))
+      receiverExecutor.submit(new FlumeBatchFetcher(this))
     }
   }
-
-
 
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")

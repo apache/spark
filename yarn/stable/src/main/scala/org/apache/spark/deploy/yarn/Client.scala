@@ -28,7 +28,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.deploy.ClientArguments
 import org.apache.spark.{Logging, SparkConf}
 
 
