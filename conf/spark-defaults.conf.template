@@ -7,4 +7,4 @@
 # spark.eventLog.dir               hdfs://namenode:8021/directory
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
-# spark.executor.extraJavaOptions  -XX:+PrintGCDetail -Dkey=value -Dnumbers="one two three"
+# spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"

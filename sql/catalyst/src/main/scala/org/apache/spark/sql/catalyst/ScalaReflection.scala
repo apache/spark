@@ -34,7 +34,8 @@ object ScalaReflection {
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any): Any = a match {
     case o: Option[_] => o.orNull
-    case s: Seq[Any] => s.map(convertToCatalyst)
+    case s: Seq[_] => s.map(convertToCatalyst)
+    case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
   }
@@ -69,11 +70,14 @@ object ScalaReflection {
       sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
-      Schema(ArrayType(schemaFor(elementType).dataType), nullable = true)
+      val Schema(dataType, nullable) = schemaFor(elementType)
+      Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
     case t if t <:< typeOf[Map[_,_]] =>
       val TypeRef(_, _, Seq(keyType, valueType)) = t
-      Schema(MapType(schemaFor(keyType).dataType, schemaFor(valueType).dataType), nullable = true)
-    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
+      val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+      Schema(MapType(schemaFor(keyType).dataType,
+        valueDataType, valueContainsNull = valueNullable), nullable = true)
+    case t if t <:< typeOf[String]            => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
     case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)

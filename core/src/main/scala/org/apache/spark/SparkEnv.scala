@@ -111,6 +111,9 @@ object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
   @volatile private var lastSetSparkEnv : SparkEnv = _
 
+  private[spark] val driverActorSystemName = "sparkDriver"
+  private[spark] val executorActorSystemName = "sparkExecutor"
+
   def set(e: SparkEnv) {
     lastSetSparkEnv = e
     env.set(e)
@@ -146,9 +149,9 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
-      securityManager = securityManager)
+    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+      actorSystemName, hostname, port, conf, securityManager)
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     // This is so that we tell the executors the correct port to connect to.
