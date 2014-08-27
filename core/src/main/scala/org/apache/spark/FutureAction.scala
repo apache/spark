@@ -92,7 +92,7 @@ trait FutureAction[T] extends Future[T] {
  * count, collect, reduce.
  */
 @Experimental
-class SimpleFutureAction[T] private[spark](val jobWaiter: JobWaiter[_], val resultFunc: => T)
+class SimpleFutureAction[T] private[spark](val jobWaiter: JobWaiter[_], resultFunc: => T)
   extends FutureAction[T] {
 
   override def cancel() {
