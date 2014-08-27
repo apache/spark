@@ -27,6 +27,7 @@ set -o posix
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+CLASS_NOT_FOUND_EXIT_STATUS=1
 
 function usage {
   echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
@@ -43,36 +44,22 @@ function usage {
   $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
-function ensure_arg_number {
-  arg_number=$1
-  at_least=$2
-
-  if [[ $arg_number -lt $at_least ]]; then
-    usage
-    exit 1
-  fi
-}
-
-if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
   exit 0
 fi
 
-THRIFT_SERVER_ARGS=()
-SUBMISSION_ARGS=()
+source $FWDIR/bin/utils.sh
+SUBMIT_USAGE_FUNCTION=usage
+gatherSparkSubmitOpts "$@"
 
-while (($#)); do
-  case $1 in
-    --hiveconf)
-      ensure_arg_number $# 2
-      THRIFT_SERVER_ARGS+=("$1"); shift
-      THRIFT_SERVER_ARGS+=("$1"); shift
-      ;;
+"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}"
+exit_status=$?
 
-    *)
-      SUBMISSION_ARGS+=("$1"); shift
-      ;;
-  esac
-done
+if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
+  echo
+  echo "Failed to load Hive Thrift server main class $CLASS."
+  echo "You need to build Spark with -Phive."
+fi
 
-exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_ARGS[@]}" spark-internal "${THRIFT_SERVER_ARGS[@]}"
+exit $exit_status
