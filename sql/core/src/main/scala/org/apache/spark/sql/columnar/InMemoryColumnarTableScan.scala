@@ -39,6 +39,9 @@ private[sql] case class InMemoryRelation(
     (private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
+  override lazy val statistics =
+    Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
