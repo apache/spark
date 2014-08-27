@@ -318,7 +318,7 @@
         </executions>
         <configuration>
           <tasks>
-            <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="build" />
+            <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="../python/build" />
           </tasks>
         </configuration>
       </plugin>
