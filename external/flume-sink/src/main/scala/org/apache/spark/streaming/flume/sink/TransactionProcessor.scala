@@ -237,16 +237,4 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
     processAckOrNack()
     null
   }
-
-  override def hashCode(): Int =  {
-    this.seqNum.hashCode
-  }
-
-  override def equals(other: Any): Boolean = {
-    if(!other.isInstanceOf[TransactionProcessor]) {
-      false
-    } else {
-      seqNum.equals(other.asInstanceOf[TransactionProcessor].seqNum)
-    }
-  }
 }

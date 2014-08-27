@@ -24,6 +24,14 @@ import com.google.common.base.Throwables
 import org.apache.spark.Logging
 import org.apache.spark.streaming.flume.sink._
 
+/**
+ * This class implements the core functionality of [[FlumePollingReceiver]]. When started it
+ * pulls data from Flume, stores it to Spark and then sends an Ack or Nack. This class should be
+ * run via an [[java.util.concurrent.Executor]] as this implements [[Runnable]]
+ *
+ * @param receiver The receiver that owns this instance.
+ */
+
 private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends Runnable with
   Logging {
 
@@ -78,13 +86,12 @@ private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends R
     val eventBatch = client.getEventBatch(receiver.getMaxBatchSize)
     if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
       // No error, proceed with processing data
-      logDebug("Received batch of " + eventBatch.getEvents.size + " events with sequence number: "
-        + eventBatch.getSequenceNumber)
+      logDebug(s"Received batch of ${eventBatch.getEvents.size} events with sequence " +
+        s"number: ${eventBatch.getSequenceNumber}")
       Some(eventBatch)
     } else {
-      logWarning(
-        "Did not receive events from Flume agent due to error on the Flume " +
-          "agent: " + eventBatch.getErrorMsg)
+      logWarning("Did not receive events from Flume agent due to error on the Flume agent: " +
+        eventBatch.getErrorMsg)
       None
     }
   }
