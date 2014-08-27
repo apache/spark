@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.SQLConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -89,6 +90,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  /** Fewer partitions to speed up testing. */
+  override private[spark] def numShufflePartitions: Int =
+    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
