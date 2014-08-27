@@ -139,7 +139,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     stderrThread.start()
 
     // In Windows, the subprocess reads directly from our stdin, so we should avoid spawning
-    // a thread that also reads from stdin and contends with the subprocess.
+    // a thread that contends with the subprocess in reading from System.in.
     if (Utils.isWindows) {
       // For the PySpark shell, the termination of this process is handled in java_gateway.py
       process.waitFor()

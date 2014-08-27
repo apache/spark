@@ -70,7 +70,7 @@ def launch_gateway():
                 error_msg += "--------------------------------------------------------------\n"
             raise Exception(error_msg)
 
-        # Ensure the Java child processes do not linger after python has exited in Windows.
+        # In Windows, ensure the Java child processes do not linger after Python has exited.
         # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
         # the parent process' stdin sends an EOF). In Windows, however, this is not possible
         # because java.lang.Process reads directly from the parent process' stdin, contending
@@ -81,7 +81,7 @@ def launch_gateway():
             # (because the UNIX "exec" command is not available). This means we cannot simply
             # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
             # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
-            # child processes.
+            # child processes in the tree.
             def killChild():
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
             atexit.register(killChild)

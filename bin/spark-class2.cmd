@@ -127,7 +127,7 @@ if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
 rem In Spark submit client mode, the driver is launched in the same JVM as Spark submit itself.
 rem Here we must parse the properties file for relevant "spark.driver.*" configs before launching
-rem the driver JVM itself. Instead of handling this complexity in Bash, we launch a separate JVM
+rem the driver JVM itself. Instead of handling this complexity here, we launch a separate JVM
 rem to prepare the launch environment of this driver JVM.
 
 rem In this case, leave out the main class (org.apache.spark.deploy.SparkSubmit) and use our own.
