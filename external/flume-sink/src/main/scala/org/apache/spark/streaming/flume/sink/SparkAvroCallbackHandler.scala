@@ -16,10 +16,11 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.{TimeUnit, ConcurrentLinkedQueue, ConcurrentHashMap, Executors}
+import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.{ConcurrentHashMap, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 import org.apache.flume.Channel
 import org.apache.commons.lang.RandomStringUtils
@@ -47,11 +48,14 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
     new ThreadFactoryBuilder().setDaemon(true)
       .setNameFormat("Spark Sink Processor Thread - %d").build()))
-  private val processorMap = new ConcurrentHashMap[CharSequence, TransactionProcessor]()
-  // processorMap only contains processors that have to be ack-ed. There may be some processors
-  // whose getEventBatch method is being called when shutdown happens. They need to be closed as
-  // well.
-  private val processorsToShutdown = new ConcurrentLinkedQueue[TransactionProcessor]()
+  private val sequenceNumberToProcessor = new
+      ConcurrentHashMap[CharSequence, TransactionProcessor]()
+  // sequenceNumberToProcessor only contains processors that have to be ack-ed.
+  // There may be some processors whose getEventBatch method is being called when shutdown happens.
+  // They need to be closed as well.
+  private val activeProcessors = new mutable.HashSet[TransactionProcessor]()
+
+  private val activeProcessorMapLock = new ReentrantLock()
   // This sink will not persist sequence numbers and reuses them if it gets restarted.
   // So it is possible to commit a transaction which may have been meant for the sink before the
   // restart.
@@ -74,19 +78,25 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
       new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
     } else {
       val sequenceNumber = seqBase + seqCounter.incrementAndGet()
+      activeProcessorMapLock.lock()
       val processor = new TransactionProcessor(channel, sequenceNumber,
         n, transactionTimeout, backOffInterval, this)
+      try {
+        activeProcessors.add(processor)
+      } finally {
+        activeProcessorMapLock.unlock()
+      }
       transactionExecutorOpt.foreach(executor => {
         executor.submit(processor)
       })
-      processorsToShutdown.add(processor)
       // Wait until a batch is available - will be an error if error message is non-empty
       val batch = processor.getEventBatch
       if (!SparkSinkUtils.isErrorBatch(batch)) {
-        processorMap.put(sequenceNumber.toString, processor)
+        sequenceNumberToProcessor.put(sequenceNumber.toString, processor)
         logDebug("Sending event batch with sequence number: " + sequenceNumber)
       }
       batch
+
     }
   }
 
@@ -129,8 +139,14 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    *         longer tracked and the caller is responsible for that txn processor.
    */
   private[sink] def removeAndGetProcessor(sequenceNumber: CharSequence): TransactionProcessor = {
-    val processor = processorMap.remove(sequenceNumber.toString) // The toString is required!
-    processorsToShutdown.remove(processor) // Remove it from the ones to be shutdown as well
+    // The toString is required!
+    val processor = sequenceNumberToProcessor.remove(sequenceNumber.toString)
+    activeProcessorMapLock.lock()
+    try {
+      activeProcessors.remove(processor) // Remove it from the ones to be shutdown as well
+    } finally {
+      activeProcessorMapLock.unlock()
+    }
     processor
   }
 
@@ -140,7 +156,12 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   def shutdown() {
     logInfo("Shutting down Spark Avro Callback Handler")
     stopped = true
-    processorsToShutdown.foreach(_.shutdown())
+    activeProcessorMapLock.lock()
+    try {
+      activeProcessors.foreach(_.shutdown())
+    } finally {
+      activeProcessorMapLock.unlock()
+    }
     transactionExecutorOpt.foreach(executor => {
       executor.shutdownNow()
     })
