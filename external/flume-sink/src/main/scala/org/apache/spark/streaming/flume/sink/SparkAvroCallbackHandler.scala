@@ -47,8 +47,8 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
     new ThreadFactoryBuilder().setDaemon(true)
       .setNameFormat("Spark Sink Processor Thread - %d").build()))
-  private val sequenceNumberToProcessor = new
-      ConcurrentHashMap[CharSequence, TransactionProcessor]()
+  private val sequenceNumberToProcessor = new ConcurrentHashMap[CharSequence,
+    TransactionProcessor]()
   // This sink will not persist sequence numbers and reuses them if it gets restarted.
   // So it is possible to commit a transaction which may have been meant for the sink before the
   // restart.
@@ -67,29 +67,34 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    */
   override def getEventBatch(n: Int): EventBatch = {
     logDebug("Got getEventBatch call from Spark.")
-    if (stopped) {
-      new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
-    } else {
-      val sequenceNumber = seqBase + seqCounter.incrementAndGet()
-      val processor = getTransactionProcessor(sequenceNumber, n)
-      transactionExecutorOpt.foreach(_.submit(processor))
-      // Wait until a batch is available - will be an error if error message is non-empty
-      val batch = processor.getEventBatch
-      if (SparkSinkUtils.isErrorBatch(batch)) {
-        // Remove the processor if it is an error batch since no ACK is sent.
-        removeAndGetProcessor(sequenceNumber)
-        logDebug("Sending event batch with sequence number: " + sequenceNumber)
-      }
-      batch
+    val sequenceNumber = seqBase + seqCounter.incrementAndGet()
+    createProcessor(sequenceNumber, n) match {
+      case Some(processor) =>
+        transactionExecutorOpt.foreach(_.submit(processor))
+        // Wait until a batch is available - will be an error if error message is non-empty
+        val batch = processor.getEventBatch
+        if (SparkSinkUtils.isErrorBatch(batch)) {
+          // Remove the processor if it is an error batch since no ACK is sent.
+          removeAndGetProcessor(sequenceNumber)
+          logDebug("Received an error batch - no events were received from channel! ")
+        }
+        batch
+      case None =>
+        new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
     }
   }
 
-  private def getTransactionProcessor(seq: String, n: Int): TransactionProcessor = {
+  private def createProcessor(seq: String, n: Int): Option[TransactionProcessor] = {
     sequenceNumberToProcessor.synchronized {
-      val processor = new TransactionProcessor(channel, seq, n, transactionTimeout, backOffInterval,
-        this)
-      sequenceNumberToProcessor.put(seq, processor)
-      processor
+      if (!stopped) {
+        val processor = new
+            TransactionProcessor(channel, seq, n, transactionTimeout, backOffInterval,
+              this)
+        sequenceNumberToProcessor.put(seq, processor)
+        Some(processor)
+      } else {
+        None
+      }
     }
   }
 
