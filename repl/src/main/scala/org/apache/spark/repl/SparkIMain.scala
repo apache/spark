@@ -319,11 +319,7 @@ import org.apache.spark.util.Utils
      * @param urls The list of items to add to the compile and runtime classpaths
      */
     def addUrlsToClassPath(urls: URL*): Unit = {
-      // TODO: Investigate how to get Scala classes to be loaded without relying on this error
-      intp.totalSilence = true
-      intp.interpret("$reservedFailureIdentifier")
-      intp.totalSilence = false
-
+      new Run // Needed to force initialization of "something" to correctly load Scala classes from jars
       urls.foreach(_runtimeClassLoader.addNewUrl) // Add jars/classes to runtime for execution
       updateCompilerClassPath(urls: _*)           // Add jars/classes to compile time for compiling
     }
