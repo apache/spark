@@ -251,6 +251,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       if (entry != null) {
         decreaseToDropMemoryForThisThread(entry.size)
         currentMemory -= entry.size
+        logInfo(s"Block $blockId of size ${entry.size} dropped from memory")
         true
       } else {
         false
