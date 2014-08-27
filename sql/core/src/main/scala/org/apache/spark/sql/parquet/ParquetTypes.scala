@@ -394,16 +394,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
     }
     val path = origPath.makeQualified(fs)
-    if (!fs.getFileStatus(path).isDir) {
-      throw new IllegalArgumentException(
-        s"Expected $path for be a directory with Parquet files/metadata")
-    }
-    ParquetRelation.enableLogForwarding()
 
     val children = fs.listStatus(path).filterNot { status =>
       val name = status.getPath.getName
       (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
     }
+
+    ParquetRelation.enableLogForwarding()
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a

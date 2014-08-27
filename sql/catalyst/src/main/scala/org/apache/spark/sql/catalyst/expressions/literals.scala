@@ -61,10 +61,9 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 }
 
 // TODO: Specialize
-case class MutableLiteral(var value: Any, nullable: Boolean = true) extends LeafExpression {
+case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true) 
+    extends LeafExpression {
   type EvaluatedType = Any
-
-  val dataType = Literal(value).dataType
 
   def update(expression: Expression, input: Row) = {
     value = expression.eval(input)

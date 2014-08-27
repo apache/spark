@@ -18,9 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.util.ClosureCleaner
 
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
   extends Expression {
+
+  // Clean function when not called with default no-arg constructor.
+  if (function != null) { ClosureCleaner.clean(function) }
 
   type EvaluatedType = Any
 
