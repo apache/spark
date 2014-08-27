@@ -135,15 +135,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              groupingExpressions,
              partialComputation,
              child) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
+
+        val preAggregate = execution.OnHeapAggregate(
+          partial = true,
+          groupingExpressions,
+          partialComputation,
+          planLater(child))
+
+        if (self.sqlContext.externalAggregate) {
+          execution.ExternalAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            preAggregate) :: Nil
+        } else {
+          execution.OnHeapAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            preAggregate) :: Nil
+        }
 
       case _ => Nil
     }
@@ -269,7 +280,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+        if (self.sqlContext.externalAggregate) {
+          execution.ExternalAggregate(partial = false, group, agg, planLater(child)) :: Nil
+        } else {
+          execution.OnHeapAggregate(partial = false, group, agg, planLater(child)) :: Nil
+        }
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
