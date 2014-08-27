@@ -89,8 +89,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
+  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+    SparkPlan.currentContext.set(self)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
+  }
 
   /**
    * :: DeveloperApi ::
