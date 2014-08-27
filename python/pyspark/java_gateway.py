@@ -81,7 +81,7 @@ def launch_gateway():
             # (because the UNIX "exec" command is not available). This means we cannot simply
             # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
             # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
-            # child processes in the tree.
+            # child processes in the tree (http://technet.microsoft.com/en-us/library/bb491009.aspx)
             def killChild():
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
             atexit.register(killChild)
