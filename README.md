@@ -69,7 +69,7 @@ Many of the example programs print usage help if no params are given.
 Testing first requires [building Spark](#building-spark). Once Spark is built, tests
 can be run using:
 
-    ./sbt/sbt test
+    ./dev/run-tests
 
 ## A Note About Hadoop Versions
 
