@@ -34,7 +34,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   private val memOnly = StorageLevel.MEMORY_ONLY
   private val none = StorageLevel.NONE
   private val taskInfo = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)
-  private val taskInfo1 = new TaskInfo(1, 1, 1, 1, "small", "cat", TaskLocality.ANY, false)
+  private val taskInfo1 = new TaskInfo(1, 1, 1, 1, "big", "cat", TaskLocality.ANY, false)
   private def rddInfo0 = new RDDInfo(0, "freedom", 100, memOnly)
   private def rddInfo1 = new RDDInfo(1, "hostage", 200, memOnly)
   private def rddInfo2 = new RDDInfo(2, "sanity", 300, memAndDisk)
@@ -175,17 +175,18 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L, 0L))
     taskMetrics0.updatedBlocks = Some(Seq(block0))
     taskMetrics1.updatedBlocks = Some(Seq(block1))
+    bus.postToAll(SparkListenerBlockManagerAdded(bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
-    assert(storageListener.rddInfoList.size == 0)
+    assert(storageListener.rddInfoList.size === 0)
     bus.postToAll(SparkListenerTaskEnd(0, 0, "big", Success, taskInfo, taskMetrics0))
-    assert(storageListener.rddInfoList.size == 1)
+    assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
-    assert(storageListener.rddInfoList.size == 1)
+    assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageCompleted(stageInfo0))
-    assert(storageListener.rddInfoList.size == 1)
+    assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerTaskEnd(1, 0, "small", Success, taskInfo1, taskMetrics1))
-    assert(storageListener.rddInfoList.size == 2)
+    assert(storageListener.rddInfoList.size === 2)
     bus.postToAll(SparkListenerStageCompleted(stageInfo1))
-    assert(storageListener.rddInfoList.size == 2)
+    assert(storageListener.rddInfoList.size === 2)
   }
 }

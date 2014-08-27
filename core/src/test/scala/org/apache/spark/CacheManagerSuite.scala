@@ -101,8 +101,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   }
 
   test("verity task metrics updated correctly") {
-    blockManager = sc.env.blockManager
-    cacheManager = new CacheManager(blockManager)
+    cacheManager = sc.env.cacheManager
     val context = new TaskContext(0, 0, 0)
     cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
     assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size == 2)
