@@ -18,20 +18,21 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{ArrayList => JArrayList, List => JList}
-import java.util.Collections
+import java.util.{Collections, ArrayList => JArrayList, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.mesos.protobuf.ByteString
-import org.apache.mesos.{Scheduler => MScheduler}
-import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
+import org.apache.mesos.protobuf.ByteString
+import org.apache.mesos.{Scheduler => MScheduler, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
@@ -85,27 +86,55 @@ private[spark] class MesosSchedulerBackend(
     }
   }
 
+  // TODO Extract common code from this method and CoarseMesosSchedulerBackend.createCommand
   def createExecutorInfo(execId: String): ExecutorInfo = {
     val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
       "Spark home is not set; set it through the spark.home system " +
       "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
+    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(File.pathSeparator)
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
+    val libraryPathEntries =
+      sc.conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { lp =>
+        lp.split(File.pathSeparator)
+      }
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
         .setValue(value)
         .build())
     }
+    val mesosCommand = Command(
+      classOf[MesosExecutorBackend].getCanonicalName,
+      Seq.empty, sc.executorEnvs, classPathEntries, libraryPathEntries, extraJavaOpts)
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
+    // We have to use "sbin/mesos-pyenv.sh" to setup the PYTHONPATH environment variable instead of
+    // setting it from the Scala code here. Because there's no way to figure out Mesos executor side
+    // Spark home in advance on driver side.
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
+      val pyEnv = new File(sparkHome, "sbin/mesos-pyenv.sh").getCanonicalPath
+      command.setValue(s"$pyEnv; " + CommandUtils.buildCommandSeq(
+        mesosCommand, sc.executorMemory, sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
+      // Grab everything to the first '.'. We'll use that and '*' to glob the directory "correctly".
+      // For example, let the URI be:
+      //
+      //   hdfs://localhost:9000/tmp/mesos/spark-1.1.0-bin-hadoop2.tgz
+      //
+      // then "basename" is "spark-1". When the Mesos executor is started, the working directory is
+      // set to the root directory of the sandbox (one level up to the directory uncompressed from
+      // the Spark distribution tarball), so "cd spark-1*" brings us to the correct executor side
+      // Spark home.
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
+      command.setValue(s"cd $basename*; ./sbin/mesos-pyenv.sh; " +
+        CommandUtils.buildCommandSeq(mesosCommand, sc.executorMemory, ".")
+          .mkString("\"", "\" \"", "\""))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val memory = Resource.newBuilder()

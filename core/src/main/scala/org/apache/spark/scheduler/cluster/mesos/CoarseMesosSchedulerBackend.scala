@@ -18,19 +18,21 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{List => JList}
-import java.util.Collections
+import java.util.{Collections, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.{Scheduler => MScheduler}
-import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
+import org.apache.mesos.{Scheduler => MScheduler, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.executor.CoarseGrainedExecutorBackend
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -111,16 +113,16 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
-    extraClassPath.foreach { cp =>
-      environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+    val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(File.pathSeparator)
     }
     val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
 
-    val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    val libraryPathEntries =
+      conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { lp =>
+        lp.split(File.pathSeparator)
+      }
 
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -136,21 +138,28 @@ private[spark] class CoarseMesosSchedulerBackend(
       conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
+    val mesosCommand = Command(
+      classOf[CoarseGrainedExecutorBackend].getCanonicalName,
+      Seq(driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores.toString),
+      sc.executorEnvs, classPathEntries, libraryPathEntries, extraJavaOpts)
+
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
-      val runScript = new File(sparkHome, "./bin/spark-class").getCanonicalPath
-      command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d".format(
-          runScript, extraOpts, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+      command.setValue(CommandUtils.buildCommandSeq(
+        mesosCommand, sc.executorMemory, sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
+      // Grab everything to the first '.'. We'll use that and '*' to glob the directory "correctly".
+      // For example, let the URI be:
+      //
+      //   hdfs://localhost:9000/tmp/mesos/spark-1.1.0-bin-hadoop2.tgz
+      //
+      // then "basename" is "spark-1". When the Mesos executor is started, the working directory is
+      // set to the root directory of the sandbox (one level up to the directory uncompressed from
+      // the Spark distribution tarball), so "cd spark-1*" brings us to the correct executor side
+      // Spark home.
       val basename = uri.split('/').last.split('.').head
-      command.setValue(
-        ("cd %s*; " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d")
-          .format(basename, extraOpts, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores))
+      command.setValue(s"cd $basename*; " + CommandUtils.buildCommandSeq(
+        mesosCommand, sc.executorMemory, ".").mkString("\"", "\" \"", "\""))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()
