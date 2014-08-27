@@ -415,7 +415,7 @@ object DecisionTree extends Serializable with Logging {
    * @param maxLevelForSingleGroup the deepest level for single-group level-wise computation.
    * @return array (over nodes) of splits with best split for each node at a given level.
    */
-  protected[tree] def findBestSplits(
+  private[tree] def findBestSplits(
       input: RDD[TreePoint],
       parentImpurities: Array[Double],
       metadata: DecisionTreeMetadata,
@@ -463,7 +463,7 @@ object DecisionTree extends Serializable with Logging {
    *                This index is different from the index used during training a particular
    *                set of nodes in a (level, group).
    */
-  def predictNodeIndex(
+  private def predictNodeIndex(
       node: Node,
       binnedFeatures: Array[Int],
       bins: Array[Array[Bin]],
@@ -517,7 +517,7 @@ object DecisionTree extends Serializable with Logging {
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param unorderedFeatures  Set of indices of unordered features.
    */
-  def someUnorderedBinSeqOp(
+  private def someUnorderedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
       nodeIndex: Int,
@@ -565,7 +565,7 @@ object DecisionTree extends Serializable with Logging {
    * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
    * @return agg
    */
-  def orderedBinSeqOp(
+  private def orderedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
       nodeIndex: Int): Unit = {
@@ -729,7 +729,7 @@ object DecisionTree extends Serializable with Logging {
    * @param topImpurity impurity of the parent node
    * @return information gain and statistics for all splits
    */
-  def calculateGainForSplit(
+  private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
       topImpurity: Double,
@@ -775,7 +775,7 @@ object DecisionTree extends Serializable with Logging {
    * @param nodeImpurity Impurity of the node (nodeIndex).
    * @return tuple for best split: (Split, information gain)
    */
-  def binsToBestSplit(
+  private def binsToBestSplit(
       binAggregates: DTStatsAggregator,
       nodeIndex: Int,
       nodeImpurity: Double,
