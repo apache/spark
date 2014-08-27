@@ -42,7 +42,7 @@ object SparkGLRM {
 
 
   /*
-   * GLRM: Change the Loss function and Loss gradient here
+   * GLRM settings: Change the Loss function and prox here
    */
 
   def loss(i: Int, j: Int, prediction: Double, actual: Double): Double = {
@@ -65,8 +65,8 @@ object SparkGLRM {
     R.map { case (i, j, rij) => (i, j, loss(i, j, ms.value(i).dot(us.value(j)), rij))}
   }
 
-  // L2 prox
   def prox(v:BDV[Double], stepSize:Double): BDV[Double] = {
+    // L2 prox
     v / (1.0 + stepSize * REG)
   }
 
@@ -144,7 +144,7 @@ object SparkGLRM {
       us = update(msb, usb, lg, 1.0/iter)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
-      println("RMSE = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij}.mean())
+      println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij}.mean())
       //println(us.mkString(", "))
       //println(ms.mkString(", "))
       println()
