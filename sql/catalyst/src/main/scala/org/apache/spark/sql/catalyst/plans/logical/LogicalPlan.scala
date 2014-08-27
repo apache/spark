@@ -41,9 +41,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   case class Statistics(
     sizeInBytes: BigInt
   )
-  lazy val statistics: Statistics = Statistics(
-    sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product
-  )
+  lazy val statistics: Statistics = {
+    if (children.size == 0) {
+      throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
+    }
+
+    Statistics(
+      sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
+  }
 
   /**
    * Returns the set of attributes that this node takes as
@@ -117,9 +122,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
-
-  override lazy val statistics: Statistics =
-    throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
 }
 
 /**

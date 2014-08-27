@@ -33,6 +33,14 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(scan, testData.collect().toSeq)
   }
 
+  test("default size avoids broadcast") {
+    // TODO: Improve this test when we have better statistics
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
+    cacheTable("sizeTst")
+    assert(
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
+  }
+
   test("projection") {
     val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, plan)
