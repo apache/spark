@@ -15,25 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.deploy.yarn
 
-import org.apache.spark._
-import org.apache.hadoop.conf.Configuration
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.Utils
+object AllocationType extends Enumeration {
+  type AllocationType = Value
+  val HOST, RACK, ANY = Value
+}
 
 /**
- * This scheduler launches executors through Yarn - by calling into Client to launch the Spark AM.
+ * Interface that defines a Yarn allocator.
  */
-private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configuration)
-  extends TaskSchedulerImpl(sc) {
+trait YarnAllocator {
 
-  def this(sc: SparkContext) = this(sc, new Configuration())
+  def allocateResources(): Unit
+  def getNumExecutorsFailed: Int
+  def getNumExecutorsRunning: Int
 
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    val host = Utils.parseHostPort(hostPort)._1
-    Option(YarnSparkHadoopUtil.lookupRack(conf, host))
-  }
 }

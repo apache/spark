@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher, YarnSparkHadoopUtil}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -60,10 +60,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
-      "--class", "notused",
-      "--jar", null, // The primary jar will be added dynamically in SparkContext.
-      "--args", hostport,
-      "--am-class", classOf[ExecutorLauncher].getName
+      "--args", hostport
     )
 
     // process any optional arguments, given either as environment variables
