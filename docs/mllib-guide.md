@@ -57,7 +57,8 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 ## From 1.0 to 1.1
 
 The only API changes in MLlib v1.1 are in
-[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree):
+[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+which continues to be an experimental API in MLlib 1.1:
 
 1. *(Breaking change)* The meaning of tree depth has been changed by 1 in order to match
 the implementations of trees in
