@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.ByteBuffer
+
 import org.apache.hadoop.conf.Configuration
 
 import parquet.filter._
@@ -25,6 +27,7 @@ import parquet.column.ColumnReader
 
 import com.google.common.io.BaseEncoding
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.expressions._
@@ -237,7 +240,8 @@ object ParquetFilters {
    */
   def serializeFilterExpressions(filters: Seq[Expression], conf: Configuration): Unit = {
     if (filters.length > 0) {
-      val serialized: Array[Byte] = SparkSqlSerializer.serialize(filters)
+      val serialized: Array[Byte] =
+        SparkEnv.get.closureSerializer.newInstance().serialize(filters).array()
       val encoded: String = BaseEncoding.base64().encode(serialized)
       conf.set(PARQUET_FILTER_DATA, encoded)
     }
@@ -252,7 +256,7 @@ object ParquetFilters {
     val data = conf.get(PARQUET_FILTER_DATA)
     if (data != null) {
       val decoded: Array[Byte] = BaseEncoding.base64().decode(data)
-      SparkSqlSerializer.deserialize(decoded)
+      SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(decoded))
     } else {
       Seq()
     }
