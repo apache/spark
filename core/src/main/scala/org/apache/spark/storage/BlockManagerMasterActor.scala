@@ -54,7 +54,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   // Remove RDD, Shuffle, Broadcast timeout
   private val removeBlocksTimeout = conf.getLong("spark.storage.removeBlocksTimeout",
-    akkaTimeout.toSeconds * 10) * 1000
+    akkaTimeout.toSeconds * 10).seconds
 
   val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
     math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))

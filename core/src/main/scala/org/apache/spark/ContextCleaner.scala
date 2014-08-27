@@ -75,7 +75,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", true)
+    "spark.cleaner.referenceTracking.blocking", false)
 
   /**
    * Whether the cleaning thread will block on shuffle cleanup tasks.
