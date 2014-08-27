@@ -104,6 +104,6 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     cacheManager = sc.env.cacheManager
     val context = new TaskContext(0, 0, 0)
     cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
-    assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size == 2)
+    assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
   }
 }
