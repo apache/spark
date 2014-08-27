@@ -66,7 +66,6 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
   override def nullable = throw new UnresolvedException(this, "nullable")
-  override def references = children.flatMap(_.references).toSet
   override lazy val resolved = false
 
   // Unresolved functions are transient at compile time and don't get evaluated during execution.

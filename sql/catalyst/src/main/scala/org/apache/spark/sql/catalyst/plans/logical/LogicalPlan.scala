@@ -51,16 +51,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   }
 
   /**
-   * Returns the set of attributes that are referenced by this node
-   * during evaluation.
-   */
-  def references: Set[Attribute]
-
-  /**
    * Returns the set of attributes that this node takes as
    * input from its children.
    */
-  lazy val inputSet: Set[Attribute] = children.flatMap(_.output).toSet
+  lazy val inputSet: AttributeSet = AttributeSet(children.flatMap(_.output))
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -128,9 +122,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
-
-  // Leaf nodes by definition cannot reference any input attributes.
-  override def references = Set.empty
 }
 
 /**
