@@ -21,6 +21,7 @@ import platform
 import shutil
 import warnings
 import gc
+import random
 
 from pyspark.serializers import BatchedSerializer, PickleSerializer
 
@@ -216,6 +217,9 @@ class ExternalMerger(Merger):
         """ Get all the directories """
         path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
         dirs = path.split(",")
+        if len(dirs) > 1:
+            rnd = random.Random(os.getpid() + id(dirs))
+            random.shuffle(dirs, rnd.random)
         return [os.path.join(d, "python", str(os.getpid()), str(id(self)))
                 for d in dirs]
 
