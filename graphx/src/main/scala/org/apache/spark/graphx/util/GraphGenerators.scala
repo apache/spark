@@ -85,7 +85,8 @@ object GraphGenerators {
   // the edge data is the weight (default 1)
   val RMATc = 0.15
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int, seed: Long = -1): Array[Edge[Int]] = {
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int,
+      seed: Long = -1): Array[Edge[Int]] = {
     val rand = if (seed == -1) new Random() else new Random(seed)
     Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
