@@ -105,8 +105,8 @@ case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class MinFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  @transient var currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
-  @transient val cmp = GreaterThan(currentMin, expr)
+  val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
+  val cmp = GreaterThan(currentMin, expr)
 
   override def update(input: Row): Unit = {
     if (currentMin.value == null) {
@@ -136,8 +136,8 @@ case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class MaxFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  @transient var currentMax: MutableLiteral = MutableLiteral(null, expr.dataType)
-  @transient val cmp = LessThan(currentMax, expr)
+  val currentMax: MutableLiteral = MutableLiteral(null, expr.dataType)
+  val cmp = LessThan(currentMax, expr)
 
   override def update(input: Row): Unit = {
     if (currentMax.value == null) {
