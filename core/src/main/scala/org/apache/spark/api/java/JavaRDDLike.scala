@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{FutureAction, Partition, SparkContext, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
@@ -573,5 +573,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 
   def name(): String = rdd.name
+
+  def foreachAsync(f: VoidFunction[T]): FutureAction[Unit] = {
+    val cleanF = rdd.context.clean((x: T) => f.call(x))
+    import org.apache.spark.SparkContext._
+    rdd.foreachAsync(cleanF)
+  }
 
 }
