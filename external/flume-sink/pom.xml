@@ -71,6 +71,10 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+    <dependency>
       <!--
         Netty explicitly added in test as it has been excluded from
         Flume dependency (to avoid runtime problems when running with

@@ -18,10 +18,9 @@ package org.apache.spark.streaming.flume
 
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
+import java.util.concurrent.{LinkedBlockingQueue, Executors}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -86,61 +85,9 @@ private[streaming] class FlumePollingReceiver(
       connections.add(new FlumeConnection(transceiver, client))
     })
     for (i <- 0 until parallelism) {
-      logInfo("Starting Flume Polling Receiver worker threads starting..")
+      logInfo("Starting Flume Polling Receiver worker threads..")
       // Threads that pull data from Flume.
-      receiverExecutor.submit(new Runnable {
-        override def run(): Unit = {
-          while (true) {
-            val connection = connections.poll()
-            val client = connection.client
-            try {
-              val eventBatch = client.getEventBatch(maxBatchSize)
-              if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
-                // No error, proceed with processing data
-                val seq = eventBatch.getSequenceNumber
-                val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
-                logDebug(
-                  "Received batch of " + events.size() + " events with sequence number: " + seq)
-                try {
-                  // Convert each Flume event to a serializable SparkFlumeEvent
-                  val buffer = new ArrayBuffer[SparkFlumeEvent](events.size())
-                  var j = 0
-                  while (j < events.size()) {
-                    buffer += toSparkFlumeEvent(events(j))
-                    j += 1
-                  }
-                  store(buffer)
-                  logDebug("Sending ack for sequence number: " + seq)
-                  // Send an ack to Flume so that Flume discards the events from its channels.
-                  client.ack(seq)
-                  logDebug("Ack sent for sequence number: " + seq)
-                } catch {
-                  case e: Exception =>
-                    try {
-                      // Let Flume know that the events need to be pushed back into the channel.
-                      logDebug("Sending nack for sequence number: " + seq)
-                      client.nack(seq) // If the agent is down, even this could fail and throw
-                      logDebug("Nack sent for sequence number: " + seq)
-                    } catch {
-                      case e: Exception => logError(
-                        "Sending Nack also failed. A Flume agent is down.")
-                    }
-                    TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
-                    logWarning("Error while attempting to store events", e)
-                }
-              } else {
-                logWarning("Did not receive events from Flume agent due to error on the Flume " +
-                  "agent: " + eventBatch.getErrorMsg)
-              }
-            } catch {
-              case e: Exception =>
-                logWarning("Error while reading data from Flume", e)
-            } finally {
-              connections.add(connection)
-            }
-          }
-        }
-      })
+      receiverExecutor.submit(new FlumeBatchFetcher(this))
     }
   }
 
@@ -153,16 +100,12 @@ private[streaming] class FlumePollingReceiver(
     channelFactory.releaseExternalResources()
   }
 
-  /**
-   * Utility method to convert [[SparkSinkEvent]] to [[SparkFlumeEvent]]
-   * @param event - Event to convert to SparkFlumeEvent
-   * @return - The SparkFlumeEvent generated from SparkSinkEvent
-   */
-  private def toSparkFlumeEvent(event: SparkSinkEvent): SparkFlumeEvent = {
-    val sparkFlumeEvent = new SparkFlumeEvent()
-    sparkFlumeEvent.event.setBody(event.getBody)
-    sparkFlumeEvent.event.setHeaders(event.getHeaders)
-    sparkFlumeEvent
+  private[flume] def getConnections: LinkedBlockingQueue[FlumeConnection] = {
+    this.connections
+  }
+
+  private[flume] def getMaxBatchSize: Int = {
+    this.maxBatchSize
   }
 }
 
@@ -171,7 +114,7 @@ private[streaming] class FlumePollingReceiver(
  * @param transceiver The transceiver to use for communication with Flume
  * @param client The client that the callbacks are received on.
  */
-private class FlumeConnection(val transceiver: NettyTransceiver,
+private[flume] class FlumeConnection(val transceiver: NettyTransceiver,
   val client: SparkFlumeProtocol.Callback)
 
 
