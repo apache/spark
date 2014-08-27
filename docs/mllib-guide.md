@@ -60,6 +60,32 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 # Migration Guide
 
+## From 1.0 to 1.1
+
+The only API changes in MLlib v1.1 are in
+[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+which continues to be an experimental API in MLlib 1.1:
+
+1. *(Breaking change)* The meaning of tree depth has been changed by 1 in order to match
+the implementations of trees in
+[scikit-learn](http://scikit-learn.org/stable/modules/classes.html#module-sklearn.tree)
+and in [rpart](http://cran.r-project.org/web/packages/rpart/index.html).
+In MLlib v1.0, a depth-1 tree had 1 leaf node, and a depth-2 tree had 1 root node and 2 leaf nodes.
+In MLlib v1.1, a depth-0 tree has 1 leaf node, and a depth-1 tree has 1 root node and 2 leaf nodes.
+This depth is specified by the `maxDepth` parameter in
+[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
+or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
+static `trainClassifier` and `trainRegressor` methods.
+
+2. *(Non-breaking change)* We recommend using the newly added `trainClassifier` and `trainRegressor`
+methods to build a [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+rather than using the old parameter class `Strategy`.  These new training methods explicitly
+separate classification and regression, and they replace specialized parameter types with
+simple `String` types.
+
+Examples of the new, recommended `trainClassifier` and `trainRegressor` are given in the
+[Decision Trees Guide](mllib-decision-tree.html#examples).
+
 ## From 0.9 to 1.0
 
 In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
@@ -85,7 +111,7 @@ val vector: Vector = Vectors.dense(array) // a dense vector
 
 [`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
 
-*Note*. Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
+*Note*: Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
 
 </div>
 
