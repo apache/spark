@@ -28,6 +28,7 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler._
+import org.eclipse.jetty.server.session._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
@@ -35,7 +36,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
-import org.eclipse.jetty.server.session.{HashSessionManager, SessionHandler}
+
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
