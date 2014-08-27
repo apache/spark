@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.nio.ByteBuffer
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -49,6 +51,8 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   val sparkConf = spConf
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
+  val maxAppAttempts = conf.getInt(
+    YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
 
   def runApp(): ApplicationId = {
     validateArgs()
@@ -81,6 +85,18 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
+    if (args.ha) {
+      Try {
+        appContext.getClass.getMethod("setMaxAppAttempts", Integer.TYPE)
+          .invoke(appContext, maxAppAttempts: java.lang.Integer)
+        appContext.getClass.getMethod("setKeepContainersAcrossApplicationAttempts",
+          java.lang.Boolean.TYPE).invoke(appContext, true: java.lang.Boolean)
+      }.recover {
+        case e: Exception =>
+          logWarning("setMaxAttempts and setKeepContainersAcrossApplicationAttempts is not " +
+            "available in the current version of YARN - HA will be disabled!")
+      }
+    }
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
