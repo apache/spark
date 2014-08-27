@@ -458,7 +458,8 @@ def launch_cluster(conn, opts, cluster_name):
                                placement=opts.zone,
                                min_count=1,
                                max_count=1,
-                               block_device_map=block_map)
+                               block_device_map=block_map,
+                               user_data=user_data_content)
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
