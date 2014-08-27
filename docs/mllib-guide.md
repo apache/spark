@@ -7,12 +7,13 @@ MLlib is Spark's scalable machine learning library consisting of common learning
 including classification, regression, clustering, collaborative
 filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:
 
-* [Data types](mllib-basics.html)
-* [Basic statistics](mllib-stats.html)
-  * random data generation  
-  * stratified sampling
+* [Data types](mllib-data-types.html)
+* [Basic statistics](mllib-statistics.html)
   * summary statistics
+  * correlations
+  * stratified sampling
   * hypothesis testing
+  * random data generation  
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
   * [decision trees](mllib-decision-tree.html)
