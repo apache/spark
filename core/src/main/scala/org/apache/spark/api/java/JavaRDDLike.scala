@@ -21,16 +21,18 @@ import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
-import org.apache.spark.{FutureAction, Partition, SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
+import scala.concurrent.ExecutionContext.Implicits.global
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -578,6 +580,62 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val cleanF = rdd.context.clean((x: T) => f.call(x))
     import org.apache.spark.SparkContext._
     rdd.foreachAsync(cleanF)
+  }
+
+  def foreachPartitionAsync(f: VoidFunction[java.util.Iterator[T]]): FutureAction[Unit] = {
+    import org.apache.spark.SparkContext._
+    rdd.foreachPartitionAsync(x => f.call(asJavaIterator(x)))
+  }
+
+  def countAsync(): FutureAction[Long] = {
+    import org.apache.spark.SparkContext._
+    rdd.countAsync()
+  }
+
+  def collectAsync(): FutureAction[JList[T]] = {
+    val results = new Array[Array[T]](rdd.partitions.size)
+    rdd.context.submitJob[T, Array[T], JList[T]](rdd, _.toArray, Range(0, rdd.partitions.size),
+      (index, data) => results(index) = data, new java.util.ArrayList[T](results.flatten.toSeq))
+  }
+
+  def takeAsync(num: Int): FutureAction[JList[T]] = {
+    val f = new ComplexFutureAction[JList[T]]
+    f.run {
+      val results = new ArrayBuffer[T](num)
+      val totalParts = rdd.partitions.length
+      var partsScanned = 0
+      while (results.size < num && partsScanned < totalParts) {
+        // The number of partitions to try in this iteration. It is ok for this number to be
+        // greater than totalParts because we actually cap it at totalParts in runJob.
+        var numPartsToTry = 1
+        if (partsScanned > 0) {
+          // If we didn't find any rows after the first iteration, just try all partitions next.
+          // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+          // by 50%.
+          if (results.size == 0) {
+            numPartsToTry = totalParts - 1
+          } else {
+            numPartsToTry = (1.5 * num * partsScanned / results.size).toInt
+          }
+        }
+        numPartsToTry = math.max(0, numPartsToTry) // guard against negative num of partitions
+
+        val left = num - results.size
+        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+
+        val buf = new Array[Array[T]](p.size)
+        f.runJob(rdd,
+          (it: Iterator[T]) => it.take(left).toArray,
+          p,
+          (index: Int, data: Array[T]) => buf(index) = data,
+          Unit)
+
+        buf.foreach(results ++= _.take(num - results.size))
+        partsScanned += numPartsToTry
+      }
+      new java.util.ArrayList[T](results.toSeq)
+    }
+    f
   }
 
 }
