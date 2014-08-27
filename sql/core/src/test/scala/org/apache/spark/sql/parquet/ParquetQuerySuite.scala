@@ -35,7 +35,6 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
 
-
 case class TestRDDEntry(key: Int, value: String)
 
 case class NullReflectData(
@@ -420,8 +419,30 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val rdd_copy = sql("SELECT * FROM tmpx").collect()
     val rdd_orig = rdd.collect()
     for(i <- 0 to 99) {
-      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,  s"key error in line $i")
-      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value in line $i")
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
+    }
+    Utils.deleteRecursively(file)
+  }
+
+  test("Read a parquet file instead of a directory") {
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val fsPath = new Path(path)
+    val fs: FileSystem = fsPath.getFileSystem(TestSQLContext.sparkContext.hadoopConfiguration)
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+    rdd.coalesce(1).saveAsParquetFile(path)
+
+    val children = fs.listStatus(fsPath).filter(_.getPath.getName.endsWith(".parquet"))
+    assert(children.length > 0)
+    val readFile = parquetFile(path + "/" + children(0).getPath.getName)
+    readFile.registerTempTable("tmpx")
+    val rdd_copy = sql("SELECT * FROM tmpx").collect()
+    val rdd_orig = rdd.collect()
+    for(i <- 0 to 99) {
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
     }
     Utils.deleteRecursively(file)
   }
