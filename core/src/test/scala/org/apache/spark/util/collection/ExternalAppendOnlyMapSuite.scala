@@ -70,6 +70,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       (1, ArrayBuffer[Int](10)),
       (2, ArrayBuffer[Int](20)),
       (3, ArrayBuffer[Int](30))))
+    sc.stop()
   }
 
   test("insert with collision") {
@@ -91,6 +92,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       (1, Set[Int](10, 100, 1000)),
       (2, Set[Int](20, 200)),
       (3, Set[Int](30))))
+    sc.stop()
   }
 
   test("ordering") {
@@ -133,6 +135,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     kv3 = it3.next()
     assert(kv1._1 === kv2._1 && kv2._1 === kv3._1)
     assert(kv1._2 === kv2._2 && kv2._2 === kv3._2)
+    sc.stop()
   }
 
   test("null keys and values") {
@@ -173,6 +176,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       (4, Set[Int](nullInt)),
       (nullInt, Set[Int](nullInt, 8))
     ))
+    sc.stop()
   }
 
   test("simple aggregator") {
@@ -188,6 +192,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val result2 = rdd.groupByKey().collect().map(x => (x._1, x._2.toList)).toSet
     assert(result2.toSet === Set[(Int, Seq[Int])]
       ((0, List[Int](1, 1, 1, 1, 1)), (1, List[Int](1, 1, 1, 1, 1))))
+    sc.stop()
   }
 
   test("simple cogroup") {
@@ -206,6 +211,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
         case 4 => assert(seq1.toSet === Set[Int](4) && seq2.toSet === Set[Int]())
       }
     }
+    sc.stop()
   }
 
   /**
@@ -308,6 +314,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
         case _ =>
       }
     }
+    sc.stop()
   }
 
   /**
@@ -359,6 +366,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       count += 1
     }
     assert(count === 100000 + collisionPairs.size * 2)
+    sc.stop()
   }
 
   /**
@@ -386,6 +394,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       count += 1
     }
     assert(count === 10000)
+    sc.stop()
   }
 
   /**
@@ -405,6 +414,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       // Should not throw NoSuchElementException
       it.next()
     }
+    sc.stop()
   }
 
   /**
@@ -426,6 +436,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       // Should not throw NullPointerException
       it.next()
     }
+    sc.stop()
   }
 
 }
