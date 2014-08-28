@@ -32,14 +32,13 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 import org.apache.spark.util.Utils
 
-class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, JavaDoubleRDD] {
+class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble] {
 
   override val classTag: ClassTag[JDouble] = implicitly[ClassTag[JDouble]]
 
   override val rdd: RDD[JDouble] = srdd.map(x => JDouble.valueOf(x))
 
-  override def wrapRDD(rdd: RDD[JDouble]): JavaDoubleRDD =
-    new JavaDoubleRDD(rdd.map(_.doubleValue))
+  def wrapRDD(rdd: RDD[JDouble]): JavaDoubleRDD = new JavaDoubleRDD(rdd.map(_.doubleValue))
 
   // Common RDD functions
 

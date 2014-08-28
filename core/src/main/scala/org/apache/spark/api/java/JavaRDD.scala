@@ -30,9 +30,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
-  extends JavaRDDLike[T, JavaRDD[T]] {
+  extends JavaRDDLike[T] {
 
-  override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
+  def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 
   // Common RDD functions
 
