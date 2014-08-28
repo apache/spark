@@ -214,6 +214,16 @@ Apart from these, the following properties are also available, and may be useful
     process. The user can specify multiple of these and to set multiple environment variables. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior

@@ -71,9 +71,11 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-    "Spark home is not set; set it through the spark.home system " +
-    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+  val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+    .orElse(sc.getSparkHome())
+    .getOrElse {
+      throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+    }
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
@@ -144,7 +146,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
-      val runScript = new File(sparkHome, "./bin/spark-class").getCanonicalPath
+      val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
         "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d".format(
           runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
