@@ -2018,6 +2018,9 @@ class RDD(object):
         >>> n = sc.parallelize(range(1000)).map(str).countApproxDistinct()
         >>> 950 < n < 1050
         True
+        >>> n = self.sc.parallelize([i % 20 for i in range(1000)])
+        >>> 18 < n < 22
+        True
         """
         if relativeSD < 0.000017:
             raise ValueError("relativeSD should be greater than 0.000017")
