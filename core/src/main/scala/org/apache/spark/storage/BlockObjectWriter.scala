@@ -140,10 +140,11 @@ private[spark] class DiskBlockObjectWriter(
       //       serializer stream and the lower level stream.
       objOut.flush()
       bs.flush()
-      updateBytesWritten()
       close()
     }
     finalPosition = file.length()
+    // In certain compression codecs, more bytes are written after close() is called
+    writeMetrics.shuffleBytesWritten += (finalPosition - lastPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
@@ -189,6 +190,10 @@ private[spark] class DiskBlockObjectWriter(
     new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
+  /**
+   * Report the number of bytes written in this writer's shuffle write metrics.
+   * Note that this is only valid before the underlying streams are closed.
+   */
   private def updateBytesWritten() {
     val pos = channel.position()
     writeMetrics.shuffleBytesWritten += (pos - lastPosition)
