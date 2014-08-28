@@ -26,20 +26,16 @@ import org.apache.spark.annotation.DeveloperApi
  * @param impurity current node impurity
  * @param leftImpurity left node impurity
  * @param rightImpurity right node impurity
- * @param predict predicted value
- * @param prob probability of the label (classification only)
  */
 @DeveloperApi
 class InformationGainStats(
     val gain: Double,
     val impurity: Double,
     val leftImpurity: Double,
-    val rightImpurity: Double,
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+    val rightImpurity: Double) extends Serializable {
 
   override def toString = {
-    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f, prob = %f"
-      .format(gain, impurity, leftImpurity, rightImpurity, predict, prob)
+    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
+      .format(gain, impurity, leftImpurity, rightImpurity)
   }
 }
