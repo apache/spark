@@ -59,7 +59,6 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-
   override def writeExternal(out: ObjectOutput) {
     out.writeUTF(executorId_)
     out.writeUTF(host_)
@@ -75,7 +74,7 @@ class BlockManagerId private (
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
-  override def toString = "BlockManagerId(%s, %s, %d)".format(executorId, host, port)
+  override def toString = s"BlockManagerId($executorId, $host, $port)"
 
   override def hashCode: Int = (executorId.hashCode * 41 + host.hashCode) * 41 + port
 

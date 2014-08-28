@@ -53,9 +53,9 @@ class JsonProtocolSuite extends FunSuite {
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(
-      BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(
-      BlockManagerId("Scarce", "to be counted...", 100, 200))
+      BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
@@ -81,7 +81,7 @@ class JsonProtocolSuite extends FunSuite {
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
-    testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
+    testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -104,7 +104,7 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15, 16), 17, 18, 19)
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19)
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
@@ -343,7 +343,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(bm1.executorId === bm2.executorId)
     assert(bm1.host === bm2.host)
     assert(bm1.port === bm2.port)
-    assert(bm1.nettyPort === bm2.nettyPort)
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -944,8 +943,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Block Manager ID": {
       |    "Executor ID": "Stars",
       |    "Host": "In your multitude...",
-      |    "Port": 300,
-      |    "Netty Port": 400
+      |    "Port": 300
       |  },
       |  "Maximum Memory": 500
       |}
@@ -958,8 +956,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Block Manager ID": {
       |    "Executor ID": "Scarce",
       |    "Host": "to be counted...",
-      |    "Port": 100,
-      |    "Netty Port": 200
+      |    "Port": 100
       |  }
       |}
     """

@@ -121,7 +121,7 @@ make_binary_release "hadoop1" "-Phive -Dhadoop.version=1.0.4" &
 make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Pyarn" &
 make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Pyarn" &
 make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
-make_binary_release "mapr3" "-Pmapr3 -Pyarn -Phive" &
+make_binary_release "mapr3" "-Pmapr3 -Phive" &
 make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive" &
 wait
 
