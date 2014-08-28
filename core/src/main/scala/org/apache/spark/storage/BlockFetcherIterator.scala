@@ -33,16 +33,8 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
 /**
- * A block fetcher iterator interface. There are two implementations:
- *
- * BasicBlockFetcherIterator: uses a custom-built NIO communication layer.
- * NettyBlockFetcherIterator: uses Netty (OIO) as the communication layer.
- *
- * Eventually we would like the two to converge and use a single NIO-based communication layer,
- * but extensive tests show that under some circumstances (e.g. large shuffles with lots of cores),
- * NIO would perform poorly and thus the need for the Netty OIO one.
+ * A block fetcher iterator interface for fetching shuffle blocks.
  */
-
 private[storage]
 trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
   def initialize()
@@ -262,67 +254,4 @@ object BlockFetcherIterator {
     }
   }
   // End of BasicBlockFetcherIterator
-
-  class NettyBlockFetcherIterator(
-      blockManager: BlockManager,
-      blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer,
-      readMetrics: ShuffleReadMetrics)
-    extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer, readMetrics) {
-
-    override protected def sendRequest(req: FetchRequest) {
-      logDebug("Sending request for %d blocks (%s) from %s".format(
-        req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
-      val cmId = new ConnectionManagerId(req.address.host, req.address.port)
-
-      bytesInFlight += req.size
-      val sizeMap = req.blocks.toMap // so we can look up the size of each blockID
-
-      // This could throw a TimeoutException. In that case we will just retry the task.
-      val client = blockManager.nettyBlockClientFactory.createClient(
-        cmId.host, req.address.nettyPort)
-      val blocks = req.blocks.map(_._1.toString)
-
-      client.fetchBlocks(
-        blocks,
-        new BlockClientListener {
-          override def onFetchFailure(blockId: String, errorMsg: String): Unit = {
-            logError(s"Could not get block(s) from $cmId with error: $errorMsg")
-            for ((blockId, size) <- req.blocks) {
-              results.put(new FetchResult(blockId, -1, null))
-            }
-          }
-
-          override def onFetchSuccess(blockId: String, data: ReferenceCountedBuffer): Unit = {
-            // Increment the reference count so the buffer won't be recycled.
-            // TODO: This could result in memory leaks when the task is stopped due to exception
-            // before the iterator is exhausted.
-            data.retain()
-            val buf = data.byteBuffer()
-            val blockSize = buf.remaining()
-            val bid = BlockId(blockId)
-
-            // TODO: remove code duplication between here and BlockManager.dataDeserialization.
-            results.put(new FetchResult(bid, sizeMap(bid), () => {
-              def createIterator: Iterator[Any] = {
-                val stream = blockManager.wrapForCompression(bid, data.inputStream())
-                serializer.newInstance().deserializeStream(stream).asIterator
-              }
-              new LazyInitIterator(createIterator) {
-                // Release the buffer when we are done traversing it.
-                override def close(): Unit = data.release()
-              }
-            }))
-
-            readMetrics.synchronized {
-              readMetrics.remoteBytesRead += blockSize
-              readMetrics.remoteBlocksFetched += 1
-            }
-            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
-          }
-        }
-      )
-    }
-  }
-  // End of NettyBlockFetcherIterator
 }

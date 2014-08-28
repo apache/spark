@@ -39,7 +39,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   private def rddInfo1 = new RDDInfo(1, "hostage", 200, memOnly)
   private def rddInfo2 = new RDDInfo(2, "sanity", 300, memAndDisk)
   private def rddInfo3 = new RDDInfo(3, "grace", 400, memAndDisk)
-  private val bm1 = BlockManagerId("big", "dog", 1, 1)
+  private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
     bus = new LiveListenerBus
