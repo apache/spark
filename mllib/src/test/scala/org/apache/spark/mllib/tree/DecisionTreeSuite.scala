@@ -34,9 +34,9 @@ import org.apache.spark.mllib.regression.LabeledPoint
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   def validateClassifier(
-      model: DecisionTreeModel,
-      input: Seq[LabeledPoint],
-      requiredAccuracy: Double) {
+                          model: DecisionTreeModel,
+                          input: Seq[LabeledPoint],
+                          requiredAccuracy: Double) {
     val predictions = input.map(x => model.predict(x.features))
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
@@ -47,9 +47,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   def validateRegressor(
-      model: DecisionTreeModel,
-      input: Seq[LabeledPoint],
-      requiredMSE: Double) {
+                         model: DecisionTreeModel,
+                         input: Seq[LabeledPoint],
+                         requiredMSE: Double) {
     val predictions = input.map(x => model.predict(x.features))
     val squaredError = predictions.zip(input).map { case (prediction, expected) =>
       val err = prediction - expected.label
@@ -446,9 +446,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(split.threshold === Double.MinValue)
 
     val stats = bestSplits(0)._2
+    val predict = bestSplits(0)._3
     assert(stats.gain > 0)
-    assert(stats.predict === 1)
-    assert(stats.prob === 0.6)
+    assert(predict.predict === 1)
+    assert(predict.prob === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -475,8 +476,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(split.threshold === Double.MinValue)
 
     val stats = bestSplits(0)._2
+    val predict = bestSplits(0)._3
     assert(stats.gain > 0)
-    assert(stats.predict === 0.6)
+    assert(predict.predict === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -543,7 +545,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    assert(bestSplits(0)._3.predict === 1)
   }
 
   test("stump with fixed label 0 for Entropy") {
@@ -568,7 +570,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 0)
+    assert(bestSplits(0)._3.predict === 0)
   }
 
   test("stump with fixed label 1 for Entropy") {
@@ -593,7 +595,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    assert(bestSplits(0)._3.predict === 1)
   }
 
   test("second level node building with/without groups") {
@@ -644,7 +646,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(bestSplits(i)._2.impurity === bestSplitsWithGroups(i)._2.impurity)
       assert(bestSplits(i)._2.leftImpurity === bestSplitsWithGroups(i)._2.leftImpurity)
       assert(bestSplits(i)._2.rightImpurity === bestSplitsWithGroups(i)._2.rightImpurity)
-      assert(bestSplits(i)._2.predict === bestSplitsWithGroups(i)._2.predict)
+      assert(bestSplits(i)._3.predict === bestSplitsWithGroups(i)._3.predict)
     }
   }
 
@@ -885,7 +887,7 @@ object DecisionTreeSuite {
   }
 
   def generateCategoricalDataPointsForMulticlassForOrderedFeatures():
-    Array[LabeledPoint] = {
+  Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](3000)
     for (i <- 0 until 3000) {
       if (i < 1000) {
