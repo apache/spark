@@ -2008,9 +2008,6 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        This support all the types of objects, which is supported by
-        Pyrolite, nearly all builtin types.
-
         @param relativeSD Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
@@ -2026,7 +2023,13 @@ class RDD(object):
             raise ValueError("relativeSD should be greater than 0.000017")
         if relativeSD > 0.37:
             raise ValueError("relativeSD should be smaller than 0.37")
-        return self._to_java_object_rdd().countApproxDistinct(relativeSD)
+        hashRDD = self.map(lambda x: portable_hash(x) % sys.maxint)
+        c = hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
+        # range of hash is [0, sys.maxint]
+        if c > sys.maxint / 30:
+            # correction for hash collision in Python
+            c = -sys.maxint * log(1 - float(c) / sys.maxint)
+        return int(c)
 
 
 class PipelinedRDD(RDD):
