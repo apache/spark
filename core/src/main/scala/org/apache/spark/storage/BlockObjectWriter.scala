@@ -160,7 +160,7 @@ private[spark] class DiskBlockObjectWriter(
     }
     finalPosition = file.length()
     // In certain compression codecs, more bytes are written after close() is called
-    writeMetrics.shuffleBytesWritten += (finalPosition - lastPosition)
+    writeMetrics.shuffleBytesWritten += (finalPosition - reportedPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
