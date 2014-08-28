@@ -2015,7 +2015,7 @@ class RDD(object):
         >>> n = sc.parallelize(range(1000)).map(str).countApproxDistinct()
         >>> 950 < n < 1050
         True
-        >>> n = self.sc.parallelize([i % 20 for i in range(1000)])
+        >>> n = self.sc.parallelize([i % 20 for i in range(1000)]).countApproxDistinct()
         >>> 18 < n < 22
         True
         """
