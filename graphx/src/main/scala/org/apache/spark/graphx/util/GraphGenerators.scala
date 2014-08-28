@@ -103,7 +103,7 @@ object GraphGenerators {
    * @param maxVal exclusive upper bound on the value of the sample
    * @param seed optional seed
    */
-  private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int, seed: Long = -1): Int = {
+  private[spark] def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int, seed: Long = -1): Int = {
     val rand = if (seed == -1) new Random() else new Random(seed)
 
     val sigmaSq = sigma * sigma
