@@ -52,11 +52,6 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
 private[spark] object Utils extends Logging {
   val random = new Random()
 
-  def sparkBin(sparkHome: String, which: String): File = {
-    val suffix = if (isWindows) ".cmd" else ""
-    new File(sparkHome + File.separator + "bin", which + suffix)
-  }
-
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -160,30 +155,6 @@ private[spark] object Utils extends Logging {
       bb.get(bbval)
       out.write(bbval)
     }
-  }
-
-  def isAlpha(c: Char): Boolean = {
-    (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-  }
-
-  /** Split a string into words at non-alphabetic characters */
-  def splitWords(s: String): Seq[String] = {
-    val buf = new ArrayBuffer[String]
-    var i = 0
-    while (i < s.length) {
-      var j = i
-      while (j < s.length && isAlpha(s.charAt(j))) {
-        j += 1
-      }
-      if (j > i) {
-        buf += s.substring(i, j)
-      }
-      i = j
-      while (i < s.length && !isAlpha(s.charAt(i))) {
-        i += 1
-      }
-    }
-    buf
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
@@ -828,14 +799,6 @@ private[spark] object Utils extends Logging {
     if (exitCode != 0) {
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
-  }
-
-  /**
-   * Execute a command in the current working directory, throwing an exception if it completes
-   * with an exit code other than 0.
-   */
-  def execute(command: Seq[String]) {
-    execute(command, new File("."))
   }
 
   /**
