@@ -196,11 +196,8 @@ object BlockFetcherIterator {
       // any memory that might exceed our maxBytesInFlight
       for (id <- localBlocksToFetch) {
         try {
-          // getLocalFromDisk never return None but throws BlockException
-          val iter = getLocalFromDisk(id, serializer).get
-          // Pass 0 as size since it's not in flight
           readMetrics.localBlocksFetched += 1
-          results.put(new FetchResult(id, 0, () => iter))
+          results.put(new FetchResult(id, 0, () => getLocalFromDisk(id, serializer).get))
           logDebug("Got local block " + id)
         } catch {
           case e: Exception => {
