@@ -2027,8 +2027,10 @@ class RDD(object):
         c = hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
         # range of hash is [0, sys.maxint]
         if c > sys.maxint / 30:
-            # correction for hash collision in Python
-            c = -sys.maxint * log(1 - float(c) / sys.maxint)
+            # correction for hash collision in Python,
+            # hash collision probability is 1 - exp(-X), so X = - log(1 - p)
+            # see http://preshing.com/20110504/hash-collision-probabilities/
+            c = - sys.maxint * log(1 - float(c) / sys.maxint)
         return int(c)
 
 
