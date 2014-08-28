@@ -546,7 +546,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
  * JavaStreamingContext object contains a number of utility functions.
  */
 object JavaStreamingContext {
-  implicit def fromStreamingContext(ssc: StreamingContext): JavaStreamingContext = new JavaStreamingContext(ssc)
+  implicit def fromStreamingContext(ssc: StreamingContext):
+    JavaStreamingContext = new JavaStreamingContext(ssc)
 
   implicit def toStreamingContext(jssc: JavaStreamingContext): StreamingContext = jssc.ssc
 
