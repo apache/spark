@@ -49,6 +49,9 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
     val edges10_round1 = GraphGenerators.generateRandomEdges(src, numEdges10, maxVertexId, seed=12345)
     val edges10_round2 = GraphGenerators.generateRandomEdges(src, numEdges10, maxVertexId, seed=12345)
     assert(edges10_round1 == edges10_round2)
+
+    val edges10_round3 = GraphGenerators.generateRandomEdges(src, numEdges10, maxVertexId, seed=3467)
+    assert(edges10_round1 != edges10_round3)
   }
 
   test("GraphGenerators.sampleLogNormal") {
