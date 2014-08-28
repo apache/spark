@@ -45,7 +45,7 @@ sealed case class PregelVertex[@specialized T]
  * vertex properties in terms of the properties of neighboring vertices. These
  * recursive properties are then computed through iterative fixed-point
  * computations.  For example, the PageRank of a web-page can be defined as a
- * weighted some of the PageRank of web-pages that link to that page and is
+ * weighted sum of the PageRank of web-pages that link to that page and is
  * computed by iteratively updating the PageRank of each page until a
  * fixed-point is reached (the PageRank values stop changing).
  *
