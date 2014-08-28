@@ -38,7 +38,7 @@ object SynthBenchmark {
    * Options:
    *   -app "pagerank" or "cc" for pagerank or connected components. (Default: pagerank)
    *   -niters the number of iterations of pagerank to use (Default: 10)
-   *   -numVertices the number of vertices in the graph (Default: 1000000)
+   *   -nverts the number of vertices in the graph (Default: 1000000)
    *   -numEPart the number of edge partitions in the graph (Default: number of cores)
    *   -partStrategy the graph partitioning strategy to use
    *   -mu the mean parameter for the log-normal graph (Default: 4.0)
