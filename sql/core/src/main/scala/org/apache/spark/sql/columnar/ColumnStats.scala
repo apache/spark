@@ -23,7 +23,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types._
 
-class ColumnStatisticsSchema(a: Attribute) extends Serializable {
+private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = false)()
   val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = false)()
   val nullCount =  AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()
@@ -31,7 +31,7 @@ class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val schema = Seq(lowerBound, upperBound, nullCount)
 }
 
-class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
+private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
   val (forAttribute, schema) = {
     val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
     (AttributeMap(allStats), allStats.map(_._2.schema).foldLeft(Seq.empty[Attribute])(_ ++ _))
@@ -44,12 +44,16 @@ class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
  * NOTE: we intentionally avoid using `Ordering[T]` to compare values here because `Ordering[T]`
  * brings significant performance penalty.
  */
-private[sql] sealed abstract class ColumnStats extends Serializable {
+private[sql] sealed trait ColumnStats extends Serializable {
   /**
    * Gathers statistics information from `row(ordinal)`.
    */
   def gatherStats(row: Row, ordinal: Int): Unit
 
+  /**
+   * Column statistics represented as a single row, currently including closed lower bound, closed
+   * upper bound and null count.
+   */
   def collectedStatistics: Row
 }
 
@@ -68,8 +72,8 @@ private[sql] class ByteColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getByte(ordinal)
-      if (row.getByte(ordinal) > upper) upper = value
-      if (row.getByte(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -86,8 +90,8 @@ private[sql] class ShortColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getShort(ordinal)
-      if (row.getShort(ordinal) > upper) upper = value
-      if (row.getShort(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -104,8 +108,8 @@ private[sql] class LongColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getLong(ordinal)
-      if (row.getLong(ordinal) > upper) upper = value
-      if (row.getLong(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -122,8 +126,8 @@ private[sql] class DoubleColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getDouble(ordinal)
-      if (row.getDouble(ordinal) > upper) upper = value
-      if (row.getDouble(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -140,8 +144,8 @@ private[sql] class FloatColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getFloat(ordinal)
-      if (row.getFloat(ordinal) > upper) upper = value
-      if (row.getFloat(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -158,8 +162,8 @@ private[sql] class IntColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getInt(ordinal)
-      if (row.getInt(ordinal) > upper) upper = value
-      if (row.getInt(ordinal) < lower) lower = value
+      if (value > upper) upper = value
+      if (value < lower) lower = value
     } else {
       nullCount += 1
     }
@@ -176,8 +180,8 @@ private[sql] class StringColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row.getString(ordinal)
-      if (upper == null || row.getString(ordinal).compareTo(upper) > 0) upper = value
-      if (lower == null || row.getString(ordinal).compareTo(upper) < 0) lower = value
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
     } else {
       nullCount += 1
     }
@@ -194,8 +198,8 @@ private[sql] class TimestampColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row(ordinal).asInstanceOf[Timestamp]
-      if (upper == null || row(ordinal).asInstanceOf[Timestamp].compareTo(upper) > 0) upper = value
-      if (lower == null || row(ordinal).asInstanceOf[Timestamp].compareTo(upper) < 0) lower = value
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
     } else {
       nullCount += 1
     }

@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
 case class IntegerData(i: Int)
 
-class PartitionSkippingSuite extends FunSuite {
+class PartitionSkippingSuite extends FunSuite with BeforeAndAfterAll {
   test("In-Memory Columnar Scan Skips Partitions") {
     val rawData = sparkContext.makeRDD(1 to 100, 10).map(IntegerData)
     rawData.registerTempTable("intData")
@@ -33,10 +33,11 @@ class PartitionSkippingSuite extends FunSuite {
     val query = sql("SELECT * FROM intData WHERE i = 1")
     assert(query.collect().toSeq === Seq(Row(1)))
 
-    val numPartitionsRead = query.queryExecution.executedPlan.collect {
-      case in: InMemoryColumnarTableScan => in.readPartitions.value
+    val (numPartitionsRead, numBatchesRead) = query.queryExecution.executedPlan.collect {
+      case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
     }.head
 
     assert(numPartitionsRead === 1)
+    assert(numBatchesRead === 1)
   }
 }

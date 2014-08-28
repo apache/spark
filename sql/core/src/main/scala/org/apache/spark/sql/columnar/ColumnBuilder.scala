@@ -70,7 +70,6 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
 
   override def appendFrom(row: Row, ordinal: Int) {
     val field = columnType.getField(row, ordinal)
-    columnStats.gatherStats(row, ordinal)
     buffer = ensureFreeSpace(buffer, columnType.actualSize(field))
     columnType.append(field, buffer)
   }

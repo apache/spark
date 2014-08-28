@@ -112,7 +112,6 @@ private[sql] case class InMemoryColumnarTableScan(
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.expressions._
 
-  /**   */
   val buildFilter: PartialFunction[Expression, Expression] = {
     case EqualTo(a: AttributeReference, l: Literal) =>
       val aStats = relation.partitionStatistics.forAttribute(a)
@@ -228,7 +227,7 @@ private[sql] case class InMemoryColumnarTableScan(
           }
         }
 
-      if (rows.nonEmpty) {
+      if (rows.hasNext) {
         readPartitions += 1
       }
 
