@@ -159,4 +159,12 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
 
+# Building under http proxy environment
 
+Sometimes,spark need be built in http proxy environment, We recommend the following settings:
+
+ mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -DskipTests clean package
+ 
+If you don't run this, you may see errors like the following:
+
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-shade-plugin:2.2:shade (default) on project spark-assembly_2.10: Execution default of goal 
