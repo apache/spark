@@ -70,7 +70,7 @@ class CheckpointSuite extends TestSuiteBase {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
+        Some((values.sum + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
       .updateStateByKey(updateFunc)
@@ -214,7 +214,7 @@ class CheckpointSuite extends TestSuiteBase {
     val output = (1 to 10).map(x => Seq(("a", x))).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
+        Some((values.sum + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
         .updateStateByKey(updateFunc)

@@ -452,7 +452,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("rdd cleanup - updateStateByKey") {
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-      Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+      Some(values.sum + state.getOrElse(0))
     }
     val stateStream = runCleanupTest(
       conf, _.map(_ -> 1).updateStateByKey(updateFunc).checkpoint(Seconds(3)))
