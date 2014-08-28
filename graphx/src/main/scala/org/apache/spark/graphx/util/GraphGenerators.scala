@@ -48,8 +48,8 @@ object GraphGenerators {
    * Ilan Horn, Naty Leiser, and Grzegorz Czajkowski. 2010.
    * Pregel: a system for large-scale graph processing. SIGMOD '10.
    *
-   * If the seed is -1, a random seed is chosen. Otherwise, use the
-   * user-specified seed.
+   * If the seed is -1 (defaut), a random seed is chosen. Otherwise, use
+   * the user-specified seed.
    *
    * @param sc Spark Context
    * @param numVertices number of vertices in generated graph
