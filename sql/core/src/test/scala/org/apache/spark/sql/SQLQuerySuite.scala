@@ -59,6 +59,10 @@ class SQLQuerySuite extends QueryTest {
       Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 01:00:00.001"))))
 
     checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE '1970-01-01 01:00:00.001'=time"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 01:00:00.001"))))
+
+    checkAnswer(sql(
       """SELECT time FROM timestamps WHERE time<'1970-01-01 01:00:00.003'
           AND time>'1970-01-01 01:00:00.001'"""),
       Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 01:00:00.002"))))

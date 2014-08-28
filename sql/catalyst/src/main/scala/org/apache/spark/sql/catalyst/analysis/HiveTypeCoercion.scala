@@ -218,6 +218,9 @@ trait HiveTypeCoercion {
       case a: BinaryArithmetic if a.right.dataType == StringType =>
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
+      case p: BinaryPredicate if p.left.dataType == StringType
+        && p.right.dataType == TimestampType =>
+        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
       case p: BinaryPredicate if p.left.dataType == TimestampType
         && p.right.dataType == StringType =>
         p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
