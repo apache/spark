@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.cm
 
 import java.net._
 import java.nio._
 import java.nio.channels._
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
-
 import org.apache.spark._
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
 
 private[spark]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,

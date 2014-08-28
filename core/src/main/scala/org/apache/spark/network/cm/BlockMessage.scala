@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.network.cm
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.StringBuilder
+import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
-import org.apache.spark.network._
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
 private[spark] case class GetBlock(id: BlockId)
 private[spark] case class GotBlock(id: BlockId, data: ByteBuffer)

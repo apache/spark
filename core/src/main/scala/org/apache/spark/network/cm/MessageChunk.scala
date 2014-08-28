@@ -15,23 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.cm
 
-import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 
-import org.apache.spark.util.Utils
+import scala.collection.mutable.ArrayBuffer
 
-private[spark] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
+private[cm]
+class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
 
-  def toSocketAddress() = new InetSocketAddress(host, port)
-}
+  val size = if (buffer == null) 0 else buffer.remaining
 
+  lazy val buffers = {
+    val ab = new ArrayBuffer[ByteBuffer]()
+    ab += header.buffer
+    if (buffer != null) {
+      ab += buffer
+    }
+    ab
+  }
 
-private[spark] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
+  override def toString = {
+    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
   }
 }

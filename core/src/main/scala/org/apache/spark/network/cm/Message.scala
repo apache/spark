@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.cm
 
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer

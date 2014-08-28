@@ -24,16 +24,17 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.future
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import org.scalatest.{FunSuite, Matchers}
-
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.stubbing.Answer
 import org.mockito.invocation.InvocationOnMock
 
-import org.apache.spark.storage.BlockFetcherIterator._
-import org.apache.spark.network.{ConnectionManager, Message}
+import org.scalatest.{FunSuite, Matchers}
+
+import org.apache.spark.network.cm._
 import org.apache.spark.executor.ShuffleReadMetrics
+import org.apache.spark.storage.BlockFetcherIterator._
+
 
 class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 

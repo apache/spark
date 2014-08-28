@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.network.cm
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark._
-import org.apache.spark.network._
+import org.apache.spark.storage.{StorageLevel, TestBlockId}
+
+import scala.collection.mutable.ArrayBuffer
 
 private[spark]
 class BlockMessageArray(var blockMessages: Seq[BlockMessage])

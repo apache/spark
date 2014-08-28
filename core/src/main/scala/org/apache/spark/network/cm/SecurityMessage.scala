@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.cm
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.StringBuilder
-
 import org.apache.spark._
-import org.apache.spark.network._
+
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
 /**
  * SecurityMessage is class that contains the connectionId and sasl token

@@ -15,23 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.cm
 
 import java.io.IOException
 import java.nio._
-import java.util.concurrent.TimeoutException
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.scalatest.FunSuite
 
-import org.mockito.Mockito._
-import org.mockito.Matchers._
-
-import scala.concurrent.TimeoutException
-import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, TimeoutException}
 import scala.language.postfixOps
-import scala.util.{Failure, Success, Try}
 
 /**
   * Test the ConnectionManager with various security settings.
