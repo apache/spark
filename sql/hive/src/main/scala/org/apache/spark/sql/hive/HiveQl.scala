@@ -54,6 +54,7 @@ private[hive] object HiveQl {
     "TOK_DESCFUNCTION",
     "TOK_DESCDATABASE",
     "TOK_SHOW_CREATETABLE",
+    "TOK_SHOWCOLUMNS",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOWDATABASES",
     "TOK_SHOWFUNCTIONS",
@@ -61,6 +62,7 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
     "TOK_SHOWTABLES",
+    "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",
     "TOK_SHOWLOCKS",
@@ -772,6 +774,7 @@ private[hive] object HiveQl {
 
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
+        case "TOK_CROSSJOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter

@@ -58,8 +58,6 @@ package object debug {
   }
 
   private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-    def references = Set.empty
-
     def output = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
