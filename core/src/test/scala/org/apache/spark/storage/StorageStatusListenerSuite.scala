@@ -26,8 +26,8 @@ import org.apache.spark.scheduler._
  * Test the behavior of StorageStatusListener in response to all relevant events.
  */
 class StorageStatusListenerSuite extends FunSuite {
-  private val bm1 = BlockManagerId("big", "dog", 1, 1)
-  private val bm2 = BlockManagerId("fat", "duck", 2, 2)
+  private val bm1 = BlockManagerId("big", "dog", 1)
+  private val bm2 = BlockManagerId("fat", "duck", 2)
   private val taskInfo1 = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)
   private val taskInfo2 = new TaskInfo(0, 0, 0, 0, "fat", "duck", TaskLocality.ANY, false)
 

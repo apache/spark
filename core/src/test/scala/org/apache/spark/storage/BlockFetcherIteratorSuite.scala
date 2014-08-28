@@ -41,7 +41,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val blockManager = mock(classOf[BlockManager])
     val connManager = mock(classOf[ConnectionManager])
     doReturn(connManager).when(blockManager).connectionManager
-    doReturn(BlockManagerId("test-client", "test-client", 1, 0)).when(blockManager).blockManagerId
+    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
 
     doReturn((48 * 1024 * 1024).asInstanceOf[Long]).when(blockManager).maxBytesInFlight
 
@@ -66,7 +66,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(3)), any())
     doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(4)), any())
 
-    val bmId = BlockManagerId("test-client", "test-client",1 , 0)
+    val bmId = BlockManagerId("test-client", "test-client", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
@@ -97,7 +97,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val blockManager = mock(classOf[BlockManager])
     val connManager = mock(classOf[ConnectionManager])
     doReturn(connManager).when(blockManager).connectionManager
-    doReturn(BlockManagerId("test-client", "test-client", 1, 0)).when(blockManager).blockManagerId
+    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
 
     doReturn((48 * 1024 * 1024).asInstanceOf[Long]).when(blockManager).maxBytesInFlight
 
@@ -117,7 +117,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(3)), any())
     doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(4)), any())
 
-    val bmId = BlockManagerId("test-client", "test-client",1 , 0)
+    val bmId = BlockManagerId("test-client", "test-client", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
@@ -155,12 +155,12 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     when(blockManager.futureExecContext).thenReturn(global)
 
     when(blockManager.blockManagerId).thenReturn(
-      BlockManagerId("test-client", "test-client", 1, 0))
+      BlockManagerId("test-client", "test-client", 1))
     when(blockManager.maxBytesInFlight).thenReturn(48 * 1024 * 1024)
 
     val blId1 = ShuffleBlockId(0,0,0)
     val blId2 = ShuffleBlockId(0,1,0)
-    val bmId = BlockManagerId("test-server", "test-server",1 , 0)
+    val bmId = BlockManagerId("test-server", "test-server", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, Seq((blId1, 1L), (blId2, 1L)))
     )
@@ -211,10 +211,10 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     when(blockManager.futureExecContext).thenReturn(global)
 
     when(blockManager.blockManagerId).thenReturn(
-      BlockManagerId("test-client", "test-client", 1, 0))
+      BlockManagerId("test-client", "test-client", 1))
     when(blockManager.maxBytesInFlight).thenReturn(48 * 1024 * 1024)
 
-    val bmId = BlockManagerId("test-server", "test-server",1 , 0)
+    val bmId = BlockManagerId("test-server", "test-server", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, Seq((blId1, 1L), (blId2, 1L)))
     )

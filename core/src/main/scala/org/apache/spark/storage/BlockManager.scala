@@ -32,8 +32,6 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
-import org.apache.spark.network.netty.client.BlockFetchingClientFactory
-import org.apache.spark.network.netty.server.BlockServer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
@@ -90,27 +88,8 @@ private[spark] class BlockManager(
     new TachyonStore(this, tachyonBlockManager)
   }
 
-  private val useNetty = conf.getBoolean("spark.shuffle.use.netty", false)
-
-  // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
-  private[storage] val nettyBlockClientFactory: BlockFetchingClientFactory = {
-    if (useNetty) new BlockFetchingClientFactory(conf) else null
-  }
-
-  private val nettyBlockServer: BlockServer = {
-    if (useNetty) {
-      val server = new BlockServer(conf, this)
-      logInfo(s"Created NettyBlockServer binding to port: ${server.port}")
-      server
-    } else {
-      null
-    }
-  }
-
-  private val nettyPort: Int = if (useNetty) nettyBlockServer.port else 0
-
   val blockManagerId = BlockManagerId(
-    executorId, connectionManager.id.host, connectionManager.id.port, nettyPort)
+    executorId, connectionManager.id.host, connectionManager.id.port)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -572,14 +551,8 @@ private[spark] class BlockManager(
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
       serializer: Serializer,
       readMetrics: ShuffleReadMetrics): BlockFetcherIterator = {
-    val iter =
-      if (conf.getBoolean("spark.shuffle.use.netty", false)) {
-        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      } else {
-        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      }
+    val iter = new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
+      readMetrics)
     iter.initialize()
     iter
   }
@@ -1092,14 +1065,6 @@ private[spark] class BlockManager(
     connectionManager.stop()
     shuffleBlockManager.stop()
     diskBlockManager.stop()
-
-    if (nettyBlockClientFactory != null) {
-      nettyBlockClientFactory.stop()
-    }
-    if (nettyBlockServer != null) {
-      nettyBlockServer.stop()
-    }
-
     actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
