@@ -72,7 +72,7 @@ def portable_hash(x):
         for i in x:
             h ^= portable_hash(i)
             h *= 1000003
-            h &= 0xffffffff
+            h &= sys.maxint
         h ^= len(x)
         if h == -1:
             h = -2
