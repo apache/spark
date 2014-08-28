@@ -158,10 +158,19 @@ The assembly jar produced by `mvn package` will, by default, include all of Spar
 
 # Building under http proxy environment
 
-Sometimes,spark need be built in http proxy environment, We recommend the following settings:
+Sometimes,spark is built in http-proxy environment. We recommend the following settings:
 
- mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -DskipTests clean package
+<div class="highlight"><pre><code class="bash"><span class="nb">export </span><span class="nv">MAVEN_OPTS</span><span class="o">=</span><span class="s2">&quot;-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true&quot;</span></code></pre></div>
+
  
-If you don't run this, you may see errors like the following:
+<p>If you don&#8217;t run this, you may see errors like the following:</p>
 
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-shade-plugin:2.2:shade (default) on project spark-assembly_2.10: Execution default of goal 
+<pre><code>Downloading: https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
+Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
+WARNING: NTLM authentication error: Credentials cannot be used for NTLM authentication: org.apache.maven.wagon.providers.http.httpclient.auth.UsernamePasswordCredentials
+Downloading: https://repository.apache.org/content/repositories/releases/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
+</code></pre>
+
+<p>You can fix this by setting the <code>MAVEN_OPTS</code> variable as discussed before.</p>
+
+<p><strong>Note:</strong> <em>the setting could lead to security risks of your Maven server.</em></p>
