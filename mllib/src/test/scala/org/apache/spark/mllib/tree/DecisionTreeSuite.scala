@@ -34,9 +34,9 @@ import org.apache.spark.mllib.regression.LabeledPoint
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   def validateClassifier(
-                          model: DecisionTreeModel,
-                          input: Seq[LabeledPoint],
-                          requiredAccuracy: Double) {
+      model: DecisionTreeModel,
+      input: Seq[LabeledPoint],
+      requiredAccuracy: Double) {
     val predictions = input.map(x => model.predict(x.features))
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
@@ -47,9 +47,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   def validateRegressor(
-                         model: DecisionTreeModel,
-                         input: Seq[LabeledPoint],
-                         requiredMSE: Double) {
+      model: DecisionTreeModel,
+      input: Seq[LabeledPoint],
+      requiredMSE: Double) {
     val predictions = input.map(x => model.predict(x.features))
     val squaredError = predictions.zip(input).map { case (prediction, expected) =>
       val err = prediction - expected.label
@@ -887,7 +887,7 @@ object DecisionTreeSuite {
   }
 
   def generateCategoricalDataPointsForMulticlassForOrderedFeatures():
-  Array[LabeledPoint] = {
+    Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](3000)
     for (i <- 0 until 3000) {
       if (i < 1000) {
