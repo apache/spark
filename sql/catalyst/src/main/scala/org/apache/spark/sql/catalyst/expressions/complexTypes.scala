@@ -103,10 +103,9 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 }
 
 /**
- * Returns the value of fields[] in the Struct `child`.
- * for array of structs
+ * Returns an array containing the value of fieldName
+ * for each element in the input array of type struct
  */
-
 case class GetArrayField(child: Expression, fieldName: String) extends UnaryExpression {
   type EvaluatedType = Any
 
@@ -115,17 +114,15 @@ case class GetArrayField(child: Expression, fieldName: String) extends UnaryExpr
   override def foldable = child.foldable
 
   protected def arrayType = child.dataType match {
-    case s: ArrayType => s.elementType match {
-      case t :StructType => t
-      case otherType => sys.error(s"GetArrayField is not valid on fields of type $otherType")
-    }
+    case ArrayType(s: StructType, _) => s
     case otherType => sys.error(s"GetArrayField is not valid on fields of type $otherType")
   }
 
-  lazy val field =
+  lazy val field = if (arrayType.isInstanceOf[StructType]) {
     arrayType.fields
       .find(_.name == fieldName)
       .getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
+  } else null
 
 
   lazy val ordinal = arrayType.fields.indexOf(field)

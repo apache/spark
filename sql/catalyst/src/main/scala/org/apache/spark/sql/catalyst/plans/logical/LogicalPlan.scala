@@ -94,7 +94,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     // matches the name or where the first part matches the scope and the second part matches the
     // name.  Return these matches along with any remaining parts, which represent dotted access to
     // struct fields.
-
     val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
