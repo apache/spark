@@ -102,6 +102,8 @@ if [[ "$1" =~ \.py$ ]]; then
   gatherSparkSubmitOpts "$@"
   exec $FWDIR/bin/spark-submit "${SUBMISSION_OPTS[@]}" $primary "${APPLICATION_OPTS[@]}"
 else
+  # PySpark shell requires special handling downstream
+  export PYSPARK_SHELL=1
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
     exec ${PYSPARK_PYTHON:-ipython} $IPYTHON_OPTS
