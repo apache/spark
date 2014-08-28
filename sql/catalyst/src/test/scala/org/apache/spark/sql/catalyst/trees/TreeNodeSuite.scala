@@ -51,7 +51,6 @@ class TreeNodeSuite extends FunSuite {
     val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
-    assert(before.map(_.id) === after.map(_.id))
   }
 
   test("collect") {
