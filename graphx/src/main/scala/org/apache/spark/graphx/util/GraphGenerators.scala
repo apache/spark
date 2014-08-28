@@ -88,7 +88,7 @@ object GraphGenerators {
   def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int,
       seed: Long = -1): Array[Edge[Int]] = {
     val rand = if (seed == -1) new Random() else new Random(seed)
-    Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
+    Array.fill(numEdges) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
 
   /**
