@@ -104,7 +104,7 @@ if [[ "$1" =~ \.py$ ]]; then
 else
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
-    exec ipython $IPYTHON_OPTS
+    exec ${PYSPARK_PYTHON:-ipython} $IPYTHON_OPTS
   else
     exec "$PYSPARK_PYTHON"
   fi
