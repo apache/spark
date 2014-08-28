@@ -40,7 +40,7 @@ object GraphGenerators {
   val RMATd = 0.25
 
   /**
-   * Generate a graph whose vertex out degree is log normal.
+   * Generate a graph whose vertex out degree distribution is log normal.
    *
    * The default values for mu and sigma are taken from the Pregel paper:
    *
@@ -52,13 +52,13 @@ object GraphGenerators {
    * based on source vertex IDs. If the seed is -1, a random seed is chosen.
    * Otherwise, use the user-specified seed.
    *
-   * @param sc
-   * @param numVertices
-   * @param numEParts
-   * @param mu
-   * @param sigma
-   * @param seed
-   * @return
+   * @param sc Spark Context
+   * @param numVertices number of vertices in generated graph
+   * @param numEParts (optional) number of partitions
+   * @param mu (optional, default: 4.0) mean of out-degree distribution 
+   * @param sigma (optional, default: 1.3) standard deviation of out-degree distribution 
+   * @param seed (optional, default: -1) seed for RNGs, -1 causes a random seed to be chosen
+   * @return Graph object
    */
   def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int = 0,
                      mu: Double = 4.0, sigma: Double = 1.3, seed: Long = -1): Graph[Long, Int] = {
