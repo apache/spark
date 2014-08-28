@@ -44,6 +44,7 @@ object SynthBenchmark {
    *   -mu the mean parameter for the log-normal graph (Default: 4.0)
    *   -sigma the stdev parameter for the log-normal graph (Default: 1.3)
    *   -degFile the local file to save the degree information (Default: Empty)
+   *   -seed seed to use for RNGs (Default: -1, picks seed randomly)
    */
   def main(args: Array[String]) {
     val options = args.map {
@@ -62,6 +63,7 @@ object SynthBenchmark {
     var mu: Double = 4.0
     var sigma: Double = 1.3
     var degFile: String = ""
+    var seed: Int = -1
 
     options.foreach {
       case ("app", v) => app = v
@@ -72,6 +74,7 @@ object SynthBenchmark {
       case ("mu", v) => mu = v.toDouble
       case ("sigma", v) => sigma = v.toDouble
       case ("degFile", v) => degFile = v
+      case ("seed", v) => seed = v.toInt
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
 
@@ -85,7 +88,7 @@ object SynthBenchmark {
     // Create the graph
     println(s"Creating graph...")
     val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
-      numEPart.getOrElse(sc.defaultParallelism), mu, sigma)
+      numEPart.getOrElse(sc.defaultParallelism), mu, sigma, seed)
     // Repartition the graph
     val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_)).cache()
 
