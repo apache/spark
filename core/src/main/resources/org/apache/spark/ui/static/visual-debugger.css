@@ -21,19 +21,21 @@
 #canvas-svg {
 }
 
-path.link {
-  fill: none;
-  stroke: #666;
-  stroke-width: 1.5px;
-}
-
-circle {
-  stroke: #fff;
-  stroke-width: 1.5px;
-}
-
 text {
-  fill: #000;
-  font: 12px sans-serif;
-  pointer-events: none;
+  font-weight: 300;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+  font-size: 14px;
+}
+
+.node rect {
+  stroke: #333;
+}
+
+.edgePath path {
+  stroke: #333;
+  fill: none;
+}
+
+line {
+  stroke-width: 1.5px;
 }

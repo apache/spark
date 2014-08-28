@@ -163,6 +163,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri("/static/visual-debugger.js")}></script>
     <script src={prependBaseUri("/static/d3.v3.min.js")}></script>
+    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
