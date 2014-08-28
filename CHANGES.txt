@@ -3,6 +3,36 @@ Spark Change Log
 
 Release 1.1.0
 
+  [SPARK-3230][SQL] Fix udfs that return structs
+  Michael Armbrust <michael@databricks.com>
+  2014-08-28 00:15:23 -0700
+  Commit: 2e8ad99, github.com/apache/spark/pull/2133
+
+  [SQL] Fixed 2 comment typos in SQLConf
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-08-28 00:08:09 -0700
+  Commit: c0e3bc1, github.com/apache/spark/pull/2172
+
+  HOTFIX: Don't build with YARN support for Mapr3
+  Patrick Wendell <pwendell@gmail.com>
+  2014-08-27 15:40:40 -0700
+  Commit: ad0fab2
+
+  [HOTFIX][SQL] Remove cleaning of UDFs
+  Michael Armbrust <michael@databricks.com>
+  2014-08-27 23:05:34 -0700
+  Commit: 233c283, github.com/apache/spark/pull/2174
+
+  [HOTFIX] Wait for EOF only for the PySpark shell
+  Andrew Or <andrewor14@gmail.com>
+  2014-08-27 23:03:46 -0700
+  Commit: 54ccd93, github.com/apache/spark/pull/2170
+
+  BUILD: Updating CHANGES.txt for Spark 1.1
+  Patrick Wendell <pwendell@gmail.com>
+  2014-08-27 15:55:59 -0700
+  Commit: 8597e9c
+
   Add line continuation for script to work w/ py2.7.5
   Matthew Farrellee <matt@redhat.com>
   2014-08-27 15:50:30 -0700
