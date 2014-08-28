@@ -65,6 +65,9 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
     val dstId_round1 = GraphGenerators.sampleLogNormal(mu, sigma, maxVal, 12345)
     val dstId_round2 = GraphGenerators.sampleLogNormal(mu, sigma, maxVal, 12345)
     assert(dstId_round1 == dstId_round2)
+
+    val dstId_round3 = GraphGenerators.sampleLogNormal(mu, sigma, maxVal, 789)
+    assert(dstId_round1 != dstId_round3)
   }
 
   test("GraphGenerators.logNormalGraph") {
