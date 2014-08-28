@@ -99,17 +99,8 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
   def logClusterResourceDetails() {
     val clusterMetrics: YarnClusterMetrics = yarnClient.getYarnClusterMetrics
-    logInfo("Got Cluster metric info from ResourceManager, number of NodeManagers: " +
+    logInfo("Got cluster metric info from ResourceManager, number of NodeManagers: " +
       clusterMetrics.getNumNodeManagers)
-
-    val queueInfo: QueueInfo = yarnClient.getQueueInfo(args.amQueue)
-    logInfo( """Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
-      queueApplicationCount = %s, queueChildQueueCount = %s""".format(
-        queueInfo.getQueueName,
-        queueInfo.getCurrentCapacity,
-        queueInfo.getMaximumCapacity,
-        queueInfo.getApplications.size,
-        queueInfo.getChildQueues.size))
   }
 
   def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
