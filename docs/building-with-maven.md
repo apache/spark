@@ -169,6 +169,8 @@ Sometimes,spark is built in http-proxy environment. We recommend the following s
 Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
 WARNING: NTLM authentication error: Credentials cannot be used for NTLM authentication: org.apache.maven.wagon.providers.http.httpclient.auth.UsernamePasswordCredentials
 Downloading: https://repository.apache.org/content/repositories/releases/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
+Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
+WARNING: NTLM authentication error: Credentials cannot be used for NTLM authentication: org.apache.maven.wagon.providers.http.httpclient.auth.UsernamePasswordCredentials
 </code></pre>
 
 <p>You can fix this by setting the <code>MAVEN_OPTS</code> variable as discussed before.</p>
