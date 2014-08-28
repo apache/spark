@@ -98,6 +98,7 @@ def manager():
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
     write_int(listen_port, sys.stdout)
+    sys.stdout.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
