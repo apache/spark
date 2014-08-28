@@ -163,7 +163,7 @@ Sometimes,spark is built in http-proxy environment. We recommend the following s
 <div class="highlight"><pre><code class="bash"><span class="nb">export </span><span class="nv">MAVEN_OPTS</span><span class="o">=</span><span class="s2">&quot;-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true&quot;</span></code></pre></div>
 
  
-<p>If you don&#8217;t run this, you may see errors like the following:</p>
+<p>If you don&#8217;t run this, you may see warnings like the following:</p>
 
 <pre><code>Downloading: https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
 Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
