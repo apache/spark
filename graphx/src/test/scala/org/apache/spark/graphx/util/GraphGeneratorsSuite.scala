@@ -64,4 +64,23 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
     assert(dstId_round1 == dstId_round2)
   }
 
+  test("GraphGenerators.logNormalGraph") {
+    withSpark { sc => 
+      val mu = 4.0
+      val sigma = 1.3
+      val numVertices100 = 100
+      
+      val graph = GraphGenerators.logNormalGraph(sc, numVertices100, mu=mu, sigma=sigma)
+      assert(graph.vertices.count() == numVertices100)
+
+      val graph_round1 = GraphGenerators.logNormalGraph(sc, numVertices100, mu=mu, sigma=sigma, seed=12345)
+      val graph_round2 = GraphGenerators.logNormalGraph(sc, numVertices100, mu=mu, sigma=sigma, seed=12345)
+
+      assert(graph_round1.edges == graph_round2.edges)
+
+      val graph_round3 = GraphGenerators.logNormalGraph(sc, numVertices100, mu=mu, sigma=sigma, seed=567)
+      assert(graph_round1.edges != graph_round3.edges)
+    }
+  }
+
 }
