@@ -577,4 +577,17 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
   }
+
+  test("SQRT") {
+    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
+    val rowSequence = inputSequence.map(l => new GenericRow(Array[Any](l.toDouble)))
+    val d = 'a.double.at(0)
+    
+    for ((row, expected) <- rowSequence zip expectedResults) {
+      checkEvaluation(Sqrt(d), expected, row)
+    }
+
+    checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+  }
 }

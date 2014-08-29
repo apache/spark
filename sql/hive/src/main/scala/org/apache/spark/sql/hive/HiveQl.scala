@@ -889,6 +889,7 @@ private[hive] object HiveQl {
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
+  val SQRT = "(?i)SQRT".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -958,6 +959,7 @@ private[hive] object HiveQl {
     case Token(DIV(), left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
