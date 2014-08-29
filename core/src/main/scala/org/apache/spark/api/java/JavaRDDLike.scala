@@ -81,23 +81,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def mapPartitionsWithIndex[R](
       f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
+    new JavaRDD(rdd.mapPartitionsWithIndex(((a, b) => f(a, asJavaIterator(b))),
         preservesPartitioning)(fakeClassTag))(fakeClassTag)
-
-  /**
-   * :: DeveloperApi ::
-   * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
-   * mapPartitions that also passes the TaskContext into the closure.
-   *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
-   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   */
-  @DeveloperApi
-  def mapPartitionsWithContext[R](
-      f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
-      preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithContext(((a,b) => f(a,asJavaIterator(b))),
-      preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
@@ -209,6 +194,21 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
+  def mapPartitionsWithContext[R](
+                                   f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
+                                   preservesPartitioning: Boolean = false): JavaRDD[R] =
+    new JavaRDD(rdd.mapPartitionsWithContext(((a, b) => f(a, asJavaIterator(b))),
+      preservesPartitioning)(fakeClassTag))(fakeClassTag)
+
+  /**
+   * :: DeveloperApi ::
+   * Return a new JavaDoubleRDD by applying a function to each partition of this RDD. This is a
+   * variant of mapPartitions that also passes the TaskContext into the closure.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   */
+  @DeveloperApi
   def mapPartitionsToDoubleWithContext(
       f: DoubleFlatMapFunction2[TaskContext, java.util.Iterator[T]],
       preservesPartitioning: Boolean): JavaDoubleRDD = {
@@ -220,8 +220,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * :: DeveloperApi ::
-   * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
-   * mapPartitions that also passes the TaskContext into the closure.
+   * Return a new JavaPairRDD by applying a function to each partition of this RDD. This is a
+   * variant of mapPartitions that also passes the TaskContext into the closure.
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
