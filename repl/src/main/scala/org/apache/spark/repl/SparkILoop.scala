@@ -176,7 +176,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     }
   }
 
-  class SparkILoopInterpreter extends SparkIMain(settings, out) with Logging {
+  class SparkILoopInterpreter extends SparkIMain(settings, out) {
     outer =>
 
     override lazy val formatting = new Formatting {
@@ -194,9 +194,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     val totalClassPath = SparkILoop.getAddedJars.foldLeft(
       settings.classpath.value)((l, r) => ClassPath.join(l, r))
     this.settings.classpath.value = totalClassPath
-
-    logError("HELLO")
-    logError("MY CLASSPATH = " + settings.classpath.value)
 
     intp = new SparkILoopInterpreter
   }
