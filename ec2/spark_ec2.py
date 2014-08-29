@@ -26,6 +26,7 @@ import os
 import pipes
 import random
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -342,12 +343,13 @@ def launch_cluster(conn, opts, cluster_name):
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
 
-    sdb = BlockDeviceType()
-    sdb.ephemeral_name = 'ephemeral0'
-    block_map['/dev/sdb'] = sdb
-    sdc = BlockDeviceType()
-    sdc.ephemeral_name = 'ephemeral1'
-    block_map['/dev/sdc'] = sdc
+    # Add ephemeral drives to device mapping.
+    for i in range(get_num_disks(opts.instance_type)):
+        dev = BlockDeviceType()
+        dev.ephemeral_name = 'ephemeral{}'.format(i)
+        # The first ephemeral drive is /dev/sdb.
+        name = '/dev/sd' + string.letters[i + 1]
+        block_map[name] = dev
 
     # Launch slaves
     if opts.spot_price is not None:
