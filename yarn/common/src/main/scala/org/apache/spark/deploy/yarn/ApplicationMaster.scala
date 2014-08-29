@@ -18,11 +18,9 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
-
-import scala.collection.JavaConversions._
-import scala.util.Try
 
 import akka.actor._
 import akka.remote._
@@ -57,6 +55,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   @volatile private var finished = false
   @volatile private var finalStatus = FinalApplicationStatus.UNDEFINED
+  @volatile private var userClassThread: Thread = _
 
   private var reporterThread: Thread = _
   private var allocator: YarnAllocator = _
@@ -224,12 +223,31 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
+    t.setUncaughtExceptionHandler(new ReporterThreadUncaughtExceptionHandler)
     // setting to daemon status, though this is usually not a good idea.
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
     logInfo("Started progress reporter thread - sleep time : " + interval)
     t
+  }
+
+  class ReporterThreadUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler {
+    override def uncaughtException(th: Thread, e: Throwable) {
+      logError("Uncaught exception", e)
+      finish(FinalApplicationStatus.FAILED, "Uncaught exception was thrown from Reporter thread")
+
+      /**
+       * If uncaught exception is thrown from ReporterThread,
+       * interrupt user class to stop.
+       * Without this interrupting, if exception is
+       * thrown before allocating enough executors,
+       * YarnClusterScheduler waits until timeout even though
+       * we cannot allocate executors.
+       */
+      logInfo("Interrupting user class to stop.")
+      userClassThread.interrupt
+    }
   }
 
   /**
@@ -344,7 +362,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
-    val t = new Thread {
+    userClassThread = new Thread {
       override def run() {
         var status = FinalApplicationStatus.FAILED
         try {
@@ -355,15 +373,23 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
           // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
           status = FinalApplicationStatus.SUCCEEDED
+        } catch {
+          case e: InvocationTargetException => {
+            e.getCause match {
+              case _: InterruptedException => {
+                // ReporterThreadUncaughtExceptionHandler can interrupt to stop user class
+              }
+            }
+          }
         } finally {
           logDebug("Finishing main")
         }
         finalStatus = status
       }
     }
-    t.setName("Driver")
-    t.start()
-    t
+    userClassThread.setName("Driver")
+    userClassThread.start()
+    userClassThread
   }
 
   // Actor used to monitor the driver when running in client deploy mode.
