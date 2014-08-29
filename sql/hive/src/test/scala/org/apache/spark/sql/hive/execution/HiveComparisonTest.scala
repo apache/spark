@@ -195,6 +195,9 @@ abstract class HiveComparisonTest
 
   val installHooksCommand = "(?i)SET.*hooks".r
   def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
+    // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
+    assert(!testCaseName.contains(":"))
+
     // If test sharding is enable, skip tests that are not in the correct shard.
     shardInfo.foreach {
       case (shardId, numShards) if testCaseName.hashCode % numShards != shardId => return
