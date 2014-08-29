@@ -129,11 +129,13 @@ private[sql] object ColumnBuilder {
       val newSize = capacity + size.max(capacity / 8 + 1)
       val pos = orig.position()
 
-      orig.clear()
       ByteBuffer
         .allocate(newSize)
         .order(ByteOrder.nativeOrder())
         .put(orig.array(), 0, pos)
+
+      // should clear old buffer after copying its content
+      orig.clear()
     }
   }
 
