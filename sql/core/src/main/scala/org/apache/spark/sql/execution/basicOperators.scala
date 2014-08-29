@@ -204,13 +204,6 @@ case class Sort(
  */
 @DeveloperApi
 object ExistingRdd {
-  def convertToCatalyst(a: Any): Any = a match {
-    case o: Option[_] => o.orNull
-    case s: Seq[Any] => s.map(convertToCatalyst)
-    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
-    case other => other
-  }
-
   def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
@@ -222,7 +215,7 @@ object ExistingRdd {
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) = convertToCatalyst(r.productElement(i))
+            mutableRow(i) = ScalaReflection.convertToCatalyst(r.productElement(i))
             i += 1
           }
 
@@ -244,6 +237,7 @@ object ExistingRdd {
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
+
 /**
  * :: DeveloperApi ::
  * Computes the set of distinct input rows using a HashSet.

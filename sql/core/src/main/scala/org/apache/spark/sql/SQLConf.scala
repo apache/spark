@@ -33,6 +33,7 @@ private[spark] object SQLConf {
   val DIALECT = "spark.sql.dialect"
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
+  val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -78,6 +79,9 @@ trait SQLConf {
   /** When true tables cached using the in-memory columnar caching will be compressed. */
   private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "false").toBoolean
 
+  /** The compression codec for writing to a Parquetfile */
+  private[spark] def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION, "snappy")
+
   /** The number of rows that will be  */
   private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE, "1000").toInt
 
@@ -88,7 +92,7 @@ trait SQLConf {
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
    * than interpreted evaluation, but there are significant start-up costs due to compilation.
-   * As a result codegen is only benificial when queries run for a long time, or when the same
+   * As a result codegen is only beneficial when queries run for a long time, or when the same
    * expressions are used multiple times.
    *
    * Defaults to false as this feature is currently experimental.
@@ -107,8 +111,9 @@ trait SQLConf {
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
-   * it is set to a larger value than `autoConvertJoinSize`, hence any logical operator without a
-   * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
+   * it is set to a larger value than `autoBroadcastJoinThreshold`, hence any logical operator
+   * without a properly implemented estimation of this statistic will not be incorrectly broadcasted
+   * in joins.
    */
   private[spark] def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
