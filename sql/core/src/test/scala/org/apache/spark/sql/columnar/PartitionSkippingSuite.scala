@@ -17,27 +17,72 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
 case class IntegerData(i: Int)
 
-class PartitionSkippingSuite extends FunSuite with BeforeAndAfterAll {
-  test("In-Memory Columnar Scan Skips Partitions") {
-    val rawData = sparkContext.makeRDD(1 to 100, 10).map(IntegerData)
+class PartitionSkippingSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
+  var originalColumnBatchSize = columnBatchSize
+
+  override protected def beforeAll() {
+    // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
+    setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
+    val rawData = sparkContext.makeRDD(1 to 100, 5).map(IntegerData)
     rawData.registerTempTable("intData")
+  }
+
+  override protected def afterAll() {
+    setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
+  }
+
+  before {
     cacheTable("intData")
+  }
 
-    val query = sql("SELECT * FROM intData WHERE i = 1")
-    assert(query.collect().toSeq === Seq(Row(1)))
+  after {
+    uncacheTable("intData")
+  }
 
-    val (numPartitionsRead, numBatchesRead) = query.queryExecution.executedPlan.collect {
-      case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
-    }.head
+  checkBatchPruning("i = 1", Seq(1), 1, 1)
+  checkBatchPruning("1 = i", Seq(1), 1, 1)
 
-    assert(numPartitionsRead === 1)
-    assert(numBatchesRead === 1)
+  checkBatchPruning("i < 12", 1 to 11, 1, 2)
+  checkBatchPruning("i <= 11", 1 to 11, 1, 2)
+  checkBatchPruning("i > 88", 89 to 100, 1, 2)
+  checkBatchPruning("i >= 89", 89 to 100, 1, 2)
+
+  checkBatchPruning("12 > i", 1 to 11, 1, 2)
+  checkBatchPruning("11 >= i", 1 to 11, 1, 2)
+  checkBatchPruning("88 < i", 89 to 100, 1, 2)
+  checkBatchPruning("89 <= i", 89 to 100, 1, 2)
+
+  // Conjunctions works
+  checkBatchPruning("i > 8 AND i <= 21", 9 to 21, 2, 3)
+
+  // Disjunctions don't work (yet)
+  checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 5, 10)
+
+  def checkBatchPruning(
+      filter: String,
+      expectedQueryResult: Seq[Int],
+      expectedReadPartitions: Int,
+      expectedReadBatches: Int) {
+
+    test(filter) {
+      val query = sql(s"SELECT * FROM intData WHERE $filter")
+      assertResult(expectedQueryResult.toArray, "Wrong query result") {
+        query.collect().map(_.head).toArray
+      }
+
+      val (readPartitions, readBatches) = query.queryExecution.executedPlan.collect {
+        case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
+      }.head
+
+      assert(readBatches === expectedReadBatches, "Wrong number of read batches")
+      assert(readPartitions === expectedReadPartitions, "Wrong number of read partitions")
+    }
   }
 }
