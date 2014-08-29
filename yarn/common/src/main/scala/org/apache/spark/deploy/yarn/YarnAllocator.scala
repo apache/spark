@@ -143,7 +143,7 @@ private[yarn] abstract class YarnAllocator(
           containersForHost += container
         } else {
           // Release container, since it doesn't satisfy resource constraints.
-          (container)
+          internalReleaseContainer(container)
         }
       }
 
@@ -183,7 +183,7 @@ private[yarn] abstract class YarnAllocator(
           // insufficient number of containers, then the next allocation cycle will reallocate
           // (but won't treat it as data local).
           // TODO(harvey): Rephrase this comment some more.
-          for (container <- remaining) (container)
+          for (container <- remaining) internalReleaseContainer(container)
           remainingContainers = null
         }
 
@@ -243,6 +243,7 @@ private[yarn] abstract class YarnAllocator(
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
             containers for it.""".format(containerId, executorHostname))
+          internalReleaseContainer(container)
           numExecutorsRunning.decrementAndGet()
         } else {
           val executorId = executorIdCounter.incrementAndGet().toString
