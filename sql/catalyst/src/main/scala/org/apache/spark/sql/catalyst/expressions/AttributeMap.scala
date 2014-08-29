@@ -17,13 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.trees
-
-import scala.collection.mutable
-
 /**
  * Builds a map that is keyed by an Attribute's expression id. Using the expression id allows values
  * to be looked up even when the attributes used differ cosmetically (i.e., the capitalization
