@@ -40,8 +40,7 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext",
-    "SchemaRDD", "Row"]
+    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
 
 
 class DataType(object):
