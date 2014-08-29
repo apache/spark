@@ -66,9 +66,10 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
         if (!iter.hasNext) {
           new RowSet()
         } else {
-          val maxRows = maxRowsL.toInt // Do you really want a row batch larger than Int Max? No.
+          // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
+          val maxRows = maxRowsL.toInt
           var curRow = 0
-          var rowSet = new ArrayBuffer[Row](maxRows)
+          var rowSet = new ArrayBuffer[Row](maxRows.min(1024))
 
           while (curRow < maxRows && iter.hasNext) {
             val sparkRow = iter.next()
