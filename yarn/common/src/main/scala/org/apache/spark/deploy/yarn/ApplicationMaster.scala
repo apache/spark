@@ -174,7 +174,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
+      registerAM(sc.ui.appUIAddress, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
       try {
         userThread.join()
       } finally {
