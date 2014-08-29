@@ -50,7 +50,7 @@ case class SetCommand(key: Option[String], value: Option[String]) extends Comman
  * Returned by a parser when the users only wants to see what query plan would be executed, without
  * actually performing the execution.
  */
-case class ExplainCommand(plan: LogicalPlan) extends Command {
+case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends Command {
   override def output =
     Seq(AttributeReference("plan", StringType, nullable = false)())
 }

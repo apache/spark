@@ -32,7 +32,8 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
-      serializer: Serializer)
+      serializer: Serializer,
+      shuffleMetrics: ShuffleReadMetrics)
     : Iterator[T] =
   {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
@@ -73,17 +74,11 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       }
     }
 
-    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
+    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer, shuffleMetrics)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
-      val shuffleMetrics = new ShuffleReadMetrics
-      shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
-      shuffleMetrics.fetchWaitTime = blockFetcherItr.fetchWaitTime
-      shuffleMetrics.remoteBytesRead = blockFetcherItr.remoteBytesRead
-      shuffleMetrics.localBlocksFetched = blockFetcherItr.numLocalBlocks
-      shuffleMetrics.remoteBlocksFetched = blockFetcherItr.numRemoteBlocks
-      context.taskMetrics.updateShuffleReadMetrics(shuffleMetrics)
+      context.taskMetrics.updateShuffleReadMetrics()
     })
 
     new InterruptibleIterator[T](context, completionIter)

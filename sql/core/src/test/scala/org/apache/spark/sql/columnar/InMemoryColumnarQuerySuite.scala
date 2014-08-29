@@ -28,14 +28,22 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("simple columnar query") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
 
+  test("default size avoids broadcast") {
+    // TODO: Improve this test when we have better statistics
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
+    cacheTable("sizeTst")
+    assert(
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
+  }
+
   test("projection") {
     val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -44,7 +52,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)

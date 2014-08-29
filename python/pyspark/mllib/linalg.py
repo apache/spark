@@ -23,10 +23,12 @@ object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
 
+import numpy
 from numpy import array, array_equal, ndarray, float64, int32
 
 
 class SparseVector(object):
+
     """
     A simple sparse vector class for passing data to MLlib. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
@@ -159,6 +161,15 @@ class SparseVector(object):
                 j += 1
             return result
 
+    def toArray(self):
+        """
+        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        """
+        arr = numpy.zeros(self.size)
+        for i in xrange(self.indices.size):
+            arr[self.indices[i]] = self.values[i]
+        return arr
+
     def __str__(self):
         inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
         vals = "[" + ",".join([str(v) for v in self.values]) + "]"
@@ -192,6 +203,7 @@ class SparseVector(object):
 
 
 class Vectors(object):
+
     """
     Factory methods for working with vectors. Note that dense vectors
     are simply represented as NumPy array objects, so there is no need

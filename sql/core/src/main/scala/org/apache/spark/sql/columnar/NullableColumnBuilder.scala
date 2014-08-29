@@ -36,9 +36,9 @@ import org.apache.spark.sql.Row
  * }}}
  */
 private[sql] trait NullableColumnBuilder extends ColumnBuilder {
-  private var nulls: ByteBuffer = _
+  protected var nulls: ByteBuffer = _
+  protected var nullCount: Int = _
   private var pos: Int = _
-  private var nullCount: Int = _
 
   abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
     nulls = ByteBuffer.allocate(1024)
@@ -77,5 +77,10 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
 
     buffer.rewind()
     buffer
+  }
+
+  protected def buildNonNulls(): ByteBuffer = {
+    nulls.limit(nulls.position()).rewind()
+    super.build()
   }
 }

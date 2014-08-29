@@ -25,10 +25,12 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -61,7 +63,8 @@ private[spark] trait ShuffleWriterGroup {
  */
 // TODO: Factor this into a separate class for each ShuffleManager implementation
 private[spark]
-class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
+class ShuffleBlockManager(blockManager: BlockManager,
+                          shuffleManager: ShuffleManager) extends Logging {
   def conf = blockManager.conf
 
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
@@ -70,8 +73,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
   // Are we using sort-based shuffle?
-  val sortBasedShuffle =
-    conf.get("spark.shuffle.manager", "") == classOf[SortShuffleManager].getName
+  val sortBasedShuffle = shuffleManager.isInstanceOf[SortShuffleManager]
 
   private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
@@ -111,7 +113,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
+  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
+      writeMetrics: ShuffleWriteMetrics) = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
@@ -121,7 +124,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize,
+            writeMetrics)
         }
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
@@ -136,7 +140,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
               logWarning(s"Failed to remove existing shuffle file $blockFile")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize, writeMetrics)
         }
       }
 

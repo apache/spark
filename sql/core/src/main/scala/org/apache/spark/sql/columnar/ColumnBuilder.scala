@@ -118,7 +118,7 @@ private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
 
 private[sql] object ColumnBuilder {
-  val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104
+  val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
 
   private[columnar] def ensureFreeSpace(orig: ByteBuffer, size: Int) = {
     if (orig.remaining >= size) {

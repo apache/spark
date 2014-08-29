@@ -89,8 +89,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
+  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+    SparkPlan.currentContext.set(self)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
+  }
 
   /**
    * :: DeveloperApi ::
@@ -273,7 +275,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         currentTable.logicalPlan
 
       case _ =>
-        InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+        InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
     }
 
     catalog.registerTable(None, tableName, asInMemoryRelation)
@@ -284,7 +286,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     table(tableName).queryExecution.analyzed match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
+      case inMem @ InMemoryRelation(_, _, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
@@ -344,8 +346,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
         prunePushedDownFilters: Seq[Expression] => Seq[Expression],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
-      val projectSet = projectList.flatMap(_.references).toSet
-      val filterSet = filterPredicates.flatMap(_.references).toSet
+      val projectSet = AttributeSet(projectList.flatMap(_.references))
+      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
       val filterCondition = prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
@@ -354,7 +356,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       // TODO: Decouple final output schema from expression evaluation so this copy can be
       // avoided safely.
 
-      if (projectList.toSet == projectSet && filterSet.subsetOf(projectSet)) {
+      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+          filterSet.subsetOf(projectSet)) {
         // When it is possible to just use column pruning to get the right projection and
         // when the columns of this projection are enough to evaluate all filter conditions,
         // just do a scan followed by a filter, with no extra project.
@@ -408,10 +411,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = stringOrError(executedPlan)
+    def simpleString: String = 
+      s"""== Physical Plan ==
+         |${stringOrError(executedPlan)}
+      """
 
     override def toString: String =
-      s"""== Logical Plan ==
+      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
+      // however, the `toRdd` will cause the real execution, which is not what we want.
+      // We need to think about how to avoid the side effect.
+      s"""== Parsed Logical Plan ==
+         |${stringOrError(logical)}
+         |== Analyzed Logical Plan ==
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
@@ -419,7 +430,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(executedPlan)}
          |Code Generation: ${executedPlan.codegenEnabled}
          |== RDD ==
-         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 
@@ -491,7 +501,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
         new java.sql.Timestamp(c.getTime().getTime())
 
       case (c: Int, ByteType) => c.toByte
+      case (c: Long, ByteType) => c.toByte
       case (c: Int, ShortType) => c.toShort
+      case (c: Long, ShortType) => c.toShort
+      case (c: Long, IntegerType) => c.toInt
       case (c: Double, FloatType) => c.toFloat
       case (c, StringType) if !c.isInstanceOf[String] => c.toString
 

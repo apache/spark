@@ -578,9 +578,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
 (https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
-the JDBC server with the beeline script comes with either Spark or Hive 0.12.  In order to use Hive
-you must first run '`sbt/sbt -Phive-thriftserver assembly/assembly`' (or use `-Phive-thriftserver`
-for maven).
+the JDBC server with the beeline script comes with either Spark or Hive 0.12.
 
 To start the JDBC server, run the following in the Spark directory:
 
@@ -604,6 +602,11 @@ your machine and a blank password. For secure mode, please follow the instructio
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script comes with Hive.
+
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+    SET spark.sql.thriftserver.scheduler.pool=accounting;
 
 ### Migration Guide for Shark Users
 
