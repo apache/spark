@@ -736,7 +736,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
    new MapStatus(makeBlockManagerId(host), Array.fill[Byte](reduces)(2))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
-    BlockManagerId("exec-" + host, host, 12345, 0)
+    BlockManagerId("exec-" + host, host, 12345)
 
   private def assertDataStructuresEmpty = {
     assert(scheduler.activeJobs.isEmpty)
