@@ -19,14 +19,27 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test._
+import org.scalatest.BeforeAndAfterAll
+import java.util.TimeZone
 
 /* Implicits */
 import TestSQLContext._
 import TestData._
 
-class SQLQuerySuite extends QueryTest {
+class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
   TestData
+
+  var origZone: TimeZone = _
+  override protected def beforeAll() {
+    origZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+  }
+
+  override protected def afterAll() {
+    TimeZone.setDefault(origZone)
+  }
+
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
@@ -61,6 +74,34 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT substring(tableName, 3) FROM tableName"),
       "st")
+  }
+
+  test("SPARK-3173 Timestamp support in the parser") {
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1970-01-01 00:00:00.001'"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE '1970-01-01 00:00:00.001'=time"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
+          AND time>'1970-01-01 00:00:00.001'"""),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")),
+        Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='123'"),
+      Nil)
   }
 
   test("index into array") {
