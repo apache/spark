@@ -34,8 +34,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * generating case class `equals` methods
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
-    // TODO we need to figure how to do that in a faster way.
-    this == other
+    this.eq(other) || this == other
   }
 
   /**

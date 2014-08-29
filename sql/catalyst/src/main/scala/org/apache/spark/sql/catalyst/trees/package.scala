@@ -40,7 +40,7 @@ package object trees extends Logging {
   /**
    * A [[TreeNode]] companion for reference equality for Hash based Collection.
    */
-  implicit class TreeNodeRef(val obj: TreeNode[_]) {
+  class TreeNodeRef(val obj: TreeNode[_]) {
     override def equals(o: Any) = o match {
       case that: TreeNodeRef => that.obj.eq(obj)
       case _ => false

@@ -158,7 +158,7 @@ case class GeneratedAggregate(
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
-      case e: Expression if resultMap.contains(e) => resultMap(e)
+      case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
       case e: Expression if groupMap.contains(e) => groupMap(e)
     })
 
