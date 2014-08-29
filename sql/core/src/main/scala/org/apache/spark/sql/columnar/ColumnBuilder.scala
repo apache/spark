@@ -75,8 +75,7 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
   }
 
   override def build() = {
-    buffer.limit(buffer.position()).rewind()
-    buffer
+    buffer.flip().asInstanceOf[ByteBuffer]
   }
 }
 
@@ -133,9 +132,6 @@ private[sql] object ColumnBuilder {
         .allocate(newSize)
         .order(ByteOrder.nativeOrder())
         .put(orig.array(), 0, pos)
-
-      // should clear old buffer after copying its content
-      orig.clear()
     }
   }
 
