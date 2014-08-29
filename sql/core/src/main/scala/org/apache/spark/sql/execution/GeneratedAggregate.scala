@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types._
@@ -141,9 +142,10 @@ case class GeneratedAggregate(
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[Long, Expression] = aggregatesToCompute.zip(computeFunctions).map {
-      case (agg, func) => agg.id -> func.result
-    }.toMap
+    val resultMap: Map[TreeNodeRef, Expression] = 
+      aggregatesToCompute.zip(computeFunctions).map {
+        case (agg, func) => new TreeNodeRef(agg) -> func.result
+      }.toMap
 
     val namedGroups = groupingExpressions.zipWithIndex.map {
       case (ne: NamedExpression, _) => (ne, ne)
@@ -156,7 +158,7 @@ case class GeneratedAggregate(
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
-      case e: Expression if resultMap.contains(e.id) => resultMap(e.id)
+      case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
       case e: Expression if groupMap.contains(e) => groupMap(e)
     })
 

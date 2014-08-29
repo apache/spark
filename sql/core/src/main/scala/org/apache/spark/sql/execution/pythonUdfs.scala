@@ -98,7 +98,7 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
         logical.Project(
           l.output,
           l.transformExpressions {
-            case p: PythonUDF if p.id == udf.id => evaluation.resultAttribute
+            case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
           }.withNewChildren(newChildren))
       }
   }
