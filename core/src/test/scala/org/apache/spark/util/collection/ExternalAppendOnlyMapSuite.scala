@@ -214,44 +214,17 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  /**
-   * For tests that involve spilling, run them multiple times with different compression settings.
-   */
-
   test("spilling") {
-    runSpillingTest(testSpilling)
+    testSimpleSpilling()
   }
 
-  test("spilling with hash collisions") {
-    runSpillingTest(testSpillingWithCollisions)
-  }
-
-  test("spilling with many hash collisions") {
-    runSpillingTest(testSpillingWithManyCollisions)
-  }
-
-  test("spilling with hash collisions using the Int.MaxValue key") {
-    runSpillingTest(testSpillingWithCollisionsMaxInt)
-  }
-
-  test("spilling with null keys and values") {
-    runSpillingTest(testSpillingWithNullKeysAndValues)
-  }
-
-  /* ------------------------------------ *
-   * Actual test logic for spilling tests *
-   * ------------------------------------ */
-
-  /**
-   * Run a spilling test multiple times, with and without compression and using all codecs.
-   */
-  private def runSpillingTest(test: Option[String] => Unit): Unit = {
+  test("spilling with compression") {
+    // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
-      test(None)
       allCompressionCodecs.foreach { c =>
         lastCompressionCodec = Some(c)
-        test(Some(c))
+        testSimpleSpilling(Some(c))
       }
     } catch {
       // Include compression codec used in test failure message
@@ -268,8 +241,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
 
   /**
    * Test spilling through simple aggregations and cogroups.
+   * If a compression codec is provided, use it. Otherwise, do not compress spills.
    */
-  private def testSpilling(codec: Option[String]): Unit = {
+  private def testSimpleSpilling(codec: Option[String] = None): Unit = {
     val conf = createSparkConf(loadDefaults = true, codec)  // Load defaults for Spark home
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -317,11 +291,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  /**
-   * Test spilling with key hash collisions.
-   */
-  private def testSpillingWithCollisions(codec: Option[String]): Unit = {
-    val conf = createSparkConf(loadDefaults = true, codec)
+  test("spilling with hash collisions") {
+    val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
     val map = createExternalMap[String]
@@ -369,11 +340,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  /**
-   * Test spilling with many key hash collisions.
-   */
-  private def testSpillingWithManyCollisions(codec: Option[String]): Unit = {
-    val conf = createSparkConf(loadDefaults = true, codec)
+  test("spilling with many hash collisions") {
+    val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
     val map = new ExternalAppendOnlyMap[FixedHashObject, Int, Int](_ => 1, _ + _, _ + _)
@@ -397,11 +365,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  /**
-   * Test spilling with key hash collisions involving Int.MaxValue.
-   */
-  private def testSpillingWithCollisionsMaxInt(codec: Option[String]): Unit = {
-    val conf = createSparkConf(loadDefaults = true, codec)
+  test("spilling with hash collisions using the Int.MaxValue key") {
+    val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
     val map = createExternalMap[Int]
@@ -417,11 +382,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  /**
-   * Test spilling with null keys and values.
-   */
-  private def testSpillingWithNullKeysAndValues(codec: Option[String]): Unit = {
-    val conf = createSparkConf(loadDefaults = true, codec)
+  test("spilling with null keys and values") {
+    val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
     val map = createExternalMap[Int]
