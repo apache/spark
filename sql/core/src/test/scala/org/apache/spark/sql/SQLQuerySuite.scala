@@ -76,9 +76,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
 
     checkAnswer(sql(
-      """SELECT time FROM timestamps WHERE time<'1970-01-01 01:00:00.003'
+      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
           AND time>'1970-01-01 00:00:00.001'"""),
-      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 01:00:00.002"))))
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
