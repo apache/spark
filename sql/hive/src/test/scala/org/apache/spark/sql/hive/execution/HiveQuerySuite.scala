@@ -309,7 +309,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
-  createQueryTest("case sensitivity: Hive table",
+  createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
