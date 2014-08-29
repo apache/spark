@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 case class IntegerData(i: Int)
 
-class PartitionSkippingSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
+class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
   var originalColumnBatchSize = columnBatchSize
 
   override protected def beforeAll() {
