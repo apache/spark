@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{InetSocketAddress, URL}
+import java.net.{InetSocketAddress, URL, URLDecoder}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -147,13 +147,23 @@ private[spark] object JettyUtils extends Logging {
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
-          val paramName = "spark." + filter + ".params"
-          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
+          var paramName = "spark." + filter + ".params"
+          var params = conf.get(paramName, "").split(',').map(_.trim()).toSet
           params.foreach {
             case param : String =>
               if (!param.isEmpty) {
                 val parts = param.split("=")
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
+             }
+          }
+          paramName = "spark." + filter + ".encodedparams"
+          params = conf.get(paramName, "").split(',').map(_.trim()).toSet
+          params.foreach {
+            case param : String =>
+              if (!param.isEmpty) {
+                val parts = param.split("=")
+                if (parts.length == 2) holder.setInitParameter(parts(0),
+                    URLDecoder.decode(parts(1), "UTF-8"))
              }
           }
           val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
