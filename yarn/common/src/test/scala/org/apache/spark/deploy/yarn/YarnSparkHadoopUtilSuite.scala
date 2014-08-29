@@ -78,19 +78,6 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
   }
 
 
-  test("test getApplicationAclsForYarn default off") {
-
-    // default spark acls are off but view acls still default to current user
-    val sparkConf = new SparkConf()
-    val securityMgr = new SecurityManager(sparkConf)
-    val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
-
-    assert(acls.getOrElse(ApplicationAccessType.VIEW_APP, "invalid") ===
-      System.getProperty("user.name", ""))
-    assert(acls.getOrElse(ApplicationAccessType.MODIFY_APP, "invalid") ===
-      System.getProperty("user.name", "") )
-  }
-
   test("test getApplicationAclsForYarn acls on") {
 
     // spark acls on, just pick up default user
@@ -100,10 +87,27 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
 
-    assert(acls.getOrElse(ApplicationAccessType.VIEW_APP, "invalid") ===
-      System.getProperty("user.name", ""))
-    assert(acls.getOrElse(ApplicationAccessType.MODIFY_APP, "invalid") ===
-      System.getProperty("user.name", "") )
+    val viewAcls = acls.get(ApplicationAccessType.VIEW_APP)
+    val modifyAcls = acls.get(ApplicationAccessType.MODIFY_APP)
+
+    viewAcls match {
+      case Some(vacls) => {
+        val aclSet = vacls.split(',').map(_.trim).toSet
+        assert(aclSet.contains(System.getProperty("user.name", "invalid")))
+      }
+      case None => {
+        fail()
+      }
+    }
+    modifyAcls match {
+      case Some(macls) => {
+        val aclSet = macls.split(',').map(_.trim).toSet
+        assert(aclSet.contains(System.getProperty("user.name", "invalid")))
+      }
+      case None => {
+        fail()
+      }
+    }
   }
 
   test("test getApplicationAclsForYarn acls on and specify users") {
@@ -125,7 +129,7 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
         val aclSet = vacls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user1"))
         assert(aclSet.contains("user2"))
-        assert(aclSet.contains(System.getProperty("user.name", "")))
+        assert(aclSet.contains(System.getProperty("user.name", "invalid")))
       }
       case None => {
         fail()
@@ -136,7 +140,7 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
         val aclSet = macls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user3"))
         assert(aclSet.contains("user4"))
-        assert(aclSet.contains(System.getProperty("user.name", "")))
+        assert(aclSet.contains(System.getProperty("user.name", "invalid")))
       }
       case None => {
         fail()
