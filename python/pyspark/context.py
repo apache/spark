@@ -568,8 +568,6 @@ class SparkContext(object):
         L{Broadcast<pyspark.broadcast.Broadcast>}
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
-
-        :keep: Keep the `value` in driver or not.
         """
         ser = CompressedSerializer(PickleSerializer())
         # pass large object by py4j is very slow and need much memory
