@@ -574,10 +574,15 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def name(): String = rdd.name
 
+  /**
+   * The asynchronous version of the foreach action.
+   *
+   * @param f the function to apply to all the elements of the RDD
+   * @return a FutureAction for the action
+   */
   def foreachAsync(f: VoidFunction[T]): FutureAction[Unit] = {
-    val cleanF = rdd.context.clean((x: T) => f.call(x))
     import org.apache.spark.SparkContext._
-    rdd.foreachAsync(cleanF)
+    rdd.foreachAsync(x => f.call(x))
   }
 
 }
