@@ -30,7 +30,7 @@ called `_site` containing index.html as well as the rest of the compiled files.
 You can modify the default Jekyll build as follows:
 
     # Skip generating API docs (which takes a while)
-    $ SKIP_SCALADOC=1 jekyll build
+    $ SKIP_API=1 jekyll build
     # Serve content locally on port 4000
     $ jekyll serve --watch
     # Build the site with extra features used on the live page

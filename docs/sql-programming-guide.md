@@ -474,10 +474,10 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
-In order to use Hive you must first run '`sbt/sbt -Phive assembly/assembly`' (or use `-Phive` for maven).
+In order to use Hive you must first run "`sbt/sbt -Phive assembly/assembly`" (or use `-Phive` for maven).
 This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
-(SerDes) in order to acccess data stored in Hive.
+(SerDes) in order to access data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
@@ -576,9 +576,8 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 ## Running the Thrift JDBC server
 
-The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
-(https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
-the JDBC server with the beeline script comes with either Spark or Hive 0.12.
+The Thrift JDBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
+in Hive 0.12. You can test the JDBC server with the beeline script comes with either Spark or Hive 0.12.
 
 To start the JDBC server, run the following in the Spark directory:
 
@@ -597,7 +596,7 @@ Connect to the JDBC server in beeline with:
 
 Beeline will ask you for a username and password. In non-secure mode, simply enter the username on
 your machine and a blank password. For secure mode, please follow the instructions given in the
-[beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients)
+[beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients).
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
@@ -616,11 +615,10 @@ In Shark, default reducer number is 1 and is controlled by the property `mapred.
 SQL deprecates this property by a new property `spark.sql.shuffle.partitions`, whose default value
 is 200. Users may customize this property via `SET`:
 
-```
-SET spark.sql.shuffle.partitions=10;
-SELECT page, count(*) c FROM logs_last_month_cached
-GROUP BY page ORDER BY c DESC LIMIT 10;
-```
+    SET spark.sql.shuffle.partitions=10;
+    SELECT page, count(*) c 
+    FROM logs_last_month_cached
+    GROUP BY page ORDER BY c DESC LIMIT 10;
 
 You may also put this property in `hive-site.xml` to override the default value.
 
@@ -630,22 +628,18 @@ For now, the `mapred.reduce.tasks` property is still recognized, and is converte
 #### Caching
 
 The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no
-longer automcatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
+longer automatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
 let user control table caching explicitly:
 
-```
-CACHE TABLE logs_last_month;
-UNCACHE TABLE logs_last_month;
-```
+    CACHE TABLE logs_last_month;
+    UNCACHE TABLE logs_last_month;
 
-**NOTE** `CACHE TABLE tbl` is lazy, it only marks table `tbl` as "need to by cached if necessary",
+**NOTE:** `CACHE TABLE tbl` is lazy, it only marks table `tbl` as "need to by cached if necessary",
 but doesn't actually cache it until a query that touches `tbl` is executed. To force the table to be
 cached, you may simply count the table immediately after executing `CACHE TABLE`:
 
-```
-CACHE TABLE logs_last_month;
-SELECT COUNT(1) FROM logs_last_month;
-```
+    CACHE TABLE logs_last_month;
+    SELECT COUNT(1) FROM logs_last_month;
 
 Several caching related features are not supported yet:
 
@@ -655,7 +649,7 @@ Several caching related features are not supported yet:
 
 ### Compatibility with Apache Hive
 
-#### Deploying in Exising Hive Warehouses
+#### Deploying in Existing Hive Warehouses
 
 Spark SQL Thrift JDBC server is designed to be "out of the box" compatible with existing Hive
 installations. You do not need to modify your existing Hive Metastore or change the data placement
@@ -666,50 +660,50 @@ or partitioning of your tables.
 Spark SQL supports the vast majority of Hive features, such as:
 
 * Hive query statements, including:
- * `SELECT`
- * `GROUP BY
- * `ORDER BY`
- * `CLUSTER BY`
- * `SORT BY`
+  * `SELECT`
+  * `GROUP BY`
+  * `ORDER BY`
+  * `CLUSTER BY`
+  * `SORT BY`
 * All Hive operators, including:
- * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
- * Arthimatic operators (`+`, `-`, `*`, `/`, `%`, etc)
- * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
- * Complex type constructors
- * Mathemtatical functions (`sign`, `ln`, `cos`, etc)
- * String functions (`instr`, `length`, `printf`, etc)
+  * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+  * Arithmetic operators (`+`, `-`, `*`, `/`, `%`, etc)
+  * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
+  * Complex type constructors
+  * Mathematical functions (`sign`, `ln`, `cos`, etc)
+  * String functions (`instr`, `length`, `printf`, etc)
 * User defined functions (UDF)
 * User defined aggregation functions (UDAF)
-* User defined serialization formats (SerDe's)
+* User defined serialization formats (SerDes)
 * Joins
- * `JOIN`
- * `{LEFT|RIGHT|FULL} OUTER JOIN`
- * `LEFT SEMI JOIN`
- * `CROSS JOIN`
+  * `JOIN`
+  * `{LEFT|RIGHT|FULL} OUTER JOIN`
+  * `LEFT SEMI JOIN`
+  * `CROSS JOIN`
 * Unions
-* Sub queries
- * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+* Sub-queries
+  * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
 * Sampling
 * Explain
 * Partitioned tables
 * All Hive DDL Functions, including:
- * `CREATE TABLE`
- * `CREATE TABLE AS SELECT`
- * `ALTER TABLE`
+  * `CREATE TABLE`
+  * `CREATE TABLE AS SELECT`
+  * `ALTER TABLE`
 * Most Hive Data types, including:
- * `TINYINT`
- * `SMALLINT`
- * `INT`
- * `BIGINT`
- * `BOOLEAN`
- * `FLOAT`
- * `DOUBLE`
- * `STRING`
- * `BINARY`
- * `TIMESTAMP`
- * `ARRAY<>`
- * `MAP<>`
- * `STRUCT<>`
+  * `TINYINT`
+  * `SMALLINT`
+  * `INT`
+  * `BIGINT`
+  * `BOOLEAN`
+  * `FLOAT`
+  * `DOUBLE`
+  * `STRING`
+  * `BINARY`
+  * `TIMESTAMP`
+  * `ARRAY<>`
+  * `MAP<>`
+  * `STRUCT<>`
 
 #### Unsupported Hive Functionality
 
@@ -749,8 +743,7 @@ releases of Spark SQL.
   Hive automatically converts the join into a map join. We are adding this auto conversion in the
   next release.
 * Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you
-  need to control the degree of parallelism post-shuffle using "SET
-  spark.sql.shuffle.partitions=[num_tasks];". We are going to add auto-setting of parallelism in the
+  need to control the degree of parallelism post-shuffle using "`SET spark.sql.shuffle.partitions=[num_tasks];`". We are going to add auto-setting of parallelism in the
   next release.
 * Meta-data only query: For queries that can be answered by using only meta data, Spark SQL still
   launches tasks to compute the result.
