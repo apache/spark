@@ -32,7 +32,7 @@ class AttributeMap[A](baseMap: Map[ExprId, (Attribute, A)])
 
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
 
-  override def +[B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] =
+  override def + [B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] =
     (baseMap.map(_._2) + kv).toMap
 
   override def iterator: Iterator[(Attribute, A)] = baseMap.map(_._2).iterator
