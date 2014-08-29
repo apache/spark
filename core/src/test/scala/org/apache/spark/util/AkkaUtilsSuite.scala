@@ -17,13 +17,16 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.Await
+
 import akka.actor._
+
+import org.scalatest.FunSuite
+
 import org.apache.spark._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
 
-import scala.concurrent.Await
 
 /**
   * Test the AkkaUtils with various security settings.
@@ -35,7 +38,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
@@ -106,13 +109,13 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
+      BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
+           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
     actorSystem.shutdown()
     slaveSystem.shutdown()
@@ -157,13 +160,13 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
+      BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security on and passwords match
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
+           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
     actorSystem.shutdown()
     slaveSystem.shutdown()

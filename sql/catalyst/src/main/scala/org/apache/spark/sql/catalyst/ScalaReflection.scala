@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
 
@@ -31,6 +30,15 @@ object ScalaReflection {
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
+
+  /** Converts Scala objects to catalyst rows / types */
+  def convertToCatalyst(a: Any): Any = a match {
+    case o: Option[_] => o.orNull
+    case s: Seq[_] => s.map(convertToCatalyst)
+    case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
+    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
+    case other => other
+  }
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
