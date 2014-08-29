@@ -33,10 +33,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   private val fileSystem = Utils.getHadoopFileSystem("/")
-  private val allCompressionCodecs = Seq[String](
-    "org.apache.spark.io.LZFCompressionCodec",
-    "org.apache.spark.io.SnappyCompressionCodec"
-  )
+  private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
   private var testDir: File = _
 
   before {
