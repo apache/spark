@@ -112,6 +112,7 @@ class L1Updater extends Updater {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     // Take gradient step
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    val norm = brzNorm(brzWeights, 1.0)
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
@@ -122,7 +123,7 @@ class L1Updater extends Updater {
       i += 1
     }
 
-    (Vectors.fromBreeze(brzWeights), brzNorm(brzWeights, 1.0) * regParam)
+    (Vectors.fromBreeze(brzWeights), regParam * norm)
   }
 }
 
@@ -146,9 +147,9 @@ class SquaredL2Updater extends Updater {
     // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val thisIterStepSize = stepSize / math.sqrt(iter)
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    val norm = brzNorm(brzWeights, 2.0)
     brzWeights :*= (1.0 - thisIterStepSize * regParam)
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
-    val norm = brzNorm(brzWeights, 2.0)
 
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
   }
