@@ -3,6 +3,36 @@ Spark Change Log
 
 Release 1.1.0
 
+  [SPARK-3277] Fix external spilling with LZ4 assertion error
+  Andrew Or <andrewor14@gmail.com>, Patrick Wendell <pwendell@gmail.com>
+  2014-08-28 17:05:21 -0700
+  Commit: fe4df34, github.com/apache/spark/pull/2187
+
+  SPARK-3082. yarn.Client.logClusterResourceDetails throws NPE if requeste...
+  Sandy Ryza <sandy@cloudera.com>
+  2014-08-28 16:18:50 -0700
+  Commit: f4cbf5e, github.com/apache/spark/pull/1984
+
+  [SPARK-3190] Avoid overflow in VertexRDD.count()
+  Ankur Dave <ankurdave@gmail.com>
+  2014-08-28 15:17:01 -0700
+  Commit: 0b9718a, github.com/apache/spark/pull/2106
+
+  [SPARK-3264] Allow users to set executor Spark home in Mesos
+  Andrew Or <andrewor14@gmail.com>
+  2014-08-28 11:05:44 -0700
+  Commit: 069ecfe, github.com/apache/spark/pull/2166
+
+  [SPARK-3150] Fix NullPointerException in in Spark recovery: Add initializing default values in DriverInfo.init()
+  Tatiana Borisova <tanyatik@yandex.ru>
+  2014-08-28 10:36:36 -0700
+  Commit: fd98020, github.com/apache/spark/pull/2062
+
+  Additional CHANGES.txt
+  Patrick Wendell <pwendell@gmail.com>
+  2014-08-28 00:19:03 -0700
+  Commit: a9df703
+
   [SPARK-3230][SQL] Fix udfs that return structs
   Michael Armbrust <michael@databricks.com>
   2014-08-28 00:15:23 -0700
