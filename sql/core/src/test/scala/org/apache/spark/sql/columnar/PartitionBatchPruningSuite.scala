@@ -59,11 +59,9 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   checkBatchPruning("88 < i", 89 to 100, 1, 2)
   checkBatchPruning("89 <= i", 89 to 100, 1, 2)
 
-  // Conjunctions works
   checkBatchPruning("i > 8 AND i <= 21", 9 to 21, 2, 3)
-
-  // Disjunctions don't work (yet)
-  checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 5, 10)
+  checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 2, 2)
+  checkBatchPruning("i < 2 OR (i > 78 AND i < 92)", Seq(1) ++ (79 to 91), 3, 4)
 
   def checkBatchPruning(
       filter: String,
