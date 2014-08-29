@@ -208,7 +208,11 @@ class ConstantFoldingSuite extends PlanTest {
           Substring("abc", 0, Literal(null, IntegerType)) as 'c18,
 
           Contains(Literal(null, StringType), "abc") as 'c19,
-          Contains("abc", Literal(null, StringType)) as 'c20
+          Contains("abc", Literal(null, StringType)) as 'c20,
+
+          Length(Literal(null, IntegerType)) as 'c21,
+          OctetLength(Literal(null, StringType), "ISO-8859-1") as 'c22
+
         )
 
     val optimized = Optimize(originalQuery.analyze)
@@ -243,7 +247,11 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(null, StringType) as 'c18,
 
           Literal(null, BooleanType) as 'c19,
-          Literal(null, BooleanType) as 'c20
+          Literal(null, BooleanType) as 'c20,
+
+          Literal(null, IntegerType) as 'c21,
+          Literal(null, IntegerType) as 'c22
+
         ).analyze
 
     comparePlans(optimized, correctAnswer)

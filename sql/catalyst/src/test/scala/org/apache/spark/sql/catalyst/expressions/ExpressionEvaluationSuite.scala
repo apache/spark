@@ -577,4 +577,42 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
   }
+
+  test("Length") {
+    checkEvaluation(Length(Literal(null, IntegerType)), null)
+    checkEvaluation(Length(Literal(0, IntegerType)), 1)
+    checkEvaluation(Length(Literal(12, IntegerType)), 2)
+    checkEvaluation(Length(Literal(123, IntegerType)), 3)
+    checkEvaluation(Length(Literal(12.4F, FloatType)), 4)
+    checkEvaluation(Length(Literal(12345678901L, LongType)), 11)
+    checkEvaluation(Length(Literal(1234567890.2D, DoubleType)), 14)
+    checkEvaluation(Length(Literal("1234567890ABC", StringType)), 13)
+    checkEvaluation(Length(Literal("\uF93D\uF936\uF949\uF942", StringType)), 4)
+  }
+
+  test("OctetLen") {
+    checkEvaluation(OctetLength(Literal(null, StringType), "ISO-8859-1"), null)
+    checkEvaluation(OctetLength(Literal(null, StringType), "UTF-8"), null)
+    checkEvaluation(OctetLength(Literal(null, StringType), "UTF-16"), null)
+    checkEvaluation(OctetLength(Literal("1234567890ABC", StringType), "ISO-8859-1"), 13)
+    checkEvaluation(OctetLength(Literal("1234567890ABC", StringType), "UTF-8"), 13)
+    checkEvaluation(OctetLength(Literal("1234567890ABC", StringType), "UTF-16"), 28)
+    checkEvaluation(OctetLength(Literal("1234567890ABC", StringType), "UTF-32"), 52)
+    checkEvaluation(OctetLength(
+      Literal("\uF93D\uF936\uF949\uF942", StringType), "ISO-8859-1"), 4)
+                  // Chinese characters get truncated by ISO-8859-1 encoding
+    checkEvaluation(OctetLength(
+      Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-8"), 12) // chinese characters
+    checkEvaluation(OctetLength(
+      Literal("\uD840\uDC0B\uD842\uDFB7", StringType), "UTF-8"), 8) // 2 surrogate pairs
+    checkEvaluation(OctetLength(
+      Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-16"), 10) // chinese characters
+    checkEvaluation(OctetLength(
+      Literal("\uD840\uDC0B\uD842\uDFB7", StringType), "UTF-16"), 10) // 2 surrogate pairs
+    checkEvaluation(OctetLength(
+      Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-32"), 16) // chinese characters
+    checkEvaluation(OctetLength(
+      Literal("\uD840\uDC0B\uD842\uDFB7", StringType), "UTF-32"), 8) // 2 surrogate pairs
+  }
+
 }

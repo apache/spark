@@ -37,7 +37,7 @@ abstract class Expression extends TreeNode[Expression] {
    *  - A [[BinaryExpression]] is foldable if its both left and right child are foldable
    *  - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable if its child is foldable
    *  - A [[Literal]] is foldable
-   *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
+   *  - A [[Cast]] or [[UnaryMinus]] or [[Length/Octetlen]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
   def nullable: Boolean

@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.UnsupportedEncodingException
 import java.util.regex.Pattern
+
+import org.apache.spark.Logging
 
 import scala.collection.IndexedSeqOptimized
 
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType, IntegerType}
 
 trait StringRegexExpression {
   self: BinaryExpression =>
@@ -206,6 +209,83 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringComparison {
   def compare(l: String, r: String) = l.endsWith(r)
+}
+
+
+/**
+ * A function that returns the number of bytes in an expression
+ */
+case class Length(child: Expression) extends UnaryExpression {
+
+  type EvaluatedType = Any
+
+  override def dataType = IntegerType
+
+  override def foldable = child.foldable
+
+  override def nullable = child.nullable
+
+  override def toString = s"Length($child)"
+
+  override def eval(input: Row): EvaluatedType = {
+    val inputVal = child.eval(input)
+    if (inputVal == null) {
+      null
+    } else if (!inputVal.isInstanceOf[String]) {
+      inputVal.toString.length
+    } else {
+      val str = inputVal.asInstanceOf[String]
+      str.codePointCount(0, str.length)
+    }
+  }
+}
+
+object OctetLengthConstants {
+  val DefaultEncoding = "UTF-8"
+}
+
+/**
+ * A function that returns the number of characters in a string expression
+ */
+case class OctetLength(child: Expression, encoding : Expression) extends UnaryExpression
+  with Logging {
+
+  type EvaluatedType = Any
+
+  override def dataType = IntegerType
+
+  override def foldable = child.foldable
+
+  override def nullable = true
+
+  override def toString = s"OctetLen($child, $encoding)"
+
+  override def eval(input: Row): EvaluatedType = {
+    val evalInput = child.eval(input)
+    if (evalInput == null) {
+      null
+    } else if (!evalInput.isInstanceOf[String]) {
+      log.debug(s"Non-string value [$evalInput] provided to OctetLen")
+      null
+    } else {
+      var evalEncoding = encoding.eval(input)
+      val strEncoding =
+        if (evalEncoding != null) {
+          evalEncoding.toString
+        } else {
+          OctetLengthConstants.DefaultEncoding
+        }
+      val s: String = ""
+      try {
+        evalInput.asInstanceOf[String].getBytes(strEncoding).length
+      } catch {
+        case ue : UnsupportedEncodingException => {
+          throw new UnsupportedEncodingException(
+            s"OctetLen: Caught UnsupportedEncodingException for encoding=[$strEncoding]")
+        }
+      }
+      }
+  }
 }
 
 /**
