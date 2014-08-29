@@ -52,6 +52,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(nums.keyBy(_.toString).collect().toList === List(("1", 1), ("2", 2), ("3", 3), ("4", 4)))
     assert(nums.max() === 4)
     assert(nums.min() === 1)
+    assert(nums.span(a=>a>2)._2.collect().toList === List(1,2))
+    assert(nums.span(a=>a>2)._1.collect().toList === List(3,4))   
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
 
