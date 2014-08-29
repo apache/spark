@@ -150,12 +150,8 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     }
   }
 
-  /**
-   * Get the corresponding job Id for this action
-   */
-  def id: Int = {
-    jobWaiter.jobId
-  }
+  /** Get the corresponding job id for this action. */
+  def jobId = jobWaiter.jobId
 }
 
 
