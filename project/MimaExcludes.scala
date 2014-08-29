@@ -59,6 +59,8 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.DiskStore.getValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
