@@ -23,6 +23,7 @@ import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * :: DeveloperApi ::
@@ -43,10 +44,10 @@ package object debug {
   implicit class DebugQuery(query: SchemaRDD) {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
-      val visited = new collection.mutable.HashSet[Long]()
+      val visited = new collection.mutable.HashSet[TreeNodeRef]()
       val debugPlan = plan transform {
-        case s: SparkPlan if !visited.contains(s.id) =>
-          visited += s.id
+        case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
+          visited += new TreeNodeRef(s)
           DebugNode(s)
       }
       println(s"Results returned: ${debugPlan.execute().count()}")
