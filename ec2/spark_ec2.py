@@ -82,7 +82,7 @@ def parse_args():
              "between zones applies)")
     parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
     parser.add_option(
-        "-v", "--spark-version", default="1.0.0",
+        "-v", "--spark-version", default="1.1.0",
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
     parser.add_option(
         "--spark-git-repo",
