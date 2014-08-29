@@ -302,7 +302,11 @@ abstract class DStream[T: ClassTag] (
                   " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
-              Some(newRDD)
+              if (newRDD.partitions.size > 0) {
+                Some(newRDD)
+              } else {
+                None
+              }
             case None =>
               None
           }
