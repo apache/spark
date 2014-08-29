@@ -325,14 +325,7 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
-    // In Windows, the URL may be the raw path starting with a root drive (e.g. C:/)
-    // We need to format this correctly so that the drive is not interpreted as a URI scheme
-    val formattedURI =
-      uri.getScheme match {
-        case windowsDrive(d) if isWindows => new URI("file:/" + uri)
-        case _ => uri
-      }
-    formattedURI.getScheme match {
+    uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
 
