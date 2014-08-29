@@ -76,20 +76,24 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 
     iterator.initialize()
 
-    // 3rd getLocalFromDisk invocation should be failed
-    verify(blockManager, times(3)).getLocalFromDisk(any(), any())
+    // Without exhausting the iterator, the iterator should be lazy and not call getLocalFromDisk.
+    verify(blockManager, times(0)).getLocalFromDisk(any(), any())
 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
     // the 2nd element of the tuple returned by iterator.next should be defined when fetching successfully
-    assert(iterator.next._2.isDefined, "1st element should be defined but is not actually defined") 
+    assert(iterator.next()._2.isDefined, "1st element should be defined but is not actually defined")
+    verify(blockManager, times(1)).getLocalFromDisk(any(), any())
+
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 1 element")
-    assert(iterator.next._2.isDefined, "2nd element should be defined but is not actually defined") 
+    assert(iterator.next()._2.isDefined, "2nd element should be defined but is not actually defined")
+    verify(blockManager, times(2)).getLocalFromDisk(any(), any())
+
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 2 elements")
     // 3rd fetch should be failed
-    assert(!iterator.next._2.isDefined, "3rd element should not be defined but is actually defined") 
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
-    // Don't call next() after fetching non-defined element even if thare are rest of elements in the iterator.
-    // Otherwise, BasicBlockFetcherIterator hangs up.
+    intercept[Exception] {
+      iterator.next()
+    }
+    verify(blockManager, times(3)).getLocalFromDisk(any(), any())
   }
 
 
@@ -127,8 +131,8 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 
     iterator.initialize()
 
-    // getLocalFromDis should be invoked for all of 5 blocks
-    verify(blockManager, times(5)).getLocalFromDisk(any(), any())
+    // Without exhausting the iterator, the iterator should be lazy and not call getLocalFromDisk.
+    verify(blockManager, times(0)).getLocalFromDisk(any(), any())
 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
     assert(iterator.next._2.isDefined, "All elements should be defined but 1st element is not actually defined") 
@@ -139,7 +143,9 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
     assert(iterator.next._2.isDefined, "All elements should be defined but 4th element is not actually defined") 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 4 elements")
-    assert(iterator.next._2.isDefined, "All elements should be defined but 5th element is not actually defined") 
+    assert(iterator.next._2.isDefined, "All elements should be defined but 5th element is not actually defined")
+
+    verify(blockManager, times(5)).getLocalFromDisk(any(), any())
   }
 
   test("block fetch from remote fails using BasicBlockFetcherIterator") {
