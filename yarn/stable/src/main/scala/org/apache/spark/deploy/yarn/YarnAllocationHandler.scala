@@ -46,7 +46,7 @@ private[yarn] class YarnAllocationHandler(
     amClient.releaseAssignedContainer(container.getId())
   }
 
-  override protected def allocateContainers(count: Int) = {
+  override protected def allocateContainers(count: Int): YarnAllocateResponse = {
     addResourceRequests(count)
 
     // We have already set the container request. Poll the ResourceManager for a response.
@@ -200,7 +200,7 @@ private[yarn] class YarnAllocationHandler(
     requests
   }
 
-  class StableAllocateResponse(response: AllocateResponse) extends YarnAllocateResponse {
+  private class StableAllocateResponse(response: AllocateResponse) extends YarnAllocateResponse {
     override def getAllocatedContainers() = response.getAllocatedContainers()
     override def getAvailableResources() = response.getAvailableResources()
     override def getCompletedContainersStatuses() = response.getCompletedContainersStatuses()

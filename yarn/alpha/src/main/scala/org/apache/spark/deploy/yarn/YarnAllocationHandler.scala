@@ -47,7 +47,7 @@ private[yarn] class YarnAllocationHandler(
   private val lastResponseId = new AtomicInteger()
   private val releaseList: CopyOnWriteArrayList[ContainerId] = new CopyOnWriteArrayList()
 
-  override protected def allocateContainers(count: Int) = {
+  override protected def allocateContainers(count: Int): YarnAllocateResponse = {
     var resourceRequests: List[ResourceRequest] = null
 
     // default.
@@ -217,7 +217,7 @@ private[yarn] class YarnAllocationHandler(
     retval
   }
 
-  class AlphaAllocateResponse(response: AMResponse) extends YarnAllocateResponse {
+  private class AlphaAllocateResponse(response: AMResponse) extends YarnAllocateResponse {
     override def getAllocatedContainers() = response.getAllocatedContainers()
     override def getAvailableResources() = response.getAvailableResources()
     override def getCompletedContainersStatuses() = response.getCompletedContainersStatuses()
