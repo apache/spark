@@ -113,7 +113,17 @@ if ! which mvn &>/dev/null; then
     echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
+
 VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | tail -n 1)
+SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | fgrep --count "<id>hive</id>";\
+    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
+    # because we use "set -o pipefail"
+    echo -n)
 
 JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
@@ -175,7 +185,7 @@ cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$FWDIR"/examples/src/main "$DISTDIR/examples/src/"
 
-if [ "$SPARK_HIVE" == "true" ]; then
+if [ "$SPARK_HIVE" == "1" ]; then
   cp "$FWDIR"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
 fi
 
