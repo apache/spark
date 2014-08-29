@@ -1046,12 +1046,12 @@ class DAGScheduler(
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         val failedStage = stageIdToStage(task.stageId)
+        val mapStage = shuffleToMapStage(shuffleId)
 
         // It is likely that we receive multiple FetchFailed for a single stage (because we have
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the scheduler.
         if (runningStages.contains(failedStage) && stage.pendingTasks.contains(task)) {
-          val mapStage = shuffleToMapStage(shuffleId)
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
           // TODO: Cancel running tasks in the stage
@@ -1066,17 +1066,17 @@ class DAGScheduler(
           }
           failedStages += failedStage
           failedStages += mapStage
+        }
 
-          // Mark the map whose fetch failed as broken in the map stage
-          if (mapId != -1) {
-            mapStage.removeOutputLoc(mapId, bmAddress)
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-          }
+        // Mark the map whose fetch failed as broken in the map stage
+        if (mapId != -1) {
+          mapStage.removeOutputLoc(mapId, bmAddress)
+          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
 
-          // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, Some(task.epoch))
-          }
+        // TODO: mark the executor as failed only if there were lots of fetch failures on it
+        if (bmAddress != null) {
+          handleExecutorLost(bmAddress.executorId, Some(task.epoch))
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
