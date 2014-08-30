@@ -575,6 +575,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def name(): String = rdd.name
 
   /**
+   * :: Experimental ::
+   * THIS IS AN EXPERIMENTAL API THAT MIGHT CHANGE IN THE FUTURE.
    * The asynchronous version of the foreach action.
    *
    * @param f the function to apply to all the elements of the RDD
