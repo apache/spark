@@ -44,10 +44,13 @@ import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
 private[spark] class EventLoggingListener(
     appName: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration())
+    hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
+
+  def this(appName: String, sparkConf: SparkConf) =
+    this(appName, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)

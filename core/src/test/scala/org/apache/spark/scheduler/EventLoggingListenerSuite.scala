@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -39,7 +40,8 @@ import java.io.File
  * read and deserialized into actual SparkListenerEvents.
  */
 class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
-  private val fileSystem = Utils.getHadoopFileSystem("/")
+  private val fileSystem = Utils.getHadoopFileSystem("/",
+    SparkHadoopUtil.get.newConfiguration(new SparkConf()))
   private val allCompressionCodecs = Seq[String](
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"

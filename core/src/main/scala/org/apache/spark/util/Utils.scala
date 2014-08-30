@@ -34,6 +34,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -318,7 +319,8 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager) {
+  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
+    hadoopConf: Configuration) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
@@ -390,7 +392,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val fs = getHadoopFileSystem(uri)
+        val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -862,8 +864,8 @@ private[spark] object Utils extends Logging {
    */
   def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot { ste:StackTraceElement => 
-        // When running under some profilers, the current stack trace might contain some bogus 
+      .filterNot { ste:StackTraceElement =>
+        // When running under some profilers, the current stack trace might contain some bogus
         // frames. This is intended to ensure that we don't crash in these situations by
         // ignoring any frames that we can't examine.
         (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
@@ -1179,15 +1181,15 @@ private[spark] object Utils extends Logging {
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: URI): FileSystem = {
-    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  def getHadoopFileSystem(path: URI, conf: Configuration): FileSystem = {
+    FileSystem.get(path, conf)
   }
 
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: String): FileSystem = {
-    getHadoopFileSystem(new URI(path))
+  def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
+    getHadoopFileSystem(new URI(path), conf)
   }
 
   /**
@@ -1264,7 +1266,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** 
+  /**
    * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.
