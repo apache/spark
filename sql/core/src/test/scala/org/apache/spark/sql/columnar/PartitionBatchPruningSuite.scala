@@ -46,22 +46,26 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
     uncacheTable("intData")
   }
 
+  // Comparisons
   checkBatchPruning("i = 1", Seq(1), 1, 1)
   checkBatchPruning("1 = i", Seq(1), 1, 1)
-
   checkBatchPruning("i < 12", 1 to 11, 1, 2)
   checkBatchPruning("i <= 11", 1 to 11, 1, 2)
   checkBatchPruning("i > 88", 89 to 100, 1, 2)
   checkBatchPruning("i >= 89", 89 to 100, 1, 2)
-
   checkBatchPruning("12 > i", 1 to 11, 1, 2)
   checkBatchPruning("11 >= i", 1 to 11, 1, 2)
   checkBatchPruning("88 < i", 89 to 100, 1, 2)
   checkBatchPruning("89 <= i", 89 to 100, 1, 2)
 
+  // Conjunction and disjunction
   checkBatchPruning("i > 8 AND i <= 21", 9 to 21, 2, 3)
   checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 2, 2)
   checkBatchPruning("i < 2 OR (i > 78 AND i < 92)", Seq(1) ++ (79 to 91), 3, 4)
+
+  // With unsupported predicate
+  checkBatchPruning("i < 12 AND i IS NOT NULL", 1 to 11, 1, 2)
+  checkBatchPruning("NOT (i < 88)", 88 to 100, 5, 10)
 
   def checkBatchPruning(
       filter: String,

@@ -113,10 +113,12 @@ private[sql] case class InMemoryColumnarTableScan(
   import org.apache.spark.sql.catalyst.expressions._
 
   val buildFilter: PartialFunction[Expression, Expression] = {
-    case And(lhs: Expression, rhs: Expression) =>
+    case And(lhs: Expression, rhs: Expression)
+      if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
       buildFilter(lhs) && buildFilter(rhs)
 
-    case Or(lhs: Expression, rhs: Expression) =>
+    case Or(lhs: Expression, rhs: Expression)
+      if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
       buildFilter(lhs) || buildFilter(rhs)
 
     case EqualTo(a: AttributeReference, l: Literal) =>
