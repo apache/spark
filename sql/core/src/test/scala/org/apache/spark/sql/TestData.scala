@@ -151,4 +151,9 @@ object TestData {
     TimestampField(new Timestamp(i))
   })
   timestamps.registerTempTable("timestamps")
+
+  case class IntField(i: Int)
+  // An RDD with 4 elements and 8 partitions
+  val withEmptyParts = TestSQLContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
+  withEmptyParts.registerTempTable("withEmptyParts")
 }
