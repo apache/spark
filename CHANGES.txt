@@ -3,6 +3,51 @@ Spark Change Log
 
 Release 1.1.0
 
+  [SPARK-3320][SQL] Made batched in-memory column buffer building work for SchemaRDDs with empty partitions
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-08-29 18:16:47 -0700
+  Commit: aa9364a, github.com/apache/spark/pull/2213
+
+  [SPARK-3296][mllib] spark-example should be run-example in head notation of DenseKMeans and SparseNaiveBayes
+  wangfei <wangfei_hello@126.com>
+  2014-08-29 17:37:15 -0700
+  Commit: b0facb5, github.com/apache/spark/pull/2193
+
+  [SPARK-3291][SQL]TestcaseName in createQueryTest should not contain ":"
+  qiping.lqp <qiping.lqp@alibaba-inc.com>
+  2014-08-29 15:37:43 -0700
+  Commit: c1333b8, github.com/apache/spark/pull/2191
+
+  [SPARK-3269][SQL] Decreases initial buffer size for row set to prevent OOM
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-08-29 15:36:04 -0700
+  Commit: 9bae345, github.com/apache/spark/pull/2171
+
+  [SPARK-3234][Build] Fixed environment variables that rely on deprecated command line options in make-distribution.sh
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-08-29 15:29:43 -0700
+  Commit: cf049ef, github.com/apache/spark/pull/2208
+
+  [Docs] SQL doc formatting and typo fixes
+  Nicholas Chammas <nicholas.chammas@gmail.com>, nchammas <nicholas.chammas@gmail.com>
+  2014-08-29 15:23:32 -0700
+  Commit: bfa2dc9, github.com/apache/spark/pull/2201
+
+  [SPARK-3307] [PySpark] Fix doc string of SparkContext.broadcast()
+  Davies Liu <davies.liu@gmail.com>
+  2014-08-29 11:47:49 -0700
+  Commit: 98d0716, github.com/apache/spark/pull/2202
+
+  HOTFIX: Bump spark-ec2 version to 1.1.0
+  Patrick Wendell <pwendell@gmail.com>
+  2014-08-29 11:20:45 -0700
+  Commit: c71b5c6
+
+  Adding new CHANGES.txt
+  Patrick Wendell <pwendell@gmail.com>
+  2014-08-28 17:17:30 -0700
+  Commit: 7db87b3
+
   [SPARK-3277] Fix external spilling with LZ4 assertion error
   Andrew Or <andrewor14@gmail.com>, Patrick Wendell <pwendell@gmail.com>
   2014-08-28 17:05:21 -0700
