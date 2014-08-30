@@ -197,7 +197,7 @@ object BlockFetcherIterator {
       for (id <- localBlocksToFetch) {
         try {
           readMetrics.localBlocksFetched += 1
-          results.put(new FetchResult(id, 0, () => getLocalFromDisk(id, serializer).get))
+          results.put(new FetchResult(id, 0, () => getLocalShuffleFromDisk(id, serializer).get))
           logDebug("Got local block " + id)
         } catch {
           case e: Exception => {

@@ -719,20 +719,20 @@ private[spark] class ExternalSorter[K, V, C](
   def iterator: Iterator[Product2[K, C]] = partitionedIterator.flatMap(pair => pair._2)
 
   /**
-   * Write all the data added into this ExternalSorter into a file in the disk store, creating
-   * an .index file for it as well with the offsets of each partition. This is called by the
-   * SortShuffleWriter and can go through an efficient path of just concatenating binary files
-   * if we decided to avoid merge-sorting.
+   * Write all the data added into this ExternalSorter into a file in the disk store. This is
+   * called by the SortShuffleWriter and can go through an efficient path of just concatenating
+   * binary files if we decided to avoid merge-sorting.
    *
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
-  def writePartitionedFile(blockId: BlockId, context: TaskContext): Array[Long] = {
-    val outputFile = blockManager.diskBlockManager.getFile(blockId)
+  def writePartitionedFile(
+      blockId: BlockId,
+      context: TaskContext,
+      outputFile: File): Array[Long] = {
 
     // Track location of each range in the output file
-    val offsets = new Array[Long](numPartitions + 1)
     val lengths = new Array[Long](numPartitions)
 
     if (bypassMergeSort && partitionWriters != null) {
@@ -750,7 +750,6 @@ private[spark] class ExternalSorter[K, V, C](
           in.close()
           in = null
           lengths(i) = size
-          offsets(i + 1) = offsets(i) + lengths(i)
         }
       } finally {
         if (out != null) {
@@ -772,34 +771,13 @@ private[spark] class ExternalSorter[K, V, C](
           }
           writer.commitAndClose()
           val segment = writer.fileSegment()
-          offsets(id + 1) = segment.offset + segment.length
           lengths(id) = segment.length
-        } else {
-          // The partition is empty; don't create a new writer to avoid writing headers, etc
-          offsets(id + 1) = offsets(id)
         }
       }
     }
 
     context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += diskBytesSpilled
-
-    // Write an index file with the offsets of each block, plus a final offset at the end for the
-    // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
-    // out where each block begins and ends.
-
-    val diskBlockManager = blockManager.diskBlockManager
-    val indexFile = diskBlockManager.getFile(blockId.name + ".index")
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
-    try {
-      var i = 0
-      while (i < numPartitions + 1) {
-        out.writeLong(offsets(i))
-        i += 1
-      }
-    } finally {
-      out.close()
-    }
 
     lengths
   }
@@ -811,7 +789,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (writer.isOpen) {
       writer.commitAndClose()
     }
-    blockManager.getLocalFromDisk(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
+    blockManager.diskStore.getValues(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
   }
 
   def stop(): Unit = {
