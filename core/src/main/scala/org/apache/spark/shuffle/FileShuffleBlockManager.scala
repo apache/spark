@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.shuffle
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, SparkConf, Logging}
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.ShuffleManager
-import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
+import org.apache.spark.shuffle.FileShuffleBlockManager.ShuffleFileGroup
+import org.apache.spark.storage._
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
-import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.executor.ShuffleWriteMetrics
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -61,19 +61,17 @@ private[spark] trait ShuffleWriterGroup {
  * each block stored in each file. In order to find the location of a shuffle block, we search the
  * files within a ShuffleFileGroups associated with the block's reducer.
  */
-// TODO: Factor this into a separate class for each ShuffleManager implementation
+
 private[spark]
-class ShuffleBlockManager(blockManager: BlockManager,
-                          shuffleManager: ShuffleManager) extends Logging {
-  def conf = blockManager.conf
+class FileShuffleBlockManager(conf: SparkConf)
+  extends ShuffleBlockManager with Logging {
+
+  private lazy val blockManager = SparkEnv.get.blockManager
 
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
-  val consolidateShuffleFiles =
+  private val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
-
-  // Are we using sort-based shuffle?
-  val sortBasedShuffle = shuffleManager.isInstanceOf[SortShuffleManager]
 
   private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
@@ -93,21 +91,10 @@ class ShuffleBlockManager(blockManager: BlockManager,
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
-  type ShuffleId = Int
   private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
 
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
-
-  /**
-   * Register a completed map without getting a ShuffleWriterGroup. Used by sort-based shuffle
-   * because it just writes a single file by itself.
-   */
-  def addCompletedMap(shuffleId: Int, mapId: Int, numBuckets: Int): Unit = {
-    shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
-    val shuffleState = shuffleStates(shuffleId)
-    shuffleState.completedMapTasks.add(mapId)
-  }
 
   /**
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
@@ -181,17 +168,30 @@ class ShuffleBlockManager(blockManager: BlockManager,
 
   /**
    * Returns the physical file segment in which the given BlockId is located.
-   * This function should only be called if shuffle file consolidation is enabled, as it is
-   * an error condition if we don't find the expected block.
    */
-  def getBlockLocation(id: ShuffleBlockId): FileSegment = {
-    // Search all file groups associated with this shuffle.
-    val shuffleState = shuffleStates(id.shuffleId)
-    for (fileGroup <- shuffleState.allFileGroups) {
-      val segment = fileGroup.getFileSegmentFor(id.mapId, id.reduceId)
-      if (segment.isDefined) { return segment.get }
+  private def getBlockLocation(id: ShuffleBlockId): FileSegment = {
+    if (consolidateShuffleFiles) {
+      // Search all file groups associated with this shuffle.
+      val shuffleState = shuffleStates(id.shuffleId)
+      val iter = shuffleState.allFileGroups.iterator
+      while (iter.hasNext) {
+        val segment = iter.next.getFileSegmentFor(id.mapId, id.reduceId)
+        if (segment.isDefined) { return segment.get }
+      }
+      throw new IllegalStateException("Failed to find shuffle block: " + id)
+    } else {
+      val file = blockManager.diskBlockManager.getFile(id)
+      new FileSegment(file, 0, file.length())
     }
-    throw new IllegalStateException("Failed to find shuffle block: " + id)
+  }
+
+  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+    val segment = getBlockLocation(blockId)
+    blockManager.diskStore.getBytes(segment)
+  }
+
+  override def getBlockData(blockId: ShuffleBlockId): Either[FileSegment, ByteBuffer] = {
+    Left(getBlockLocation(blockId.asInstanceOf[ShuffleBlockId]))
   }
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */
@@ -207,14 +207,7 @@ class ShuffleBlockManager(blockManager: BlockManager,
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
-        if (sortBasedShuffle) {
-          // There's a single block ID for each map, plus an index file for it
-          for (mapId <- state.completedMapTasks) {
-            val blockId = new ShuffleBlockId(shuffleId, mapId, 0)
-            blockManager.diskBlockManager.getFile(blockId).delete()
-            blockManager.diskBlockManager.getFile(blockId.name + ".index").delete()
-          }
-        } else if (consolidateShuffleFiles) {
+        if (consolidateShuffleFiles) {
           for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
             file.delete()
           }
@@ -240,13 +233,13 @@ class ShuffleBlockManager(blockManager: BlockManager,
     shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
   }
 
-  def stop() {
+  override def stop() {
     metadataCleaner.cancel()
   }
 }
 
 private[spark]
-object ShuffleBlockManager {
+object FileShuffleBlockManager {
   /**
    * A group of shuffle files, one per reducer.
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
