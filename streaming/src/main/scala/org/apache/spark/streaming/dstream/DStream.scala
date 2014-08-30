@@ -605,12 +605,12 @@ abstract class DStream[T: ClassTag] (
    */
   def print(num: Int = 10) {
     def foreachFunc = (rdd: RDD[T], time: Time) => {
-      val first11 = rdd.take(num + 1)
+      val firstNum = rdd.take(num + 1)
       println ("-------------------------------------------")
       println ("Time: " + time)
       println ("-------------------------------------------")
-      first11.take(num).foreach(println)
-      if (first11.size > num) println("...")
+      firstNum.take(num).foreach(println)
+      if (firstNum.size > num) println("...")
       println()
     }
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
