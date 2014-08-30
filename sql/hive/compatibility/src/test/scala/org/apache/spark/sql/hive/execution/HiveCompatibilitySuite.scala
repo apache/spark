@@ -30,25 +30,21 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
-    File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
+  lazy val hiveQueryDir = TestHive.getHiveFile(
+    "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
-  var originalTimeZone: TimeZone = _
-  var originalLocale: Locale = _
-  var originalColumnBatchSize: Int = TestHive.columnBatchSize
+  private val originalTimeZone = TimeZone.getDefault
+  private val originalLocale = Locale.getDefault
+  private val originalColumnBatchSize = TestHive.columnBatchSize
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    originalTimeZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-
     // Add Locale setting
-    originalLocale = Locale.getDefault
     Locale.setDefault(Locale.US)
-
     // Set a relatively small column batch size for testing purposes
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, "5")
   }
