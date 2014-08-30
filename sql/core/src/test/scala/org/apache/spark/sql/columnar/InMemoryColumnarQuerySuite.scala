@@ -98,7 +98,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq)
 
-    TestSQLContext.cacheTable("timestamps")
+    TestSQLContext.cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
