@@ -35,7 +35,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
-
+  private val maxApplicationEnabled = conf.getBoolean("spark.history.deletelogs.enable", false)
+  private val maxSavedApplication = conf.getInt("spark.history.fs.maxsavedapplication", 50)
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
   private val resolvedLogDir = Option(logDir)
     .map { d => Utils.resolveURI(d) }
@@ -118,7 +119,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
       val logStatus = fs.listStatus(new Path(resolvedLogDir))
-      val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+      var logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+      if(maxApplicationEnabled && logDirs.size > maxSavedApplication) {
+        val apps = logDirs.sortBy(dir => -getModificationTime(dir))
+        val deleteApps = apps.takeRight(logDirs.size - maxSavedApplication);
+        deleteApps.foreach(x => fs.delete(x.getPath, true))
+        logDirs = fs.listStatus(new Path(logDir))
+      }
+
       val logInfos = logDirs.filter { dir =>
         fs.isFile(new Path(dir.getPath, EventLoggingListener.APPLICATION_COMPLETE))
       }
