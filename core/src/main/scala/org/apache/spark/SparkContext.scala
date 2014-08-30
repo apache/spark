@@ -796,7 +796,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
-   * use `SparkFiles.get(path)` to find its download location.
+   * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String) {
     val uri = new URI(path)
@@ -1619,4 +1619,3 @@ private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable
-
