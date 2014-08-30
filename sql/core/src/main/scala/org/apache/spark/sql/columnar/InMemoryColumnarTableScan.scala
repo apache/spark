@@ -104,40 +104,29 @@ private[sql] case class InMemoryColumnarTableScan(
   override def execute() = {
     relation.cachedColumnBuffers.mapPartitions { iterator =>
       // Find the ordinals of the requested columns.  If none are requested, use the first.
-      val requestedColumns =
-        if (attributes.isEmpty) {
-          Seq(0)
-        } else {
-          attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
-        }
-
-      new Iterator[Row] {
-        private[this] var columnBuffers: Array[ByteBuffer] = null
-        private[this] var columnAccessors: Seq[ColumnAccessor] = null
-        nextBatch()
-
-        private[this] val nextRow = new GenericMutableRow(columnAccessors.length)
-
-        def nextBatch() = {
-          columnBuffers = iterator.next()
-          columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
-        }
-
-        override def next() = {
-          if (!columnAccessors.head.hasNext) {
-            nextBatch()
-          }
-
-          var i = 0
-          while (i < nextRow.length) {
-            columnAccessors(i).extractTo(nextRow, i)
-            i += 1
-          }
-          nextRow
-        }
-
-        override def hasNext = columnAccessors.head.hasNext || iterator.hasNext
+      val requestedColumns = if (attributes.isEmpty) {
+        Seq(0)
+      } else {
+        attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
       }
+
+      iterator
+        .map(batch => requestedColumns.map(batch(_)).map(ColumnAccessor(_)))
+        .flatMap { columnAccessors =>
+          val nextRow = new GenericMutableRow(columnAccessors.length)
+          new Iterator[Row] {
+            override def next() = {
+              var i = 0
+              while (i < nextRow.length) {
+                columnAccessors(i).extractTo(nextRow, i)
+                i += 1
+              }
+              nextRow
+            }
+
+            override def hasNext = columnAccessors.head.hasNext
+          }
+        }
     }
   }
 }
