@@ -77,12 +77,11 @@ case class DescribeHiveTableCommand(
     results
   }
 
-  override def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map {
-      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
-    }
-    context.sparkContext.parallelize(rows, 1)
-  }
+  override def executeCollect(): Array[Row] = sideEffectResult.map {
+      case (name, dataType, comment) => Row(name, dataType, comment)
+    }.toArray
+
+  override def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
 
   override def otherCopyArgs = context :: Nil
 }

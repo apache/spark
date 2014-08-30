@@ -90,10 +90,9 @@ case class SetCommand(
       throw new IllegalArgumentException()
   }
 
-  def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map { line => new GenericRow(Array[Any](line)) }
-    context.sparkContext.parallelize(rows, 1)
-  }
+  def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
+
+  override def executeCollect(): Array[Row] = sideEffectResult.map(Row(_)).toArray
 
   override def otherCopyArgs = context :: Nil
 }
@@ -123,10 +122,9 @@ case class ExplainCommand(
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
   }
 
-  def execute(): RDD[Row] = {
-    val explanation = sideEffectResult.map(row => new GenericRow(Array[Any](row)))
-    context.sparkContext.parallelize(explanation, 1)
-  }
+  def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
+
+  override def executeCollect(): Array[Row] = sideEffectResult.map(Row(_)).toArray
 
   override def otherCopyArgs = context :: Nil
 }
@@ -146,6 +144,8 @@ case class CacheCommand(tableName: String, doCache: Boolean)(@transient context:
     }
     Seq.empty[Any]
   }
+
+  override def executeCollect(): Array[Row] = Array.empty[Row]
 
   override def execute(): RDD[Row] = {
     sideEffectResult
@@ -168,10 +168,9 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
       child.output.map(field => (field.name, field.dataType.toString, null))
   }
 
-  override def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map {
-      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
-    }
-    context.sparkContext.parallelize(rows, 1)
-  }
+  override def executeCollect(): Array[Row] = sideEffectResult.map {
+    case (name, dataType, comment) => Row(name, dataType, comment)
+  }.toArray
+
+  override def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
 }

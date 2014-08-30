@@ -34,14 +34,9 @@ case class NativeCommand(
 
   override protected[sql] lazy val sideEffectResult: Seq[String] = context.runSqlHive(sql)
 
-  override def execute(): RDD[Row] = {
-    if (sideEffectResult.size == 0) {
-      context.emptyResult
-    } else {
-      val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
-      context.sparkContext.parallelize(rows, 1)
-    }
-  }
+  override def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
+
+  override def executeCollect(): Array[Row] = sideEffectResult.map(Row(_)).toArray
 
   override def otherCopyArgs = context :: Nil
 }

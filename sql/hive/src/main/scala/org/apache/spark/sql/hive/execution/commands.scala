@@ -33,7 +33,6 @@ import org.apache.spark.sql.hive.HiveContext
  */
 @DeveloperApi
 case class AnalyzeTable(tableName: String) extends LeafNode with Command {
-
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   def output = Seq.empty
@@ -42,6 +41,8 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
     hiveContext.analyze(tableName)
     Seq.empty[Any]
   }
+
+  override def executeCollect(): Array[Row] = Array.empty[Row]
 
   override def execute(): RDD[Row] = {
     sideEffectResult
@@ -66,6 +67,8 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
     hiveContext.catalog.unregisterTable(None, tableName)
     Seq.empty
   }
+
+  override def executeCollect(): Array[Row] = Array.empty[Row]
 
   override def execute(): RDD[Row] = {
     sideEffectResult
