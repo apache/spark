@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{Command, LeafNode}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 
@@ -41,16 +41,11 @@ case class DescribeHiveTableCommand(
   extends LeafNode with Command {
 
   // Strings with the format like Hive. It is used for result comparison in our unit tests.
-  lazy val hiveString: Seq[String] = {
-    val alignment = 20
-    val delim = "\t"
-
-    sideEffectResult.map {
-      case (name, dataType, comment) =>
-        String.format("%-" + alignment + "s", name) + delim +
-          String.format("%-" + alignment + "s", dataType) + delim +
-          String.format("%-" + alignment + "s", Option(comment).getOrElse("None"))
-    }
+  lazy val hiveString: Seq[String] = sideEffectResult.map {
+    case (name, dataType, comment) =>
+      Seq(name, dataType, Option(comment).getOrElse("None"))
+        .map(String.format(s"%-20s", _))
+        .mkString("\t")
   }
 
   override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
@@ -60,7 +55,7 @@ case class DescribeHiveTableCommand(
     val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
     val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
     results ++= columns.map(field => (field.getName, field.getType, field.getComment))
-    if (!partitionColumns.isEmpty) {
+    if (partitionColumns.nonEmpty) {
       val partColumnInfo =
         partitionColumns.map(field => (field.getName, field.getType, field.getComment))
       results ++=
@@ -78,8 +73,8 @@ case class DescribeHiveTableCommand(
   }
 
   override def executeCollect(): Array[Row] = sideEffectResult.map {
-      case (name, dataType, comment) => Row(name, dataType, comment)
-    }.toArray
+    case (name, dataType, comment) => Row(name, dataType, comment)
+  }.toArray
 
   override def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
 
