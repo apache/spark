@@ -125,6 +125,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
      the environment of the executor launcher. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.queue</code></td>
+  <td>default</td>
+  <td>
+     The YARN queue to use for allocation requests.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
@@ -148,6 +155,7 @@ For example:
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1 \
+        --queue thequeue \
         lib/spark-examples*.jar \
         10
 
