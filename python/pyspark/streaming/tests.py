@@ -33,6 +33,7 @@ else:
     import unittest
 
 from pyspark.context import SparkContext
+from pyspark.conf import SparkConf
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.duration import *
 
@@ -47,8 +48,6 @@ class PySparkStreamingTestCase(unittest.TestCase):
         # we do not wait to shutdown py4j client.
         self.ssc._jssc.stop()
         self.ssc._sc.stop()
-        # Why does it long time to terminate StremaingContext and SparkContext?
-        # Should we change the sleep time if this depends on machine spec?
         time.sleep(1)
 
     @classmethod
@@ -454,6 +453,71 @@ class TestBasicOperationsSuite(PySparkStreamingTestCase):
                 break
 
         return result
+
+
+class TestStreamingContextSuite(unittest.TestCase):
+    """
+    Should we have conf property in  SparkContext?
+    @property
+    def conf(self):
+        return self._conf
+
+    """
+    def setUp(self):
+        self.master = "local[2]"
+        self.appName = self.__class__.__name__
+        self.batachDuration = Milliseconds(500)
+        self.sparkHome = "SomeDir"
+        self.envPair = {"key": "value"}
+
+    def tearDown(self):
+        # Do not call pyspark.streaming.context.StreamingContext.stop directly because
+        # we do not wait to shutdown py4j client.
+        self.ssc._jssc.stop()
+        self.ssc._sc.stop()
+        # Why does it long time to terminate StremaingContext and SparkContext?
+        # Should we change the sleep time if this depends on machine spec?
+        time.sleep(1)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Make sure tp shutdown the callback server
+        SparkContext._gateway._shutdown_callback_server()
+
+
+    def test_from_no_conf_constructor(self):
+        ssc = StreamingContext(master=self.master, appName=self.appName, duration=batachDuration)
+        # Alternative call master: ssc.sparkContext.master
+        # I try to make code close to Scala.
+        self.assertEqual(ssc.sparkContext._conf.get("spark.master"), self.master)
+        self.assertEqual(ssc.sparkContext._conf.get("spark.app.name"), self.appName)
+
+    def test_from_no_conf_plus_spark_home(self):
+        ssc = StreamingContext(master=self.master, appName=self.appName, 
+                               sparkHome=self.sparkHome, duration=batachDuration)
+        self.assertEqual(ssc.sparkContext._conf.get("spark.home"), self.sparkHome)
+
+    def test_from_existing_spark_context(self):
+        sc = SparkContext(master=self.master, appName=self.appName)
+        ssc = StreamingContext(sparkContext=sc)
+
+    def test_existing_spark_context_with_settings(self):
+        conf = SparkConf()
+        conf.set("spark.cleaner.ttl", "10")
+        sc = SparkContext(master=self.master, appName=self.appName, conf=conf)
+        ssc = StreamingContext(context=sc)
+        self.assertEqual(int(ssc.sparkContext._conf.get("spark.cleaner.ttl")), 10)
+
+    def _addInputStream(self, s):
+        test_inputs = map(lambda x: range(1, x), range(5, 101))
+        # make sure numSlice is 2 due to deserializer proglem in pyspark
+        s._testInputStream(test_inputs, 2)
+
+
+
+
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,8 @@
 
 import sys
 from signal import signal, SIGTERM, SIGINT
+import atexit
+import time
 
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.context import SparkContext
@@ -73,7 +75,7 @@ class StreamingContext(object):
         # Callback sever is need only by SparkStreming; therefore the callback sever
         # is started in StreamingContext.
         SparkContext._gateway.restart_callback_server()
-        self._set_clean_up_trigger()
+        self._set_clean_up_handler()
         self._jvm = self._sc._jvm
         self._jssc = self._initialize_context(self._sc._jsc, duration._jduration)
 
@@ -81,21 +83,22 @@ class StreamingContext(object):
     def _initialize_context(self, jspark_context, jduration):
         return self._jvm.JavaStreamingContext(jspark_context, jduration)
 
-    def _set_clean_up_trigger(self):
-        """Kill py4j callback server properly using signal lib"""
+    def _set_clean_up_handler(self):
+        """ set clean up hander using atexit """
 
-        def clean_up_handler(*args):
-            # Make sure stop callback server.
+        def clean_up_handler():
             SparkContext._gateway.shutdown()
-            sys.exit(0)
 
+        atexit.register(clean_up_handler)
+        # atext is not called when the program is killed by a signal not handled by
+        # Python.
         for sig in (SIGINT, SIGTERM):
             signal(sig, clean_up_handler)
 
     @property
     def sparkContext(self):
         """
-        Return SparkContext which is associated this StreamingContext
+        Return SparkContext which is associated with this StreamingContext.
         """
         return self._sc
 
@@ -152,11 +155,14 @@ class StreamingContext(object):
         Stop the execution of the streams immediately (does not wait for all received data
         to be processed).
         """
-        try:
-            self._jssc.stop(stopSparkContext, stopGraceFully)
-        finally:
-            SparkContext._gateway.shutdown()
+        self._jssc.stop(stopSparkContext, stopGraceFully)
+        if stopSparkContext:
+            self._sc.stop()
 
+        # Shutdown only callback server and all py3j client is shutdowned
+        # clean up handler
+        SparkContext._gateway._shutdown_callback_server()
+        
     def _testInputStream(self, test_inputs, numSlices=None):
         """
         This function is only for unittest.
