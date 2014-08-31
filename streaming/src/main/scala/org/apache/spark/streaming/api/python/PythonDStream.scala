@@ -43,8 +43,8 @@ class PythonDStream[T: ClassTag](
     preservePartitoning: Boolean,
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
-    accumulator: Accumulator[JList[Array[Byte]]])
-  extends DStream[Array[Byte]](parent.ssc) {
+    accumulator: Accumulator[JList[Array[Byte]]]
+  ) extends DStream[Array[Byte]](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -70,8 +70,10 @@ class PythonDStream[T: ClassTag](
 }
 
 
-private class PythonPairwiseDStream(prev:DStream[Array[Byte]], partitioner: Partitioner) extends
-DStream[Array[Byte]](prev.ssc){
+private class PythonPairwiseDStream(
+    prev:DStream[Array[Byte]],
+    partitioner: Partitioner
+  ) extends DStream[Array[Byte]](prev.ssc){
   override def dependencies = List(prev)
 
   override def slideDuration: Duration = prev.slideDuration
@@ -116,14 +118,14 @@ class PythonForeachDStream(
 
 /**
  * This is a input stream just for the unitest. This is equivalent to a checkpointable,
- * replayable, reliable message queue like Kafka. It requires a JArrayList input of JavaRDD,
+ * replayable, reliable message queue like Kafka. It requires a JArrayList of JavaRDD,
  * and returns the i_th element at the i_th batch under manual clock.
  */
 
 class PythonTestInputStream(
     ssc_ : JavaStreamingContext,
-    inputRDDs: JArrayList[JavaRDD[Array[Byte]]])
-  extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
+    inputRDDs: JArrayList[JavaRDD[Array[Byte]]]
+  ) extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
 
   def start() {}
 
