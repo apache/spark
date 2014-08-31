@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Building Spark with Maven
+title: Building Spark
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -159,4 +159,8 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
 
+# Building with SBT
 
+Maven is the official recommendation for packaging Spark, and is the "build of reference".
+But SBT is supported for day-to-day development since it can provide much faster iterative
+compilation. More advanced developers may wish to use SBT.

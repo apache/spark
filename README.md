@@ -25,7 +25,7 @@ To build Spark and its example programs, run:
 
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
-["Building Spark with Maven"](http://spark.apache.org/docs/latest/building-with-maven.html).
+["Building Spark"](http://spark.apache.org/docs/latest/building-with-maven.html).
 
 ## Interactive Scala Shell
 
@@ -68,6 +68,11 @@ package. For instance:
 Many of the example programs print usage help if no params are given.
 
 ## Running Tests
+
+Testing first requires [building Spark](#building-spark). Once Spark is built, tests
+can be run using:
+
+    ./dev/run-tests
 
 Please see the guidance on how to 
 [run all automated tests](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-AutomatedTesting)
