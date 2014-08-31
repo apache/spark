@@ -473,6 +473,7 @@ class TestStreamingContextSuite(unittest.TestCase):
     def tearDown(self):
         # Do not call pyspark.streaming.context.StreamingContext.stop directly because
         # we do not wait to shutdown py4j client.
+        # We need change this simply calll streamingConxt.Stop
         self.ssc._jssc.stop()
         self.ssc._sc.stop()
         # Why does it long time to terminate StremaingContext and SparkContext?
@@ -483,7 +484,6 @@ class TestStreamingContextSuite(unittest.TestCase):
     def tearDownClass(cls):
         # Make sure tp shutdown the callback server
         SparkContext._gateway._shutdown_callback_server()
-
 
     def test_from_no_conf_constructor(self):
         ssc = StreamingContext(master=self.master, appName=self.appName, duration=batachDuration)
@@ -513,7 +513,17 @@ class TestStreamingContextSuite(unittest.TestCase):
         # make sure numSlice is 2 due to deserializer proglem in pyspark
         s._testInputStream(test_inputs, 2)
 
+    def test_from_no_conf_plus_spark_home_plus_env(self):
+        pass
 
+    def test_from_conf_with_settings(self):
+        pass
+
+    def test_stop_only_streaming_context(self):
+        pass
+
+    def test_await_termination(self):
+        pass
 
 
 
@@ -521,4 +531,3 @@ class TestStreamingContextSuite(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-    SparkContext._gateway._shutdown_callback_server()
