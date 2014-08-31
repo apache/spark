@@ -94,6 +94,9 @@ class StreamingContext(object):
 
     @property
     def sparkContext(self):
+        """
+        Return SparkContext which is associated this StreamingContext
+        """
         return self._sc
 
     def start(self):
