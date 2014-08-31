@@ -443,7 +443,7 @@ class RowMatrix(
     val sg = math.sqrt(gamma) // sqrt(gamma) used many times
 
     val sims = rows.flatMap { row =>
-      val buf = new ListBuffer[((Long, Long), Double)]()
+      val buf = new ListBuffer[((Int, Int), Double)]()
       row.toBreeze.activeIterator.foreach {
         case (_, 0.0) => // Skip explicit zero elements.
         case (i, iVal) =>
@@ -452,7 +452,7 @@ class RowMatrix(
               case (_, 0.0) => // Skip explicit zero elements.
               case (j, jVal) =>
                 if (Math.random < sg / colMags(j)) {
-                  val contrib = ((i.toLong, j.toLong), (iVal * jVal) /
+                  val contrib = ((i, j), (iVal * jVal) /
                     (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
                   buf += contrib
                 }
@@ -461,7 +461,7 @@ class RowMatrix(
       }
       buf
     }.reduceByKey(_ + _).map { case ((i, j), sim) =>
-      MatrixEntry(i, j, sim)
+      MatrixEntry(i.toLong, j.toLong, sim)
     }
     new CoordinateMatrix(sims, numCols(), numCols())
   }
