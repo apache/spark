@@ -82,7 +82,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
           throw new SparkException("Failed to get value of " + broadcastId)
       }
 
-      doDestroy(true)
+      SparkEnv.get.blockManager.removeBroadcast(id, false)
       numBlocks = writeBlocks()
     }
   }
