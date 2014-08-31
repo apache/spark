@@ -22,7 +22,7 @@ import java.io.File
 import scala.io.Source
 import scala.math
 
-import org.scalatest.FunSuite
+import org.scalatest.{ FunSuite, Matchers }
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => breezeNorm,
   squaredDistance => breezeSquaredDistance}
@@ -34,7 +34,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.util.Utils
 
-class MLUtilsSuite extends FunSuite with LocalSparkContext {
+class MLUtilsSuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
@@ -188,5 +188,18 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     val loaded = loadLabeledPoints(sc, path)
     assert(points.collect().toSet === loaded.collect().toSet)
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("normalizeByCol") {
+    val arrays = sc.parallelize(List(Array(1.0, 2.0, 3.0), Array(1.5, 2.0, 4.0), Array(2.0, 2.0, 5.0)))
+    val vectors = arrays.map(Vectors.dense(_))
+    val normalized = normalizeByCol(vectors)
+    val results = normalized.map(_.toArray).collect
+    results(0)(0) should be(-1.0 +- 0.01)
+    results(1)(0) should be(0.0 +- 0.01)
+    results(2)(0) should be(1.0 +- 0.01)
+    assert(results(0)(1).isNaN)
+    assert(results(1)(1).isNaN)
+    assert(results(2)(1).isNaN)
   }
 }

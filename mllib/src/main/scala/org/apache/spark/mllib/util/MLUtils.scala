@@ -24,6 +24,7 @@ import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliSampler
@@ -319,4 +320,25 @@ object MLUtils {
     }
     sqDist
   }
+
+  /**
+   * Compute the mean and standard deviations of each vector component and normalize each vector in the RDD.
+   * The result is an RDD of Vectors where each column has a mean of zero and standard deviation of one.
+   */
+  def normalizeByCol(rdd: RDD[Vector]): RDD[Vector] = {
+    val plus: (Array[Double], Array[Double]) => Array[Double] = _.zip(_).map{ x => x._1 + x._2 }
+    val meansAndSdevs = rdd
+      .map{ v => (1, (1L, v.toArray, v.toArray.map{ x => x * x })) }
+      .reduceByKey{ case ((count1, sums1, sqSums1), (count2, sums2, sqSums2)) => (count1 + count2, plus(sums1, sums2), plus(sqSums1, sqSums2)) }
+      .map{ case(_, x) => x } // contains (count, sums, sqSums)
+      .map{ case(count, sum, sqSum) => (sum.map(_ / count), sqSum.map(_ / count), 1.0 * count / (count - 1)) } // contains (means, sqMeans, fSample)
+      .map{ case(means, sqMeans, fSample) => (means, sqMeans.zip(means).map{ case (sqMean, mean) => math.pow(fSample * (sqMean - mean * mean), 0.5) }) }
+    rdd
+      .cartesian(meansAndSdevs)
+      .map{ case(v, (means, sdevs)) => v.toArray.zip(means zip sdevs).map{ case (value, (mean, sdev)) => (value - mean) / sdev } }
+      .map(Vectors.dense(_))
+  }
+
+  def normalizeByCol(rdd: RDD[LabeledPoint])(implicit d: DummyImplicit): RDD[LabeledPoint] =
+    normalizeByCol(rdd.map(_.features)).zip(rdd).map{ case (newVector, oldLp) => LabeledPoint(oldLp.label, newVector) }
 }
