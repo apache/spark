@@ -69,6 +69,7 @@ class LinearModel(object):
     def __str__(self):
         return "(weights: " + str(self._coeff) + ", intercept: " + str(self._intercept) + ")"
 
+
 class LinearRegressionModelBase(LinearModel):
 
     """A linear regression model.
