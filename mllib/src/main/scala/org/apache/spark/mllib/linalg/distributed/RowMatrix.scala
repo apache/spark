@@ -394,25 +394,11 @@ class RowMatrix(
   }
 
   /**
-   * Return 2-norm of the columns of this matrix.
-   * @return an array of column magnitudes
-   */
-  def columnMagnitudes():
-  Array[Double] = {
-    rows.map {
-      x =>
-        val brzX = x.toBreeze
-        brzX.:*(brzX)
-    }.fold(BDV.zeros[Double](numCols().toInt))(_ + _).toArray.map(math.sqrt(_))
-  }
-
-  /**
    * Find all similar columns using cosine similarity.
    *
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumns():
-  CoordinateMatrix = {
+  def similarColumns(): CoordinateMatrix = {
     similarColumns(Double.PositiveInfinity)
   }
 
@@ -425,9 +411,19 @@ class RowMatrix(
    *              and n is the number of columns
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumns(gamma: Double):
-  CoordinateMatrix = {
+  def similarColumns(gamma: Double): CoordinateMatrix = {
     similarColumnsDIMSUM(columnMagnitudes(), gamma)
+  }
+
+  /**
+   * Return 2-norm of the columns of this matrix.
+   * @return an array of column magnitudes
+   */
+  def columnMagnitudes(): Array[Double] = {
+    rows.map { x =>
+      val brzX = x.toBreeze
+      brzX.:*(brzX)
+    }.fold(BDV.zeros[Double](numCols().toInt))(_ + _).toArray.map(math.sqrt(_))
   }
 
   /**
@@ -440,35 +436,33 @@ class RowMatrix(
    *              and n is the number of columns
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double):
-  CoordinateMatrix = {
+  def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double): CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
-
-    require(colMags.size == this.numCols(),
-      "Number of magnitudes didn't match column dimension")
+    require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
 
     val sg = math.sqrt(gamma) // sqrt(gamma) used many times
 
-    val sims = rows.flatMap {
-      row =>
-        val buf = new ListBuffer[((Long, Long), Double)]()
-        row.toBreeze.activeIterator.foreach {
-          case (_, 0.0) => // Skip explicit zero elements.
-          case (i, iVal) =>
-            if (Math.random < sg / colMags(i)) {
-              row.toBreeze.activeIterator.foreach {
-                case (_, 0.0) => // Skip explicit zero elements.
-                case (j, jVal) =>
-                  if (Math.random < sg / colMags(j)) {
-                    val contrib = ((i.toLong, j.toLong), (iVal * jVal) /
-                      (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
-                    buf += contrib
-                  }
-              }
+    val sims = rows.flatMap { row =>
+      val buf = new ListBuffer[((Long, Long), Double)]()
+      row.toBreeze.activeIterator.foreach {
+        case (_, 0.0) => // Skip explicit zero elements.
+        case (i, iVal) =>
+          if (Math.random < sg / colMags(i)) {
+            row.toBreeze.activeIterator.foreach {
+              case (_, 0.0) => // Skip explicit zero elements.
+              case (j, jVal) =>
+                if (Math.random < sg / colMags(j)) {
+                  val contrib = ((i.toLong, j.toLong), (iVal * jVal) /
+                    (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                  buf += contrib
+                }
             }
-        }
-        buf
-    }.reduceByKey(_ + _).map { case ((i, j), sim) => MatrixEntry(i, j, sim)}
+          }
+      }
+      buf
+    }.reduceByKey(_ + _).map { case ((i, j), sim) =>
+      MatrixEntry(i, j, sim)
+    }
     new CoordinateMatrix(sims, numCols(), numCols())
   }
 
