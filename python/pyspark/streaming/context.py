@@ -92,6 +92,10 @@ class StreamingContext(object):
         for sig in (SIGINT, SIGTERM):
             signal(sig, clean_up_handler)
 
+    @property
+    def sparkContext(self):
+        return self._sc
+
     def start(self):
         """
         Start the execution of the streams.
