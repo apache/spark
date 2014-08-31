@@ -63,6 +63,9 @@ class StreamingContext(object):
 
         """
 
+        if not isinstance(duration, Duration):
+            raise TypeError("Input should be pyspark.streaming.duration.Duration object")
+
         if sparkContext is None:
             # Create the Python Sparkcontext
             self._sc = SparkContext(master=master, appName=appName, sparkHome=sparkHome,
