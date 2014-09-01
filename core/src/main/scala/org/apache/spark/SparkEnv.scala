@@ -82,9 +82,7 @@ class SparkEnv (
     shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
-    if (isDriver) {
-      blockManager.master.stop()
-    }
+    blockManager.master.stop()
     metricsSystem.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
