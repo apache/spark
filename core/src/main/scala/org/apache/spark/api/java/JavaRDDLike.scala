@@ -195,10 +195,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   @DeveloperApi
   def mapPartitionsWithContext[R](
-                                   f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
-                                   preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithContext(((a, b) => f(a, asJavaIterator(b))),
-      preservesPartitioning)(fakeClassTag))(fakeClassTag)
+      f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
+      preservesPartitioning: Boolean = false): JavaRDD[R] = {
+
+    new JavaRDD(rdd.mapPartitionsWithContext(
+      ((a, b) => f(a, asJavaIterator(b))), preservesPartitioning)(fakeClassTag))(fakeClassTag)
+  }
+
 
   /**
    * :: DeveloperApi ::
@@ -212,6 +215,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def mapPartitionsToDoubleWithContext(
       f: DoubleFlatMapFunction2[TaskContext, java.util.Iterator[T]],
       preservesPartitioning: Boolean): JavaDoubleRDD = {
+
     def fn = (context: TaskContext, x: Iterator[T]) =>
       asScalaIterator(f.call(context, asJavaIterator(x)).iterator())
     new JavaDoubleRDD(
@@ -227,8 +231,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
-  def mapPartitionsToPairWithContext[K2, V2](f: PairFlatMapFunction2[TaskContext,
-      java.util.Iterator[T], K2, V2], preservesPartitioning: Boolean): JavaPairRDD[K2, V2] = {
+  def mapPartitionsToPairWithContext[K2, V2](
+      f: PairFlatMapFunction2[TaskContext, java.util.Iterator[T], K2, V2],
+      preservesPartitioning: Boolean): JavaPairRDD[K2, V2] = {
+
     def fn = (context: TaskContext, x: Iterator[T]) =>
       asScalaIterator(f.call(context, asJavaIterator(x)).iterator())
     JavaPairRDD.fromRDD(
