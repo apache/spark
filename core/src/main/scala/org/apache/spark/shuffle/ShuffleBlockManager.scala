@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.shuffle
 
-import org.apache.spark._
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.Utils
+import java.nio.ByteBuffer
 
-/**
- * This scheduler launches executors through Yarn - by calling into Client to launch the Spark AM.
- */
-private[spark] class YarnClientClusterScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+import org.apache.spark.storage.{FileSegment, ShuffleBlockId}
 
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    val host = Utils.parseHostPort(hostPort)._1
-    Option(YarnSparkHadoopUtil.lookupRack(sc.hadoopConfiguration, host))
-  }
+private[spark]
+trait ShuffleBlockManager {
+  type ShuffleId = Int
+
+  /**
+   * Get shuffle block data managed by the local ShuffleBlockManager.
+   * @return Some(ByteBuffer) if block found, otherwise None.
+   */
+  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
+
+  def getBlockData(blockId: ShuffleBlockId): Either[FileSegment, ByteBuffer]
+
+  def stop(): Unit
 }
+
