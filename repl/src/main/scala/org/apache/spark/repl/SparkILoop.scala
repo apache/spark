@@ -190,8 +190,16 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     require(settings != null)
 
     if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    val addedJars =
+      if (Utils.isWindows) {
+        // Strip any URI scheme prefix so we can add the correct path to the classpath
+        // e.g. file:/C:/my/path.jar -> C:/my/path.jar
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
+      } else {
+        SparkILoop.getAddedJars
+      }
     // work around for Scala bug
-    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+    val totalClassPath = addedJars.foldLeft(
       settings.classpath.value)((l, r) => ClassPath.join(l, r))
     this.settings.classpath.value = totalClassPath
 
@@ -1053,15 +1061,7 @@ object SparkILoop {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        val addedJars =
-          if (Utils.isWindows) {
-            // Strip any URI scheme prefix so we can add the correct path to the classpath
-            // e.g. file:/C:/my/path.jar -> C:/my/path.jar
-            getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
-          } else {
-            getAddedJars
-          }
-        addedJars.foreach(settings.classpath.append)
+        getAddedJars.foreach(settings.classpath.append(_))
 
         repl process settings
       }
