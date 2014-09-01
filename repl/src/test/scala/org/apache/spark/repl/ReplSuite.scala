@@ -317,4 +317,9 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
+
+  test("stop SparkContext on exit() command") {
+    val output = runInterpreter("local", "exit()")
+    assertContains("Stopping spark context.", output)
+  }
 }
