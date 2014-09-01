@@ -5,6 +5,13 @@
 SparkR is an R package that provides a light-weight frontend to use Spark from
 R.
 
+## Report Issues/Feedback 
+Since this is incubating Spark subproject and for better tracking and collaboration across, all prior SparkR TODOs and issues to JIRA hosted at [SparkR Feedback](https://sparkr.atlassian.net/browse/SPARKR/)
+Please also report new issues/feedbacks/improvement at [SparkR Feedback](https://sparkr.atlassian.net/browse/SPARKR/)
+To accelerate R on Spark, we value all your inputs. 
+In your pull request, please cross reference the ticket item created. Likewise, if you already have a pull request ready, please reference so in your ticket item.
+
+
 ## Installing SparkR
 
 ### Requirements
@@ -24,7 +31,7 @@ To develop SparkR, you can build the scala package and the R package using
 
     ./install-dev.sh
 
-If you wish to try out the package directly from github, you can use [`install_github`](http://www.inside-r.org/packages/cran/devtools/docs/install_github) from [`devtools`](http://www.inside-r.org/packages/cran/devtools). Note that you can specify which branch, tag etc to install from.
+If you wish to try out the package directly from github, you can use `install_github` from `devtools`
 
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
