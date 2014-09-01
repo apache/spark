@@ -966,9 +966,11 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
+    val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setAppName("Spark shell")
+      .setJars(jars)
       .set("spark.repl.class.uri", intp.classServer.uri)
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
@@ -1017,14 +1019,7 @@ object SparkILoop {
       if (p == "") None else Some(p)
     }
     val jars = propJars.orElse(envJars).getOrElse("")
-    val resolvedJars = Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
-    if (Utils.isWindows) {
-      // Strip any URI scheme prefix so we can add the correct path to the classpath
-      // e.g. file:/C:/my/path.jar -> C:/my/path.jar
-      resolvedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
-    } else {
-      resolvedJars
-    }
+    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
 
   // Designed primarily for use by test code: take a String with a
@@ -1058,7 +1053,15 @@ object SparkILoop {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        getAddedJars.foreach(settings.classpath.append(_))
+        val addedJars =
+          if (Utils.isWindows) {
+            // Strip any URI scheme prefix so we can add the correct path to the classpath
+            // e.g. file:/C:/my/path.jar -> C:/my/path.jar
+            getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
+          } else {
+            getAddedJars
+          }
+        addedJars.foreach(settings.classpath.append)
 
         repl process settings
       }
