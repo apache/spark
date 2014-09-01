@@ -347,7 +347,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.instance_type.startswith('m3.'):
         for i in range(get_num_disks(opts.instance_type)):
             dev = BlockDeviceType()
-            dev.ephemeral_name = 'ephemeral{}'.format(i)
+            dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
             name = '/dev/sd' + string.letters[i + 1]
             block_map[name] = dev
