@@ -66,8 +66,7 @@ class SparkEnv (
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
-    val conf: SparkConf,
-    val isDriver : Boolean) extends Logging {
+    val conf: SparkConf) extends Logging {
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -226,7 +225,7 @@ object SparkEnv extends Logging {
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf, securityManager, mapOutputTracker, shuffleManager)
@@ -286,8 +285,7 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       shuffleMemoryManager,
-      conf,
-      isDriver)
+      conf)
   }
 
   /**
