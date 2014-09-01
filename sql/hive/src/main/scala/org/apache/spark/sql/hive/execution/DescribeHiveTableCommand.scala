@@ -42,13 +42,13 @@ case class DescribeHiveTableCommand(
 
   // Strings with the format like Hive. It is used for result comparison in our unit tests.
   lazy val hiveString: Seq[String] = sideEffectResult.map {
-    case (name, dataType, comment) =>
+    case Row(name: String, dataType: String, comment: String) =>
       Seq(name, dataType, Option(comment).getOrElse("None"))
-        .map(String.format(s"%-20s", _))
+        .map(s => String.format(s"%-20s", s))
         .mkString("\t")
   }
 
-  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 
@@ -69,14 +69,12 @@ case class DescribeHiveTableCommand(
       results ++= Seq(("Detailed Table Information", table.hiveQlTable.getTTable.toString, ""))
     }
 
-    results
+    results.map { case (name, dataType, comment) =>
+      Row(name, dataType, comment)
+    }
   }
 
-  override def executeCollect(): Array[Row] = sideEffectResult.map {
-    case (name, dataType, comment) => Row(name, dataType, comment)
-  }.toArray
-
-  override def execute(): RDD[Row] = context.sparkContext.parallelize(executeCollect(), 1)
+  override def execute(): RDD[Row] = context.sparkContext.parallelize(sideEffectResult, 1)
 
   override def otherCopyArgs = context :: Nil
 }

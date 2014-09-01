@@ -37,12 +37,10 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     hiveContext.analyze(tableName)
-    Seq.empty[Any]
+    Seq.empty[Row]
   }
-
-  override def executeCollect(): Array[Row] = Array.empty[Row]
 
   override def execute(): RDD[Row] = {
     sideEffectResult
@@ -61,14 +59,12 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Any] = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
-    Seq.empty
+    Seq.empty[Row]
   }
-
-  override def executeCollect(): Array[Row] = Array.empty[Row]
 
   override def execute(): RDD[Row] = {
     sideEffectResult
