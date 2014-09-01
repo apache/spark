@@ -59,7 +59,7 @@ class LogisticRegressionModel (
  * Broyden–Fletcher–Goldfarb–Shanno algorithm.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  *
- * Using [[org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS]] is recommended over this.
+ * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,
