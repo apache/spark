@@ -49,10 +49,11 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
 
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
+    var blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
         (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
     }
+    blocksByAddress = randomize(blocksByAddress, shuffleId, reduceId)
 
     def unpackBlock(blockPair: (BlockId, Option[Iterator[Any]])) : Iterator[T] = {
       val blockId = blockPair._1
@@ -82,5 +83,22 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
     })
 
     new InterruptibleIterator[T](context, completionIter)
+  }
+
+  private def randomize[T](data: Seq[T], shuffleId: Int, reduceId: Int): Seq[T] = {
+    data.zipWithIndex.map { case (v, i) =>
+      val hash = 1000000007D * (Math.cos(i * shuffleId * reduceId + 3) * 5 +
+        17 * Math.sin(i * data.size) + Math.log(19 + (shuffleId * reduceId)) + 11 * i)
+      val m = hash.toLong % data.size
+      (v, m, i)
+    }.sortWith { (a, b) =>
+      if (a._2 > b._2) {
+        true
+      } else if (a._2 == b._2) {
+        a._3 > b._3
+      } else {
+        false
+      }
+    }.map(_._1)
   }
 }
