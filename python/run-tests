@@ -19,7 +19,7 @@
 
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; cd ../; pwd)"
+FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 
 # CD into the python directory to find things on the right path
 cd "$FWDIR/python"
@@ -33,7 +33,9 @@ rm -rf metastore warehouse
 
 function run_test() {
     echo "Running test: $1"
-    SPARK_TESTING=1 $FWDIR/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+
+    SPARK_TESTING=1 "$FWDIR"/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
     # Fail and exit on the first test failure.
