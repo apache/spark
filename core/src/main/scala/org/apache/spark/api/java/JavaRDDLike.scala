@@ -576,12 +576,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * :: Experimental ::
-   * THIS IS AN EXPERIMENTAL API THAT MIGHT CHANGE IN THE FUTURE.
    * The asynchronous version of the foreach action.
    *
    * @param f the function to apply to all the elements of the RDD
    * @return a FutureAction for the action
    */
+  @Experimental
   def foreachAsync(f: VoidFunction[T]): FutureAction[Unit] = {
     import org.apache.spark.SparkContext._
     rdd.foreachAsync(x => f.call(x))
