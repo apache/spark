@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.util.control.NonFatal
+
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.net.Socket
@@ -24,7 +26,6 @@ import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
 import akka.remote._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
@@ -208,47 +209,58 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
 
+    // The number of failures in a row until Reporter thread give up
+    val reporterMaxFailures = sparkConf.getLong("spark.yarn.scheduler.reporterThread.maxFailures", 5)
+
     val t = new Thread {
       override def run() {
+        var failureCount = 0
+
         while (!finished) {
-          checkNumExecutorsFailed()
-          if (!finished) {
-            logDebug("Sending progress")
-            allocator.allocateResources()
-            try {
-              Thread.sleep(interval)
-            } catch {
-              case e: InterruptedException =>
+          try {
+            checkNumExecutorsFailed()
+            if (!finished) {
+              logDebug("Sending progress")
+              allocator.allocateResources()
             }
+            failureCount = 0
+          } catch {
+            case e: Throwable => {
+              failureCount += 1
+              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+                logError("Exception was thrown from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, "Exception was thrown" +
+                  s"${failureCount} time(s) from Reporter thread.")
+
+                /**
+                 * If exception is thrown from ReporterThread,
+                 * interrupt user class to stop.
+                 * Without this interrupting, if exception is
+                 * thrown before allocating enough executors,
+                 * YarnClusterScheduler waits until timeout even though
+                 * we cannot allocate executors.
+                 */
+                logInfo("Interrupting user class to stop.")
+                userClassThread.interrupt
+              } else {
+                logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
+              }
+            }
+          }
+          try {
+            Thread.sleep(interval)
+          } catch {
+            case e: InterruptedException =>
           }
         }
       }
     }
-    t.setUncaughtExceptionHandler(new ReporterThreadUncaughtExceptionHandler)
     // setting to daemon status, though this is usually not a good idea.
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
     logInfo("Started progress reporter thread - sleep time : " + interval)
     t
-  }
-
-  class ReporterThreadUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler {
-    override def uncaughtException(th: Thread, e: Throwable) {
-      logError("Uncaught exception", e)
-      finish(FinalApplicationStatus.FAILED, "Uncaught exception was thrown from Reporter thread")
-
-      /**
-       * If uncaught exception is thrown from ReporterThread,
-       * interrupt user class to stop.
-       * Without this interrupting, if exception is
-       * thrown before allocating enough executors,
-       * YarnClusterScheduler waits until timeout even though
-       * we cannot allocate executors.
-       */
-      logInfo("Interrupting user class to stop.")
-      userClassThread.interrupt
-    }
   }
 
   /**
@@ -378,7 +390,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           case e: InvocationTargetException => {
             e.getCause match {
               case _: InterruptedException => {
-                // ReporterThreadUncaughtExceptionHandler can interrupt to stop user class
+                // Reporter thread can interrupt to stop user class
               }
             }
           }
