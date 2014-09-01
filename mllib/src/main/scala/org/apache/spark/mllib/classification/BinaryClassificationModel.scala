@@ -107,14 +107,4 @@ class BinaryClassificationModel (
     if (useThreshold) predictClass(testData)
     else predictScore(testData)
   }
-
-  /**
-   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
-   * Predict values for examples stored in a JavaRDD.
-   * @param testData JavaRDD representing data points to be predicted
-   * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
-   */
-  @Deprecated
-  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
-    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }

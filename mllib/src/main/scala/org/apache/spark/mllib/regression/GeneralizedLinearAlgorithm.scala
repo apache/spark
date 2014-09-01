@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.api.java.JavaRDD
 
 /**
  * :: DeveloperApi ::
@@ -120,6 +121,13 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
+
+  /**
+   * DEPRECATED: Use predictScore(...) instead
+   */
+  @Deprecated
+  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
+    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }
 
 /**
