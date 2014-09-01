@@ -86,7 +86,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  @deprecated
+  @Deprecated
   protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
 
   /**
@@ -96,7 +96,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
-  @deprecated
+  @Deprecated
   def predict(testData: RDD[Vector]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
@@ -116,7 +116,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    */
-  @deprecated
+  @Deprecated
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }

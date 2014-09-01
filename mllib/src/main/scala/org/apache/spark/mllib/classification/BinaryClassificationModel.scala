@@ -21,7 +21,6 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.GeneralizedLinearModel
 import org.apache.spark.api.java.JavaRDD
-import scala.deprecated
 
 /**
  * Represents a classification model that predicts to which of a set of categories an example
@@ -33,7 +32,8 @@ class BinaryClassificationModel (
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
 
   protected var threshold: Double = 0.0
-  @deprecated
+
+  // this is only used to ensure prior behaviour of deprecated `predict``
   protected var useThreshold: Boolean = true
 
   /**
@@ -61,7 +61,7 @@ class BinaryClassificationModel (
   }
 
   /**
-   * :: Deprecated ::
+   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
   @Deprecated
@@ -71,38 +71,50 @@ class BinaryClassificationModel (
   }
 
   /**
-   * :: Deprecated ::
+   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
+   */
+  @Deprecated
+  override protected def predictPoint(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double) = {
+    if (useThreshold) predictClass(dataMatrix)
+    else predictScore(dataMatrix)
+  }
+
+  /**
+   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
    * Predict values for the given data set using the model trained.
    *
    * @param testData RDD representing data points to be predicted
    * @return an RDD[Double] where each entry contains the corresponding prediction
    */
-  @deprecated
+  @Deprecated
   override def predict(testData: RDD[Vector]): RDD[Double] = {
     if (useThreshold) predictClass(testData)
     else predictScore(testData)
   }
 
   /**
-   * :: Deprecated ::
+   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
    * @return predicted category from the trained model
    */
-  @deprecated
-  def predict(testData: Vector): Double = {
+  @Deprecated
+  override def predict(testData: Vector): Double = {
     if (useThreshold) predictClass(testData)
     else predictScore(testData)
   }
 
   /**
-   * :: Deprecated ::
+   * DEPRECATED: Use predictScore(...) or predictClass(...) instead
    * Predict values for examples stored in a JavaRDD.
    * @param testData JavaRDD representing data points to be predicted
    * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
    */
-  @deprecated
+  @Deprecated
   def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
     predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }

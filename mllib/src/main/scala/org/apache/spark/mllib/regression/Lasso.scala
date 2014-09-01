@@ -34,12 +34,16 @@ class LassoModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
-  override protected def computeScore(
-      dataMatrix: Vector,
-      weightMatrix: Vector,
-      intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-  }
+  /**
+   * DEPRECATED: Use predictScore(...) instead
+   */
+  @Deprecated
+  override protected def predictPoint(
+                                       dataMatrix: Vector,
+                                       weightMatrix: Vector,
+                                       intercept: Double): Double =
+    predictScore(dataMatrix)
+
 }
 
 /**

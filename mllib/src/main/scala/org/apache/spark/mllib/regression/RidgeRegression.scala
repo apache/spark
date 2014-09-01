@@ -33,11 +33,14 @@ class RidgeRegressionModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
-  @deprecated
+  /**
+   * DEPRECATED: Use predictScore(...) instead
+   */
+  @Deprecated
   override protected def predictPoint(
                                        dataMatrix: Vector,
                                        weightMatrix: Vector,
-                                       intercept: Double) =
+                                       intercept: Double): Double =
     predictScore(dataMatrix)
 
 }

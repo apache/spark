@@ -33,15 +33,6 @@ class SVMModel (
                  override val weights: Vector,
                  override val intercept: Double)
   extends BinaryClassificationModel(weights, intercept) {
-
-  @deprecated
-  override protected def predictPoint(
-                                       dataMatrix: Vector,
-                                       weightMatrix: Vector,
-                                       intercept: Double) = {
-    if (useThreshold) predictClass(dataMatrix)
-    else predictScore(dataMatrix)
-  }
 }
 
 /**

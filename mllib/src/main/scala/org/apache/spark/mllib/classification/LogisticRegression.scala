@@ -46,7 +46,10 @@ class LogisticRegressionModel (
     computeProbability(predictScore(testData))
   }
 
-  @deprecated
+  /**
+   * DEPRECATED: Use predictProbability(...) or predictClass(...) instead
+   */
+  @Deprecated
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
                                       intercept: Double) = {
     if (useThreshold) predictClass(dataMatrix)
