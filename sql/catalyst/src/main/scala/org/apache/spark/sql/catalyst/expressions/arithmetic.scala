@@ -33,6 +33,19 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
   }
 }
 
+case class Sqrt(child: Expression) extends UnaryExpression {
+  type EvaluatedType = Any
+  
+  def dataType = child.dataType
+  override def foldable = child.foldable
+  def nullable = child.nullable
+  override def toString = s"SQRT($child)"
+
+  override def eval(input: Row): Any = {
+    n1(child, input, ((na,a) => math.sqrt(na.toDouble(a))))
+  }
+}
+
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
 
