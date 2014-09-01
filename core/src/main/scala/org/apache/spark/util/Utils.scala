@@ -717,14 +717,15 @@ private[spark] object Utils extends Logging {
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
     if (lower.endsWith("k")) {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
+      (lower.substring(0, lower.length - 1).toLong / 1024).toInt
     } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length-1).toInt
+      lower.substring(0, lower.length - 1).toInt
     } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length-1).toInt * 1024
+      lower.substring(0, lower.length - 1).toInt * 1024
     } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
+      lower.substring(0, lower.length - 1).toInt * 1024 * 1024
+    } else {
+      // no suffix, so it's just a number in bytes
       (lower.toLong / 1024 / 1024).toInt
     }
   }
