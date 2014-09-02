@@ -56,7 +56,7 @@ object FlumePollingEventCount {
     val ssc = new StreamingContext(sparkConf, batchInterval)
 
     // Create a flume stream that polls the Spark Sink running in a Flume agent
-    val stream = FlumeUtils.createPollingStream(ssc, host, port)
+    val stream = FlumeUtils.createPullBasedStream(ssc, host, port)
 
     // Print out the count of events received from this server in each batch
     stream.count().map(cnt => "Received " + cnt + " flume events." ).print()

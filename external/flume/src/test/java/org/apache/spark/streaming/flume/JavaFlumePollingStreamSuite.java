@@ -33,12 +33,12 @@ public class JavaFlumePollingStreamSuite extends LocalJavaStreamingContext {
         new InetSocketAddress("localhost", 12345)
     };
     JavaReceiverInputDStream<SparkFlumeEvent> test1 =
-        FlumeUtils.createPollingStream(ssc, "localhost", 12345);
-    JavaReceiverInputDStream<SparkFlumeEvent> test2 = FlumeUtils.createPollingStream(
-        ssc, "localhost", 12345, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaReceiverInputDStream<SparkFlumeEvent> test3 = FlumeUtils.createPollingStream(
-        ssc, addresses, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaReceiverInputDStream<SparkFlumeEvent> test4 = FlumeUtils.createPollingStream(
-        ssc, addresses, StorageLevel.MEMORY_AND_DISK_SER_2(), 100, 5);
+        FlumeUtils.createPullBasedStream(ssc, "localhost", 12345);
+    JavaReceiverInputDStream<SparkFlumeEvent> test2 = FlumeUtils.createPullBasedStream(
+            ssc, "localhost", 12345, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaReceiverInputDStream<SparkFlumeEvent> test3 = FlumeUtils.createPullBasedStream(
+            ssc, addresses, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaReceiverInputDStream<SparkFlumeEvent> test4 = FlumeUtils.createPullBasedStream(
+            ssc, addresses, StorageLevel.MEMORY_AND_DISK_SER_2(), 100, 5);
   }
 }

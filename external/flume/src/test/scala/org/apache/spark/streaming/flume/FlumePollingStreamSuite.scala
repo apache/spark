@@ -93,7 +93,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", sink.getPort())),
+      FlumeUtils.createPullBasedStream(ssc, Seq(new InetSocketAddress("localhost", sink.getPort())),
         StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
@@ -137,7 +137,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
     val ssc = new StreamingContext(conf, batchDuration)
     val addresses = Seq(sink.getPort(), sink2.getPort()).map(new InetSocketAddress("localhost", _))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
+      FlumeUtils.createPullBasedStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
         eventsPerBatch, 5)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]

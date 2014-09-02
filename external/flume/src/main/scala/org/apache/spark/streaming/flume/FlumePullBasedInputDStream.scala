@@ -45,7 +45,7 @@ import org.apache.spark.streaming.flume.sink._
  * @param storageLevel The storage level to use.
  * @tparam T Class type of the object of this stream
  */
-private[streaming] class FlumePollingInputDStream[T: ClassTag](
+private[streaming] class FlumePullBasedInputDStream[T: ClassTag](
     @transient _ssc: StreamingContext,
     val addresses: Seq[InetSocketAddress],
     val maxBatchSize: Int,
@@ -54,11 +54,11 @@ private[streaming] class FlumePollingInputDStream[T: ClassTag](
   ) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
+    new FlumePullBasedReceiver(addresses, maxBatchSize, parallelism, storageLevel)
   }
 }
 
-private[streaming] class FlumePollingReceiver(
+private[streaming] class FlumePullBasedReceiver(
     addresses: Seq[InetSocketAddress],
     maxBatchSize: Int,
     parallelism: Int,

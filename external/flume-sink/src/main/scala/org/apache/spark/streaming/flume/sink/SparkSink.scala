@@ -28,7 +28,7 @@ import org.apache.flume.sink.AbstractSink
 
 /**
  * A sink that uses Avro RPC to run a server that can be polled by Spark's
- * FlumePollingInputDStream. This sink has the following configuration parameters:
+ * FlumePullBasedInputDStream. This sink has the following configuration parameters:
  *
  * hostname - The hostname to bind to. Default: 0.0.0.0
  * port - The port to bind to. (No default - mandatory)

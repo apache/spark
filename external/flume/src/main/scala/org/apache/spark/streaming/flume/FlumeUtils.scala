@@ -122,13 +122,13 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       ssc: StreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(ssc, Seq(new InetSocketAddress(hostname, port)), storageLevel)
+    createPullBasedStream(ssc, Seq(new InetSocketAddress(hostname, port)), storageLevel)
   }
 
   /**
@@ -139,12 +139,12 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       ssc: StreamingContext,
       addresses: Seq[InetSocketAddress],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(ssc, addresses, storageLevel,
+    createPullBasedStream(ssc, addresses, storageLevel,
       DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
   }
 
@@ -160,14 +160,14 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       ssc: StreamingContext,
       addresses: Seq[InetSocketAddress],
       storageLevel: StorageLevel,
       maxBatchSize: Int,
       parallelism: Int
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    new FlumePollingInputDStream[SparkFlumeEvent](ssc, addresses, maxBatchSize,
+    new FlumePullBasedInputDStream[SparkFlumeEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 
@@ -179,12 +179,12 @@ object FlumeUtils {
    * @param port     Port of the host at which the Spark Sink is listening
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, hostname, port, StorageLevel.MEMORY_AND_DISK_SER_2)
+    createPullBasedStream(jssc, hostname, port, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
   /**
@@ -196,13 +196,13 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, Array(new InetSocketAddress(hostname, port)), storageLevel)
+    createPullBasedStream(jssc, Array(new InetSocketAddress(hostname, port)), storageLevel)
   }
 
   /**
@@ -213,12 +213,12 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       jssc: JavaStreamingContext,
       addresses: Array[InetSocketAddress],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, addresses, storageLevel,
+    createPullBasedStream(jssc, addresses, storageLevel,
       DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
   }
 
@@ -234,13 +234,13 @@ object FlumeUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   @Experimental
-  def createPollingStream(
+  def createPullBasedStream(
       jssc: JavaStreamingContext,
       addresses: Array[InetSocketAddress],
       storageLevel: StorageLevel,
       maxBatchSize: Int,
       parallelism: Int
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
+    createPullBasedStream(jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
   }
 }
