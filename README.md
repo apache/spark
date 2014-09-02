@@ -5,12 +5,6 @@
 SparkR is an R package that provides a light-weight frontend to use Spark from
 R.
 
-## Report Issues/Feedback 
-
-For better tracking and collaboration, issues and TODO items are reported to a dedicated [SparkR JIRA](https://sparkr.atlassian.net/browse/SPARKR/).
-
-In your pull request, please cross reference the ticket item created. Likewise, if you already have a pull request ready, please reference it in your ticket item.
-
 
 ## Installing SparkR
 
@@ -95,3 +89,9 @@ You can also run the unit-tests for SparkR by running
 
 Instructions for running SparkR on EC2 can be found in the
 [SparkR wiki](https://github.com/amplab-extras/SparkR-pkg/wiki/SparkR-on-EC2).
+
+## Report Issues/Feedback 
+
+For better tracking and collaboration, issues and TODO items are reported to a dedicated [SparkR JIRA](https://sparkr.atlassian.net/browse/SPARKR/).
+
+In your pull request, please cross reference the ticket item created. Likewise, if you already have a pull request ready, please reference it in your ticket item.
