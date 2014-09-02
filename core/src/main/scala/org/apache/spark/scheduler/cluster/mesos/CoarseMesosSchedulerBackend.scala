@@ -110,8 +110,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome())
       .getOrElse {
-      throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
-    }
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
