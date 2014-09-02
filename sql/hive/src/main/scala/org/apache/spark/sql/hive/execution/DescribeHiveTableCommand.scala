@@ -42,8 +42,8 @@ case class DescribeHiveTableCommand(
 
   // Strings with the format like Hive. It is used for result comparison in our unit tests.
   lazy val hiveString: Seq[String] = sideEffectResult.map {
-    case Row(name: String, dataType: String, comment: String) =>
-      Seq(name, dataType, Option(comment).getOrElse("None"))
+    case Row(name: String, dataType: String, comment) =>
+      Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse("None"))
         .map(s => String.format(s"%-20s", s))
         .mkString("\t")
   }

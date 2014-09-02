@@ -389,7 +389,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType, _)) =>
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -409,7 +409,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // be similar with Hive.
         describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
-        command.sideEffectResult.map(_.toString)
+        command.sideEffectResult.map(_.head.toString)
 
       case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
