@@ -948,6 +948,23 @@
     </pluginManagement>
 
     <plugins>
+      <!--
+      Additionally clean assembly/target when parent is cleaned. Many assemblies can
+      build up here when different profiles are built, and these are not otherwise cleaned
+      with "mvn clean" since the assembly module is not declared as a submodule
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-clean-plugin</artifactId>
+        <version>2.5</version>
+        <configuration>
+          <filesets>
+            <fileset>
+              <directory>assembly/target</directory>
+            </fileset>
+          </filesets>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
