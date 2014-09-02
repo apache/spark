@@ -88,18 +88,18 @@ private[spark] class SparkDeploySchedulerBackend(
   override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
-    wakeUpContext()
+    notifyContext()
   }
 
   override def disconnected() {
-    wakeUpContext()
+    notifyContext()
     if (!stopping) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
   override def dead(reason: String) {
-    wakeUpContext()
+    notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
       scheduler.error(reason)
@@ -127,7 +127,7 @@ private[spark] class SparkDeploySchedulerBackend(
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 
-  override def applicationId(): Option[String] = Some(appId)
+  override def applicationId(): Option[String] = Option(appId)
 
   private def waitForRegistration() = {
     registrationLock.synchronized {
@@ -137,7 +137,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  private def wakeUpContext() = {
+  private def notifyContext() = {
     registrationLock.synchronized {
       registrationDone = true
       registrationLock.notifyAll()

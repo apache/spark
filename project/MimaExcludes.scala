@@ -108,11 +108,6 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
           // Class was missing "@DeveloperApi" annotation in 1.0.
           MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
-          // Class is "private[spark]" but for some reason not being ignored?
-          Seq(
-            ProblemFilters.exclude[AbstractClassProblem](
-              "org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend")
-          ) ++
           Seq(
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),

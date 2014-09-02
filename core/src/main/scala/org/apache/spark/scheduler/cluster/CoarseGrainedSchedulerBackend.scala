@@ -42,7 +42,7 @@ import org.apache.spark.ui.JettyUtils
  * (spark.deploy.*).
  */
 private[spark]
-abstract class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: ActorSystem)
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: ActorSystem)
   extends SchedulerBackend with Logging
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -51,12 +51,12 @@ abstract class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actor
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  // Submit tasks only after (registered resources / total expected resources) 
+  // Submit tasks only after (registered resources / total expected resources)
   // is equal to at least this value, that is double between 0 and 1.
   var minRegisteredRatio =
     math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
-  // if minRegisteredRatio has not yet been reached  
+  // if minRegisteredRatio has not yet been reached
   val maxRegisteredWaitingTime =
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()

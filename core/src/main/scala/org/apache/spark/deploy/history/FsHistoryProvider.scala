@@ -117,7 +117,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
         replayBus.replay()
 
-        // Note that this does not have any effect due to SPARK-2169.
         ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
 
         val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
@@ -183,29 +182,28 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
       lastModifiedTime = newLastModifiedTime
 
+      // When there are new logs, merge the new list with the existing one, maintaining
+      // the expected ordering (descending end time). Maintaining the order is important
+      // to avoid having to sort the list every time there is a request for the log list.
       if (!logInfos.isEmpty) {
-        var newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-
-        def addToList(info: FsApplicationHistoryInfo) = {
+        val newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+        def addIfAbsent(info: FsApplicationHistoryInfo) = {
           if (!newApps.contains(info.id)) {
             newApps += (info.id -> info)
           }
         }
 
-        // Merge the new apps with the existing ones, discarding any duplicates.
         val newIterator = logInfos.iterator.buffered
         val oldIterator = applications.values.iterator.buffered
-
         while (newIterator.hasNext && oldIterator.hasNext) {
           if (newIterator.head.endTime > oldIterator.head.endTime) {
-            addToList(newIterator.next)
+            addIfAbsent(newIterator.next)
           } else {
-            addToList(oldIterator.next)
+            addIfAbsent(oldIterator.next)
           }
         }
-
-        newIterator.foreach(addToList)
-        oldIterator.foreach(addToList)
+        newIterator.foreach(addIfAbsent)
+        oldIterator.foreach(addIfAbsent)
 
         applications = newApps
       }
