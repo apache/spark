@@ -103,7 +103,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       case Array(s1, s2) =>
         handleResult(input.collect {
           case a if a.qualifiers.contains(s1) && a.name == s2 => a
-          case a if a.name == s1 && a.dataType.isInstanceOf[StructType] => Alias(GetField(a, s2), s2)()
+          case a if a.name == s1 && a.dataType.isInstanceOf[StructType] =>
+            Alias(GetField(a, s2), s2)()
         })
       case _ => None
     }
