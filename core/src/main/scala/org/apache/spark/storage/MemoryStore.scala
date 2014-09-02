@@ -443,22 +443,36 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (enoughFreeSpace) {
       selectedBlocks ++= freeSpaceResult.toDropBlocksId
       selectedMemory = freeSpaceResult.selectedMemory
-      if (!selectedBlocks.isEmpty) {
-        for (selectedblockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(selectedblockId) }
-          // drop old block in parallel to free memory for new blocks to put
-          if (entry != null) {
-            val data = if (entry.deserialized) {
-              Left(entry.value.asInstanceOf[Array[Any]])
-            } else {
-              Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+      try {
+        if (!selectedBlocks.isEmpty) {
+          for (selectedblockId <- selectedBlocks) {
+            val entry = entries.synchronized { entries.get(selectedblockId) }
+            // drop old block in parallel to free memory for new blocks to put
+            if (entry != null) {
+              val data = if (entry.deserialized) {
+                Left(entry.value.asInstanceOf[Array[Any]])
+              } else {
+                Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+              }
+              val droppedBlockStatus = blockManager.dropFromMemory(selectedblockId, data)
+              droppedBlockStatus.foreach { status => droppedBlocks += ((selectedblockId, status)) }
             }
-            val droppedBlockStatus = blockManager.dropFromMemory(selectedblockId, data)
-            droppedBlockStatus.foreach { status => droppedBlocks += ((selectedblockId, status)) }
           }
         }
+      } catch {
+        // if there is exception, the current block will never put into Memory
+        case e: Exception =>
+          {
+            decreaseTryToPutMemoryForThisThread(size)
+          }
+          throw e
+      } finally {
+        // whatever there is exception or not, blocks selected by this thread to drop should 
+        // already been dropped, and Unrolled Memory for this thread should also be 0.
+        removeUnrollMemoryForThisThread()
+        removeToDropMemoryForThisThread()
       }
-
+      
       val entry = new MemoryEntry(value, size, deserialized)
       entries.synchronized {
         entries.put(blockId, entry)
@@ -472,7 +486,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else {
       logInfo(s"Failed to put block ${blockId} to memory, block size is ${size}.")
       // For some reason, blocks might still not be able to put into memory even unroll
-      // successfully.If so, we need to clear reserved unroll memory and to be dropped blocks for 
+      // successfully. If so, we need to clear reserved unroll memory and to-be-dropped blocks for 
       // this thread. 
       removeUnrollMemoryForThisThread()
       removeToDropMemoryForThisThread()
@@ -524,9 +538,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else {
       // This is synchronized with two purpose, one is to ensure that the set of entries 
       // is not changed (because of getValue or getBytes) while traversing the iterator, 
-      // as that can lead to exceptions. Two is to ensure that only one thread is traversing
-      // the entry to select "to-be-dropped" blocks and update the map information, to avoid
-      // same block is selected by multiple threads.
+      // as that can lead to exceptions. The other is to ensure that only one thread is 
+      // traversing the entry to select "to-be-dropped" blocks and update the map information, 
+      // to avoid same block is selected by multiple threads.
       entries.synchronized {
         if (memoryFree < size) {
           val rddToAdd = getRddId(blockIdToAdd)
@@ -534,6 +548,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           while (memoryFree + selectedMemory < size && iterator.hasNext) {
             val pair = iterator.next()
             val blockId = pair.getKey
+            // only blocks that has not been selected can be selected
             if (!tobeDroppedBlocksSet.contains(blockId)) {
               if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
                 selectedBlocks += blockId
