@@ -544,7 +544,7 @@ keywords. See the Scala examples [TwitterPopularTags({{site.SPARK_GITHUB_URL}}bl
 
 #### Flume
 {:.no_toc}
-Spark Streaming can received data from Flume 1.4.0. This is explained in more detail in the [Flume Integration Guide](streaming-flume). Also, see the example [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala) (Scala) and [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java)(Java).
+Spark Streaming can received data from Flume 1.4.0. This is explained in more detail in the [Flume Integration Guide](streaming-flume). Also, see the examples [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala) (Scala) and [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java)(Java).
 
 #### Kafka
 {:.no_toc}
