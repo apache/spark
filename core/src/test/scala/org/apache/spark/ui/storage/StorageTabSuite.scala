@@ -175,7 +175,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L, 0L))
     taskMetrics0.updatedBlocks = Some(Seq(block0))
     taskMetrics1.updatedBlocks = Some(Seq(block1))
-    bus.postToAll(SparkListenerBlockManagerAdded(bm1, 1000L))
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener.rddInfoList.size === 0)
     bus.postToAll(SparkListenerTaskEnd(0, 0, "big", Success, taskInfo, taskMetrics0))

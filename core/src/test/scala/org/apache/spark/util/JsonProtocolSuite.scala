@@ -157,9 +157,9 @@ class JsonProtocolSuite extends FunSuite {
   test("BlockManager events backward compatibility") {
     // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
-      BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
-      BlockManagerId("Scarce", "to be counted...", 100, 200))
+      BlockManagerId("Scarce", "to be counted...", 100))
 
     val oldBmAdded = JsonProtocol.blockManagerAddedToJson(blockManagerAdded)
       .removeField({ _._1 == "Timestamp" })
