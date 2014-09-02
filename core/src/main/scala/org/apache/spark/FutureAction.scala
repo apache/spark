@@ -149,6 +149,9 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
       case JobFailed(e: Exception) => scala.util.Failure(e)
     }
   }
+
+  /** Get the corresponding job id for this action. */
+  def jobId = jobWaiter.jobId
 }
 
 
