@@ -2023,15 +2023,9 @@ class RDD(object):
             raise ValueError("relativeSD should be greater than 0.000017")
         if relativeSD > 0.37:
             raise ValueError("relativeSD should be smaller than 0.37")
-        hashRDD = self.map(lambda x: portable_hash(x) % sys.maxint)
-        c = hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
-        # range of hash is [0, sys.maxint]
-        if c > sys.maxint / 30:
-            # correction for hash collision in Python,
-            # hash collision probability is 1 - exp(-X), so X = - log(1 - p)
-            # see http://preshing.com/20110504/hash-collision-probabilities/
-            c = - sys.maxint * log(1 - float(c) / sys.maxint)
-        return int(c)
+        # the hash space in Java is 2^32
+        hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
+        return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
 
 
 class PipelinedRDD(RDD):
