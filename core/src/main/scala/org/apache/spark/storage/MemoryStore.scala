@@ -461,11 +461,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         }
       } catch {
         // if there is exception, the current block will never put into Memory
-        case e: Exception =>
-          {
-            decreaseTryToPutMemoryForThisThread(size)
-          }
+        case e: Exception => {
+          decreaseTryToPutMemoryForThisThread(size)
           throw e
+        }
       } finally {
         // whatever there is exception or not, blocks selected by this thread to drop should 
         // already been dropped, and Unrolled Memory for this thread should also be 0.
