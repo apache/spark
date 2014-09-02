@@ -26,6 +26,7 @@ import os
 import pipes
 import random
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -34,7 +35,7 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
@@ -354,6 +355,15 @@ def launch_cluster(conn, opts, cluster_name):
         device.size = opts.ebs_vol_size
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
+
+    # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
+    if opts.instance_type.startswith('m3.'):
+        for i in range(get_num_disks(opts.instance_type)):
+            dev = BlockDeviceType()
+            dev.ephemeral_name = 'ephemeral%d' % i
+            # The first ephemeral drive is /dev/sdb.
+            name = '/dev/sd' + string.letters[i + 1]
+            block_map[name] = dev
 
     # Launch slaves
     if opts.spot_price is not None:
