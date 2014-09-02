@@ -118,6 +118,7 @@ make_binary_release() {
 }
 
 make_binary_release "hadoop1" "-Phive -Dhadoop.version=1.0.4" &
+make_binary_release "cdh4" "-Phive -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
 make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Pyarn" &
 make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Pyarn" &
 make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
