@@ -520,9 +520,14 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
-      rdd.collect().map { case Row(key: String, value: String) => key -> value }.toSet
-
+    val KV = "([^=]+)=([^=]*)".r
+    def collectResults(rdd: SchemaRDD): Set[(String, String)] = 
+      rdd.collect().map { 
+        case Row(key: String, value: String) => key -> value 
+        case Row(kv: String) => kv match {
+          case KV(key, value) => key -> value
+        }
+      }.toSet
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
