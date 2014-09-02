@@ -993,7 +993,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = {
-    require(p >= 4, s"p ($p) must be greater than 0")
+    require(p >= 4, s"p ($p) must be at least 4")
     require(sp <= 32, s"sp ($sp) cannot be greater than 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)

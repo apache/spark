@@ -404,6 +404,22 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(a.count(), b.count())
         self.assertRaises(Exception, lambda: a.zip(b).count())
 
+    def test_count_approx_distinct(self):
+        rdd = self.sc.parallelize(range(1000))
+        self.assertTrue(950 < rdd.countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(lambda x: (x, -x)).countApproxDistinct(0.04) < 1050)
+
+        rdd = self.sc.parallelize([i % 20 for i in range(1000)], 7)
+        self.assertTrue(18 < rdd.countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(float).countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(str).countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(lambda x: (x, -x)).countApproxDistinct() < 22)
+
+        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
+        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.5))
+
     def test_histogram(self):
         # empty
         rdd = self.sc.parallelize([])
