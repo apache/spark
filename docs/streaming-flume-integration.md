@@ -37,20 +37,24 @@ configuring Flume agents.
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 		import org.apache.spark.streaming.flume._
+
 		val flumeStream = FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port])
+
+	See the example [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.flume.*;
+
 		JavaReceiverInputDStream<SparkFlumeEvent> flumeStream =
         	FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port]);
+
+	See the example [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java).
 	</div>
 	</div>
-	
+
 	Note that the hostname should be the same as the one used by the resource manager in the
     cluster (Mesos, YARN or Spark Standalone), so that resource allocation can match the names and launch
     the receiver in the right machine.
-
-	See the examples [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala) (Scala) and [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java) (Java).
 
 3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
@@ -100,12 +104,14 @@ configuring Flume agents.
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 		import org.apache.spark.streaming.flume._
+
 		val flumeStream = FlumeUtils.createPollingStream(streamingContext, [sink machine hostname], [sink port])
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.flume.*;
+
 		JavaReceiverInputDStream<SparkFlumeEvent>flumeStream =
-			FlumeUtils.createPollingStream(streamingContext, [chosen machine hostname], [chosen port]);
+			FlumeUtils.createPollingStream(streamingContext, [sink machine hostname], [sink port]);
 	</div>
 	</div>
 

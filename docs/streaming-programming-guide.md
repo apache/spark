@@ -487,7 +487,7 @@ Spark Streaming will monitor the directory `dataDirectory` and process any files
  the data directory.
  * Once moved, the files must not be changed. So if the files are being continuously appended, the new data will not be read.
 
-Note that for simple text files, there is an easier method `ssc.textFileStream(dataDirectory)`.
+For simple text files, there is an easier method `ssc.textFileStream(dataDirectory)`. And `fileStream` does not require running a receiver, hence does not require allocating a core.
 
 #### Streams based on Actor data
 {:.no_toc}
@@ -516,14 +516,14 @@ This category of sources require interfacing with external non-Spark libraries, 
 {% highlight scala %}
 import org.apache.spark.streaming.twitter._
 
-TwitterUtils.createStream(ssc, kafkaParams, ...)
+TwitterUtils.createStream(ssc)
 {% endhighlight %}
 </div>
 <div data-lang="java">
 {% highlight java %}
-import org.apache.spark.streaming.kafka.*;
+import org.apache.spark.streaming.twitter.*;
 
-KafkaUtils.createStream(jssc, kafkaParams, ...);
+TwitterUtils.createStream(jssc);
 {% endhighlight %}
 </div>
 </div>
@@ -539,24 +539,24 @@ Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of 
 [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
 can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
 Twitter4J library. You can either get the public stream, or get the filtered stream based on a
-keywords. See the Scala examples [TwitterPopularTags({{site.SPARK_GITHUB_URL}}blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala) and 
+keywords. See the Scala examples [TwitterPopularTags]({{site.SPARK_GITHUB_URL}}blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala) and
 [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala).
 
 #### Flume
 {:.no_toc}
-Spark Streaming can received data from Flume 1.4.0. This is explained in more detail in the [Flume Integration Guide](streaming-flume). Also, see the examples [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala) (Scala) and [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java)(Java).
+Spark Streaming can received data from Flume 1.4.0. This is explained in more detail in the [Flume Integration Guide](streaming-flume-integration.html). Also, see the examples [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala) (Scala) and [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java) (Java).
 
 #### Kafka
 {:.no_toc}
-Spark Streaming can receive data from Kafka 0.8.0. This is explained in more detail in the [Kafka Integration Guide](streaming-kafka). Also, see the examples [KafkaWordCount.scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala) (Scala) and [JavaKafkaWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java)(Java).
+Spark Streaming can receive data from Kafka 0.8.0. This is explained in more detail in the [Kafka Integration Guide](streaming-kafka-integration.html). Also, see the examples [KafkaWordCount.scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala) (Scala) and [JavaKafkaWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java) (Java).
 
 #### Kinesis
 {:.no_toc}
-See the [Kinesis Integration Guide](streaming-kinesis) for more details.
+See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
 ### Custom Sources
 {:.no_toc}
-Input DStreams can also be created out of custom data sources. All you have to do is implemente a user-defined **receiver** (see next section to understand what that is) that can receive data from the custom sources and push it into Spark. See the
+Input DStreams can also be created out of custom data sources. All you have to do is implement an user-defined **receiver** (see next section to understand what that is) that can receive data from the custom sources and push it into Spark. See the
 [Custom Receiver Guide](streaming-custom-receivers.html) for details.
 
 ***
