@@ -69,7 +69,7 @@ Many of the example programs print usage help if no params are given.
 Testing first requires [building Spark](#building-spark). Once Spark is built, tests
 can be run using:
 
-    ./sbt/sbt test
+    ./dev/run-tests
 
 ## A Note About Hadoop Versions
 
@@ -118,11 +118,10 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
 ## A Note About Thrift JDBC server and CLI for Spark SQL
 
 Spark SQL supports Thrift JDBC server and CLI.
-See sql-programming-guide.md for more information about those features.
-You can use those features by setting `-Phive-thriftserver` when building Spark as follows.
+See sql-programming-guide.md for more information about using the JDBC server and CLI.
+You can use those features by setting `-Phive` when building Spark as follows.
 
-    $ sbt/sbt -Phive-thriftserver assembly
-
+    $ sbt/sbt -Phive  assembly
 
 ## Configuration
 

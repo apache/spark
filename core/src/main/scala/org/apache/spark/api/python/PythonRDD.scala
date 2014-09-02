@@ -62,7 +62,7 @@ private[spark] class PythonRDD(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
-    envVars += ("SPARK_LOCAL_DIR" -> localdir) // it's also used in monitor thread
+    envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
@@ -313,6 +313,14 @@ private[spark] object PythonRDD extends Logging {
       case eof: EOFException => {}
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
+  }
+
+  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
+    val file = new DataInputStream(new FileInputStream(filename))
+    val length = file.readInt()
+    val obj = new Array[Byte](length)
+    file.readFully(obj)
+    sc.broadcast(obj)
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {

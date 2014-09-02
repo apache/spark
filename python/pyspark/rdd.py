@@ -32,11 +32,11 @@ import warnings
 import heapq
 import bisect
 from random import Random
-from math import sqrt, log
+from math import sqrt, log, isinf, isnan
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long
+    PickleSerializer, pack_long, CompressedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -575,6 +575,8 @@ class RDD(object):
         # noqa
 
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        >>> sc.parallelize(tmp).sortByKey().first()
+        ('1', 3)
         >>> sc.parallelize(tmp).sortByKey(True, 1).collect()
         [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
         >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
@@ -587,14 +589,13 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
+        def sortPartition(iterator):
+            return iter(sorted(iterator, key=lambda (k, v): keyfunc(k), reverse=not ascending))
+
         if numPartitions == 1:
             if self.getNumPartitions() > 1:
                 self = self.coalesce(1)
-
-            def sort(iterator):
-                return sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
-
-            return self.mapPartitions(sort)
+            return self.mapPartitions(sortPartition)
 
         # first compute the boundary of each part via sampling: we want to partition
         # the key-space into bins such that the bins have roughly the same
@@ -610,17 +611,14 @@ class RDD(object):
         bounds = [samples[len(samples) * (i + 1) / numPartitions]
                   for i in range(0, numPartitions - 1)]
 
-        def rangePartitionFunc(k):
+        def rangePartitioner(k):
             p = bisect.bisect_left(bounds, keyfunc(k))
             if ascending:
                 return p
             else:
                 return numPartitions - 1 - p
 
-        def mapFunc(iterator):
-            return sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
-
-        return self.partitionBy(numPartitions, rangePartitionFunc).mapPartitions(mapFunc, True)
+        return self.partitionBy(numPartitions, rangePartitioner).mapPartitions(sortPartition, True)
 
     def sortBy(self, keyfunc, ascending=True, numPartitions=None):
         """
@@ -857,6 +855,133 @@ class RDD(object):
             return left_counter.mergeStats(right_counter)
 
         return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
+
+    def histogram(self, buckets):
+        """
+        Compute a histogram using the provided buckets. The buckets
+        are all open to the right except for the last which is closed.
+        e.g. [1,10,20,50] means the buckets are [1,10) [10,20) [20,50],
+        which means 1<=x<10, 10<=x<20, 20<=x<=50. And on the input of 1
+        and 50 we would have a histogram of 1,0,1.
+
+        If your histogram is evenly spaced (e.g. [0, 10, 20, 30]),
+        this can be switched from an O(log n) inseration to O(1) per
+        element(where n = # buckets).
+
+        Buckets must be sorted and not contain any duplicates, must be
+        at least two elements.
+
+        If `buckets` is a number, it will generates buckets which are
+        evenly spaced between the minimum and maximum of the RDD. For
+        example, if the min value is 0 and the max is 100, given buckets
+        as 2, the resulting buckets will be [0,50) [50,100]. buckets must
+        be at least 1 If the RDD contains infinity, NaN throws an exception
+        If the elements in RDD do not vary (max == min) always returns
+        a single bucket.
+
+        It will return an tuple of buckets and histogram.
+
+        >>> rdd = sc.parallelize(range(51))
+        >>> rdd.histogram(2)
+        ([0, 25, 50], [25, 26])
+        >>> rdd.histogram([0, 5, 25, 50])
+        ([0, 5, 25, 50], [5, 20, 26])
+        >>> rdd.histogram([0, 15, 30, 45, 60])  # evenly spaced buckets
+        ([0, 15, 30, 45, 60], [15, 15, 15, 6])
+        >>> rdd = sc.parallelize(["ab", "ac", "b", "bd", "ef"])
+        >>> rdd.histogram(("a", "b", "c"))
+        (('a', 'b', 'c'), [2, 2])
+        """
+
+        if isinstance(buckets, (int, long)):
+            if buckets < 1:
+                raise ValueError("number of buckets must be >= 1")
+
+            # filter out non-comparable elements
+            def comparable(x):
+                if x is None:
+                    return False
+                if type(x) is float and isnan(x):
+                    return False
+                return True
+
+            filtered = self.filter(comparable)
+
+            # faster than stats()
+            def minmax(a, b):
+                return min(a[0], b[0]), max(a[1], b[1])
+            try:
+                minv, maxv = filtered.map(lambda x: (x, x)).reduce(minmax)
+            except TypeError as e:
+                if " empty " in str(e):
+                    raise ValueError("can not generate buckets from empty RDD")
+                raise
+
+            if minv == maxv or buckets == 1:
+                return [minv, maxv], [filtered.count()]
+
+            try:
+                inc = (maxv - minv) / buckets
+            except TypeError:
+                raise TypeError("Can not generate buckets with non-number in RDD")
+
+            if isinf(inc):
+                raise ValueError("Can not generate buckets with infinite value")
+
+            # keep them as integer if possible
+            if inc * buckets != maxv - minv:
+                inc = (maxv - minv) * 1.0 / buckets
+
+            buckets = [i * inc + minv for i in range(buckets)]
+            buckets.append(maxv)  # fix accumulated error
+            even = True
+
+        elif isinstance(buckets, (list, tuple)):
+            if len(buckets) < 2:
+                raise ValueError("buckets should have more than one value")
+
+            if any(i is None or isinstance(i, float) and isnan(i) for i in buckets):
+                raise ValueError("can not have None or NaN in buckets")
+
+            if sorted(buckets) != list(buckets):
+                raise ValueError("buckets should be sorted")
+
+            if len(set(buckets)) != len(buckets):
+                raise ValueError("buckets should not contain duplicated values")
+
+            minv = buckets[0]
+            maxv = buckets[-1]
+            even = False
+            inc = None
+            try:
+                steps = [buckets[i + 1] - buckets[i] for i in range(len(buckets) - 1)]
+            except TypeError:
+                pass  # objects in buckets do not support '-'
+            else:
+                if max(steps) - min(steps) < 1e-10:  # handle precision errors
+                    even = True
+                    inc = (maxv - minv) / (len(buckets) - 1)
+
+        else:
+            raise TypeError("buckets should be a list or tuple or number(int or long)")
+
+        def histogram(iterator):
+            counters = [0] * len(buckets)
+            for i in iterator:
+                if i is None or (type(i) is float and isnan(i)) or i > maxv or i < minv:
+                    continue
+                t = (int((i - minv) / inc) if even
+                     else bisect.bisect_right(buckets, i) - 1)
+                counters[t] += 1
+            # add last two together
+            last = counters.pop()
+            counters[-1] += last
+            return [counters]
+
+        def mergeCounters(a, b):
+            return [i + j for i, j in zip(a, b)]
+
+        return buckets, self.mapPartitions(histogram).reduce(mergeCounters)
 
     def mean(self):
         """
@@ -1191,7 +1316,9 @@ class RDD(object):
             for x in iterator:
                 if not isinstance(x, basestring):
                     x = unicode(x)
-                yield x.encode("utf-8")
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
         keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -1685,10 +1812,82 @@ class RDD(object):
         >>> x.zip(y).collect()
         [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
         """
+        if self.getNumPartitions() != other.getNumPartitions():
+            raise ValueError("Can only zip with RDD which has the same number of partitions")
+
+        def get_batch_size(ser):
+            if isinstance(ser, BatchedSerializer):
+                return ser.batchSize
+            return 0
+
+        def batch_as(rdd, batchSize):
+            ser = rdd._jrdd_deserializer
+            if isinstance(ser, BatchedSerializer):
+                ser = ser.serializer
+            return rdd._reserialize(BatchedSerializer(ser, batchSize))
+
+        my_batch = get_batch_size(self._jrdd_deserializer)
+        other_batch = get_batch_size(other._jrdd_deserializer)
+        if my_batch != other_batch:
+            # use the greatest batchSize to batch the other one.
+            if my_batch > other_batch:
+                other = batch_as(other, my_batch)
+            else:
+                self = batch_as(self, other_batch)
+
+        # There will be an Exception in JVM if there are different number
+        # of items in each partitions.
         pairRDD = self._jrdd.zip(other._jrdd)
         deserializer = PairDeserializer(self._jrdd_deserializer,
                                         other._jrdd_deserializer)
         return RDD(pairRDD, self.ctx, deserializer)
+
+    def zipWithIndex(self):
+        """
+        Zips this RDD with its element indices.
+
+        The ordering is first based on the partition index and then the
+        ordering of items within each partition. So the first item in
+        the first partition gets index 0, and the last item in the last
+        partition receives the largest index.
+
+        This method needs to trigger a spark job when this RDD contains
+        more than one partitions.
+
+        >>> sc.parallelize(["a", "b", "c", "d"], 3).zipWithIndex().collect()
+        [('a', 0), ('b', 1), ('c', 2), ('d', 3)]
+        """
+        starts = [0]
+        if self.getNumPartitions() > 1:
+            nums = self.mapPartitions(lambda it: [sum(1 for i in it)]).collect()
+            for i in range(len(nums) - 1):
+                starts.append(starts[-1] + nums[i])
+
+        def func(k, it):
+            for i, v in enumerate(it, starts[k]):
+                yield v, i
+
+        return self.mapPartitionsWithIndex(func)
+
+    def zipWithUniqueId(self):
+        """
+        Zips this RDD with generated unique Long ids.
+
+        Items in the kth partition will get ids k, n+k, 2*n+k, ..., where
+        n is the number of partitions. So there may exist gaps, but this
+        method won't trigger a spark job, which is different from
+        L{zipWithIndex}
+
+        >>> sc.parallelize(["a", "b", "c", "d", "e"], 3).zipWithUniqueId().collect()
+        [('a', 0), ('b', 1), ('c', 4), ('d', 2), ('e', 5)]
+        """
+        n = self.getNumPartitions()
+
+        def func(k, it):
+            for i, v in enumerate(it):
+                yield v, i * n + k
+
+        return self.mapPartitionsWithIndex(func)
 
     def name(self):
         """
@@ -1810,7 +2009,8 @@ class PipelinedRDD(RDD):
             self._jrdd_deserializer = NoOpSerializer()
         command = (self.func, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
-        pickled_command = CloudPickleSerializer().dumps(command)
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)

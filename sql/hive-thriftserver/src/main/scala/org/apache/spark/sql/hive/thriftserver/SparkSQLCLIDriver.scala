@@ -26,8 +26,6 @@ import jline.{ConsoleReader, History}
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
@@ -118,17 +116,13 @@ private[hive] object SparkSQLCLIDriver {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    /**
-     * This should be executed before shutdown hook of
-     * FileSystem to avoid race condition of FileSystem operation
-     */
-    ShutdownHookManager.get.addShutdownHook(
+    Runtime.getRuntime.addShutdownHook(
       new Thread() {
         override def run() {
           SparkSQLEnv.stop()
         }
       }
-    , FileSystem.SHUTDOWN_HOOK_PRIORITY - 1)
+    )
 
     // "-h" option has been passed, so connect to Hive thrift server.
     if (sessionState.getHost != null) {

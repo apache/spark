@@ -39,7 +39,7 @@ else:
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int
+from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
@@ -256,6 +256,15 @@ class TestRDDFunctions(PySparkTestCase):
         raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
         self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
 
+    def test_save_as_textfile_with_utf8(self):
+        x = u"\u00A1Hola, mundo!"
+        data = self.sc.parallelize([x.encode("utf-8")])
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsTextFile(tempFile.name)
+        raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
+        self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
+
     def test_transforming_cartesian_result(self):
         # Regression test for SPARK-1034
         rdd1 = self.sc.parallelize([1, 2])
@@ -322,6 +331,142 @@ class TestRDDFunctions(PySparkTestCase):
         jane = Person(2, "Jane", "Doe")
         theDoes = self.sc.parallelize([jon, jane])
         self.assertEquals([jon, jane], theDoes.collect())
+
+    def test_large_broadcast(self):
+        N = 100000
+        data = [[float(i) for i in range(300)] for i in range(N)]
+        bdata = self.sc.broadcast(data)  # 270MB
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        self.assertEquals(N, m)
+
+    def test_zip_with_different_serializers(self):
+        a = self.sc.parallelize(range(5))
+        b = self.sc.parallelize(range(100, 105))
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
+        a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
+        b = b._reserialize(MarshalSerializer())
+        self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
+
+    def test_zip_with_different_number_of_items(self):
+        a = self.sc.parallelize(range(5), 2)
+        # different number of partitions
+        b = self.sc.parallelize(range(100, 106), 3)
+        self.assertRaises(ValueError, lambda: a.zip(b))
+        # different number of batched items in JVM
+        b = self.sc.parallelize(range(100, 104), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+        # different number of items in one pair
+        b = self.sc.parallelize(range(100, 106), 2)
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+        # same total number of items, but different distributions
+        a = self.sc.parallelize([2, 3], 2).flatMap(range)
+        b = self.sc.parallelize([3, 2], 2).flatMap(range)
+        self.assertEquals(a.count(), b.count())
+        self.assertRaises(Exception, lambda: a.zip(b).count())
+
+    def test_histogram(self):
+        # empty
+        rdd = self.sc.parallelize([])
+        self.assertEquals([0], rdd.histogram([0, 10])[1])
+        self.assertEquals([0, 0], rdd.histogram([0, 4, 10])[1])
+        self.assertRaises(ValueError, lambda: rdd.histogram(1))
+
+        # out of range
+        rdd = self.sc.parallelize([10.01, -0.01])
+        self.assertEquals([0], rdd.histogram([0, 10])[1])
+        self.assertEquals([0, 0], rdd.histogram((0, 4, 10))[1])
+
+        # in range with one bucket
+        rdd = self.sc.parallelize(range(1, 5))
+        self.assertEquals([4], rdd.histogram([0, 10])[1])
+        self.assertEquals([3, 1], rdd.histogram([0, 4, 10])[1])
+
+        # in range with one bucket exact match
+        self.assertEquals([4], rdd.histogram([1, 4])[1])
+
+        # out of range with two buckets
+        rdd = self.sc.parallelize([10.01, -0.01])
+        self.assertEquals([0, 0], rdd.histogram([0, 5, 10])[1])
+
+        # out of range with two uneven buckets
+        rdd = self.sc.parallelize([10.01, -0.01])
+        self.assertEquals([0, 0], rdd.histogram([0, 4, 10])[1])
+
+        # in range with two buckets
+        rdd = self.sc.parallelize([1, 2, 3, 5, 6])
+        self.assertEquals([3, 2], rdd.histogram([0, 5, 10])[1])
+
+        # in range with two bucket and None
+        rdd = self.sc.parallelize([1, 2, 3, 5, 6, None, float('nan')])
+        self.assertEquals([3, 2], rdd.histogram([0, 5, 10])[1])
+
+        # in range with two uneven buckets
+        rdd = self.sc.parallelize([1, 2, 3, 5, 6])
+        self.assertEquals([3, 2], rdd.histogram([0, 5, 11])[1])
+
+        # mixed range with two uneven buckets
+        rdd = self.sc.parallelize([-0.01, 0.0, 1, 2, 3, 5, 6, 11.0, 11.01])
+        self.assertEquals([4, 3], rdd.histogram([0, 5, 11])[1])
+
+        # mixed range with four uneven buckets
+        rdd = self.sc.parallelize([-0.01, 0.0, 1, 2, 3, 5, 6, 11.01, 12.0, 199.0, 200.0, 200.1])
+        self.assertEquals([4, 2, 1, 3], rdd.histogram([0.0, 5.0, 11.0, 12.0, 200.0])[1])
+
+        # mixed range with uneven buckets and NaN
+        rdd = self.sc.parallelize([-0.01, 0.0, 1, 2, 3, 5, 6, 11.01, 12.0,
+                                   199.0, 200.0, 200.1, None, float('nan')])
+        self.assertEquals([4, 2, 1, 3], rdd.histogram([0.0, 5.0, 11.0, 12.0, 200.0])[1])
+
+        # out of range with infinite buckets
+        rdd = self.sc.parallelize([10.01, -0.01, float('nan'), float("inf")])
+        self.assertEquals([1, 2], rdd.histogram([float('-inf'), 0, float('inf')])[1])
+
+        # invalid buckets
+        self.assertRaises(ValueError, lambda: rdd.histogram([]))
+        self.assertRaises(ValueError, lambda: rdd.histogram([1]))
+        self.assertRaises(ValueError, lambda: rdd.histogram(0))
+        self.assertRaises(TypeError, lambda: rdd.histogram({}))
+
+        # without buckets
+        rdd = self.sc.parallelize(range(1, 5))
+        self.assertEquals(([1, 4], [4]), rdd.histogram(1))
+
+        # without buckets single element
+        rdd = self.sc.parallelize([1])
+        self.assertEquals(([1, 1], [1]), rdd.histogram(1))
+
+        # without bucket no range
+        rdd = self.sc.parallelize([1] * 4)
+        self.assertEquals(([1, 1], [4]), rdd.histogram(1))
+
+        # without buckets basic two
+        rdd = self.sc.parallelize(range(1, 5))
+        self.assertEquals(([1, 2.5, 4], [2, 2]), rdd.histogram(2))
+
+        # without buckets with more requested than elements
+        rdd = self.sc.parallelize([1, 2])
+        buckets = [1 + 0.2 * i for i in range(6)]
+        hist = [1, 0, 0, 0, 1]
+        self.assertEquals((buckets, hist), rdd.histogram(5))
+
+        # invalid RDDs
+        rdd = self.sc.parallelize([1, float('inf')])
+        self.assertRaises(ValueError, lambda: rdd.histogram(2))
+        rdd = self.sc.parallelize([float('nan')])
+        self.assertRaises(ValueError, lambda: rdd.histogram(2))
+
+        # string
+        rdd = self.sc.parallelize(["ab", "ac", "b", "bd", "ef"], 2)
+        self.assertEquals([2, 2], rdd.histogram(["a", "b", "c"])[1])
+        self.assertEquals((["ab", "ef"], [5]), rdd.histogram(1))
+        self.assertRaises(TypeError, lambda: rdd.histogram(2))
+
+        # mixed RDD
+        rdd = self.sc.parallelize([1, 4, "ab", "ac", "b"], 2)
+        self.assertEquals([1, 1], rdd.histogram([0, 4, 10])[1])
+        self.assertEquals([2, 1], rdd.histogram(["a", "b", "c"])[1])
+        self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
+        self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
 
 class TestIO(PySparkTestCase):

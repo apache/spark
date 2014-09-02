@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.{HashSet, HashMap, Map}
+import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
 import akka.actor._
@@ -98,7 +98,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   val WAIT_TIMEOUT_MILLIS = 10000
   val sparkListener = new SparkListener() {
     val successfulStages = new HashSet[Int]()
-    val failedStages = new HashSet[Int]()
+    val failedStages = new ArrayBuffer[Int]()
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
       val stageInfo = stageCompleted.stageInfo
       if (stageInfo.failureReason.isEmpty) {
@@ -433,6 +433,43 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty
+  }
+
+  test("trivial shuffle with multiple fetch failures") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    // The MapOutputTracker should know about both map output locations.
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
+      Array("hostA", "hostB"))
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0),
+      null,
+      Map[Long, Any](),
+      null,
+      null))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.contains(0))
+
+    // The second ResultTask fails, with a fetch failure for the output from the second mapper.
+    runEvent(CompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 1, 1),
+      null,
+      Map[Long, Any](),
+      null,
+      null))
+    // The SparkListener should not receive redundant failure events.
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.size == 1)
   }
 
   test("ignore late map task completions") {

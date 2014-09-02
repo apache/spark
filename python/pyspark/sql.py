@@ -186,15 +186,15 @@ class ArrayType(DataType):
 
     """
 
-    def __init__(self, elementType, containsNull=False):
+    def __init__(self, elementType, containsNull=True):
         """Creates an ArrayType
 
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains None values.
 
-        >>> ArrayType(StringType) == ArrayType(StringType, False)
+        >>> ArrayType(StringType) == ArrayType(StringType, True)
         True
-        >>> ArrayType(StringType, True) == ArrayType(StringType)
+        >>> ArrayType(StringType, False) == ArrayType(StringType)
         False
         """
         self.elementType = elementType
@@ -1093,8 +1093,8 @@ class SQLContext:
         >>> sqlCtx.sql(
         ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
         ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
-        ...     "float + 1.1 as float FROM table2").collect()
-        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.1...)]
+        ...     "float + 1.5 as float FROM table2").collect()
+        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.5)]
 
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
