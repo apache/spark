@@ -127,9 +127,9 @@ object TestParallelANN {
   def main( arg: Array[String] ) {
 
     println( "Parallel ANN tester" )
+    println
 
-    val formatter = new SimpleDateFormat("hh:mm:ss")
-    val starttime = Calendar.getInstance().getTime()
+    val formatter = new SimpleDateFormat("hh:mm:ss")    
 
     var curAngle: Double = 0.0
     var graphic: Boolean = false
@@ -158,12 +158,16 @@ object TestParallelANN {
     var A = 20.0
     var B = 50.0
 
-    var conf = new SparkConf().setAppName("Parallel ANN").setMaster("local[5]")
+    var conf = new SparkConf().setAppName("Parallel ANN").setMaster("local[1]")
     var sc = new SparkContext(conf)
 
-    val testRDD2D = sc.parallelize( generateInput2D( T => f(T), -10, 10, 100 ), 2).cache()
+    val testRDD2D = sc.parallelize( generateInput2D( T => f(T), -10, 10, 100 ), 2).cache
     val testRDD3D = sc.parallelize( generateInput3D( (x,y) => f3D(x,y), -10, 10, -10, 10, 200 ), 2).cache
     val testRDD4D = sc.parallelize( generateInput4D( t => f4D(t), -10, 10, 100 ), 2 ).cache
+    
+    val validationRDD2D = sc.parallelize( generateInput2D( T => f(T), -10, 10, 100 ), 2).cache
+    val validationRDD3D = sc.parallelize( generateInput3D( (x,y) => f3D(x,y), -10, 10, -10, 10, 100 ), 2).cache
+    val validationRDD4D = sc.parallelize( generateInput4D( t => f4D(t), -10, 10, 100 ), 2 ).cache
 
     if( graphic ) {
 
@@ -173,25 +177,24 @@ object TestParallelANN {
 
     }
 
-    val parallelANN2D = new ParallelANN( 1, 10 )
+    val parallelANN2D = new ParallelANN( Array[Int]( 1, 3, 3, 1 ) )
     parallelANN2D.optimizer.setNumIterations(1000).setStepSize( 1.0 )
 
-    val parallelANN3D = new ParallelANN( 2, 20 )
+    val parallelANN3D = new ParallelANN( Array[Int]( 2, 20, 1 ) )
     parallelANN3D.optimizer.setNumIterations(1000).setStepSize( 1.0 )
 
-    val parallelANN4D = new ParallelANN( 1, 20, 3 )
+    val parallelANN4D = new ParallelANN( Array[Int]( 1, 20, 3 ) )
     parallelANN4D.optimizer.setNumIterations( 1000 ).setStepSize( 1.0 )
+    
+    val starttime = Calendar.getInstance().getTime()
+    println( "Start training " + starttime )
 
     var model2D = parallelANN2D.train( testRDD2D )
     var model3D = parallelANN3D.train( testRDD3D )
     var model4D = parallelANN4D.train( testRDD4D )
 
-    val noIt = 20
+    val noIt = 1500
     var errHist = new Array[(Int,Double,Double,Double)]( noIt )
-
-    val validationRDD2D = sc.parallelize( generateInput2D( T => f(T), -10, 10, 100 ), 2).cache
-    val validationRDD3D = sc.parallelize( generateInput3D( (x,y) => f3D(x,y), -10, 10, -10, 10, 100 ), 2).cache
-    val validationRDD4D = sc.parallelize( generateInput4D( t => f4D(t), -10, 10, 100 ), 2 ).cache
 
     for( i <- 0 to noIt - 1 ) {
 
@@ -247,10 +250,7 @@ object TestParallelANN {
 
       }
 
-      val now = Calendar.getInstance().getTime()
-      val times = formatter.format( now );
-
-      println( "It. "+i+" ("+times+"), Error 2D/3D/4D: " + (err2D, err3D, err4D) )
+      println( "It. "+i+" ("+Calendar.getInstance().getTime()+"), Error 2D/3D/4D: " + (err2D, err3D, err4D) )
       errHist(i) = ( i, err2D, err3D, err4D )
 
       if( i < noIt - 1 ) {
