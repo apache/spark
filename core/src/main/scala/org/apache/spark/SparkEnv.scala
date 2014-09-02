@@ -201,7 +201,7 @@ object SparkEnv extends Logging {
       }
     }
 
-    val mapOutputTracker =  if (isDriver) {
+    val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf)
     } else {
       new MapOutputTrackerWorker(conf)
@@ -223,12 +223,14 @@ object SparkEnv extends Logging {
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
+    val blockManager = new BlockManager(executorId, actorSystem,
+      serializer, conf, securityManager, mapOutputTracker, shuffleManager)
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+      new BlockManagerMasterActor(isLocal, conf, listenerBus, Some(blockManager))), conf)
 
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager, mapOutputTracker, shuffleManager)
+    blockManager.initialize(blockManagerMaster)
 
     val connectionManager = blockManager.connectionManager
 

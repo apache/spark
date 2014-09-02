@@ -31,9 +31,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
   private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
-  val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
-
-  val timeout = AkkaUtils.askTimeout(conf)
+  private val timeout = AkkaUtils.askTimeout(conf)
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -69,6 +67,14 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
+  }
+
+  /**
+   * Get the block if it is available on driver and small enough. Otherwise, get the locations of
+   * the block from the driver so we can fetch it from other block managers later.
+   */
+  def getBlockOrLocations(blockId: BlockId): Either[Array[Byte], Seq[BlockManagerId]] = {
+    askDriverWithReply(GetBlockOrLocations(blockId))
   }
 
   /**

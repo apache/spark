@@ -109,25 +109,42 @@ private[spark] class TorrentBroadcast[T: ClassTag](
       // broadcast blocks have already fetched some of the blocks. In that case, some blocks
       // would be available locally (on this executor).
       var blockOpt = bm.getLocalBytes(pieceId)
+
       if (!blockOpt.isDefined) {
-        blockOpt = bm.getRemoteBytes(pieceId)
-        blockOpt match {
+        // For the first block, try to piggyback on the control message to get the block.
+        val (replicate, blockOpt0) = if (pid == 0) {
+          bm.getRemoteBytesPiggybackControl(pieceId)
+        } else {
+          (true, bm.getRemoteBytes(pieceId))
+        }
+
+        // replicate is only false if there is only one block and the block is small enough.
+        if (!replicate) {
+          assert(numBlocks == 1)
+        }
+
+        blockOpt0 match {
           case Some(block) =>
-            // If we found the block from remote executors/driver's BlockManager, put the block
-            // in this executor's BlockManager.
-            SparkEnv.get.blockManager.putBytes(
-              pieceId,
-              block,
-              StorageLevel.MEMORY_AND_DISK_SER,
-              tellMaster = true)
+            if (replicate) {
+              // If we found the block from remote executors/driver's BlockManager, put the block
+              // in this executor's BlockManager.
+              bm.putBytes(
+                pieceId,
+                block,
+                StorageLevel.MEMORY_AND_DISK_SER,
+                tellMaster = true)
+            }
 
           case None =>
             throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
         }
+
+        blockOpt = blockOpt0
       }
       // If we get here, the option is defined.
       blocks(pid) = blockOpt.get
     }
+
     blocks
   }
 

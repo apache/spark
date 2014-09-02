@@ -97,12 +97,18 @@ private[spark] object ThreadingTest {
     val actorSystem = ActorSystem("test")
     val conf = new SparkConf()
     val serializer = new KryoSerializer(conf)
-    val blockManagerMaster = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf)
+
     val blockManager = new BlockManager(
-      "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024, conf,
+      "<driver>", actorSystem, serializer, 1024 * 1024, conf,
       new SecurityManager(conf), new MapOutputTrackerMaster(conf), new HashShuffleManager(conf))
+
+    val blockManagerMaster = new BlockManagerMaster(
+      actorSystem.actorOf(Props(
+        new BlockManagerMasterActor(true, conf, new LiveListenerBus, Some(blockManager)))),
+      conf)
+
+    blockManager.initialize(blockManagerMaster)
+
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
     producers.foreach(_.start)
