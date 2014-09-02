@@ -12,16 +12,14 @@ on the [Amazon Web Services site](http://aws.amazon.com/).
 
 `spark-ec2` is designed to manage multiple named clusters. You can
 launch a new cluster (telling the script its size and giving it a name),
-shutdown an existing cluster, or log into a cluster. Each cluster
-launches a set of instances, which are tagged with the cluster name,
-and placed into EC2 security groups.  If you don't specify a security
-group, the `spark-ec2` script will create security groups based on the
-cluster name you request. For example, a cluster named
+shutdown an existing cluster, or log into a cluster. Each cluster is
+identified by placing its machines into EC2 security groups whose names
+are derived from the name of the cluster. For example, a cluster named
 `test` will contain a master node in a security group called
 `test-master`, and a number of slave nodes in a security group called
-`test-slaves`.  You can also specify a security group prefix to be used
-in place of the cluster name.  Machines in a cluster can be identified
-by looking for the "Name" tag of the instance in the Amazon EC2 Console.
+`test-slaves`. The `spark-ec2` script will create these security groups
+for you based on the cluster name you request. You can also use them to
+identify machines belonging to each cluster in the Amazon EC2 Console.
 
 
 # Before You Start
