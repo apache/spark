@@ -67,7 +67,7 @@ class LinearModel(object):
         return self._intercept
 
     def __str__(self):
-        return "(%s, %s)" % (Vectors.stringify(self._coeff), self._intercept)
+        return "(weights=%s, intercept=%s)" % (Vectors.stringify(self._coeff), self._intercept)
 
 
 class LinearRegressionModelBase(LinearModel):
