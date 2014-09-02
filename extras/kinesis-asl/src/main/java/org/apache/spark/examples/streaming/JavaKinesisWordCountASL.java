@@ -75,7 +75,7 @@ import com.google.common.collect.Lists;
  *   onto the Kinesis stream. 
  * Usage instructions for KinesisWordCountProducerASL are provided in the class definition.
  */
-public final class JavaKinesisWordCountASL {
+final class JavaKinesisWordCountASL {
     private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
     private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
