@@ -32,7 +32,11 @@ private[spark] trait SchedulerBackend {
     throw new UnsupportedOperationException
   def isReady(): Boolean = true
 
-  /** Get the application ID associated with the job, if any. */
-  def applicationId(): Option[String]
+  /**
+   * The application ID associated with the job, if any.
+   *
+   * @return The application ID, or None if the backend does not provide an ID.
+   */
+  def applicationId(): Option[String] = None
 
 }

@@ -115,6 +115,4 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
     localActor ! StatusUpdate(taskId, state, serializedData)
   }
 
-  override def applicationId(): Option[String] = None
-
 }

@@ -69,5 +69,4 @@ private[spark] class SimrSchedulerBackend(
     super.stop()
   }
 
-  override def applicationId(): Option[String] = None
 }
