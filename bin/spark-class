@@ -105,9 +105,14 @@ else
     exit 1
   fi
 fi
+JAVA_VERSION=$($RUNNER -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
-JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
+if [ "$JAVA_VERSION" -ge 18 ]; then
+  JAVA_OPTS="$OUR_JAVA_OPTS"
+else
+  JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
+fi
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 
 # Load extra JAVA_OPTS from conf/java-opts, if it exists

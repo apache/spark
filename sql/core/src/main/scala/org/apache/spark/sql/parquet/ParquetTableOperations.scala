@@ -139,7 +139,7 @@ case class ParquetTableScan(
           partOutput.map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
         new Iterator[Row] {
-          private[this] val joinedRow = new JoinedRow(Row(partitionRowValues:_*), null)
+          private[this] val joinedRow = new JoinedRow5(Row(partitionRowValues:_*), null)
 
           def hasNext = iter.hasNext
 

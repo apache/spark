@@ -32,8 +32,6 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
-import org.apache.spark.network.netty.client.BlockFetchingClientFactory
-import org.apache.spark.network.netty.server.BlockServer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
@@ -66,8 +64,8 @@ private[spark] class BlockManager(
   extends BlockDataProvider with Logging {
 
   private val port = conf.getInt("spark.blockManager.port", 0)
-  val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
-  val diskBlockManager = new DiskBlockManager(shuffleBlockManager, conf)
+
+  val diskBlockManager = new DiskBlockManager(this, conf)
   val connectionManager =
     new ConnectionManager(port, conf, securityManager, "Connection manager for block manager")
 
@@ -85,32 +83,13 @@ private[spark] class BlockManager(
     val tachyonStorePath = s"$storeDir/$appFolderName/${this.executorId}"
     val tachyonMaster = conf.get("spark.tachyonStore.url",  "tachyon://localhost:19998")
     val tachyonBlockManager =
-      new TachyonBlockManager(shuffleBlockManager, tachyonStorePath, tachyonMaster)
+      new TachyonBlockManager(this, tachyonStorePath, tachyonMaster)
     tachyonInitialized = true
     new TachyonStore(this, tachyonBlockManager)
   }
 
-  private val useNetty = conf.getBoolean("spark.shuffle.use.netty", false)
-
-  // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
-  private[storage] val nettyBlockClientFactory: BlockFetchingClientFactory = {
-    if (useNetty) new BlockFetchingClientFactory(conf) else null
-  }
-
-  private val nettyBlockServer: BlockServer = {
-    if (useNetty) {
-      val server = new BlockServer(conf, this)
-      logInfo(s"Created NettyBlockServer binding to port: ${server.port}")
-      server
-    } else {
-      null
-    }
-  }
-
-  private val nettyPort: Int = if (useNetty) nettyBlockServer.port else 0
-
   val blockManagerId = BlockManagerId(
-    executorId, connectionManager.id.host, connectionManager.id.port, nettyPort)
+    executorId, connectionManager.id.host, connectionManager.id.port)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -236,7 +215,7 @@ private[spark] class BlockManager(
   override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
     val bid = BlockId(blockId)
     if (bid.isShuffle) {
-      Left(diskBlockManager.getBlockLocation(bid))
+      shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
@@ -354,8 +333,14 @@ private[spark] class BlockManager(
    * shuffle blocks. It is safe to do so without a lock on block info since disk store
    * never deletes (recent) items.
    */
-  def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer).orElse {
+  def getLocalShuffleFromDisk(
+      blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+
+    val shuffleBlockManager = shuffleManager.shuffleBlockManager
+    val values = shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]).map(
+      bytes => this.dataDeserialize(blockId, bytes, serializer))
+
+    values.orElse {
       throw new BlockException(blockId, s"Block $blockId not found on disk, though it should be")
     }
   }
@@ -376,7 +361,8 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      diskStore.getBytes(blockId) match {
+      val shuffleBlockManager = shuffleManager.shuffleBlockManager
+      shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
         case Some(bytes) =>
           Some(bytes)
         case None =>
@@ -572,14 +558,8 @@ private[spark] class BlockManager(
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
       serializer: Serializer,
       readMetrics: ShuffleReadMetrics): BlockFetcherIterator = {
-    val iter =
-      if (conf.getBoolean("spark.shuffle.use.netty", false)) {
-        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      } else {
-        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      }
+    val iter = new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
+      readMetrics)
     iter.initialize()
     iter
   }
@@ -1066,40 +1046,13 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
-
-    def getIterator: Iterator[Any] = {
-      val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
-      serializer.newInstance().deserializeStream(stream).asIterator
-    }
-
-    if (blockId.isShuffle) {
-      /* Reducer may need to read many local shuffle blocks and will wrap them into Iterators
-       * at the beginning. The wrapping will cost some memory (compression instance
-       * initialization, etc.). Reducer reads shuffle blocks one by one so we could do the
-       * wrapping lazily to save memory. */
-      class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
-        lazy val proxy = f
-        override def hasNext: Boolean = proxy.hasNext
-        override def next(): Any = proxy.next()
-      }
-      new LazyProxyIterator(getIterator)
-    } else {
-      getIterator
-    }
+    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    serializer.newInstance().deserializeStream(stream).asIterator
   }
 
   def stop(): Unit = {
     connectionManager.stop()
-    shuffleBlockManager.stop()
     diskBlockManager.stop()
-
-    if (nettyBlockClientFactory != null) {
-      nettyBlockClientFactory.stop()
-    }
-    if (nettyBlockServer != null) {
-      nettyBlockServer.stop()
-    }
-
     actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()

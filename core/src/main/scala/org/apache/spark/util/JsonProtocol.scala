@@ -297,8 +297,7 @@ private[spark] object JsonProtocol {
   def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
     ("Executor ID" -> blockManagerId.executorId) ~
     ("Host" -> blockManagerId.host) ~
-    ("Port" -> blockManagerId.port) ~
-    ("Netty Port" -> blockManagerId.nettyPort)
+    ("Port" -> blockManagerId.port)
   }
 
   def jobResultToJson(jobResult: JobResult): JValue = {
@@ -648,8 +647,7 @@ private[spark] object JsonProtocol {
     val executorId = (json \ "Executor ID").extract[String]
     val host = (json \ "Host").extract[String]
     val port = (json \ "Port").extract[Int]
-    val nettyPort = (json \ "Netty Port").extract[Int]
-    BlockManagerId(executorId, host, port, nettyPort)
+    BlockManagerId(executorId, host, port)
   }
 
   def jobResultFromJson(json: JValue): JobResult = {

@@ -125,6 +125,7 @@
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <hive.version>0.12.0</hive.version>
     <parquet.version>1.4.3</parquet.version>
