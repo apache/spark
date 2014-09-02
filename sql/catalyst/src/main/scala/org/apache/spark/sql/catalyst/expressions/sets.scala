@@ -26,8 +26,6 @@ import org.apache.spark.util.collection.OpenHashSet
 case class NewSet(elementType: DataType) extends LeafExpression {
   type EvaluatedType = Any
 
-  def references = Set.empty
-
   def nullable = false
 
   // We are currently only using these Expressions internally for aggregation.  However, if we ever
@@ -53,9 +51,6 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
   def nullable = set.nullable
 
   def dataType = set.dataType
-
-  def references = (item.flatMap(_.references) ++ set.flatMap(_.references)).toSet
-
   def eval(input: Row): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]

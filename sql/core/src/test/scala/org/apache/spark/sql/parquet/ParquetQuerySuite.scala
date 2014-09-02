@@ -35,7 +35,6 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
 
-
 case class TestRDDEntry(key: Int, value: String)
 
 case class NullReflectData(
@@ -78,7 +77,9 @@ case class AllDataTypesWithNonPrimitiveType(
     booleanField: Boolean,
     binaryField: Array[Byte],
     array: Seq[Int],
-    map: Map[Int, String],
+    arrayContainsNull: Seq[Option[Int]],
+    map: Map[Int, Long],
+    mapValueContainsNull: Map[Int, Option[Long]],
     data: Data)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
@@ -186,6 +187,100 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
   }
 
+  test("Compression options for writing to a Parquetfile") {
+    val defaultParquetCompressionCodec = TestSQLContext.parquetCompressionCodec
+    import scala.collection.JavaConversions._
+
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+
+    // test default compression codec
+    rdd.saveAsParquetFile(path)
+    var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "UNCOMPRESSED"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "UNCOMPRESSED")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "none"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "none")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === "UNCOMPRESSED" :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test gzip compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test snappy compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "snappy")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // TODO: Lzo requires additional external setup steps so leave it out for now
+    // ref.: https://github.com/Parquet/parquet-mr/blob/parquet-1.5.0/parquet-hadoop/src/test/java/parquet/hadoop/example/TestInputOutputFormat.java#L169
+
+    // Set it back.
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, defaultParquetCompressionCodec)
+  }
+
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
@@ -193,7 +288,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .map(x => AllDataTypesWithNonPrimitiveType(
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
         (0 to x).map(_.toByte).toArray,
-        (0 until x), (0 until x).map(i => i -> s"$i").toMap, Data((0 until x), Nested(x, s"$x"))))
+        (0 until x),
+        (0 until x).map(Option(_).filter(_ % 3 == 0)),
+        (0 until x).map(i => i -> i.toLong).toMap,
+        (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
+        Data((0 until x), Nested(x, s"$x"))))
       .saveAsParquetFile(tempDir)
     val result = parquetFile(tempDir).collect()
     range.foreach {
@@ -208,8 +307,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getBoolean(7) === (i % 2 == 0))
         assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
         assert(result(i)(9) === (0 until i))
-        assert(result(i)(10) === (0 until i).map(i => i -> s"$i").toMap)
-        assert(result(i)(11) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
+        assert(result(i)(10) === (0 until i).map(i => if (i % 3 == 0) i else null))
+        assert(result(i)(11) === (0 until i).map(i => i -> i.toLong).toMap)
+        assert(result(i)(12) === (0 until i).map(i => i -> i.toLong).toMap + (i -> null))
+        assert(result(i)(13) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
     }
   }
 
@@ -318,8 +419,30 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val rdd_copy = sql("SELECT * FROM tmpx").collect()
     val rdd_orig = rdd.collect()
     for(i <- 0 to 99) {
-      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,  s"key error in line $i")
-      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value in line $i")
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
+    }
+    Utils.deleteRecursively(file)
+  }
+
+  test("Read a parquet file instead of a directory") {
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val fsPath = new Path(path)
+    val fs: FileSystem = fsPath.getFileSystem(TestSQLContext.sparkContext.hadoopConfiguration)
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+    rdd.coalesce(1).saveAsParquetFile(path)
+
+    val children = fs.listStatus(fsPath).filter(_.getPath.getName.endsWith(".parquet"))
+    assert(children.length > 0)
+    val readFile = parquetFile(path + "/" + children(0).getPath.getName)
+    readFile.registerTempTable("tmpx")
+    val rdd_copy = sql("SELECT * FROM tmpx").collect()
+    val rdd_orig = rdd.collect()
+    for(i <- 0 to 99) {
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
     }
     Utils.deleteRecursively(file)
   }

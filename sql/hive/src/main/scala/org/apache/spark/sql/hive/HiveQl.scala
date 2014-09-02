@@ -54,6 +54,7 @@ private[hive] object HiveQl {
     "TOK_DESCFUNCTION",
     "TOK_DESCDATABASE",
     "TOK_SHOW_CREATETABLE",
+    "TOK_SHOWCOLUMNS",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOWDATABASES",
     "TOK_SHOWFUNCTIONS",
@@ -61,6 +62,7 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
     "TOK_SHOWTABLES",
+    "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",
     "TOK_SHOWLOCKS",
@@ -772,6 +774,7 @@ private[hive] object HiveQl {
 
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
+        case "TOK_CROSSJOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
@@ -886,6 +889,7 @@ private[hive] object HiveQl {
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
+  val SQRT = "(?i)SQRT".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -955,6 +959,7 @@ private[hive] object HiveQl {
     case Token(DIV(), left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
