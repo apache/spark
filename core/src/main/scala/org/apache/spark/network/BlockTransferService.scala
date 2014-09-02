@@ -63,8 +63,39 @@ abstract class BlockTransferService {
    * }}}
    */
   def fetchBlock(hostName: String, port: Int, blockId: String): ManagedBuffer = {
-    //fetchBlocks(hostName, port, Seq(blockId)).iterator().next()._2
-    null
+    // TODO(rxin): Add timeout?
+    val lock = new Object
+    @volatile var result: Either[ManagedBuffer, Exception] = null
+    fetchBlocks(hostName, port, Seq(blockId), new BlockFetchingListener {
+      override def onBlockFetchFailure(exception: Exception): Unit = {
+        lock.synchronized {
+          result = Right(exception)
+          lock.notify()
+        }
+      }
+      override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+        lock.synchronized {
+          result = Left(data)
+          lock.notify()
+        }
+      }
+    })
+
+    // Sleep until result is no longer null
+    lock.synchronized {
+      while (result == null) {
+        try {
+          lock.wait()
+        } catch {
+          case e: InterruptedException =>
+        }
+      }
+    }
+
+    result match {
+      case Left(data: ManagedBuffer) => data
+      case Right(e: Exception) => throw e
+    }
   }
 
   /**

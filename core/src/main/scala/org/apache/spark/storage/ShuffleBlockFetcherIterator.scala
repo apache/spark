@@ -231,7 +231,8 @@ final class ShuffleBlockFetcherIterator(
     if (!result.failed) {
       bytesInFlight -= result.size
     }
-    while (!fetchRequests.isEmpty &&
+    // Send fetch requests up to maxBytesInFlight
+    while (fetchRequests.nonEmpty &&
       (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
       sendRequest(fetchRequests.dequeue())
     }

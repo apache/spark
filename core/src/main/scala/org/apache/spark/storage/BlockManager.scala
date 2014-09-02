@@ -63,9 +63,9 @@ private[spark] class BlockManager(
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
     blockTransferService: BlockTransferService)
-  extends BlockDataProvider with Logging {
+  extends BlockDataManager with Logging {
 
-  //blockTransferService.init(this)
+  blockTransferService.init(this)
 
   private val port = conf.getInt("spark.blockManager.port", 0)
   val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
@@ -207,18 +207,32 @@ private[spark] class BlockManager(
     }
   }
 
-  override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
+  /**
+   * Interface to get local block data.
+   *
+   * @return Some(buffer) if the block exists locally, and None if it doesn't.
+   */
+  override def getBlockData(blockId: String): Option[ManagedBuffer] = {
     val bid = BlockId(blockId)
     if (bid.isShuffle) {
-      Left(diskBlockManager.getBlockLocation(bid))
+      val fileSegment = diskBlockManager.getBlockLocation(bid)
+      Some(new FileSegmentManagedBuffer(fileSegment.file, fileSegment.offset, fileSegment.length))
     } else {
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
-        Right(blockBytesOpt.get)
+        val buffer = blockBytesOpt.get
+        Some(new NioByteBufferManagedBuffer(buffer))
       } else {
-        throw new BlockNotFoundException(blockId)
+        None
       }
     }
+  }
+
+  /**
+   * Put the block locally, using the given storage level.
+   */
+  override def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = {
+    putBytes(BlockId(blockId), data.byteBuffer(), level)
   }
 
   /**

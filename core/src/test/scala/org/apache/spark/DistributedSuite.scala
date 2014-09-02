@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.network.cm.{GetBlock, BlockManagerWorker, ConnectionManagerId}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
@@ -202,12 +201,13 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
-    blockManager.master.getLocations(blockId).foreach(id => {
-      val bytes = BlockManagerWorker.syncGetBlock(
-        GetBlock(blockId), ConnectionManagerId(id.host, id.port))
-      val deserialized = blockManager.dataDeserialize(blockId, bytes).asInstanceOf[Iterator[Int]].toList
+    val blockTransfer = SparkEnv.get.blockTransferService
+    blockManager.master.getLocations(blockId).foreach { cmId =>
+      val bytes = blockTransfer.fetchBlock(cmId.host, cmId.port, blockId.toString)
+      val deserialized = blockManager.dataDeserialize(blockId, bytes.byteBuffer())
+        .asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)
-    })
+    }
   }
 
   test("compute without caching when no partitions fit in memory") {
@@ -268,6 +268,8 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
+      println("i = " + i)
+      Console.out.flush()
       val data = sc.parallelize(Seq(true, true), 2)
       assert(data.count === 2)
       assert(data.map(markNodeIfIdentity).collect.size === 2)
@@ -339,6 +341,7 @@ object DistributedSuite {
   // Act like an identity function, but if the argument is true, set mark to true.
   def markNodeIfIdentity(item: Boolean): Boolean = {
     if (item) {
+      println("marking node!!!!!!!!!!!!!!!")
       assert(!amMaster)
       mark = true
     }
@@ -349,6 +352,7 @@ object DistributedSuite {
   // crashing the entire JVM.
   def failOnMarkedIdentity(item: Boolean): Boolean = {
     if (mark) {
+      println("failing node !!!!!!!!!!!!!!!")
       System.exit(42)
     }
     item

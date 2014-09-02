@@ -17,8 +17,9 @@
 
 package org.apache.spark.network
 
-import java.io.{File, FileInputStream, InputStream}
+import java.io.{RandomAccessFile, File, FileInputStream, InputStream}
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel.MapMode
 
 import io.netty.buffer.{ByteBufInputStream, ByteBuf, Unpooled}
 import io.netty.channel.DefaultFileRegion
@@ -34,7 +35,7 @@ abstract class ManagedBuffer {
   // Note that all the methods are defined with parenthesis because their implementations can
   // have side effects (io operations).
 
-  def byteBuffer(): ByteBuffer = throw new UnsupportedOperationException
+  def byteBuffer(): ByteBuffer
 
   def fileSegment(): Option[FileSegment] = None
 
@@ -55,6 +56,11 @@ final class FileSegmentManagedBuffer(file: File, offset: Long, length: Long)
   extends ManagedBuffer {
 
   override def size: Long = length
+
+  override def byteBuffer(): ByteBuffer = {
+    val channel = new RandomAccessFile(file, "r").getChannel
+    channel.map(MapMode.READ_ONLY, offset, length)
+  }
 
   override private[network] def toNetty(): AnyRef = {
     val fileChannel = new FileInputStream(file).getChannel

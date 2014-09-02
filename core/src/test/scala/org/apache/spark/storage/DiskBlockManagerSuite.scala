@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
+import org.apache.spark.network.cm.CMBlockTransferService
 import org.apache.spark.shuffle.hash.HashShuffleManager
 
 import scala.collection.mutable
@@ -61,7 +62,6 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
     rootDir1 = Files.createTempDir()
     rootDir1.deleteOnExit()
     rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
-    println("Created root dirs: " + rootDirs)
   }
 
   override def afterAll() {
@@ -153,8 +153,9 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
     val master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, confCopy, new LiveListenerBus))),
       confCopy)
-    val store = new BlockManager("<driver>", actorSystem, master , serializer, confCopy,
-      securityManager, null, shuffleManager)
+    val transfer = new CMBlockTransferService(confCopy, securityManager)
+    val store = new BlockManager("<driver>", actorSystem, master, serializer, confCopy,
+      mapOutputTracker = null, shuffleManager, transfer)
 
     try {
 
