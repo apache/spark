@@ -153,7 +153,9 @@ case class Power(base: Expression, exponent: Expression) extends Expression {
   type EvaluatedType = Any
 
   def dataType: DataType = {
-    if (!resolved) throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
+    if (!resolved) {
+      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
+    }
     DoubleType
   }
   override def foldable = base.foldable && exponent.foldable
