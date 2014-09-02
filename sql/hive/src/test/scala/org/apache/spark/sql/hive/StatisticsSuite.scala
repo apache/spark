@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.HiveShim
 
 class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
   TestHive.reset()
@@ -79,9 +80,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
-
-    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
-
+    if (HiveShim.version.equals("0.12.0")) {
+      assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+    }
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))

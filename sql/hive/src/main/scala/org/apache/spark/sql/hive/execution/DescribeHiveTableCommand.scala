@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
 import org.apache.spark.sql.execution.{Command, LeafNode}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveShim
 
 /**
  * Implementation for "describe [extended] table".
@@ -49,7 +50,8 @@ case class DescribeHiveTableCommand(
       case (name, dataType, comment) =>
         String.format("%-" + alignment + "s", name) + delim +
           String.format("%-" + alignment + "s", dataType) + delim +
-          String.format("%-" + alignment + "s", Option(comment).getOrElse("None"))
+          String.format("%-" + alignment + "s", Option(comment).
+            getOrElse(HiveShim.getEmptyCommentsFieldValue))
     }
   }
 

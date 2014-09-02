@@ -189,6 +189,22 @@
       </dependencies>
     </profile>
     <profile>
+      <id>hive-0.13</id>
+      <activation>
+        <property>
+          <name>hive.version</name>
+          <value>0.13.1</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>

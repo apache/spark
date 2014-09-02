@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
-
+import org.apache.hadoop.hive.ql.processors._
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
@@ -76,7 +76,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-
+  CommandProcessorFactory.clean(hiveconf);
   configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
@@ -297,6 +297,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * tests.
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
+  HiveShim.createDefaultDBIfNeeded(this)
 
   /**
    * Resets the test instance by deleting any tables that have been created.

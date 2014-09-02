@@ -35,6 +35,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row, GenericMutableRow, Literal, Cast}
 import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.hive.HiveShim._
 
 /**
  * A trait for subclasses that handle table scans.
@@ -142,7 +143,7 @@ class HadoopTableReader(
       filterOpt: Option[PathFilter]): RDD[Row] = {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
-      val partPath = partition.getPartitionPath
+      val partPath = partition.getDataLocationPath
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]

@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.conf.HiveConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -210,7 +212,13 @@ private[hive] object HiveQl {
   /**
    * Returns the AST for the given SQL string.
    */
-  def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
+  def getAst(sql: String): ASTNode = {
+    val hContext = new Context(new HiveConf())
+    val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
+    hContext.clear
+    node
+  }
+
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {

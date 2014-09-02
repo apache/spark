@@ -24,6 +24,7 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.hive.HiveShim
 
 case class TestData(a: Int, b: String)
 
@@ -451,14 +452,14 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", "None"),
-        Array("value", "string", "None"),
-        Array("dt", "string", "None"),
+        Array("key", "int", HiveShim.getEmptyCommentsFieldValue),
+        Array("value", "string", HiveShim.getEmptyCommentsFieldValue),
+        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue),
         Array("", "", ""),
         Array("# Partition Information", "", ""),
         Array("# col_name", "data_type", "comment"),
         Array("", "", ""),
-        Array("dt", "string", "None"))
+        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
@@ -538,8 +539,8 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql(s"SET").collect().map(_.getString(0))
+    assertResult(Set(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
+      sql(s"SET").collect().map(_.getString(0)).toSet
     }
 
     // "set key"
@@ -566,8 +567,8 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql("SET").collect().map(_.getString(0))
+    assertResult(Set(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
+      sql("SET").collect().map(_.getString(0)).toSet
     }
 
     assertResult(Array(s"$testKey=$testVal")) {

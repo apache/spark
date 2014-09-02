@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
@@ -33,6 +31,7 @@ import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+import org.apache.spark.sql.hive.HiveShim
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {
@@ -110,7 +109,8 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
+      classOf[org.apache.hadoop.hive.common.`type`.HiveDecimal],
+      java.lang.Byte.TYPE, classOf[java.lang.Byte],
       classOf[java.sql.Timestamp]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
@@ -128,7 +128,7 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
           } else {
             constructor.newInstance(a match {
               case i: Int => i: java.lang.Integer
-              case bd: BigDecimal => new HiveDecimal(bd.underlying())
+              case bd: BigDecimal => HiveShim.createDecimal(bd.underlying())
               case other: AnyRef => other
             }).asInstanceOf[AnyRef]
           }
