@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Building Spark
+redirect_from: "building-with-maven.html"
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -164,3 +165,8 @@ The assembly jar produced by `mvn package` will, by default, include all of Spar
 Maven is the official recommendation for packaging Spark, and is the "build of reference".
 But SBT is supported for day-to-day development since it can provide much faster iterative
 compilation. More advanced developers may wish to use SBT.
+
+The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
+can be set to control the SBT build. For example:
+
+    sbt -Pyarn -Phadoop-2.3 compile
