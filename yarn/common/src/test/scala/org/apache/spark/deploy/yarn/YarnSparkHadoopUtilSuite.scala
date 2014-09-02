@@ -20,9 +20,10 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 
 class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
 
@@ -59,6 +60,18 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
     } finally {
       scriptFile.delete()
     }
+  }
+
+  test("Yarn configuration override") {
+    val key = "yarn.nodemanager.hostname"
+    val default = new YarnConfiguration()
+
+    val sparkConf = new SparkConf()
+      .set("spark.hadoop." + key, "someHostName")
+    val yarnConf = new YarnSparkHadoopUtil().newConfiguration(sparkConf)
+
+    yarnConf.getClass() should be (classOf[YarnConfiguration])
+    yarnConf.get(key) should not be default.get(key)
   }
 
 }

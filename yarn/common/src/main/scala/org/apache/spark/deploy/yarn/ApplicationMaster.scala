@@ -48,7 +48,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   // optimal as more containers are available. Might need to handle this better.
 
   private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = new YarnConfiguration(new Configuration())
+  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    .asInstanceOf[YarnConfiguration]
   private val isDriver = args.userClass != null
 
   // Default to numExecutors * 2, with minimum of 3

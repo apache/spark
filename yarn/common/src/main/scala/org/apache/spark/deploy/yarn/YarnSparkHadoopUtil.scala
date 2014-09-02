@@ -54,7 +54,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
   // Always create a new config, dont reuse yarnConf.
-  override def newConfiguration(): Configuration = new YarnConfiguration(new Configuration())
+  override def newConfiguration(conf: SparkConf): Configuration =
+    new YarnConfiguration(super.newConfiguration(conf))
 
   // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
   override def addCredentials(conf: JobConf) {
