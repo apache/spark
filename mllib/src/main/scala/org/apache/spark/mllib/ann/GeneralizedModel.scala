@@ -29,13 +29,13 @@ import breeze.linalg.{SparseVector => BSV}
 
 /**
  * :: DeveloperApi ::
- * GeneralizedSteepestDescendModel represents a model trained using
- * GeneralizedSteepestDescendAlgorithm.
+ * GeneralizedModel represents a model trained using
+ * GeneralizedAlgorithm.
  *
  * @param weights Weights computed for every feature.
  */
 @DeveloperApi
-abstract class GeneralizedSteepestDescentModel(val weights: Vector )
+abstract class GeneralizedModel(val weights: Vector )
 
   extends Serializable {
 
@@ -123,12 +123,11 @@ abstract class GeneralizedSteepestDescentModel(val weights: Vector )
 
 /**
  * :: DeveloperApi ::
- * GeneralizedSteepestDescend implements methods to train a function using
- * the Steepest Descend algorithm.
- * This class should be extended with an Optimizer to create a new GLM.
+ * GeneralizedAlgorithm implements methods to train a function.
+ * This class should be extended with an Optimizer to create a new GM.
  */
 @DeveloperApi
-abstract class GeneralizedSteepestDescentAlgorithm[M <: GeneralizedSteepestDescentModel]
+abstract class GeneralizedAlgorithm[M <: GeneralizedModel]
   extends Logging with Serializable {
 
   /** The optimizer to solve the problem. */
@@ -139,19 +138,9 @@ abstract class GeneralizedSteepestDescentAlgorithm[M <: GeneralizedSteepestDesce
    */
   protected def createModel(weights: Vector): M
 
-  /** Prepends one to the input vector. */
-  private def prependOne(vector: Vector): Vector = {
-    val vector1 = vector.toBreeze match {
-      case dv: BDV[Double] => BDV.vertcat(BDV.ones[Double](1), dv)
-      case sv: BSV[Double] => BSV.vertcat(new BSV[Double](Array(0), Array(1.0), 1), sv)
-      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
-    }
-    Vectors.fromBreeze(vector1)
-  }
-
   /**
    * Run the algorithm with the configured parameters on an input RDD
-   * of LabeledPoint entries starting from the initial weights provided.
+   * of (Vector,Vector) entries starting from the initial weights provided.
    */
   def run(input: RDD[(Vector,Vector)], initialWeights: Vector): M = {
 
