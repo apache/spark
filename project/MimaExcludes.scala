@@ -41,6 +41,9 @@ object MimaExcludes {
           Seq(
             // Adding new method to JavaRDLike trait - we should probably mark this as a developer API.
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitions"),
+            // Should probably mark this as Experimental
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
             // them, and use the following to tell Mima to not care about them.

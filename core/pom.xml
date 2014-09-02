@@ -306,26 +306,20 @@
       </plugin>
       <!-- Unzip py4j so we can include its files in the jar -->
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>1.2.1</version>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
         <executions>
           <execution>
             <phase>generate-resources</phase>
             <goals>
-              <goal>exec</goal>
+              <goal>run</goal>
             </goals>
           </execution>
         </executions>
         <configuration>
-          <executable>unzip</executable>
-          <workingDirectory>../python</workingDirectory>
-          <arguments>
-            <argument>-o</argument>
-            <argument>lib/py4j*.zip</argument>
-            <argument>-d</argument>
-            <argument>build</argument>
-          </arguments>
+          <tasks>
+            <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="../python/build" />
+          </tasks>
         </configuration>
       </plugin>
       <plugin>

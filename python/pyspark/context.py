@@ -606,8 +606,8 @@ class SparkContext(object):
         FTP URI.
 
         To access the file in Spark jobs, use
-        L{SparkFiles.get(path)<pyspark.files.SparkFiles.get>} to find its
-        download location.
+        L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
+        filename to find its download location.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")

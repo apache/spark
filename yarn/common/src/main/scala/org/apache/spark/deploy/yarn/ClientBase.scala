@@ -209,7 +209,7 @@ trait ClientBase extends Logging {
       if (! localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
-          val setPermissions = if (destName.equals(ClientBase.APP_JAR)) true else false
+          val setPermissions = destName.equals(ClientBase.APP_JAR)
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), conf)
           distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,

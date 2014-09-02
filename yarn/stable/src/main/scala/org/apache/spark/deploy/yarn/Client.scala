@@ -29,7 +29,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SparkConf}
-
+import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's stable API.
@@ -40,7 +40,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   val yarnClient = YarnClient.createYarnClient
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, new Configuration(), spConf)
+    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
   def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
 
