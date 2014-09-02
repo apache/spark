@@ -25,7 +25,7 @@ import org.apache.spark.mllib.tree.impurity._
  * and helps with indexing.
  */
 private[tree] class DTStatsAggregator(
-    metadata: DecisionTreeMetadata,
+    val metadata: DecisionTreeMetadata,
     val numNodes: Int) extends Serializable {
 
   /**
@@ -49,6 +49,11 @@ private[tree] class DTStatsAggregator(
    * Number of bins for each feature.  This is indexed by the feature index.
    */
   val numBins: Array[Int] = metadata.numBins
+
+  /**
+   * Number of splits for the given feature.
+   */
+  def numSplits(featureIndex: Int): Int = metadata.numSplits(featureIndex)
 
   /**
    * Indicator for each feature of whether that feature is an unordered feature.
@@ -142,7 +147,7 @@ private[tree] class DTStatsAggregator(
   def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int) = {
     require(isUnordered(featureIndex),
       s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
-        s" but was called for ordered feature $featureIndex.")
+      s" but was called for ordered feature $featureIndex.")
     val baseOffset = nodeIndex * nodeStride + featureOffsets(featureIndex)
     (baseOffset, baseOffset + numBins(featureIndex) * statsSize)
   }

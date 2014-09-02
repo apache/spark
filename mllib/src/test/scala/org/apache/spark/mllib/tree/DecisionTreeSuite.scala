@@ -148,7 +148,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 3)
-    assert(bins(0).length === 3)
+    assert(bins(0).length === 6)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -564,7 +564,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   test("Multiclass classification stump with unordered categorical features," +
     " with just enough bins") {
-    val maxBins = math.pow(2, 3 - 1).toInt // just enough bins to allow unordered features
+    val maxBins = 2 * (math.pow(2, 3 - 1).toInt - 1) // just enough bins to allow unordered features
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,

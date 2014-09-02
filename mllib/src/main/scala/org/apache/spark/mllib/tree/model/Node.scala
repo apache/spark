@@ -151,12 +151,12 @@ private[tree] object Node {
   /**
    * Return the index of the left child of this node.
    */
-  def leftChildIndex(nodeIndex: Int): Int = nodeIndex * 2
+  def leftChildIndex(nodeIndex: Int): Int = nodeIndex << 1
 
   /**
    * Return the index of the right child of this node.
    */
-  def rightChildIndex(nodeIndex: Int): Int = nodeIndex * 2 + 1
+  def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
 
   /**
    * Get the parent index of the given node, or 0 if it is the root.
@@ -185,10 +185,9 @@ private[tree] object Node {
   def maxNodesInLevel(level: Int): Int = 1 << level
 
   /**
-   * Return the maximum number of nodes which can be in or above the given level of the tree
-   * (i.e., for the entire subtree from the root to this level).
+   * Return the index of the first node in the given level.
    * @param level  Level of tree (0 = root).
    */
-  def maxNodesInSubtree(level: Int): Int = (1 << level + 1) - 1
+  def startIndexInLevel(level: Int): Int = 1 << level
 
 }

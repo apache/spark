@@ -74,9 +74,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata)
     timer.stop("findSplitsBins")
     logDebug("numBins: feature: number of bins")
-    Range(0, metadata.numFeatures).foreach { featureIndex =>
-      logDebug(s"\t$featureIndex\t${metadata.numBins(featureIndex)}")
-    }
+    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
+        s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
+      }.mkString("\n"))
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
@@ -85,12 +85,14 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
-    // the max number of nodes possible given the depth of the tree, plus 1
-    val maxNumNodes_p1 = Node.maxNodesInLevel(maxDepth + 1)
+    require(maxDepth <= 30,
+      s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
+    // Number of nodes to allocate: max number of nodes possible given the depth of the tree, plus 1
+    val maxNumNodesPlus1 = Node.startIndexInLevel(maxDepth + 1)
     // Initialize an array to hold parent impurity calculations for each node.
-    val parentImpurities = new Array[Double](maxNumNodes_p1)
+    val parentImpurities = new Array[Double](maxNumNodesPlus1)
     // dummy value for top node (updated during first split calculation)
-    val nodes = new Array[Node](maxNumNodes_p1)
+    val nodes = new Array[Node](maxNumNodesPlus1)
 
     // Calculate level for single group construction
 
@@ -126,7 +128,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       logDebug("level = " + level)
       logDebug("#####################################")
 
-
       // Find best split for all nodes at a level.
       timer.start("findBestSplits")
       val splitsStatsForLevel: Array[(Split, InformationGainStats)] =
@@ -134,9 +135,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           metadata, level, nodes, splits, bins, maxLevelForSingleGroup, timer)
       timer.stop("findBestSplits")
 
-      val levelNodeIndexOffset = Node.maxNodesInSubtree(level - 1)
+      val levelNodeIndexOffset = Node.startIndexInLevel(level)
       for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
-        val nodeIndex = levelNodeIndexOffset + index + 1 // + 1 since nodes indexed from 1
+        val nodeIndex = levelNodeIndexOffset + index
 
         // Extract info for this node (index) at the current level.
         timer.start("extractNodeInfo")
@@ -504,7 +505,7 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Helper for binSeqOp, for data containing some unordered (categorical) features.
+   * Helper for binSeqOp, for data which can contain a mix of ordered and unordered features.
    *
    * For ordered features, a single bin is updated.
    * For unordered features, bins correspond to subsets of categories; either the left or right bin
@@ -517,7 +518,7 @@ object DecisionTree extends Serializable with Logging {
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param unorderedFeatures  Set of indices of unordered features.
    */
-  private def someUnorderedBinSeqOp(
+  private def mixedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
       nodeIndex: Int,
@@ -533,17 +534,16 @@ object DecisionTree extends Serializable with Logging {
         val featureValue = treePoint.binnedFeatures(featureIndex)
         val (leftNodeFeatureOffset, rightNodeFeatureOffset) =
           agg.getLeftRightNodeFeatureOffsets(nodeIndex, featureIndex)
-        // Update the left or right count for one bin.
-        // Find all matching bins and increment their values.
-        val numCategoricalBins = agg.numBins(featureIndex)
-        var binIndex = 0
-        while (binIndex < numCategoricalBins) {
-          if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
-            agg.nodeFeatureUpdate(leftNodeFeatureOffset, binIndex, treePoint.label)
+        // Update the left or right bin for each split.
+        val numSplits = agg.numSplits(featureIndex)
+        var splitIndex = 0
+        while (splitIndex < numSplits) {
+          if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
+            agg.nodeFeatureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label)
           } else {
-            agg.nodeFeatureUpdate(rightNodeFeatureOffset, binIndex, treePoint.label)
+            agg.nodeFeatureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label)
           }
-          binIndex += 1
+          splitIndex += 1
         }
       } else {
         // Ordered feature
@@ -648,10 +648,9 @@ object DecisionTree extends Serializable with Logging {
     val groupShift = numNodes * groupIndex
 
     // Used for treePointToNodeIndex to get an index for this (level, group).
-    // - Node.maxNodesInSubtree(level - 1) corrects for nodes before this level.
+    // - Node.startIndexInLevel(level) gives the global index offset for nodes at this level.
     // - groupShift corrects for groups in this level before the current group.
-    // - 1 corrects for the fact that global node indices start at 1, not 0.
-    val globalNodeIndexOffset = Node.maxNodesInSubtree(level - 1) + groupShift + 1
+    val globalNodeIndexOffset = Node.startIndexInLevel(level) + groupShift
 
     /**
      * Find the node index for the given example.
@@ -690,7 +689,7 @@ object DecisionTree extends Serializable with Logging {
         if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg, treePoint, nodeIndex)
         } else {
-          someUnorderedBinSeqOp(agg, treePoint, nodeIndex, bins, metadata.unorderedFeatures)
+          mixedBinSeqOp(agg, treePoint, nodeIndex, bins, metadata.unorderedFeatures)
         }
       }
       agg
@@ -907,11 +906,7 @@ object DecisionTree extends Serializable with Logging {
   private def getElementsPerNode(metadata: DecisionTreeMetadata): Int = {
     val totalBins = metadata.numBins.sum
     if (metadata.isClassification) {
-      if (metadata.isMulticlassWithCategoricalFeatures) {
-        2 * metadata.numClasses * totalBins
-      } else {
-        metadata.numClasses * totalBins
-      }
+      metadata.numClasses * totalBins
     } else {
       3 * totalBins
     }
@@ -1008,8 +1003,12 @@ object DecisionTree extends Serializable with Logging {
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex)
             if (metadata.isUnordered(featureIndex)) {
-              // Unordered features: low-arity features in multiclass classification
-              // 2^(maxFeatureValue- 1) - 1 combinations
+              // TODO: The second half of the bins are unused.  Actually, we could just use
+              //       splits and not build bins for unordered features.  That should be part of
+              //       a later PR since it will require changing other code (using splits instead
+              //       of bins in a few places).
+              // Unordered features
+              //   2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
               bins(featureIndex) = new Array[Bin](numBins)
               var splitIndex = 0
@@ -1036,7 +1035,7 @@ object DecisionTree extends Serializable with Logging {
                 splitIndex += 1
               }
             } else {
-              // Ordered features: high-arity features, or not multiclass classification
+              // Ordered features
               //   Bins correspond to feature values, so we do not need to compute splits or bins
               //   beforehand.  Splits are constructed as needed during training.
               splits(featureIndex) = new Array[Split](0)
