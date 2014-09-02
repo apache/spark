@@ -84,7 +84,7 @@ final class CMBlockTransferService(conf: SparkConf, securityManager: SecurityMan
 
     val future = cm.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
 
-    // If succeeds in getting blocks from a remote connection manager, put the block in results.
+    // Register the listener on success/failure future callback.
     future.onSuccess { case message =>
       val bufferMessage = message.asInstanceOf[BufferMessage]
       val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
@@ -100,6 +100,10 @@ final class CMBlockTransferService(conf: SparkConf, securityManager: SecurityMan
             blockId.toString, new NioByteBufferManagedBuffer(blockMessage.getData))
         }
       }
+    }(cm.futureExecContext)
+
+    future.onFailure { case exception =>
+      listener.onBlockFetchFailure(exception)
     }(cm.futureExecContext)
   }
 

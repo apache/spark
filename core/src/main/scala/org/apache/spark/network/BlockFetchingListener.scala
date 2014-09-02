@@ -33,5 +33,5 @@ trait BlockFetchingListener extends EventListener {
   /**
    * Called upon failures.
    */
-  def onBlockFetchFailure(exception: Exception): Unit
+  def onBlockFetchFailure(exception: Throwable): Unit
 }

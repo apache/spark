@@ -341,7 +341,6 @@ object DistributedSuite {
   // Act like an identity function, but if the argument is true, set mark to true.
   def markNodeIfIdentity(item: Boolean): Boolean = {
     if (item) {
-      println("marking node!!!!!!!!!!!!!!!")
       assert(!amMaster)
       mark = true
     }
@@ -352,7 +351,6 @@ object DistributedSuite {
   // crashing the entire JVM.
   def failOnMarkedIdentity(item: Boolean): Boolean = {
     if (mark) {
-      println("failing node !!!!!!!!!!!!!!!")
       System.exit(42)
     }
     item

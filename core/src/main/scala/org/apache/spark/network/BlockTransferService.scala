@@ -44,7 +44,11 @@ abstract class BlockTransferService {
   def hostName: String
 
   /**
-   * Fetch a sequence of blocks from a remote node, available only after [[init]] is invoked.
+   * Fetch a sequence of blocks from a remote node asynchronously,
+   * available only after [[init]] is invoked.
+   *
+   * Note that [[BlockFetchingListener.onBlockFetchSuccess]] is called once per block,
+   * while [[BlockFetchingListener.onBlockFetchSuccess]] is called once per failure.
    *
    * This takes a sequence so the implementation can batch requests.
    */
@@ -55,19 +59,17 @@ abstract class BlockTransferService {
       listener: BlockFetchingListener): Unit
 
   /**
-   * Fetch a single block from a remote node, available only after [[init]] is invoked.
-   *
-   * This is functionally equivalent to
-   * {{{
-   *   fetchBlocks(hostName, port, Seq(blockId)).iterator().next()._2
-   * }}}
+   * Fetch a single block from a remote node, synchronously,
+   * available only after [[init]] is invoked.
    */
   def fetchBlock(hostName: String, port: Int, blockId: String): ManagedBuffer = {
     // TODO(rxin): Add timeout?
+
+    // A monitor for the thread to wait on.
     val lock = new Object
-    @volatile var result: Either[ManagedBuffer, Exception] = null
+    @volatile var result: Either[ManagedBuffer, Throwable] = null
     fetchBlocks(hostName, port, Seq(blockId), new BlockFetchingListener {
-      override def onBlockFetchFailure(exception: Exception): Unit = {
+      override def onBlockFetchFailure(exception: Throwable): Unit = {
         lock.synchronized {
           result = Right(exception)
           lock.notify()
@@ -93,8 +95,8 @@ abstract class BlockTransferService {
     }
 
     result match {
-      case Left(data: ManagedBuffer) => data
-      case Right(e: Exception) => throw e
+      case Left(data) => data
+      case Right(e) => throw e
     }
   }
 
