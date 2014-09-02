@@ -713,7 +713,9 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<String> partitionSumsWithContext = rdd.mapPartitionsWithContext(
       new Function2<TaskContext, Iterator<Integer>, Iterator<String>>() {
         @Override
-        public Iterator<String> call(TaskContext context, Iterator<Integer> iter) throws Exception {
+        public Iterator<String> call(TaskContext context,
+          Iterator<Integer> iter) throws Exception {
+
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
@@ -721,7 +723,8 @@ public class JavaAPISuite implements Serializable {
           return Collections.singletonList(sum + "-partition-" + context.partitionId()).iterator();
         }
       }, false);
-    Assert.assertEquals("[3-partition-0, 7-partition-1]", partitionSumsWithContext.collect().toString());
+    Assert.assertEquals("[3-partition-0, 7-partition-1]",
+            partitionSumsWithContext.collect().toString());
   }
 
   @Test
@@ -729,16 +732,17 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
     JavaPairRDD<Integer, String> pairRdd = rdd.mapPartitionsToPair(
       new PairFlatMapFunction<Iterator<Integer>, Integer, String>() {
-          @Override
-          public Iterable<Tuple2<Integer, String>> call(Iterator<Integer> iter) throws Exception {
-              int sum = 0;
-              while (iter.hasNext()) {
-                  sum += iter.next();
-              }
-              return Collections.singletonList(new Tuple2<Integer, String>(sum, "a"));
+        @Override
+        public Iterable<Tuple2<Integer, String>> call(Iterator<Integer> iter) throws Exception {
+          int sum = 0;
+          while (iter.hasNext()) {
+            sum += iter.next();
           }
+          return Collections.singletonList(new Tuple2<Integer, String>(sum, "a"));
+        }
       }
     );
+
     Assert.assertEquals("[(3,a), (7,a)]", pairRdd.collect().toString());
   }
 
@@ -748,14 +752,18 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> pairRdd = rdd.mapPartitionsToPairWithContext(
       new PairFlatMapFunction2<TaskContext, Iterator<Integer>, Integer, String>() {
         @Override
-        public Iterable<Tuple2<Integer, String>> call(TaskContext context, Iterator<Integer> iter) throws Exception {
+        public Iterable<Tuple2<Integer, String>> call(TaskContext context, Iterator<Integer> iter)
+          throws Exception {
+
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
           }
-          return Collections.singletonList(new Tuple2<Integer, String>(sum, "partition-" + context.partitionId()));
+          return Collections.singletonList(
+                   new Tuple2<Integer, String>(sum, "partition-" + context.partitionId()));
         }
       }, false);
+
     Assert.assertEquals("[(3,partition-0), (7,partition-1)]", pairRdd.collect().toString());
   }
 
@@ -774,6 +782,7 @@ public class JavaAPISuite implements Serializable {
         }
       }
     );
+
     Assert.assertEquals("[3.0, 7.0]", pairRdd.collect().toString());
   }
 
@@ -782,16 +791,17 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
     JavaDoubleRDD pairRdd = rdd.mapPartitionsToDoubleWithContext(
       new DoubleFlatMapFunction2<TaskContext, Iterator<Integer>>() {
-        @Override
-        public Iterable<Double> call(TaskContext context, Iterator<Integer> iter) throws Exception {
-          int sum = 0;
-          while (iter.hasNext()) {
-            sum += iter.next();
-          }
-          sum += context.partitionId();
-          return Collections.singletonList(Double.valueOf(sum));
+      @Override
+      public Iterable<Double> call(TaskContext context, Iterator<Integer> iter) throws Exception {
+        int sum = 0;
+        while (iter.hasNext()) {
+          sum += iter.next();
         }
-      }, false);
+        sum += context.partitionId();
+        return Collections.singletonList(Double.valueOf(sum));
+      }
+    }, false);
+
     Assert.assertEquals("[3.0, 8.0]", pairRdd.collect().toString());
   }
 
