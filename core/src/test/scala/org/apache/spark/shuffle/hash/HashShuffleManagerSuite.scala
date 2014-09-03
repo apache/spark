@@ -25,7 +25,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.{SparkEnv, SparkContext, LocalSparkContext, SparkConf}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.network.ManagedBuffer
+import org.apache.spark.network.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FileShuffleBlockManager
 import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
@@ -34,7 +34,8 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
   private val testConf = new SparkConf(false)
 
   private def checkSegments(expected: FileSegment, buffer: ManagedBuffer) {
-    val segment = buffer.fileSegment().get
+    assert(buffer.isInstanceOf[FileSegmentManagedBuffer])
+    val segment = buffer.asInstanceOf[FileSegmentManagedBuffer]
     assert(expected.file.getCanonicalPath === segment.file.getCanonicalPath)
     assert(expected.offset === segment.offset)
     assert(expected.length === segment.length)

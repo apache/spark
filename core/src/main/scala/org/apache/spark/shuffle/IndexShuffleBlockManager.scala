@@ -91,7 +91,7 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
   }
 
   override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    Some(getBlockData(blockId).byteBuffer())
+    Some(getBlockData(blockId).nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

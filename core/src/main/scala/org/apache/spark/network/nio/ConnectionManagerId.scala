@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.cm
+package org.apache.spark.network.nio
 
 import java.net.InetSocketAddress
 
 import org.apache.spark.util.Utils
 
-private[spark] case class ConnectionManagerId(host: String, port: Int) {
+private[nio] case class ConnectionManagerId(host: String, port: Int) {
   // DEBUG code
   Utils.checkHost(host)
   assert (port > 0)
@@ -30,7 +30,7 @@ private[spark] case class ConnectionManagerId(host: String, port: Int) {
 }
 
 
-private[spark] object ConnectionManagerId {
+private[nio] object ConnectionManagerId {
   def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
     new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
   }

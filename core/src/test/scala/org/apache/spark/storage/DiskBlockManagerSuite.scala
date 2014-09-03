@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
-import org.apache.spark.network.cm.CMBlockTransferService
+import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.shuffle.hash.HashShuffleManager
 
 import scala.collection.mutable

@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.cm
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+import scala.concurrent.Future
 
 import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
 import org.apache.spark.network._
@@ -29,9 +28,10 @@ import org.apache.spark.util.Utils
 
 
 /**
- * A [[BlockTransferService]] implementation based on our [[ConnectionManager]].
+ * A [[BlockTransferService]] implementation based on [[ConnectionManager]], a custom
+ * implementation using Java NIO.
  */
-final class CMBlockTransferService(conf: SparkConf, securityManager: SecurityManager)
+final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityManager)
   extends BlockTransferService with Logging {
 
   private var cm: ConnectionManager = _
@@ -124,15 +124,14 @@ final class CMBlockTransferService(conf: SparkConf, securityManager: SecurityMan
       port: Int,
       blockId: String,
       blockData: ManagedBuffer,
-      level: StorageLevel) {
+      level: StorageLevel)
+    : Future[Unit] = {
     checkInit()
-    val msg = PutBlock(BlockId(blockId), blockData.byteBuffer(), level)
+    val msg = PutBlock(BlockId(blockId), blockData.nioByteBuffer(), level)
     val blockMessageArray = new BlockMessageArray(BlockMessage.fromPutBlock(msg))
     val remoteCmId = new ConnectionManagerId(hostName, port)
-
-    // TODO: Not wait infinitely.
-    Await.result(cm.sendMessageReliably(remoteCmId, blockMessageArray.toBufferMessage),
-      Duration.Inf)
+    val reply = cm.sendMessageReliably(remoteCmId, blockMessageArray.toBufferMessage)
+    reply.map(x => ())(cm.futureExecContext)
   }
 
   private def checkInit(): Unit = if (cm == null) {
@@ -201,6 +200,6 @@ final class CMBlockTransferService(conf: SparkConf, securityManager: SecurityMan
     val buffer = blockDataManager.getBlockData(blockId).orNull
     logDebug("GetBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " and got buffer " + buffer)
-    buffer.byteBuffer()
+    buffer.nioByteBuffer()
   }
 }

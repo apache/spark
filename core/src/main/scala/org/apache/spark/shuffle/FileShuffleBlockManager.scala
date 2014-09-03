@@ -169,7 +169,7 @@ class FileShuffleBlockManager(conf: SparkConf)
 
   override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
     val segment = getBlockData(blockId)
-    Some(segment.byteBuffer())
+    Some(segment.nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

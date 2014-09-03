@@ -17,6 +17,9 @@
 
 package org.apache.spark.network
 
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.storage.StorageLevel
 
 
@@ -48,9 +51,11 @@ abstract class BlockTransferService {
    * available only after [[init]] is invoked.
    *
    * Note that [[BlockFetchingListener.onBlockFetchSuccess]] is called once per block,
-   * while [[BlockFetchingListener.onBlockFetchSuccess]] is called once per failure.
+   * while [[BlockFetchingListener.onBlockFetchFailure]] is called once per failure (not per block).
    *
-   * This takes a sequence so the implementation can batch requests.
+   * Note that this API takes a sequence so the implementation can batch requests, and does not
+   * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
+   * the data of a block is fetched, rather than waiting for all blocks to be fetched.
    */
   def fetchBlocks(
       hostName: String,
@@ -59,12 +64,21 @@ abstract class BlockTransferService {
       listener: BlockFetchingListener): Unit
 
   /**
-   * Fetch a single block from a remote node, synchronously,
-   * available only after [[init]] is invoked.
+   * Upload a single block to a remote node, available only after [[init]] is invoked.
    */
-  def fetchBlock(hostName: String, port: Int, blockId: String): ManagedBuffer = {
-    // TODO(rxin): Add timeout?
+  def uploadBlock(
+      hostname: String,
+      port: Int,
+      blockId: String,
+      blockData: ManagedBuffer,
+      level: StorageLevel): Future[Unit]
 
+  /**
+   * A special case of [[fetchBlocks]], since it only fetches on block and is blocking.
+   *
+   * It is also only available after [[init]] is invoked.
+   */
+  def fetchBlockSync(hostName: String, port: Int, blockId: String): ManagedBuffer = {
     // A monitor for the thread to wait on.
     val lock = new Object
     @volatile var result: Either[ManagedBuffer, Throwable] = null
@@ -103,12 +117,15 @@ abstract class BlockTransferService {
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
    *
-   * This call blocks until the upload completes, or throws an exception upon failures.
+   * This method is similar to [[uploadBlock]], except this one blocks the thread
+   * until the upload finishes.
    */
-  def uploadBlock(
+  def uploadBlockSync(
       hostname: String,
       port: Int,
       blockId: String,
       blockData: ManagedBuffer,
-      level: StorageLevel): Unit
+      level: StorageLevel): Unit = {
+    Await.result(uploadBlock(hostname, port, blockId, blockData, level), Duration.Inf)
+  }
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.cm
+package org.apache.spark.network.nio
 
 import java.net._
 import java.nio._
@@ -25,7 +25,7 @@ import org.apache.spark._
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
 
-private[spark]
+private[nio]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,
     val socketRemoteConnectionManagerId: ConnectionManagerId, val connectionId: ConnectionId)
   extends Logging {
@@ -190,7 +190,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 }
 
 
-private[spark]
+private[nio]
 class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     remoteId_ : ConnectionManagerId, id_ : ConnectionId)
   extends Connection(SocketChannel.open, selector_, remoteId_, id_) {

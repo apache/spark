@@ -35,7 +35,7 @@ import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleBlockManager, ShuffleManager}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
 
 
@@ -67,7 +67,6 @@ private[spark] class BlockManager(
 
   blockTransferService.init(this)
 
-  private val port = conf.getInt("spark.blockManager.port", 0)
   val diskBlockManager = new DiskBlockManager(this, conf)
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
@@ -230,7 +229,7 @@ private[spark] class BlockManager(
    * Put the block locally, using the given storage level.
    */
   override def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(BlockId(blockId), data.byteBuffer(), level)
+    putBytes(BlockId(blockId), data.nioByteBuffer(), level)
   }
 
   /**
@@ -520,7 +519,7 @@ private[spark] class BlockManager(
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      val data = blockTransferService.fetchBlock(loc.host, loc.port, blockId.toString).byteBuffer()
+      val data = blockTransferService.fetchBlockSync(loc.host, loc.port, blockId.toString).nioByteBuffer()
 
       if (data != null) {
         if (asBlockResult) {
@@ -809,7 +808,7 @@ private[spark] class BlockManager(
         s"To node: $peer")
 
       try {
-        blockTransferService.uploadBlock(
+        blockTransferService.uploadBlockSync(
           peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
       } catch {
         case e: Exception =>

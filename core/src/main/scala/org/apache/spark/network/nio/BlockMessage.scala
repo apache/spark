@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.cm
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
@@ -23,11 +23,12 @@ import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
 import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
+// private[spark] because we need to register them in Kryo
 private[spark] case class GetBlock(id: BlockId)
 private[spark] case class GotBlock(id: BlockId, data: ByteBuffer)
 private[spark] case class PutBlock(id: BlockId, data: ByteBuffer, level: StorageLevel)
 
-private[spark] class BlockMessage() {
+private[nio] class BlockMessage() {
   // Un-initialized: typ = 0
   // GetBlock: typ = 1
   // GotBlock: typ = 2
@@ -158,7 +159,7 @@ private[spark] class BlockMessage() {
   }
 }
 
-private[spark] object BlockMessage {
+private[nio] object BlockMessage {
   val TYPE_NON_INITIALIZED: Int = 0
   val TYPE_GET_BLOCK: Int = 1
   val TYPE_GOT_BLOCK: Int = 2
@@ -192,17 +193,5 @@ private[spark] object BlockMessage {
     val newBlockMessage = new BlockMessage()
     newBlockMessage.set(putBlock)
     newBlockMessage
-  }
-
-  def main(args: Array[String]) {
-    val B = new BlockMessage()
-    val blockId = TestBlockId("ABC")
-    B.set(new PutBlock(blockId, ByteBuffer.allocate(10), StorageLevel.MEMORY_AND_DISK_SER_2))
-    val bMsg = B.toBufferMessage
-    val C = new BlockMessage()
-    C.set(bMsg)
-
-    println(B.getId + " " + B.getLevel)
-    println(C.getId + " " + C.getLevel)
   }
 }

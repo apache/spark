@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.cm
+package org.apache.spark.network.nio
 
 import java.io.IOException
 import java.net._
@@ -26,15 +26,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{LinkedBlockingDeque, ThreadPoolExecutor, TimeUnit}
 import java.util.{Timer, TimerTask}
 
-import org.apache.spark._
-import org.apache.spark.util.{SystemClock, Utils}
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, SynchronizedMap, SynchronizedQueue}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
-private[spark] class ConnectionManager(
+import org.apache.spark._
+import org.apache.spark.util.{SystemClock, Utils}
+
+
+private[nio] class ConnectionManager(
     port: Int,
     conf: SparkConf,
     securityManager: SecurityManager,

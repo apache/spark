@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.network.cm.CMBlockTransferService
+import org.apache.spark.network.nio.NioBlockTransferService
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
@@ -72,7 +72,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
   private def makeBlockManager(maxMem: Long, name: String = "<driver>"): BlockManager = {
-    val transfer = new CMBlockTransferService(conf, securityMgr)
+    val transfer = new NioBlockTransferService(conf, securityMgr)
     new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer)
   }
@@ -792,7 +792,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
-    val transfer = new CMBlockTransferService(conf, securityMgr)
+    val transfer = new NioBlockTransferService(conf, securityMgr)
     store = new BlockManager("<driver>", actorSystem, master, new JavaSerializer(conf), 1200, conf,
       mapOutputTracker, shuffleManager, transfer)
 

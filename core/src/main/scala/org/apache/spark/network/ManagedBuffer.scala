@@ -17,85 +17,90 @@
 
 package org.apache.spark.network
 
-import java.io.{RandomAccessFile, File, FileInputStream, InputStream}
+import java.io.{FileInputStream, RandomAccessFile, File, InputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
-import io.netty.buffer.{ByteBufInputStream, ByteBuf, Unpooled}
-import io.netty.channel.DefaultFileRegion
+import io.netty.buffer.{ByteBufInputStream, ByteBuf}
 
-import org.apache.spark.storage.FileSegment
 import org.apache.spark.util.ByteBufferInputStream
 
 
 /**
- * Provides a buffer abstraction that allows pooling and reuse.
+ * This interface provides an immutable view for data in the form of bytes. The implementation
+ * should specify how the data is provided:
+ *
+ * - FileSegmentManagedBuffer: data backed by part of a file
+ * - NioByteBufferManagedBuffer: data backed by a NIO ByteBuffer
+ * - NettyByteBufManagedBuffer: data backed by a Netty ByteBuf
  */
-abstract class ManagedBuffer {
+sealed abstract class ManagedBuffer {
   // Note that all the methods are defined with parenthesis because their implementations can
   // have side effects (io operations).
 
-  def byteBuffer(): ByteBuffer
-
-  def fileSegment(): Option[FileSegment] = None
-
-  def inputStream(): InputStream = throw new UnsupportedOperationException
-
-  def release(): Unit = throw new UnsupportedOperationException
-
+  /** Number of bytes of the data. */
   def size: Long
 
-  private[network] def toNetty(): AnyRef
+  /**
+   * Exposes this buffer's data as an NIO ByteBuffer. Changing the position and limit of the
+   * returned ByteBuffer should not affect the content of this buffer.
+   */
+  def nioByteBuffer(): ByteBuffer
+
+  /**
+   * Exposes this buffer's data as an InputStream. The underlying implementation does not
+   * necessarily check for the length of bytes read, so the caller is responsible for making sure
+   * it does not go over the limit.
+   */
+  def inputStream(): InputStream
 }
 
 
 /**
- * A ManagedBuffer backed by a segment in a file.
+ * A [[ManagedBuffer]] backed by a segment in a file
  */
-final class FileSegmentManagedBuffer(file: File, offset: Long, length: Long)
+final class FileSegmentManagedBuffer(val file: File, val offset: Long, val length: Long)
   extends ManagedBuffer {
 
   override def size: Long = length
 
-  override def byteBuffer(): ByteBuffer = {
+  override def nioByteBuffer(): ByteBuffer = {
     val channel = new RandomAccessFile(file, "r").getChannel
     channel.map(MapMode.READ_ONLY, offset, length)
   }
 
-  override private[network] def toNetty(): AnyRef = {
-    val fileChannel = new FileInputStream(file).getChannel
-    new DefaultFileRegion(fileChannel, offset, length)
+  override def inputStream(): InputStream = {
+    val is = new FileInputStream(file)
+    is.skip(offset)
+    is
   }
 }
 
 
 /**
- * A ManagedBuffer backed by [[java.nio.ByteBuffer]].
+ * A [[ManagedBuffer]] backed by [[java.nio.ByteBuffer]].
  */
 final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 
-  override def byteBuffer() = buf
-
-  override def inputStream() = new ByteBufferInputStream(buf)
-
   override def size: Long = buf.remaining()
 
-  override private[network] def toNetty(): AnyRef = Unpooled.wrappedBuffer(buf)
+  override def nioByteBuffer() = buf
+
+  override def inputStream() = new ByteBufferInputStream(buf)
 }
 
 
 /**
- * A ManagedBuffer backed by a Netty [[ByteBuf]].
+ * A [[ManagedBuffer]] backed by a Netty [[ByteBuf]].
  */
 final class NettyByteBufManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
 
-  override def byteBuffer() = buf.nioBuffer()
+  override def size: Long = buf.readableBytes()
+
+  override def nioByteBuffer() = buf.nioBuffer()
 
   override def inputStream() = new ByteBufInputStream(buf)
 
-  override def release(): Unit = buf.release()
-
-  override def size: Long = buf.readableBytes()
-
-  override private[network] def toNetty(): AnyRef = buf
+  // TODO(rxin): Promote this to top level ManagedBuffer interface and add documentation for it.
+  def release(): Unit = buf.release()
 }
