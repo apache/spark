@@ -25,7 +25,7 @@ import org.apache.spark.metrics.source.Source
 private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: SparkContext)
     extends Source {
   val metricRegistry = new MetricRegistry()
-  val sourceName = "%s.BlockManager".format(sc.appName)
+  val sourceName = "BlockManager"
 
   metricRegistry.register(MetricRegistry.name("memory", "maxMem_MB"), new Gauge[Long] {
     override def getValue: Long = {
