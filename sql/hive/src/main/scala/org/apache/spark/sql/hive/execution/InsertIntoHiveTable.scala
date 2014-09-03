@@ -153,9 +153,8 @@ case class InsertIntoHiveTable(
     if (dynamicPartNum == 0) {
       writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
-    } else {
-
     }
+
     var count = 0
     //  writer for Dynamic Partition
     var writer2: SparkHiveHadoopWriter = null
@@ -221,6 +220,7 @@ case class InsertIntoHiveTable(
       .map { case (c, v) => s"/$c=${handleNull(v, defaultPartName)}" }
       .mkString
   }
+
  /*
  * if rowVal is null or "",will return HiveConf.get(hive.exec.default.partition.name) with default
  * */
