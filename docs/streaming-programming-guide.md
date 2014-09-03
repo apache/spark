@@ -308,7 +308,7 @@ some of the common ones are as follows.
 </table>
 
 For an up-to-date list, please refer to the
-[Apache repository](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.spark%22%20AND%20v%3A%22{{site.SPARK_VERSION}}%22)
+[Apache repository](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.spark%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22)
 for the full list of supported sources and artifacts.
 
 ***
@@ -524,8 +524,8 @@ Some of these advanced sources are as follows.
     [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
     can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
     Twitter4J library. You can either get the public stream, or get the filtered stream based on a
-    keywords. See the API documentation ([Scala](), [Java]()) and examples ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala) and
-    [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala)).
+    keywords. See the API documentation ([Scala](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$), [Java](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html)) and examples ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala) and
+    [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala)).
 
 - **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} can received data from Flume 1.4.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
@@ -1332,10 +1332,7 @@ context.awaitTermination();
 If the `checkpointDirectory` exists, then the context will be recreated from the checkpoint data.
 If the directory does not exist (i.e., running for the first time),
 then the function `contextFactory` will be called to create a new
-context and set up the DStreams. See the Scala example
-[JavaRecoverableWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/JavaRecoverableWordCount.scala)
-(note that this example is missing in the 0.9 release, so you can test it using the master branch).
-This example appends the word counts of network data into a file.
+context and set up the DStreams.
 
 You can also explicitly create a `JavaStreamingContext` from the checkpoint data and start
 the computation by using `new JavaStreamingContext(checkpointDirectory)`.
@@ -1488,7 +1485,7 @@ replaced by [Receiver](api/scala/index.html#org.apache.spark.streaming.receiver.
 the following advantages.
 
 * Methods like `stop` and `restart` have been added to for better control of the lifecycle of a receiver. See
-the [custom receiver guide](streaming-custom-receiver.html) for more details.
+the [custom receiver guide](streaming-custom-receivers.html) for more details.
 * Custom receivers can be implemented using both Scala and Java.
 
 To migrate your existing custom receivers from the earlier NetworkReceiver to the new Receiver, you have

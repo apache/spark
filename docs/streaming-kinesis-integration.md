@@ -44,7 +44,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
         	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position]);
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the next subsection for instructions to run the example.
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the next subsection for instructions to run the example.
 
 	</div>
 	</div>
