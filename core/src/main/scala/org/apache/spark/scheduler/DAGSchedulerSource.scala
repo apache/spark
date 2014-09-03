@@ -25,7 +25,7 @@ import org.apache.spark.metrics.source.Source
 private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: SparkContext)
     extends Source {
   val metricRegistry = new MetricRegistry()
-  val sourceName = "DAGScheduler"
+  val sourceName = "%s.DAGScheduler".format(sc.appName)
 
   metricRegistry.register(MetricRegistry.name("stage", "failedStages"), new Gauge[Int] {
     override def getValue: Int = dagScheduler.failedStages.size
