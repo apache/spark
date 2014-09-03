@@ -3,7 +3,7 @@ layout: global
 title: Spark Streaming + Flume Integration Guide
 ---
 
-[Apache Flume](https://flume.apache.org/) is a distributed, reliable, and available service for efficiently collecting, aggregating, and moving large amounts of log data. Here we explain how to configure the Flume and Spark Streaming. There are two approaches by which this integration can be achieved.
+[Apache Flume](https://flume.apache.org/) is a distributed, reliable, and available service for efficiently collecting, aggregating, and moving large amounts of log data. Here we explain how to configure Flume and Spark Streaming to receive data from Flume. There are two approaches to this.
 
 ## Approach 1: Flume-style Push-based Approach
 Flume is designed to push data between Flume agents. In this approach, Spark Streaming essentially sets up a receiver that acts an Avro agent for Flume, to which Flume can push the data. Here are the configuration steps.
@@ -30,7 +30,11 @@ See the [Flume's documentation](https://flume.apache.org/documentation.html) for
 configuring Flume agents.
 
 #### Configuring Spark Streaming Application
-1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide).
+1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
+
+		groupId = org.apache.spark
+		artifactId = spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}
+		version = {{site.SPARK_VERSION_SHORT}}
 
 2. **Programming:** In the streaming application code, import `FlumeUtils` and create input DStream as follows.
 
@@ -40,7 +44,8 @@ configuring Flume agents.
 
 		val flumeStream = FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port])
 
-	See the example [FlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala).
+	See the [API docs](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$)
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.flume.*;
@@ -48,7 +53,8 @@ configuring Flume agents.
 		JavaReceiverInputDStream<SparkFlumeEvent> flumeStream =
         	FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port]);
 
-	See the example [JavaFlumeEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java).
+	See the [API docs](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html)
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java).
 	</div>
 	</div>
 
@@ -62,10 +68,10 @@ configuring Flume agents.
 Instead of Flume pushing data directly to Spark Streaming, this approach runs a custom Flume sink that allows the following.
 - Flume pushes data into the sink, and the data stays buffered.
 - Spark Streaming uses transactions to pull data from the sink. Transactions succeed only after data is received and replicated by Spark Streaming.
-This ensures that better reliability and fault-tolerance than the previous approach. However, this requires configuring Flume to run an extra agent with the custom sink. Here are the configuration steps.
+This ensures that better reliability and fault-tolerance than the previous approach. However, this requires configuring Flume to run a custom sink. Here are the configuration steps.
 
 #### General Requirements
-Choose a machine that will run the custom sink in a Flume agent. The rest of the Flume pipeline is configured to Machines confiMachines in the Spark cluster should have access to the machine in the Flume cluster that is configured to run the custom sink.
+Choose a machine that will run the custom sink in a Flume agent. The rest of the Flume pipeline is configured to send data to that agent. Machines in the Spark cluster should have access to the chosen machine running the custom sink.
 
 #### Configuring Flume
 Configuring Flume on the chosen machine requires the following two steps.
@@ -85,6 +91,7 @@ Configuring Flume on the chosen machine requires the following two steps.
 		version = {{site.SCALA_VERSION}}
 
 2. **Configuration file**: On that machine, configure Flume agent to send data to an Avro sink by having the following in the configuration file.
+
 		agent.sinks = spark
 		agent.sinks.spark.type = org.apache.spark.streaming.flume.sink.SparkSink
 		agent.sinks.spark.hostname = <hostname of the local machine>
@@ -116,6 +123,8 @@ configuring Flume agents.
 	</div>
 
 	See the Scala example [FlumePollingEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumePollingEventCount.scala).
+
+	Note that each input DStream can be configured to receive data from multiple sinks.
 
 3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
