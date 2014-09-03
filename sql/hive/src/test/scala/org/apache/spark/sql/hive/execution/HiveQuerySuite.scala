@@ -524,9 +524,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     def collectResults(rdd: SchemaRDD): Set[(String, String)] = 
       rdd.collect().map { 
         case Row(key: String, value: String) => key -> value 
-        case Row(kv: String) => kv match {
-          case KV(key, value) => key -> value
-        }
+        case Row(KV(key, value)) => key -> value
       }.toSet
     clear()
 
