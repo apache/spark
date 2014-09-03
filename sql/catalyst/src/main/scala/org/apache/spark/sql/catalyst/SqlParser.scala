@@ -126,8 +126,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SQRT = Keyword("SQRT")
   protected val ABS = Keyword("ABS")
-  protected val POW = Keyword("POW")
-  protected val POWER = Keyword("POWER")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -332,9 +330,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     } |
     SQRT ~> "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) } |
     ABS ~> "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) } |
-    (POW | POWER) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
-      case s ~ "," ~ p => Power(s,p)
-    } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)
     }
