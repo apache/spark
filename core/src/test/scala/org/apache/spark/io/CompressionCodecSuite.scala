@@ -86,3 +86,33 @@ class CompressionCodecSuite extends FunSuite {
     testCodec(codec)
   }
 }
+
+class CompressionCodecSuite extends FunSuite {
+  val conf = new SparkConf(false)
+
+  def testCodec(codec: CompressionCodec) {
+    // Write 1000 integers to the output stream, compressed.
+    val outputStream = new ByteArrayOutputStream()
+    val out = codec.compressedOutputStream(outputStream)
+    for (i <- 1 until 1000) {
+      out.write(i % 256)
+    }
+    out.close()
+
+    // Read the 1000 integers back.
+    val inputStream = new ByteArrayInputStream(outputStream.toByteArray)
+    val in = codec.compressedInputStream(inputStream)
+    for (i <- 1 until 1000) {
+      assert(in.read() === i % 256)
+    }
+    in.close()
+  }
+
+  test("zlib compression codec") {
+    val codec = CompressionCodec.createCodec(conf, classOf[ZLIBCompressionCodec].getName)
+    assert(codec.getClass === classOf[ZLIBCompressionCodec])
+    testCodec(codec)
+  }
+}
+
+

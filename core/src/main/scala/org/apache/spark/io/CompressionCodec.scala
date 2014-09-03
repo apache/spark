@@ -127,3 +127,24 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
 }
+
+
+/**
+ * :: DeveloperApi ::
+ * ZLIB implementation of [[org.apache.spark.io.CompressionCodec]].
+ * 
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
+ */
+import com.jcraft.jzlib._
+@DeveloperApi
+class ZLIBCompressionCodec(conf: SparkConf) extends CompressionCodec {
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+ //  val blockSize = conf.getInt("spark.io.compression.snappy.block.size", 32768)
+    //new SnappyOutputStream(s, blockSize)
+   val zOut = new ZOutputStream(s, JZlib.Z_BEST_COMPRESSION)
+         zOut
+  }
