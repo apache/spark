@@ -30,12 +30,13 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile(
+  private lazy val hiveQueryDir = TestHive.getHiveFile(
     "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
@@ -47,6 +48,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, "5")
+    // Enable in-memory partition pruning for testing purposes
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
   }
 
   override def afterAll() {
@@ -54,6 +57,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

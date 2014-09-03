@@ -23,6 +23,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
@@ -109,9 +110,8 @@ private[sql] case class InMemoryColumnarTableScan(
 
   override def output: Seq[Attribute] = attributes
 
-  import org.apache.spark.sql.catalyst.dsl.expressions._
-  import org.apache.spark.sql.catalyst.expressions._
-
+  // Returned filter predicate should return false iff it is impossible for the input expression
+  // to evaluate to `true' based on statistics collected about this partition batch.
   val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
@@ -202,7 +202,7 @@ private[sql] case class InMemoryColumnarTableScan(
       val rows = iterator
         // Skip pruned batches
         .filter { cachedBatch =>
-          if (!partitionFilter(cachedBatch.stats)) {
+          if (sqlContext.inMemoryPartitionPruning && !partitionFilter(cachedBatch.stats)) {
             def statsString = relation.partitionStatistics.schema
               .zip(cachedBatch.stats)
               .map { case (a, s) => s"${a.name}: $s" }
