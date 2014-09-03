@@ -17,33 +17,24 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.lang.{Boolean => JBoolean}
-import java.util.{Collections, Set => JSet}
 import java.util.concurrent.{CopyOnWriteArrayList, ConcurrentHashMap}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
-import org.apache.spark.scheduler.{SplitInfo,TaskSchedulerImpl}
+import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.AMRMProtocol
 import org.apache.hadoop.yarn.api.records.{AMResponse, ApplicationAttemptId}
-import org.apache.hadoop.yarn.api.records.{Container, ContainerId, ContainerStatus}
+import org.apache.hadoop.yarn.api.records.{Container, ContainerId}
 import org.apache.hadoop.yarn.api.records.{Priority, Resource, ResourceRequest}
 import org.apache.hadoop.yarn.api.protocolrecords.{AllocateRequest, AllocateResponse}
-import org.apache.hadoop.yarn.util.{RackResolver, Records}
-
-
-object AllocationType extends Enumeration {
-  type AllocationType = Value
-  val HOST, RACK, ANY = Value
-}
+import org.apache.hadoop.yarn.util.Records
 
 // TODO:
 // Too many params.
@@ -59,16 +50,14 @@ object AllocationType extends Enumeration {
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
  */
 private[yarn] class YarnAllocationHandler(
-    val conf: Configuration,
-    val resourceManager: AMRMProtocol,
-    val appAttemptId: ApplicationAttemptId,
-    val maxExecutors: Int,
-    val executorMemory: Int,
-    val executorCores: Int,
-    val preferredHostToCount: Map[String, Int],
-    val preferredRackToCount: Map[String, Int],
-    val sparkConf: SparkConf)
-  extends Logging {
+    conf: Configuration,
+    sparkConf: SparkConf,
+    resourceManager: AMRMProtocol,
+    appAttemptId: ApplicationAttemptId,
+    args: ApplicationMasterArguments,
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
+  extends YarnAllocator with Logging {
+
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
   // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
   // allocatedContainerToHostMap: container to host mapping.
@@ -90,13 +79,19 @@ private[yarn] class YarnAllocationHandler(
 
   // Additional memory overhead - in mb.
   private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    YarnAllocationHandler.MEMORY_OVERHEAD)
+    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
 
   private val numExecutorsRunning = new AtomicInteger()
   // Used to generate a unique id per executor
   private val executorIdCounter = new AtomicInteger()
   private val lastResponseId = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
+
+  private val maxExecutors = args.numExecutors
+  private val executorMemory = args.executorMemory
+  private val executorCores = args.executorCores
+  private val (preferredHostToCount, preferredRackToCount) =
+    generateNodeToWeight(conf, preferredNodes)
 
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
@@ -106,9 +101,10 @@ private[yarn] class YarnAllocationHandler(
     container.getResource.getMemory >= (executorMemory + memoryOverhead)
   }
 
-  def allocateContainers(executorsToRequest: Int) {
+  override def allocateResources() = {
     // We need to send the request only once from what I understand ... but for now, not modifying
     // this much.
+    val executorsToRequest = Math.max(maxExecutors - numExecutorsRunning.get(), 0)
 
     // Keep polling the Resource Manager for containers
     val amResp = allocateExecutorResources(executorsToRequest).getAMResponse
@@ -182,7 +178,7 @@ private[yarn] class YarnAllocationHandler(
 
         // Now rack local
         if (remainingContainers != null){
-          val rack = YarnAllocationHandler.lookupRack(conf, candidateHost)
+          val rack = YarnSparkHadoopUtil.lookupRack(conf, candidateHost)
 
           if (rack != null){
             val maxExpectedRackCount = preferredRackToCount.getOrElse(rack, 0)
@@ -256,7 +252,7 @@ private[yarn] class YarnAllocationHandler(
           // Should not be there, but ..
           pendingReleaseContainers.remove(containerId)
 
-          val rack = YarnAllocationHandler.lookupRack(conf, executorHostname)
+          val rack = YarnSparkHadoopUtil.lookupRack(conf, executorHostname)
           allocatedHostToContainersMap.synchronized {
             val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
               new HashSet[ContainerId]())
@@ -331,7 +327,7 @@ private[yarn] class YarnAllocationHandler(
             allocatedContainerToHostMap -= containerId
 
             // Doing this within locked context, sigh ... move to outside ?
-            val rack = YarnAllocationHandler.lookupRack(conf, host)
+            val rack = YarnSparkHadoopUtil.lookupRack(conf, host)
             if (rack != null) {
               val rackCount = allocatedRackCount.getOrElse(rack, 0) - 1
               if (rackCount > 0) {
@@ -364,9 +360,9 @@ private[yarn] class YarnAllocationHandler(
     for (container <- hostContainers) {
       val candidateHost = container.getHostName
       val candidateNumContainers = container.getNumContainers
-      assert(YarnAllocationHandler.ANY_HOST != candidateHost)
+      assert(YarnSparkHadoopUtil.ANY_HOST != candidateHost)
 
-      val rack = YarnAllocationHandler.lookupRack(conf, candidateHost)
+      val rack = YarnSparkHadoopUtil.lookupRack(conf, candidateHost)
       if (rack != null) {
         var count = rackToCounts.getOrElse(rack, 0)
         count += candidateNumContainers
@@ -378,7 +374,8 @@ private[yarn] class YarnAllocationHandler(
       new ArrayBuffer[ResourceRequest](rackToCounts.size)
     for ((rack, count) <- rackToCounts){
       requestedContainers +=
-        createResourceRequest(AllocationType.RACK, rack, count, YarnAllocationHandler.PRIORITY)
+        createResourceRequest(AllocationType.RACK, rack, count,
+          YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
     }
 
     requestedContainers.toList
@@ -409,7 +406,7 @@ private[yarn] class YarnAllocationHandler(
       logDebug("numExecutors: " + numExecutors + ", host preferences: " +
         preferredHostToCount.isEmpty)
       resourceRequests = List(createResourceRequest(
-        AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
+        AllocationType.ANY, null, numExecutors, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
     } else {
       // request for all hosts in preferred nodes and for numExecutors -
       // candidates.size, request by default allocation policy.
@@ -423,7 +420,7 @@ private[yarn] class YarnAllocationHandler(
             AllocationType.HOST,
             candidateHost,
             requiredCount,
-            YarnAllocationHandler.PRIORITY)
+            YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
         }
       }
       val rackContainerRequests: List[ResourceRequest] = createRackResourceRequests(
@@ -433,7 +430,7 @@ private[yarn] class YarnAllocationHandler(
         AllocationType.ANY,
         resource = null,
         numExecutors,
-        YarnAllocationHandler.PRIORITY)
+        YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
 
       val containerRequests: ArrayBuffer[ResourceRequest] = new ArrayBuffer[ResourceRequest](
         hostContainerRequests.size + rackContainerRequests.size + 1)
@@ -483,12 +480,12 @@ private[yarn] class YarnAllocationHandler(
     // There must be a third request - which is ANY : that will be specially handled.
     requestType match {
       case AllocationType.HOST => {
-        assert(YarnAllocationHandler.ANY_HOST != resource)
+        assert(YarnSparkHadoopUtil.ANY_HOST != resource)
         val hostname = resource
         val nodeLocal = createResourceRequestImpl(hostname, numExecutors, priority)
 
         // Add to host->rack mapping
-        YarnAllocationHandler.populateRackInfo(conf, hostname)
+        YarnSparkHadoopUtil.populateRackInfo(conf, hostname)
 
         nodeLocal
       }
@@ -497,7 +494,7 @@ private[yarn] class YarnAllocationHandler(
         createResourceRequestImpl(rack, numExecutors, priority)
       }
       case AllocationType.ANY => createResourceRequestImpl(
-        YarnAllocationHandler.ANY_HOST, numExecutors, priority)
+        YarnSparkHadoopUtil.ANY_HOST, numExecutors, priority)
       case _ => throw new IllegalArgumentException(
         "Unexpected/unsupported request type: " + requestType)
     }
@@ -541,90 +538,6 @@ private[yarn] class YarnAllocationHandler(
 
     retval
   }
-}
-
-object YarnAllocationHandler {
-
-  val ANY_HOST = "*"
-  // All requests are issued with same priority : we do not (yet) have any distinction between
-  // request types (like map/reduce in hadoop for example)
-  val PRIORITY = 1
-
-  // Additional memory overhead - in mb
-  val MEMORY_OVERHEAD = 384
-
-  // Host to rack map - saved from allocation requests
-  // We are expecting this not to change.
-  // Note that it is possible for this to change : and RM will indicate that to us via update
-  // response to allocate. But we are punting on handling that for now.
-  private val hostToRack = new ConcurrentHashMap[String, String]()
-  private val rackToHostSet = new ConcurrentHashMap[String, JSet[String]]()
-
-
-  def newAllocator(
-    conf: Configuration,
-    resourceManager: AMRMProtocol,
-    appAttemptId: ApplicationAttemptId,
-    args: ApplicationMasterArguments,
-    sparkConf: SparkConf): YarnAllocationHandler = {
-
-    new YarnAllocationHandler(
-      conf,
-      resourceManager,
-      appAttemptId,
-      args.numExecutors,
-      args.executorMemory,
-      args.executorCores,
-      Map[String, Int](),
-      Map[String, Int](),
-      sparkConf)
-  }
-
-  def newAllocator(
-    conf: Configuration,
-    resourceManager: AMRMProtocol,
-    appAttemptId: ApplicationAttemptId,
-    args: ApplicationMasterArguments,
-    map: collection.Map[String,
-    collection.Set[SplitInfo]],
-    sparkConf: SparkConf): YarnAllocationHandler = {
-
-    val (hostToCount, rackToCount) = generateNodeToWeight(conf, map)
-    new YarnAllocationHandler(
-      conf,
-      resourceManager,
-      appAttemptId,
-      args.numExecutors,
-      args.executorMemory,
-      args.executorCores,
-      hostToCount,
-      rackToCount,
-      sparkConf)
-  }
-
-  def newAllocator(
-    conf: Configuration,
-    resourceManager: AMRMProtocol,
-    appAttemptId: ApplicationAttemptId,
-    maxExecutors: Int,
-    executorMemory: Int,
-    executorCores: Int,
-    map: collection.Map[String, collection.Set[SplitInfo]],
-    sparkConf: SparkConf): YarnAllocationHandler = {
-
-    val (hostToCount, rackToCount) = generateNodeToWeight(conf, map)
-
-    new YarnAllocationHandler(
-      conf,
-      resourceManager,
-      appAttemptId,
-      maxExecutors,
-      executorMemory,
-      executorCores,
-      hostToCount,
-      rackToCount,
-      sparkConf)
-  }
 
   // A simple method to copy the split info map.
   private def generateNodeToWeight(
@@ -642,7 +555,7 @@ object YarnAllocationHandler {
       val hostCount = hostToCount.getOrElse(host, 0)
       hostToCount.put(host, hostCount + splits.size)
 
-      val rack = lookupRack(conf, host)
+      val rack = YarnSparkHadoopUtil.lookupRack(conf, host)
       if (rack != null){
         val rackCount = rackToCount.getOrElse(host, 0)
         rackToCount.put(host, rackCount + splits.size)
@@ -652,41 +565,4 @@ object YarnAllocationHandler {
     (hostToCount.toMap, rackToCount.toMap)
   }
 
-  def lookupRack(conf: Configuration, host: String): String = {
-    if (!hostToRack.contains(host)) populateRackInfo(conf, host)
-    hostToRack.get(host)
-  }
-
-  def fetchCachedHostsForRack(rack: String): Option[Set[String]] = {
-    val set = rackToHostSet.get(rack)
-    if (set == null) return None
-
-    // No better way to get a Set[String] from JSet ?
-    val convertedSet: collection.mutable.Set[String] = set
-    Some(convertedSet.toSet)
-  }
-
-  def populateRackInfo(conf: Configuration, hostname: String) {
-    Utils.checkHost(hostname)
-
-    if (!hostToRack.containsKey(hostname)) {
-      // If there are repeated failures to resolve, all to an ignore list ?
-      val rackInfo = RackResolver.resolve(conf, hostname)
-      if (rackInfo != null && rackInfo.getNetworkLocation != null) {
-        val rack = rackInfo.getNetworkLocation
-        hostToRack.put(hostname, rack)
-        if (! rackToHostSet.containsKey(rack)) {
-          rackToHostSet.putIfAbsent(rack,
-            Collections.newSetFromMap(new ConcurrentHashMap[String, JBoolean]()))
-        }
-        rackToHostSet.get(rack).add(hostname)
-
-        // TODO(harvey): Figure out this comment...
-        // Since RackResolver caches, we are disabling this for now ...
-      } /* else {
-        // right ? Else we will keep calling rack resolver in case we cant resolve rack info ...
-        hostToRack.put(hostname, null)
-      } */
-    }
-  }
 }

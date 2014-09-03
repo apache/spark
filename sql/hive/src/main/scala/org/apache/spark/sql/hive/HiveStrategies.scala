@@ -79,9 +79,9 @@ private[hive] trait HiveStrategies {
              hiveContext.convertMetastoreParquet =>
 
         // Filter out all predicates that only deal with partition keys
-        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
+        val partitionsKeys = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.exprId).subsetOf(partitionKeyIds)
+          _.references.subsetOf(partitionsKeys)
         }
 
         // We are going to throw the predicates and projection back at the whole optimization
@@ -135,7 +135,7 @@ private[hive] trait HiveStrategies {
             .fakeOutput(projectList.map(_.toAttribute)):: Nil
         } else {
           hiveContext
-            .parquetFile(relation.hiveQlTable.getDataLocation.getPath)
+            .parquetFile(relation.hiveQlTable.getDataLocation.toString)
             .lowerCase
             .where(unresolvedOtherPredicates)
             .select(unresolvedProjection:_*)
@@ -176,9 +176,9 @@ private[hive] trait HiveStrategies {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
+        val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.exprId).subsetOf(partitionKeyIds)
+          _.references.subsetOf(partitionKeyIds)
         }
 
         pruneFilterProject(
