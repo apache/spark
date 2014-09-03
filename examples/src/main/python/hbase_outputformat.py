@@ -63,3 +63,5 @@ if __name__ == "__main__":
         conf=conf,
         keyConverter="org.apache.spark.examples.pythonconverters.StringToImmutableBytesWritableConverter",
         valueConverter="org.apache.spark.examples.pythonconverters.StringListToPutConverter")
+
+    sc.stop()

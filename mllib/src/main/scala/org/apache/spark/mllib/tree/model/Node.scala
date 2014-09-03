@@ -69,24 +69,24 @@ class Node (
 
   /**
    * predict value if node is not leaf
-   * @param feature feature value
+   * @param features feature value
    * @return predicted value
    */
-  def predictIfLeaf(feature: Vector) : Double = {
+  def predict(features: Vector) : Double = {
     if (isLeaf) {
       predict
     } else{
       if (split.get.featureType == Continuous) {
-        if (feature(split.get.feature) <= split.get.threshold) {
-          leftNode.get.predictIfLeaf(feature)
+        if (features(split.get.feature) <= split.get.threshold) {
+          leftNode.get.predict(features)
         } else {
-          rightNode.get.predictIfLeaf(feature)
+          rightNode.get.predict(features)
         }
       } else {
-        if (split.get.categories.contains(feature(split.get.feature))) {
-          leftNode.get.predictIfLeaf(feature)
+        if (split.get.categories.contains(features(split.get.feature))) {
+          leftNode.get.predict(features)
         } else {
-          rightNode.get.predictIfLeaf(feature)
+          rightNode.get.predict(features)
         }
       }
     }

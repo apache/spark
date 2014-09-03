@@ -23,12 +23,18 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
+source $FWDIR/bin/utils.sh
+
 SCALA_VERSION=2.10
 
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+function usage() {
   echo "Usage: ./bin/pyspark [options]" 1>&2
   $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
+}
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  usage
 fi
 
 # Exit if the user hasn't compiled Spark
@@ -66,10 +72,11 @@ fi
 # Build up arguments list manually to preserve quotes and backslashes.
 # We export Spark submit arguments as an environment variable because shell.py must run as a
 # PYTHONSTARTUP script, which does not take in arguments. This is required for IPython notebooks.
-
+SUBMIT_USAGE_FUNCTION=usage
+gatherSparkSubmitOpts "$@"
 PYSPARK_SUBMIT_ARGS=""
 whitespace="[[:space:]]"
-for i in "$@"; do
+for i in "${SUBMISSION_OPTS[@]}"; do
   if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
   if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
   PYSPARK_SUBMIT_ARGS="$PYSPARK_SUBMIT_ARGS $i"
@@ -90,11 +97,16 @@ fi
 if [[ "$1" =~ \.py$ ]]; then
   echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
   echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
-  exec $FWDIR/bin/spark-submit "$@"
+  primary=$1
+  shift
+  gatherSparkSubmitOpts "$@"
+  exec $FWDIR/bin/spark-submit "${SUBMISSION_OPTS[@]}" $primary "${APPLICATION_OPTS[@]}"
 else
+  # PySpark shell requires special handling downstream
+  export PYSPARK_SHELL=1
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
-    exec ipython $IPYTHON_OPTS
+    exec ${PYSPARK_PYTHON:-ipython} $IPYTHON_OPTS
   else
     exec "$PYSPARK_PYTHON"
   fi

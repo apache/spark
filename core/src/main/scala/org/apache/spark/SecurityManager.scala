@@ -41,9 +41,18 @@ import org.apache.spark.deploy.SparkHadoopUtil
  * secure the UI if it has data that other users should not be allowed to see. The javax
  * servlet filter specified by the user can authenticate the user and then once the user
  * is logged in, Spark can compare that user versus the view acls to make sure they are
- * authorized to view the UI. The configs 'spark.ui.acls.enable' and 'spark.ui.view.acls'
+ * authorized to view the UI. The configs 'spark.acls.enable' and 'spark.ui.view.acls'
  * control the behavior of the acls. Note that the person who started the application
  * always has view access to the UI.
+ *
+ * Spark has a set of modify acls (`spark.modify.acls`) that controls which users have permission
+ * to  modify a single application. This would include things like killing the application. By
+ * default the person who started the application has modify access. For modify access through
+ * the UI, you must have a filter that does authentication in place for the modify acls to work
+ * properly.
+ *
+ * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
+ * who always have permission to view or modify the Spark application.
  *
  * Spark does not currently support encryption after authentication.
  *
@@ -137,18 +146,32 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   private val sparkSecretLookupKey = "sparkCookie"
 
   private val authOn = sparkConf.getBoolean("spark.authenticate", false)
-  private var uiAclsOn = sparkConf.getBoolean("spark.ui.acls.enable", false)
+  // keep spark.ui.acls.enable for backwards compatibility with 1.0
+  private var aclsOn = sparkConf.getOption("spark.acls.enable").getOrElse(
+    sparkConf.get("spark.ui.acls.enable", "false")).toBoolean
+
+  // admin acls should be set before view or modify acls
+  private var adminAcls: Set[String] =
+    stringToSet(sparkConf.get("spark.admin.acls", ""))
 
   private var viewAcls: Set[String] = _
+
+  // list of users who have permission to modify the application. This should
+  // apply to both UI and CLI for things like killing the application.
+  private var modifyAcls: Set[String] = _
+
   // always add the current user and SPARK_USER to the viewAcls
-  private val defaultAclUsers = Seq[String](System.getProperty("user.name", ""),
+  private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
     Option(System.getenv("SPARK_USER")).getOrElse(""))
+
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
+  setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
   private val secretKey = generateSecretKey()
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
-    "; ui acls " + (if (uiAclsOn) "enabled" else "disabled") +
-    "; users with view permissions: " + viewAcls.toString())
+    "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
+    "; users with view permissions: " + viewAcls.toString() +
+    "; users with modify permissions: " + modifyAcls.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
@@ -169,18 +192,51 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
     )
   }
 
-  private[spark] def setViewAcls(defaultUsers: Seq[String], allowedUsers: String) {
-    viewAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet 
+  /**
+   * Split a comma separated String, filter out any empty items, and return a Set of strings
+   */
+  private def stringToSet(list: String): Set[String] = {
+    list.split(',').map(_.trim).filter(!_.isEmpty).toSet
+  }
+
+  /**
+   * Admin acls should be set before the view or modify acls.  If you modify the admin
+   * acls you should also set the view and modify acls again to pick up the changes.
+   */
+  def setViewAcls(defaultUsers: Set[String], allowedUsers: String) {
+    viewAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
     logInfo("Changing view acls to: " + viewAcls.mkString(","))
   }
 
-  private[spark] def setViewAcls(defaultUser: String, allowedUsers: String) {
-    setViewAcls(Seq[String](defaultUser), allowedUsers)
+  def setViewAcls(defaultUser: String, allowedUsers: String) {
+    setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
-  private[spark] def setUIAcls(aclSetting: Boolean) { 
-    uiAclsOn = aclSetting 
-    logInfo("Changing acls enabled to: " + uiAclsOn)
+  def getViewAcls: String = viewAcls.mkString(",")
+
+  /**
+   * Admin acls should be set before the view or modify acls.  If you modify the admin
+   * acls you should also set the view and modify acls again to pick up the changes.
+   */
+  def setModifyAcls(defaultUsers: Set[String], allowedUsers: String) {
+    modifyAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
+    logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
+  }
+
+  def getModifyAcls: String = modifyAcls.mkString(",")
+
+  /**
+   * Admin acls should be set before the view or modify acls.  If you modify the admin
+   * acls you should also set the view and modify acls again to pick up the changes.
+   */
+  def setAdminAcls(adminUsers: String) {
+    adminAcls = stringToSet(adminUsers)
+    logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+  }
+
+  def setAcls(aclSetting: Boolean) {
+    aclsOn = aclSetting
+    logInfo("Changing acls enabled to: " + aclsOn)
   }
 
   /**
@@ -224,21 +280,38 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
    * Check to see if Acls for the UI are enabled
    * @return true if UI authentication is enabled, otherwise false
    */
-  def uiAclsEnabled(): Boolean = uiAclsOn
+  def aclsEnabled(): Boolean = aclsOn
 
   /**
    * Checks the given user against the view acl list to see if they have
-   * authorization to view the UI. If the UI acls must are disabled
-   * via spark.ui.acls.enable, all users have view access.
+   * authorization to view the UI. If the UI acls are disabled
+   * via spark.acls.enable, all users have view access. If the user is null
+   * it is assumed authentication is off and all users have access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
   def checkUIViewPermissions(user: String): Boolean = {
-    logDebug("user=" + user + " uiAclsEnabled=" + uiAclsEnabled() + " viewAcls=" + 
+    logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    if (uiAclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
+    !aclsEnabled || user == null || viewAcls.contains(user)
   }
+
+  /**
+   * Checks the given user against the modify acl list to see if they have
+   * authorization to modify the application. If the UI acls are disabled
+   * via spark.acls.enable, all users have modify access. If the user is null
+   * it is assumed authentication isn't turned on and all users have access.
+   *
+   * @param user to see if is authorized
+   * @return true is the user has permission, otherwise false
+   */
+  def checkModifyPermissions(user: String): Boolean = {
+    logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
+      modifyAcls.mkString(","))
+    !aclsEnabled || user == null || modifyAcls.contains(user)
+  }
+
 
   /**
    * Check to see if authentication for the Spark communication protocols is enabled

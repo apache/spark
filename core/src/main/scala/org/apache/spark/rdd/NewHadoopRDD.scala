@@ -35,6 +35,7 @@ import org.apache.spark.SerializableWritable
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
+import org.apache.spark.util.Utils
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -129,7 +130,7 @@ class NewHadoopRDD[K, V](
       context.taskMetrics.inputMetrics = Some(inputMetrics)
 
       // Register an on-task-completion callback to close the input stream.
-      context.addOnCompleteCallback(() => close())
+      context.addTaskCompletionListener(context => close())
       var havePair = false
       var finished = false
 
@@ -153,7 +154,11 @@ class NewHadoopRDD[K, V](
         try {
           reader.close()
         } catch {
-          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+          case e: Exception => {
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }

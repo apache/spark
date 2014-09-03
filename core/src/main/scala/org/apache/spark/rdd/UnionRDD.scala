@@ -83,8 +83,7 @@ class UnionRDD[T: ClassTag](
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val part = s.asInstanceOf[UnionPartition[T]]
-    val parentRdd = dependencies(part.parentRddIndex).rdd.asInstanceOf[RDD[T]]
-    parentRdd.iterator(part.parentPartition, context)
+    parent[T](part.parentRddIndex).iterator(part.parentPartition, context)
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] =

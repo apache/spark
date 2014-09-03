@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | sbt/sbt -Phive -Phive-thriftserver scalastyle > scalastyle.txt
+echo -e "q\n" | sbt/sbt -Phive scalastyle > scalastyle.txt
 # Check style with YARN alpha built too
 echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-alpha/scalastyle \
   >> scalastyle.txt
@@ -30,5 +30,5 @@ if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
     exit 1
 else
-    echo -e "Scalastyle checks passed.\n"
+    echo -e "Scalastyle checks passed."
 fi

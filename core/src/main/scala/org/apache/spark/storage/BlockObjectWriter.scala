@@ -22,6 +22,7 @@ import java.nio.channels.FileChannel
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
@@ -60,41 +61,26 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
    * This is only valid after commitAndClose() has been called.
    */
   def fileSegment(): FileSegment
-
-  /**
-   * Cumulative time spent performing blocking writes, in ns.
-   */
-  def timeWriting(): Long
-
-  /**
-   * Number of bytes written so far
-   */
-  def bytesWritten: Long
 }
 
-/** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
+/**
+ * BlockObjectWriter which writes directly to a file on disk. Appends to the given file.
+ */
 private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
     file: File,
     serializer: Serializer,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
-    syncWrites: Boolean)
+    syncWrites: Boolean,
+    // These write metrics concurrently shared with other active BlockObjectWriter's who
+    // are themselves performing writes. All updates must be relative.
+    writeMetrics: ShuffleWriteMetrics)
   extends BlockObjectWriter(blockId)
   with Logging
 {
-
   /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
   private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
-    def timeWriting = _timeWriting
-    private var _timeWriting = 0L
-
-    private def callWithTiming(f: => Unit) = {
-      val start = System.nanoTime()
-      f
-      _timeWriting += (System.nanoTime() - start)
-    }
-
     def write(i: Int): Unit = callWithTiming(out.write(i))
     override def write(b: Array[Byte]) = callWithTiming(out.write(b))
     override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
@@ -108,10 +94,30 @@ private[spark] class DiskBlockObjectWriter(
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
+  private var initialized = false
+
+  /**
+   * Cursors used to represent positions in the file.
+   *
+   * xxxxxxxx|--------|---       |
+   *         ^        ^          ^
+   *         |        |        finalPosition
+   *         |      reportedPosition
+   *       initialPosition
+   *
+   * initialPosition: Offset in the file where we start writing. Immutable.
+   * reportedPosition: Position at the time of the last update to the write metrics.
+   * finalPosition: Offset where we stopped writing. Set on closeAndCommit() then never changed.
+   * -----: Current writes to the underlying file.
+   * xxxxx: Existing contents of the file.
+   */
   private val initialPosition = file.length()
   private var finalPosition: Long = -1
-  private var initialized = false
-  private var _timeWriting = 0L
+  private var reportedPosition = initialPosition
+
+  /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
+    * only call it every N writes */
+  private var writesSinceMetricsUpdate = 0
 
   override def open(): BlockObjectWriter = {
     fos = new FileOutputStream(file, true)
@@ -128,13 +134,10 @@ private[spark] class DiskBlockObjectWriter(
       if (syncWrites) {
         // Force outstanding writes to disk and track how long it takes
         objOut.flush()
-        val start = System.nanoTime()
-        fos.getFD.sync()
-        _timeWriting += System.nanoTime() - start
+        def sync = fos.getFD.sync()
+        callWithTiming(sync)
       }
       objOut.close()
-
-      _timeWriting += ts.timeWriting
 
       channel = null
       bs = null
@@ -156,12 +159,16 @@ private[spark] class DiskBlockObjectWriter(
       close()
     }
     finalPosition = file.length()
+    // In certain compression codecs, more bytes are written after close() is called
+    writeMetrics.shuffleBytesWritten += (finalPosition - reportedPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
+      writeMetrics.shuffleBytesWritten -= (reportedPosition - initialPosition)
+
       if (initialized) {
         objOut.flush()
         bs.flush()
@@ -184,19 +191,40 @@ private[spark] class DiskBlockObjectWriter(
     if (!initialized) {
       open()
     }
+
     objOut.writeObject(value)
+
+    if (writesSinceMetricsUpdate == 32) {
+      writesSinceMetricsUpdate = 0
+      updateBytesWritten()
+    } else {
+      writesSinceMetricsUpdate += 1
+    }
   }
 
   override def fileSegment(): FileSegment = {
-    new FileSegment(file, initialPosition, bytesWritten)
+    new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
-  // Only valid if called after close()
-  override def timeWriting() = _timeWriting
+  /**
+   * Report the number of bytes written in this writer's shuffle write metrics.
+   * Note that this is only valid before the underlying streams are closed.
+   */
+  private def updateBytesWritten() {
+    val pos = channel.position()
+    writeMetrics.shuffleBytesWritten += (pos - reportedPosition)
+    reportedPosition = pos
+  }
 
-  // Only valid if called after commit()
-  override def bytesWritten: Long = {
-    assert(finalPosition != -1, "bytesWritten is only valid after successful commit()")
-    finalPosition - initialPosition
+  private def callWithTiming(f: => Unit) = {
+    val start = System.nanoTime()
+    f
+    writeMetrics.shuffleWriteTime += (System.nanoTime() - start)
+  }
+
+  // For testing
+  private[spark] def flush() {
+    objOut.flush()
+    bs.flush()
   }
 }

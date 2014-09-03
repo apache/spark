@@ -17,10 +17,6 @@ To build Spark yourself, refer to the [building with Maven guide](building-with-
 
 Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.html) for more information on those.  These are configs that are specific to Spark on YARN.
 
-#### Environment Variables
-
-* `SPARK_YARN_USER_ENV`, to add environment variables to the Spark processes launched on YARN. This can be a comma separated list of environment variables, e.g. `SPARK_YARN_USER_ENV="JAVA_HOME=/jdk64,FOO=bar"`.
-
 #### Spark Properties
 
 <table class="table">
@@ -79,7 +75,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
-  <td>
+  </td>
 </tr>
 <tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
@@ -104,6 +100,29 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
     need to be distributed each time an application runs. To point to a jar on HDFS, for example,
     set this configuration to "hdfs:///some/path".
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.access.namenodes</code></td>
+  <td>(none)</td>
+  <td>
+    A list of secure HDFS namenodes your Spark application is going to access. For 
+    example, `spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032`. 
+    The Spark application must have acess to the namenodes listed and Kerberos must 
+    be properly configured to be able to access them (either in the same realm or in 
+    a trusted realm). Spark acquires security tokens for each of the namenodes so that 
+    the Spark application can access those remote HDFS clusters.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+     Add the environment variable specified by <code>EnvironmentVariableName</code> to the 
+     Application Master process launched on YARN. The user can specify multiple of 
+     these and to set multiple environment variables. In yarn-cluster mode this controls 
+     the environment of the SPARK driver and in yarn-client mode it only controls 
+     the environment of the executor launcher. 
   </td>
 </tr>
 </table>

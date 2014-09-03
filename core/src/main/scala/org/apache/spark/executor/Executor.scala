@@ -26,6 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
@@ -62,16 +63,6 @@ private[spark] class Executor(
   val conf = new SparkConf(true)
   conf.setAll(properties)
 
-  // If we are in yarn mode, systems can have different disk layouts so we must set it
-  // to what Yarn on this system said was available. This will be used later when SparkEnv
-  // created.
-  if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
-    conf.set("spark.local.dir", getYarnLocalDirs())
-  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
-    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
-  }
-
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -98,6 +89,9 @@ private[spark] class Executor(
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+
+  // Set the classloader for serializer
+  env.serializer.setDefaultClassLoader(urlClassLoader)
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -129,21 +123,6 @@ private[spark] class Executor(
     env.metricsSystem.report()
     isStopped = true
     threadPool.shutdown()
-  }
-
-  /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(System.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
-
-    if (localDirs.isEmpty) {
-      throw new Exception("Yarn Local dirs can't be empty")
-    }
-    localDirs
   }
 
   class TaskRunner(
@@ -276,10 +255,7 @@ private[spark] class Executor(
         }
       } finally {
         // Release memory used by this thread for shuffles
-        val shuffleMemoryMap = env.shuffleMemoryMap
-        shuffleMemoryMap.synchronized {
-          shuffleMemoryMap.remove(Thread.currentThread().getId)
-        }
+        env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         runningTasks.remove(taskId)
@@ -319,9 +295,9 @@ private[spark] class Executor(
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
-          classOf[Boolean])
-        constructor.newInstance(classUri, parent, userClassPathFirst)
+        val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
+          classOf[ClassLoader], classOf[Boolean])
+        constructor.newInstance(conf, classUri, parent, userClassPathFirst)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")
@@ -338,16 +314,19 @@ private[spark] class Executor(
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+          hadoopConf)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+          hadoopConf)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
@@ -377,6 +356,7 @@ private[spark] class Executor(
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
+                metrics.updateShuffleReadMetrics
                 tasksMetrics += ((taskRunner.taskId, metrics))
               }
             }

@@ -26,6 +26,7 @@ import os
 import pipes
 import random
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -34,12 +35,11 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
-
 
 class UsageError(Exception):
     pass
@@ -124,7 +124,7 @@ def parse_args():
         help="The SSH user you want to connect as (default: root)")
     parser.add_option(
         "--delete-groups", action="store_true", default=False,
-        help="When destroying a cluster, delete the security groups that were created")
+        help="When destroying a cluster, delete the security groups that were created.")
     parser.add_option(
         "--use-existing-master", action="store_true", default=False,
         help="Launch fresh slaves, but use an existing stopped master if possible")
@@ -138,7 +138,15 @@ def parse_args():
     parser.add_option(
         "--user-data", type="string", default="",
         help="Path to a user-data file (most AMI's interpret this as an initialization script)")
-
+    parser.add_option(
+        "--security-group-prefix", type="string", default=None,
+        help="Use this prefix for the security group rather than the cluster name.")
+    parser.add_option(
+        "--authorized-address", type="string", default="0.0.0.0/0",
+        help="Address to authorize on created security groups (default: 0.0.0.0/0)")
+    parser.add_option(
+        "--additional-security-group", type="string", default="",
+        help="Additional security group to place the machines in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -285,42 +293,53 @@ def launch_cluster(conn, opts, cluster_name):
             user_data_content = user_data_file.read()
 
     print "Setting up security groups..."
-    master_group = get_or_make_group(conn, cluster_name + "-master")
-    slave_group = get_or_make_group(conn, cluster_name + "-slaves")
+    if opts.security_group_prefix is None:
+        master_group = get_or_make_group(conn, cluster_name + "-master")
+        slave_group = get_or_make_group(conn, cluster_name + "-slaves")
+    else:
+        master_group = get_or_make_group(conn, opts.security_group_prefix + "-master")
+        slave_group = get_or_make_group(conn, opts.security_group_prefix + "-slaves")
+    authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
         master_group.authorize(src_group=master_group)
         master_group.authorize(src_group=slave_group)
-        master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        master_group.authorize('tcp', 18080, 18080, '0.0.0.0/0')
-        master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
-        master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-        master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-        master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-        master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+        master_group.authorize('tcp', 22, 22, authorized_address)
+        master_group.authorize('tcp', 8080, 8081, authorized_address)
+        master_group.authorize('tcp', 18080, 18080, authorized_address)
+        master_group.authorize('tcp', 19999, 19999, authorized_address)
+        master_group.authorize('tcp', 50030, 50030, authorized_address)
+        master_group.authorize('tcp', 50070, 50070, authorized_address)
+        master_group.authorize('tcp', 60070, 60070, authorized_address)
+        master_group.authorize('tcp', 4040, 4045, authorized_address)
         if opts.ganglia:
-            master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+            master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
         slave_group.authorize(src_group=master_group)
         slave_group.authorize(src_group=slave_group)
-        slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+        slave_group.authorize('tcp', 22, 22, authorized_address)
+        slave_group.authorize('tcp', 8080, 8081, authorized_address)
+        slave_group.authorize('tcp', 50060, 50060, authorized_address)
+        slave_group.authorize('tcp', 50075, 50075, authorized_address)
+        slave_group.authorize('tcp', 60060, 60060, authorized_address)
+        slave_group.authorize('tcp', 60075, 60075, authorized_address)
 
-    # Check if instances are already running in our groups
+    # Check if instances are already running with the cluster name
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
                                                              die_on_error=False)
     if existing_slaves or (existing_masters and not opts.use_existing_master):
-        print >> stderr, ("ERROR: There are already instances running in " +
-                          "group %s or %s" % (master_group.name, slave_group.name))
+        print >> stderr, ("ERROR: There are already instances for name: %s " % cluster_name)
         sys.exit(1)
 
     # Figure out Spark AMI
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
+
+
+    additional_groups = []
+    if opts.additional_security_group:
+        additional_groups = [sg
+                             for sg in conn.get_all_security_groups()
+                             if opts.additional_security_group in (sg.name, sg.id)]
     print "Launching instances..."
 
     try:
@@ -336,6 +355,15 @@ def launch_cluster(conn, opts, cluster_name):
         device.size = opts.ebs_vol_size
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
+
+    # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
+    if opts.instance_type.startswith('m3.'):
+        for i in range(get_num_disks(opts.instance_type)):
+            dev = BlockDeviceType()
+            dev.ephemeral_name = 'ephemeral%d' % i
+            # The first ephemeral drive is /dev/sdb.
+            name = '/dev/sd' + string.letters[i + 1]
+            block_map[name] = dev
 
     # Launch slaves
     if opts.spot_price is not None:
@@ -355,7 +383,7 @@ def launch_cluster(conn, opts, cluster_name):
                 placement=zone,
                 count=num_slaves_this_zone,
                 key_name=opts.key_pair,
-                security_groups=[slave_group],
+                security_groups=[slave_group] + additional_groups,
                 instance_type=opts.instance_type,
                 block_device_map=block_map,
                 user_data=user_data_content)
@@ -371,9 +399,13 @@ def launch_cluster(conn, opts, cluster_name):
                 for r in reqs:
                     id_to_req[r.id] = r
                 active_instance_ids = []
+                outstanding_request_ids = []
                 for i in my_req_ids:
-                    if i in id_to_req and id_to_req[i].state == "active":
-                        active_instance_ids.append(id_to_req[i].instance_id)
+                    if i in id_to_req:
+                        if id_to_req[i].state == "active":
+                            active_instance_ids.append(id_to_req[i].instance_id)
+                        else:
+                            outstanding_request_ids.append(i)
                 if len(active_instance_ids) == opts.slaves:
                     print "All %d slaves granted" % opts.slaves
                     reservations = conn.get_all_instances(active_instance_ids)
@@ -382,8 +414,8 @@ def launch_cluster(conn, opts, cluster_name):
                         slave_nodes += r.instances
                     break
                 else:
-                    print "%d of %d slaves granted, waiting longer" % (
-                        len(active_instance_ids), opts.slaves)
+                    print "%d of %d slaves granted, waiting longer for request ids including %s" % (
+                        len(active_instance_ids), opts.slaves, outstanding_request_ids[0:10])
         except:
             print "Canceling spot instance requests"
             conn.cancel_spot_instance_requests(my_req_ids)
@@ -404,7 +436,7 @@ def launch_cluster(conn, opts, cluster_name):
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
                 slave_res = image.run(key_name=opts.key_pair,
-                                      security_groups=[slave_group],
+                                      security_groups=[slave_group] + additional_groups,
                                       instance_type=opts.instance_type,
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
@@ -430,43 +462,66 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
         master_res = image.run(key_name=opts.key_pair,
-                               security_groups=[master_group],
+                               security_groups=[master_group] + additional_groups,
                                instance_type=master_type,
                                placement=opts.zone,
                                min_count=1,
                                max_count=1,
-                               block_device_map=block_map)
+                               block_device_map=block_map,
+                               user_data=user_data_content)
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
     # Give the instances descriptive names
     for master in master_nodes:
-        master.add_tag(
-            key='Name',
-            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        name = '{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id)
+        tag_instance(master, name)
+
     for slave in slave_nodes:
-        slave.add_tag(
-            key='Name',
-            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        name = '{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id)
+        tag_instance(slave, name)
 
     # Return all the instances
     return (master_nodes, slave_nodes)
 
+def tag_instance(instance, name):
+    for i in range(0, 5):
+        try:
+            instance.add_tag(key='Name', value=name)
+        except:
+            print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+            if (i == 5):
+                raise "Error - failed max attempts to add name tag"
+            time.sleep(5)
 
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
+    # Search all the spot instance requests, and copy any tags from the spot instance request to the cluster.
+    spot_instance_requests = conn.get_all_spot_instance_requests()
+    for req in spot_instance_requests:
+        if req.state != u'active':
+            continue
+        name = req.tags.get(u'Name', "")
+        if name.startswith(cluster_name):
+            reservations = conn.get_all_instances(instance_ids=[req.instance_id])
+            for res in reservations:
+                active = [i for i in res.instances if is_active(i)]
+                for instance in active:
+                    if (instance.tags.get(u'Name') == None):
+                        tag_instance(instance, name)
+    # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
     master_nodes = []
     slave_nodes = []
     for res in reservations:
         active = [i for i in res.instances if is_active(i)]
         for inst in active:
-            group_names = [g.name for g in inst.groups]
-            if group_names == [cluster_name + "-master"]:
+            name = inst.tags.get(u'Name', "")
+            if name.startswith(cluster_name + "-master"):
                 master_nodes.append(inst)
-            elif group_names == [cluster_name + "-slaves"]:
+            elif name.startswith(cluster_name + "-slave"):
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
         print ("Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)))
@@ -474,11 +529,10 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in with name " + cluster_name + "-master"
         else:
             print >> sys.stderr, "ERROR: Could not find any existing cluster"
         sys.exit(1)
-
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
@@ -816,7 +870,10 @@ def real_main():
             # Delete security groups as well
             if opts.delete_groups:
                 print "Deleting security groups (this will take some time)..."
-                group_names = [cluster_name + "-master", cluster_name + "-slaves"]
+                if opts.security_group_prefix is None:
+                    group_names = [cluster_name + "-master", cluster_name + "-slaves"]
+                else:
+                    group_names = [opts.security_group_prefix + "-master", opts.security_group_prefix + "-slaves"]
 
                 attempt = 1
                 while attempt <= 3:

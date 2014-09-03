@@ -61,7 +61,7 @@ private[spark] class ResultTask[T, U](
     try {
       func(context, rdd.iterator(partition, context))
     } finally {
-      context.executeOnCompleteCallbacks()
+      context.markTaskCompleted()
     }
   }
 
