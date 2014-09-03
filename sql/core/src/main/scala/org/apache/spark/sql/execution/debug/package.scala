@@ -74,22 +74,22 @@ package object debug {
     }
 
     /**
-     * A collection of stats for each column of output.
+     * A collection of metrics for each column of output.
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *        causing the wrong data to be projected.
      */
-    case class ColumnStat(
+    case class ColumnMetrics(
         elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
     val tupleCount = sparkContext.accumulator[Int](0)
 
     val numColumns = child.output.size
-    val columnStats = Array.fill(child.output.size)(new ColumnStat())
+    val columnStats = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
       println(s"== ${child.simpleString} ==")
       println(s"Tuples output: ${tupleCount.value}")
-      child.output.zip(columnStats).foreach { case(attr, stat) =>
-        val actualDataTypes =stat.elementTypes.value.mkString("{", ",", "}")
+      child.output.zip(columnStats).foreach { case(attr, metric) =>
+        val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
         println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
