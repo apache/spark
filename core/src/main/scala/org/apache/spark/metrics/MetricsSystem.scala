@@ -95,10 +95,24 @@ private[spark] class MetricsSystem private (val instance: String,
     sinks.foreach(_.report())
   }
 
+  def buildRegistryName(source: Source) = {
+    val appName = conf.get("spark.unique.app.name")
+    val executorId = conf.get("spark.executor.id")
+    val registryName = {
+      if (appName != null && executorId != null) {
+        MetricRegistry.name(appName, executorId, source.sourceName)
+      } else {
+        MetricRegistry.name(source.sourceName)
+      }
+    }
+    registryName
+  }
+
   def registerSource(source: Source) {
     sources += source
     try {
-      registry.register(source.sourceName, source.metricRegistry)
+      val regName = buildRegistryName(source)
+      registry.register(regName, source.metricRegistry)
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
@@ -106,8 +120,9 @@ private[spark] class MetricsSystem private (val instance: String,
 
   def removeSource(source: Source) {
     sources -= source
+    val regName = buildRegistryName(source)
     registry.removeMatching(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name.startsWith(source.sourceName)
+      def matches(name: String, metric: Metric): Boolean = name.startsWith(regName)
     })
   }
 
