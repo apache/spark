@@ -108,7 +108,7 @@ private[sql] case class InMemoryColumnarTableScan(
     relation: InMemoryRelation)
   extends LeafNode {
 
-  override val sqlContext = relation.child.sqlContext
+  @transient override val sqlContext = relation.child.sqlContext
 
   override def output: Seq[Attribute] = attributes
 
@@ -185,6 +185,8 @@ private[sql] case class InMemoryColumnarTableScan(
   val readPartitions = sparkContext.accumulator(0)
   val readBatches = sparkContext.accumulator(0)
 
+  private val inMemoryPartitionPruningEnabled = sqlContext.inMemoryPartitionPruning
+
   override def execute() = {
     readPartitions.setValue(0)
     readBatches.setValue(0)
@@ -204,7 +206,7 @@ private[sql] case class InMemoryColumnarTableScan(
       val rows = iterator
         // Skip pruned batches
         .filter { cachedBatch =>
-          if (sqlContext.inMemoryPartitionPruning && !partitionFilter(cachedBatch.stats)) {
+          if (inMemoryPartitionPruningEnabled && !partitionFilter(cachedBatch.stats)) {
             def statsString = relation.partitionStatistics.schema
               .zip(cachedBatch.stats)
               .map { case (a, s) => s"${a.name}: $s" }
