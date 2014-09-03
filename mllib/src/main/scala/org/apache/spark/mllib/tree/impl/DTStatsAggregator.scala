@@ -78,7 +78,7 @@ private[tree] class DTStatsAggregator(
   /**
    * Number of elements for each node, corresponding to stride between nodes in [[allStats]].
    */
-  private val nodeStride: Int = featureOffsets.last * statsSize
+  private val nodeStride: Int = featureOffsets.last
 
   /**
    * Total number of elements stored in this aggregator.
