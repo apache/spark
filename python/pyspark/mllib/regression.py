@@ -17,13 +17,13 @@
 
 from numpy import array, ndarray
 from pyspark import SparkContext
-from pyspark.mllib._common import \
-    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
+from pyspark.mllib._common import _dot, _regression_train_wrapper, \
     _linear_predictor_typecheck, _have_scipy, _scipy_issparse
 from pyspark.mllib.linalg import SparseVector, Vectors
+
+
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+           'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
 
 
 class LabeledPoint(object):

@@ -24,6 +24,8 @@ from pyspark.mllib._common import \
     _serialize_tuple, RatingDeserializer
 from pyspark.rdd import RDD
 
+__all__ = ['MatrixFactorizationModel', 'ALS']
+
 
 class MatrixFactorizationModel(object):
 

@@ -94,6 +94,9 @@ from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
+__all__ = ['Accumulator', 'AccumulatorParam']
+
+
 pickleSer = PickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send

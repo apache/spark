@@ -26,6 +26,9 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
 
+__all__ = ['DecisionTreeModel', 'DecisionTree']
+
+
 class DecisionTreeModel(object):
 
     """
@@ -88,6 +91,7 @@ class DecisionTree(object):
                   It will probably be modified for Spark v1.2.
 
     Example usage:
+
     >>> from numpy import array
     >>> import sys
     >>> from pyspark.mllib.regression import LabeledPoint

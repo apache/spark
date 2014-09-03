@@ -30,6 +30,10 @@ from pyspark.mllib.regression import LabeledPoint, LinearModel
 from math import exp, log
 
 
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
+           'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+
+
 class LogisticRegressionModel(LinearModel):
 
     """A linear binary classification model derived from logistic regression.
