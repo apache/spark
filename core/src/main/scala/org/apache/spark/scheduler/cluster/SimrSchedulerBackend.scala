@@ -69,4 +69,5 @@ private[spark] class SimrSchedulerBackend(
     fs.delete(new Path(driverFilePath), false)
     super.stop()
   }
+
 }

@@ -83,7 +83,8 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val fstream = fileSystem.create(logFilePath)
     val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
     val writer = new PrintWriter(cstream)
-    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", 125L, "Mickey")
+    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
+      125L, "Mickey")
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))

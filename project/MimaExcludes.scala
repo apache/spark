@@ -111,6 +111,8 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.Values") ++
           MimaBuild.excludeSparkClass("storage.Entry") ++
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
+          // Class was missing "@DeveloperApi" annotation in 1.0.
+          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
           Seq(
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
@@ -119,14 +121,14 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Variance.calculate")
           ) ++
-          Seq ( // Package-private classes removed in SPARK-2341
+          Seq( // Package-private classes removed in SPARK-2341
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
-          ) ++ 
+          ) ++
           Seq( // package-private classes removed in MLlib
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.regression.GeneralizedLinearAlgorithm.org$apache$spark$mllib$regression$GeneralizedLinearAlgorithm$$prependOne")

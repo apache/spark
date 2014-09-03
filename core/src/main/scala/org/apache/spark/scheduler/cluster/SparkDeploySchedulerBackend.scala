@@ -34,6 +34,10 @@ private[spark] class SparkDeploySchedulerBackend(
   var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
+  var appId: String = _
+
+  val registrationLock = new Object()
+  var registrationDone = false
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
   val totalExpectedCores = maxCores.getOrElse(0)
@@ -68,6 +72,8 @@ private[spark] class SparkDeploySchedulerBackend(
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
+
+    waitForRegistration()
   }
 
   override def stop() {
@@ -81,15 +87,19 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
+    this.appId = appId
+    notifyContext()
   }
 
   override def disconnected() {
+    notifyContext()
     if (!stopping) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
   override def dead(reason: String) {
+    notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
       scheduler.error(reason)
@@ -116,4 +126,22 @@ private[spark] class SparkDeploySchedulerBackend(
   override def sufficientResourcesRegistered(): Boolean = {
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
+
+  override def applicationId(): Option[String] = Option(appId)
+
+  private def waitForRegistration() = {
+    registrationLock.synchronized {
+      while (!registrationDone) {
+        registrationLock.wait()
+      }
+    }
+  }
+
+  private def notifyContext() = {
+    registrationLock.synchronized {
+      registrationDone = true
+      registrationLock.notifyAll()
+    }
+  }
+
 }

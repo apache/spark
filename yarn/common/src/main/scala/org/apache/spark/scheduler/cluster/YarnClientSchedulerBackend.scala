@@ -56,7 +56,6 @@ private[spark] class YarnClientSchedulerBackend(
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
     conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
-    conf.set("spark.driver.appUIHistoryAddress", YarnSparkHadoopUtil.getUIHistoryAddress(sc, conf))
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
@@ -150,4 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
+
+  override def applicationId(): Option[String] = Option(appId).map(_.toString())
+
 }

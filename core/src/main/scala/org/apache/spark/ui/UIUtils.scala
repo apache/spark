@@ -232,7 +232,7 @@ private[spark] object UIUtils extends Logging {
   def listingTable[T](
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
-      data: Seq[T],
+      data: Iterable[T],
       fixedWidth: Boolean = false): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
