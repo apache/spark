@@ -22,7 +22,7 @@ import com.codahale.metrics.{Gauge,MetricRegistry}
 import org.apache.spark.SparkContext
 import org.apache.spark.metrics.source.Source
 
-private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: SparkContext)
+private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler)
     extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "DAGScheduler"

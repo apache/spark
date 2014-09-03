@@ -22,7 +22,7 @@ import com.codahale.metrics.{Gauge,MetricRegistry}
 import org.apache.spark.SparkContext
 import org.apache.spark.metrics.source.Source
 
-private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: SparkContext)
+private[spark] class BlockManagerSource(val blockManager: BlockManager)
     extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
