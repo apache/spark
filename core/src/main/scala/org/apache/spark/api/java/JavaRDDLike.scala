@@ -212,13 +212,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   @DeveloperApi
   def mapPartitionsToPairWithContext[K2, V2](
-      f: PairFlatMapFunction2[TaskContext, java.util.Iterator[T], K2, V2],
+      f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[(K2, V2)]],
       preservesPartitioning: Boolean): JavaPairRDD[K2, V2] = {
 
-    def fn = (context: TaskContext, x: Iterator[T]) =>
-      asScalaIterator(f.call(context, asJavaIterator(x)).iterator())
-    JavaPairRDD.fromRDD(
-      rdd.mapPartitionsWithContext(fn, preservesPartitioning))(fakeClassTag[K2], fakeClassTag[V2])
+    JavaPairRDD.fromJavaRDD(mapPartitionsWithContext(f, preservesPartitioning))
   }
 
   /**

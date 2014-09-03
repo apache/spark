@@ -750,19 +750,20 @@ public class JavaAPISuite implements Serializable {
   public void mapPartitionsToPairWithContext() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
     JavaPairRDD<Integer, String> pairRdd = rdd.mapPartitionsToPairWithContext(
-      new PairFlatMapFunction2<TaskContext, Iterator<Integer>, Integer, String>() {
+      new Function2<TaskContext, Iterator<Integer>, Iterator<Tuple2<Integer, String>>>() {
         @Override
-        public Iterable<Tuple2<Integer, String>> call(TaskContext context, Iterator<Integer> iter)
-          throws Exception {
+        public Iterator<Tuple2<Integer, String>> call(TaskContext context,
+        Iterator<Integer> iter) throws Exception {
 
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
           }
           return Collections.singletonList(
-                   new Tuple2<Integer, String>(sum, "partition-" + context.partitionId()));
+            new Tuple2<Integer, String>(sum, "partition-" + context.partitionId())).iterator();
         }
-      }, false);
+      }, false
+    );
 
     Assert.assertEquals("[(3,partition-0), (7,partition-1)]", pairRdd.collect().toString());
   }
