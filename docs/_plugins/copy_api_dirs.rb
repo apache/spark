@@ -25,8 +25,8 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   curr_dir = pwd
   cd("..")
 
-  puts "Running 'sbt/sbt compile unidoc' from " + pwd + "; this may take a few minutes..."
-  puts `sbt/sbt compile unidoc`
+  puts "Running 'sbt/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
+  puts `sbt/sbt -Pkinesis-asl compile unidoc`
 
   puts "Moving back into docs dir."
   cd("docs")

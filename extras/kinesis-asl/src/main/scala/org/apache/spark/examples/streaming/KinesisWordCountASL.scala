@@ -69,7 +69,7 @@ import org.apache.log4j.Level
  *   dummy data onto the Kinesis stream.
  * Usage instructions for KinesisWordCountProducerASL are provided in that class definition.
  */
-object KinesisWordCountASL extends Logging {
+private object KinesisWordCountASL extends Logging {
   def main(args: Array[String]) {
     /* Check that all required args were passed in. */
     if (args.length < 2) {
@@ -154,7 +154,7 @@ object KinesisWordCountASL extends Logging {
  *         org.apache.spark.examples.streaming.KinesisWordCountProducerASL mySparkStream \
  *         https://kinesis.us-east-1.amazonaws.com 10 5
  */
-object KinesisWordCountProducerASL {
+private object KinesisWordCountProducerASL {
   def main(args: Array[String]) {
     if (args.length < 4) {
       System.err.println("Usage: KinesisWordCountProducerASL <stream-name> <endpoint-url>" +
@@ -235,7 +235,7 @@ object KinesisWordCountProducerASL {
  *  Utility functions for Spark Streaming examples. 
  *  This has been lifted from the examples/ project to remove the circular dependency.
  */
-object StreamingExamples extends Logging {
+private[streaming] object StreamingExamples extends Logging {
 
   /** Set reasonable logging levels for streaming if the user has not configured log4j. */
   def setStreamingLogLevels() {

@@ -290,9 +290,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -314,7 +314,7 @@ object Unidoc {
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
         "streaming.api.java", "streaming.flume", "streaming.kafka",
-        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
