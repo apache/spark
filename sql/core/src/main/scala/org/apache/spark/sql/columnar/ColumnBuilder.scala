@@ -75,8 +75,7 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
   }
 
   override def build() = {
-    buffer.limit(buffer.position()).rewind()
-    buffer
+    buffer.flip().asInstanceOf[ByteBuffer]
   }
 }
 
@@ -129,7 +128,6 @@ private[sql] object ColumnBuilder {
       val newSize = capacity + size.max(capacity / 8 + 1)
       val pos = orig.position()
 
-      orig.clear()
       ByteBuffer
         .allocate(newSize)
         .order(ByteOrder.nativeOrder())
