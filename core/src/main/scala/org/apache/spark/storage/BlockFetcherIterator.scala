@@ -17,12 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.LinkedBlockingQueue
-import org.apache.spark.network.netty.client.{BlockClientListener, LazyInitIterator, ReferenceCountedBuffer}
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{ArrayBuffer, Queue, HashMap}
 import scala.util.{Failure, Success}
 
 import org.apache.spark.{Logging, SparkException}
@@ -87,11 +82,13 @@ object BlockFetcherIterator {
     // BlockIds for local blocks that need to be fetched. Excludes zero-sized blocks
     protected val localBlocksToFetch = new ArrayBuffer[BlockId]()
 
-    // BlockIds for remote blocks that need to be fetched. Excludes zero-sized blocks
-    protected val remoteBlocksToFetch = new HashSet[BlockId]()
+    // A Map to hold our results.
+    protected val resultsCache = new HashMap[FetchRequest, Array[FetchResult]]
 
-    // A queue to hold our results.
-    protected val results = new LinkedBlockingQueue[FetchResult]
+    // Current request form fetchRequests
+    protected var currentRequest: FetchRequest = _
+
+    protected val nextRequests = new Queue[FetchRequest]
 
     // Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
     // the number of bytes in flight is limited to maxBytesInFlight
@@ -101,12 +98,22 @@ object BlockFetcherIterator {
     protected var bytesInFlight = 0L
 
     protected def sendRequest(req: FetchRequest) {
+      if (req.address == blockManagerId) {
+        // Get Local Blocks
+        startTime = System.currentTimeMillis
+        getLocalBlocks(req)
+        logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
+        return
+      }
       logDebug("Sending request for %d blocks (%s) from %s".format(
         req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
       val cmId = new ConnectionManagerId(req.address.host, req.address.port)
       val blockMessageArray = new BlockMessageArray(req.blocks.map {
         case (blockId, size) => BlockMessage.fromGetBlock(GetBlock(blockId))
       })
+      val results =  new Array[FetchResult](blockMessageArray.length)
+      resultsCache(req) = results
+      nextRequests.enqueue(req)
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
@@ -114,15 +121,19 @@ object BlockFetcherIterator {
         case Success(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          for (blockMessage <- blockMessageArray) {
+          for ((blockMessage, offset) <- blockMessageArray.iterator.zipWithIndex) {
             if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
               throw new SparkException(
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
             val blockId = blockMessage.getId
             val networkSize = blockMessage.getData.limit()
-            results.put(new FetchResult(blockId, sizeMap(blockId),
-              () => dataDeserialize(blockId, blockMessage.getData, serializer)))
+            val result = new FetchResult(blockId, sizeMap(blockId),
+              () => dataDeserialize(blockId, blockMessage.getData, serializer))
+            resultsCache.synchronized {
+              results(offset) = result
+              resultsCache.notifyAll()
+            }
             // TODO: NettyBlockFetcherIterator has some race conditions where multiple threads can
             // be incrementing bytes read at the same time (SPARK-2625).
             readMetrics.remoteBytesRead += networkSize
@@ -132,8 +143,11 @@ object BlockFetcherIterator {
         }
         case Failure(exception) => {
           logError("Could not get block(s) from " + cmId, exception)
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
+          resultsCache.synchronized {
+            for (((blockId, size), offset) <- req.blocks.zipWithIndex) {
+              results(offset) = new FetchResult(blockId, -1, null)
+            }
+            resultsCache.notifyAll()
           }
         }
       }
@@ -152,37 +166,30 @@ object BlockFetcherIterator {
       var totalBlocks = 0
       for ((address, blockInfos) <- blocksByAddress) {
         totalBlocks += blockInfos.size
-        if (address == blockManagerId) {
-          // Filter out zero-sized blocks
-          localBlocksToFetch ++= blockInfos.filter(_._2 != 0).map(_._1)
-          _numBlocksToFetch += localBlocksToFetch.size
-        } else {
-          val iterator = blockInfos.iterator
-          var curRequestSize = 0L
-          var curBlocks = new ArrayBuffer[(BlockId, Long)]
-          while (iterator.hasNext) {
-            val (blockId, size) = iterator.next()
-            // Skip empty blocks
-            if (size > 0) {
-              curBlocks += ((blockId, size))
-              remoteBlocksToFetch += blockId
-              _numBlocksToFetch += 1
-              curRequestSize += size
-            } else if (size < 0) {
-              throw new BlockException(blockId, "Negative block size " + size)
-            }
-            if (curRequestSize >= targetRequestSize) {
-              // Add this FetchRequest
-              remoteRequests += new FetchRequest(address, curBlocks)
-              curBlocks = new ArrayBuffer[(BlockId, Long)]
-              logDebug(s"Creating fetch request of $curRequestSize at $address")
-              curRequestSize = 0
-            }
+        val iterator = blockInfos.iterator
+        var curRequestSize = 0L
+        var curBlocks = new ArrayBuffer[(BlockId, Long)]
+        while (iterator.hasNext) {
+          val (blockId, size) = iterator.next()
+          // Skip empty blocks
+          if (size > 0) {
+            curBlocks += ((blockId, size))
+            _numBlocksToFetch += 1
+            curRequestSize += size
+          } else if (size < 0) {
+            throw new BlockException(blockId, "Negative block size " + size)
           }
-          // Add in the final request
-          if (!curBlocks.isEmpty) {
+          if (curRequestSize >= targetRequestSize) {
+            // Add this FetchRequest
             remoteRequests += new FetchRequest(address, curBlocks)
+            curBlocks = new ArrayBuffer[(BlockId, Long)]
+            logDebug(s"Creating fetch request of $curRequestSize at $address")
+            curRequestSize = 0
           }
+        }
+        // Add in the final request
+        if (!curBlocks.isEmpty) {
+          remoteRequests += new FetchRequest(address, curBlocks)
         }
       }
       logInfo("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
@@ -190,19 +197,30 @@ object BlockFetcherIterator {
       remoteRequests
     }
 
-    protected def getLocalBlocks() {
+    protected def getLocalBlocks(req: FetchRequest) {
+      val localBlocksToFetch = req.blocks.filter(_._2 != 0).map(_._1)
       // Get the local blocks while remote blocks are being fetched. Note that it's okay to do
       // these all at once because they will just memory-map some files, so they won't consume
       // any memory that might exceed our maxBytesInFlight
-      for (id <- localBlocksToFetch) {
+      val results = new Array[FetchResult](localBlocksToFetch.length)
+      resultsCache(req) = results
+      nextRequests.enqueue(req)
+      for ((id, offset) <- localBlocksToFetch.zipWithIndex) {
         try {
           readMetrics.localBlocksFetched += 1
-          results.put(new FetchResult(id, 0, () => getLocalShuffleFromDisk(id, serializer).get))
+          val result = new FetchResult(id, 0, () => getLocalShuffleFromDisk(id, serializer).get)
+          resultsCache.synchronized {
+            results(offset) = result
+            resultsCache.notifyAll()
+          }
           logDebug("Got local block " + id)
         } catch {
           case e: Exception => {
             logError(s"Error occurred while fetching local blocks", e)
-            results.put(new FetchResult(id, -1, null))
+            resultsCache.synchronized {
+              results(offset) = new FetchResult(id, -1, null)
+              resultsCache.notifyAll()
+            }
             return
           }
         }
@@ -213,7 +231,7 @@ object BlockFetcherIterator {
       // Split local and remote blocks.
       val remoteRequests = splitLocalRemoteBlocks()
       // Add the remote requests into our queue in a random order
-      fetchRequests ++= Utils.randomize(remoteRequests)
+      fetchRequests ++= remoteRequests
 
       // Send out initial requests for blocks, up to our maxBytesInFlight
       while (!fetchRequests.isEmpty &&
@@ -223,26 +241,47 @@ object BlockFetcherIterator {
 
       val numFetches = remoteRequests.size - fetchRequests.size
       logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTime))
+      nextRequest()
+    }
 
-      // Get Local Blocks
-      startTime = System.currentTimeMillis
-      getLocalBlocks()
-      logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
+    private def nextRequest() {
+      if (hasNext) {
+        currentRequest = nextRequests.dequeue()
+        currentResultsGotten = 0
+      }
     }
 
     // Implementing the Iterator methods with an iterator that reads fetched blocks off the queue
     // as they arrive.
     @volatile protected var resultsGotten = 0
 
+    // The position has been read  by iterator
+    @volatile protected var currentResultsGotten = 0
+
     override def hasNext: Boolean = resultsGotten < _numBlocksToFetch
 
     override def next(): (BlockId, Option[Iterator[Any]]) = {
-      resultsGotten += 1
+      val results = resultsCache(currentRequest)
       val startFetchWait = System.currentTimeMillis()
-      val result = results.take()
+      var result: FetchResult = null
+      while (result == null) {
+        resultsCache.synchronized {
+          if (results(currentResultsGotten) == null) {
+            resultsCache.wait()
+          } else {
+            result = results(currentResultsGotten)
+          }
+        }
+      }
+      results(currentResultsGotten)= null
+      resultsGotten += 1
+      currentResultsGotten += 1
+      if (currentResultsGotten == results.size) {
+        nextRequest
+      }
       val stopFetchWait = System.currentTimeMillis()
       readMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
-      if (! result.failed) bytesInFlight -= result.size
+      if (!result.failed) bytesInFlight -= result.size
       while (!fetchRequests.isEmpty &&
         (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
         sendRequest(fetchRequests.dequeue())
