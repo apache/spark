@@ -1297,7 +1297,7 @@ class SparkContext(config: SparkConf) extends Logging {
  */
 object SparkContext extends Logging {
 
-  private[spark] val SPARK_VERSION = "1.0.0"
+  private[spark] val SPARK_VERSION = "1.2.0-SNAPSHOT"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
