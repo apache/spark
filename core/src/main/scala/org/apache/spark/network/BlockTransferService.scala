@@ -74,7 +74,7 @@ abstract class BlockTransferService {
       level: StorageLevel): Future[Unit]
 
   /**
-   * A special case of [[fetchBlocks]], since it only fetches on block and is blocking.
+   * A special case of [[fetchBlocks]], as it fetches only one block and is blocking.
    *
    * It is also only available after [[init]] is invoked.
    */
