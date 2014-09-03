@@ -787,25 +787,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void mapPartitionsToDoubleWithContext() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
-    JavaDoubleRDD pairRdd = rdd.mapPartitionsToDoubleWithContext(
-      new DoubleFlatMapFunction2<TaskContext, Iterator<Integer>>() {
-      @Override
-      public Iterable<Double> call(TaskContext context, Iterator<Integer> iter) throws Exception {
-        int sum = 0;
-        while (iter.hasNext()) {
-          sum += iter.next();
-        }
-        sum += context.partitionId();
-        return Collections.singletonList(Double.valueOf(sum));
-      }
-    }, false);
-
-    Assert.assertEquals("[3.0, 8.0]", pairRdd.collect().toString());
-  }
-
-  @Test
   public void repartition() {
     // Shrinking number of partitions
     JavaRDD<Integer> in1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 2);

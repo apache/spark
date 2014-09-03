@@ -202,26 +202,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
       ((a, b) => f(a, asJavaIterator(b))), preservesPartitioning)(fakeClassTag))(fakeClassTag)
   }
 
-
-  /**
-   * :: DeveloperApi ::
-   * Return a new JavaDoubleRDD by applying a function to each partition of this RDD. This is a
-   * variant of mapPartitions that also passes the TaskContext into the closure.
-   *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
-   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   */
-  @DeveloperApi
-  def mapPartitionsToDoubleWithContext(
-      f: DoubleFlatMapFunction2[TaskContext, java.util.Iterator[T]],
-      preservesPartitioning: Boolean): JavaDoubleRDD = {
-
-    def fn = (context: TaskContext, x: Iterator[T]) =>
-      asScalaIterator(f.call(context, asJavaIterator(x)).iterator())
-    new JavaDoubleRDD(
-      rdd.mapPartitionsWithContext(fn, preservesPartitioning).map(x => x.doubleValue()))
-  }
-
   /**
    * :: DeveloperApi ::
    * Return a new JavaPairRDD by applying a function to each partition of this RDD. This is a
