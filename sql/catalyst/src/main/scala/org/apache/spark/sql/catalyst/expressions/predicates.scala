@@ -265,11 +265,7 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
       false
     } else {
       val allCondBooleans = predicates.forall(_.dataType == BooleanType)
-      val valueTypes = branches.sliding(2, 2).map {
-        case Seq(_, value) => value.dataType
-        case Seq(elseVal) => elseVal.dataType
-      }.toSeq
-      val dataTypesEqual = valueTypes.distinct.size <= 1
+      val dataTypesEqual = (values ++ elseValue).map(_.dataType).distinct.size <= 1
       allCondBooleans && dataTypesEqual
     }
   }
