@@ -43,7 +43,7 @@ object ShippableVertexPartition {
    * table, filling in missing vertices mentioned in the routing table using `defaultVal`.
    */
   def apply[VD: ClassTag](
-    iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)
+      iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)
     : ShippableVertexPartition[VD] = 
     apply(iter, routingTable, defaultVal, (a, b) => a)
 
@@ -53,7 +53,9 @@ object ShippableVertexPartition {
    * and merging duplicate vertex atrribute with mergeFunc.
    */
   def apply[VD: ClassTag](
-    iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD, mergeFunc: (VD, VD) => VD)
+      iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD,
+      mergeFunc: (VD, VD) => VD
+  )
     : ShippableVertexPartition[VD] = {
     val fullIter = iter ++ routingTable.iterator.map(vid => (vid, defaultVal))
     val (index, values, mask) = VertexPartitionBase.initFrom(fullIter, mergeFunc)
