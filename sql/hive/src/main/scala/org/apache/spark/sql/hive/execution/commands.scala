@@ -72,6 +72,7 @@ case class AddJar(path: String) extends LeafNode with Command {
   override def output = Seq.empty
 
   override protected[sql] lazy val sideEffectResult: Seq[Any] = {
+    hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
     Seq.empty[Any]
   }
