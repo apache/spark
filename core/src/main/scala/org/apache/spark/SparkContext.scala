@@ -202,6 +202,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val listenerBus = new LiveListenerBus
 
   // Create the Spark execution environment (cache, map output tracker, etc)
+  conf.set("spark.executor.id", "driver")
   private[spark] val env = SparkEnv.create(
     conf,
     "<driver>",
