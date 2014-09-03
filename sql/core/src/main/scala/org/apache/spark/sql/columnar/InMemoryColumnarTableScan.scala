@@ -108,6 +108,8 @@ private[sql] case class InMemoryColumnarTableScan(
     relation: InMemoryRelation)
   extends LeafNode {
 
+  override val sqlContext = relation.child.sqlContext
+
   override def output: Seq[Attribute] = attributes
 
   // Returned filter predicate should return false iff it is impossible for the input expression
