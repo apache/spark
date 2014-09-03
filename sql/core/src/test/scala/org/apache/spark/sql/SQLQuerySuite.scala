@@ -41,18 +41,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
-  test("SPARK-3176 Added Parser of SQL ABS()") {
-    checkAnswer(
-      sql("SELECT ABS(-1.3)"),
-      1.3)
-    checkAnswer(
-      sql("SELECT ABS(0.0)"),
-      0.0)
-    checkAnswer(
-      sql("SELECT ABS(2.5)"),
-      2.5)
-  }
-
   test("SPARK-3176 Added Parser of SQL POWER()") {
     checkAnswer(
       sql("SELECT POWER(0, 512.0)"),
@@ -85,13 +73,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT POW(16, 0.5)"),
       4.0)
   }
-
-  test("SPARK-3176 Added Parser of SQL LAST()") {
-    checkAnswer(
-      sql("SELECT LAST(n) FROM lowerCaseData"),
-      4)
-  }
-
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
