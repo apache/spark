@@ -1032,10 +1032,10 @@ class RDD(object):
             numPartsToTry = 1
             if partsScanned > 0:
                 # If we didn't find any rows after the previous iteration,
-                # double and retry.  Otherwise, interpolate the number of
+                # quadruple and retry.  Otherwise, interpolate the number of
                 # partitions we need to try, but overestimate it by 50%.
                 if len(items) == 0:
-                    numPartsToTry = partsScanned * 2
+                    numPartsToTry = partsScanned * 4
                 else:
                     numPartsToTry = int(1.5 * num * partsScanned / len(items))
 

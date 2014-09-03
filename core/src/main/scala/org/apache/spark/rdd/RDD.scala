@@ -1064,10 +1064,10 @@ abstract class RDD[T: ClassTag](
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
       if (partsScanned > 0) {
-        // If we didn't find any rows after the previous iteration, double and retry.  Otherwise,
+        // If we didn't find any rows after the previous iteration, quadruple and retry.  Otherwise,
         // interpolate the number of partitions we need to try, but overestimate it by 50%.
         if (buf.size == 0) {
-          numPartsToTry = partsScanned * 2
+          numPartsToTry = partsScanned * 4
         } else {
           numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
         }
