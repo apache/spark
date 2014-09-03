@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx.lib
+package org.apache.spark.examples.graphx
 
 import scala.collection.mutable
 import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.lib._
 import org.apache.spark.graphx.PartitionStrategy._
 
 /**
