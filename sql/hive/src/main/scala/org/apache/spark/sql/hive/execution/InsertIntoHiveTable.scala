@@ -157,7 +157,7 @@ case class InsertIntoHiveTable(
     }
 
     var count = 0
-    //  writer for Dynamic Partition
+    // writer for Dynamic Partition
     var writer2: SparkHiveHadoopWriter = null
     while(iter.hasNext) {
       val record = iter.next()
@@ -201,9 +201,6 @@ case class InsertIntoHiveTable(
       }
       writerMap.clear()
     }
-
-
-
   }
   /*
   * e.g.
@@ -215,9 +212,9 @@ case class InsertIntoHiveTable(
   *     return: /part2=val2/part3=val3
   */
   private def getDynamicPartDir(partCols: Array[String],
-                                row: Row,
-                                dynamicPartNum: Int,
-                                defaultPartName: String): String = {
+      row: Row,
+      dynamicPartNum: Int,
+      defaultPartName: String): String = {
     assert(dynamicPartNum > 0)
     partCols
       .takeRight(dynamicPartNum)
@@ -230,11 +227,11 @@ case class InsertIntoHiveTable(
  * if rowVal is null or "",will return HiveConf.get(hive.exec.default.partition.name) with default
  * */
  private def handleNull(rowVal: Any, defaultPartName: String): String = {
-    if (rowVal == null ||String.valueOf(rowVal).length == 0) {
-      defaultPartName
-    } else {
-      String.valueOf(rowVal)
-    }
+   if (rowVal == null ||String.valueOf(rowVal).length == 0) {
+     defaultPartName
+   } else {
+     String.valueOf(rowVal)
+   }
   }
 
   override def execute() = result
@@ -326,13 +323,13 @@ case class InsertIntoHiveTable(
         serializer.serialize(outputData, standardOI) -> dynamicPartPath
       }
     }
-      saveAsHiveFile(
-        rdd,
-        outputClass,
-        fileSinkConf,
-        jobConfSer,
-        sc.hiveconf.getBoolean("hive.exec.compress.output", false),
-        dynamicPartNum)
+    saveAsHiveFile(
+      rdd,
+      outputClass,
+      fileSinkConf,
+      jobConfSer,
+      sc.hiveconf.getBoolean("hive.exec.compress.output", false),
+      dynamicPartNum)
 
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.
