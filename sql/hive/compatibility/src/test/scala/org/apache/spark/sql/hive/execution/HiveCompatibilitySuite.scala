@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -29,29 +30,31 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
-    File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
+  private lazy val hiveQueryDir = TestHive.getHiveFile(
+    "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
-  var originalTimeZone: TimeZone = _
-  var originalLocale: Locale = _
+  private val originalTimeZone = TimeZone.getDefault
+  private val originalLocale = Locale.getDefault
+  private val originalUseCompression = TestHive.useCompression
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
+    // Enable in-memory columnar caching
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    originalTimeZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    
     // Add Locale setting
-    originalLocale = Locale.getDefault
     Locale.setDefault(Locale.US)
+    // Enable in-memory columnar compression
+    TestHive.setConf(SQLConf.COMPRESS_CACHED, "true")
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
+    TestHive.setConf(SQLConf.COMPRESS_CACHED, originalUseCompression.toString)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

@@ -114,6 +114,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
+  protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val TRUE = Keyword("TRUE")
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
@@ -122,6 +123,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val EXCEPT = Keyword("EXCEPT")
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
+  protected val SQRT = Keyword("SQRT")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -323,6 +325,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
+    SQRT ~> "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)
     }
@@ -357,7 +360,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     literal
 
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType
+    STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
 }
 
 class SqlLexical(val keywords: Seq[String]) extends StdLexical {
