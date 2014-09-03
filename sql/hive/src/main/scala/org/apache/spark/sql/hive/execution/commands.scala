@@ -41,11 +41,6 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
     hiveContext.analyze(tableName)
     Seq.empty[Row]
   }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
-  }
 }
 
 /**
@@ -54,7 +49,6 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
  */
 @DeveloperApi
 case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with Command {
-
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   def output = Seq.empty
@@ -64,10 +58,5 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
     Seq.empty[Row]
-  }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
   }
 }

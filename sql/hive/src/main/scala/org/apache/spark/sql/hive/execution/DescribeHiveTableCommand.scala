@@ -74,7 +74,5 @@ case class DescribeHiveTableCommand(
     }
   }
 
-  override def execute(): RDD[Row] = context.sparkContext.parallelize(sideEffectResult, 1)
-
   override def otherCopyArgs = context :: Nil
 }

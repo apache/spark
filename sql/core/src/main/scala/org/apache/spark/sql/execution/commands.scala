@@ -40,6 +40,8 @@ trait Command {
   protected[sql] lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
+
+  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
 
 /**
@@ -93,8 +95,6 @@ case class SetCommand(
       throw new IllegalArgumentException()
   }
 
-  def execute(): RDD[Row] = context.sparkContext.parallelize(sideEffectResult, 1)
-
   override def otherCopyArgs = context :: Nil
 }
 
@@ -123,8 +123,6 @@ case class ExplainCommand(
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 
-  def execute(): RDD[Row] = context.sparkContext.parallelize(sideEffectResult, 1)
-
   override def otherCopyArgs = context :: Nil
 }
 
@@ -144,11 +142,6 @@ case class CacheCommand(tableName: String, doCache: Boolean)(@transient context:
     Seq.empty[Row]
   }
 
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    context.emptyResult
-  }
-
   override def output: Seq[Attribute] = Seq.empty
 }
 
@@ -164,6 +157,4 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
     Row("# Registered as a temporary table", null, null) +:
       child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
-
-  override def execute(): RDD[Row] = context.sparkContext.parallelize(sideEffectResult, 1)
 }
