@@ -486,6 +486,73 @@ case class LeftSemiJoinBNL(
   }
 }
 
+
+
+
+
+/**
+ * :: DeveloperApi ::
+ * LeftSemiBloomFilterBroadcastJoin
+ * Sometimes the semijoin's broadcast table can't fit memory.So  we can make it as Bloomfilter to  reduce the space
+ * and then broadcast it do the mapside  join
+ * The bloomfilter  use Shark's BloomFilter class implementation.
+ */
+@DeveloperApi
+case class LeftSemiJoinBFB(
+                            leftKeys: Seq[Expression],
+                            rightKeys: Seq[Expression],
+                            buildSide: BuildSide,
+                            left: SparkPlan,
+                            right: SparkPlan,
+                            @transient sc: SparkContext) extends BinaryNode {
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  val (buildPlan, streamedPlan) = buildSide match {
+    case BuildLeft => (left, right)
+    case BuildRight => (right, left)
+  }
+  val (buildKeys, streamedKeys) = buildSide match {
+    case BuildLeft => (leftKeys, rightKeys)
+    case BuildRight => (rightKeys, leftKeys)
+  }
+
+  def output = left.output ++ right.output
+
+  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+  @transient lazy val streamSideKeyGenerator = new Projection(streamedKeys, streamedPlan.output)
+
+  def execute() = {
+
+    val buildSideKeys = buildPlan.execute().map(row => buildSideKeyGenerator(row)).collect()
+    /**
+     * @param fpp is the expected false positive probability.
+     * @param expectedSize is the number of elements to be contained.
+     */
+    val fpp: Double = 0.03 //This could be a config param
+    val expectedSize: Int = buildSideKeys.size
+    val bf = new BloomFilter(fpp, expectedSize)
+    val iter = buildSideKeys.iterator
+    while (iter.hasNext) {
+      bf.add(buildSideKeyGenerator(iter.next()).toString())
+    }
+    val buildKeysBroadcast = sc.broadcast(bf)
+    streamedPlan.execute().filter { currentRow =>
+      val rowKey = streamSideKeyGenerator(currentRow)
+      if (buildKeysBroadcast.value.contains(rowKey.toString())) true
+      else false
+    }.map(row => {
+      buildRow(row)
+    })
+  }
+
+
+
+
+
+
 /**
  * :: DeveloperApi ::
  */

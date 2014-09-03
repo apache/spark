@@ -309,3 +309,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 }
+
+
+object LeftSemiJoinBFB extends Strategy with PredicateHelper {
+  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case LeftSemiJoinBFBFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+      val hashJoin =
+        execution.LeftSemiJoinBFBJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
+      condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+    case _ => Nil
+  }
+}

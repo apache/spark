@@ -226,3 +226,22 @@ object Unions {
     case other => other :: Nil
   }
 }
+
+
+object LeftSemiJoinBFBFilteredJoin extends Logging with PredicateHelper {
+  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+  type ReturnType =
+  (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    // All predicates can be evaluated for inner join (i.e., those that are in the ON
+    // clause and WHERE clause.)
+    case FilteredOperation(predicates, join@Join(left, right, Inner, condition)) =>
+      logger.debug(s"Considering Semi inner join on: ${predicates ++ condition}")
+      splitPredicates(predicates ++ condition, join)
+    case join@Join(left, right, joinType, condition) =>
+      logger.debug(s"Considering Semi join on: $condition")
+      splitPredicates(condition.toSeq, join)
+    case _ => None
+  }
+}
