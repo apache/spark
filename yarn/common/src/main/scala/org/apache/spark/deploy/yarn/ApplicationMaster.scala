@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.IOException
 import java.net.Socket
+import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConversions._
@@ -32,6 +33,7 @@ import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -175,7 +177,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
+      registerAM(sc.ui.appUIAddress, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
       try {
         userThread.join()
       } finally {
@@ -325,17 +327,24 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter() = {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
-    val proxy = client.getProxyHostAndPort(yarnConf)
-    val parts = proxy.split(":")
-    val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    val uriBase = "http://" + proxy + proxyBase
-    val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-
+    val proxies = client.getProxyHostsAndPorts(yarnConf)
+    var sbProxies = new StringBuilder
+    var sbUrlBases = new StringBuilder
+    for (proxy <- proxies) {
+        sbProxies ++= proxy.split(":")(0)
+        sbProxies +=','
+        sbUrlBases ++= WebAppUtils.getHttpSchemePrefix(yarnConf)
+        sbUrlBases ++= proxy
+        sbUrlBases ++= System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+        sbUrlBases +=','
+    }
+    var params = "PROXY_HOSTS=" + URLEncoder.encode(sbProxies.toString(), "UTF-8") + ","
+    params ++= "PROXY_URI_BASES=" + URLEncoder.encode(sbUrlBases.toString(), "UTF-8")
     if (isDriver) {
       System.setProperty("spark.ui.filters", amFilter)
-      System.setProperty(s"spark.$amFilter.params", params)
+      System.setProperty(s"spark.$amFilter.encodedparams", params)
     } else {
-      actor ! AddWebUIFilter(amFilter, params, proxyBase)
+      actor ! AddWebUIFilter(amFilter, params, sbUrlBases.toString())
     }
   }
 
