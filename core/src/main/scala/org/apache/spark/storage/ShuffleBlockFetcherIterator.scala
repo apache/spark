@@ -39,10 +39,13 @@ import org.apache.spark.util.Utils
  * The implementation throttles the remote fetches to they don't exceed maxBytesInFlight to avoid
  * using too much memory.
  *
- * @param context
- * @param blockManager
- * @param blocksByAddress
- * @param serializer
+ * @param context [[TaskContext]], used for metrics update
+ * @param blockTransferService [[BlockTransferService]] for fetching remote blocks
+ * @param blockManager  [[BlockManager]] for reading local blocks
+ * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
+ *                        For each block we also require the size (in bytes as a long field) in
+ *                        order to throttle the memory usage.
+ * @param serializer serializer used to deserialize the data.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  */
 private[spark]
