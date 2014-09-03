@@ -104,11 +104,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   }
 
   def calculateAMMemory(newApp: GetNewApplicationResponse): Int = {
-    val minResMemory = newApp.getMinimumResourceCapability().getMemory()
-    val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-          ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-          memoryOverhead)
-    amMemory
+    args.amMemory
   }
 
   def setupSecurityToken(amContainer: ContainerLaunchContext) = {
