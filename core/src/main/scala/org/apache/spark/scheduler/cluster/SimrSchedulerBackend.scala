@@ -20,7 +20,8 @@ package org.apache.spark.scheduler.cluster
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class SimrSchedulerBackend(
@@ -38,11 +39,13 @@ private[spark] class SimrSchedulerBackend(
   override def start() {
     super.start()
 
-    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port"),
+    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+      SparkEnv.driverActorSystemName,
+      sc.conf.get("spark.driver.host"),
+      sc.conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)
 
     logInfo("Writing to HDFS file: "  + driverFilePath)
@@ -61,7 +64,7 @@ private[spark] class SimrSchedulerBackend(
   }
 
   override def stop() {
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)
     fs.delete(new Path(driverFilePath), false)
     super.stop()

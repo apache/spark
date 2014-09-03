@@ -32,6 +32,74 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("count distinct 0 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 0) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value strings",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 'b' AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values including null",
+    """
+      |SELECT COUNT(DISTINCT a, 1) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null",
+  """
+    |SELECT COUNT(DISTINCT a) FROM (
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT null AS a FROM src LIMIT 1) table
+  """.stripMargin)
+
+  createQueryTest("count distinct 1 value long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("null case",
+    "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
+
   createQueryTest("single case",
     """SELECT case when true then 1 else 2 end FROM src LIMIT 1""")
 
@@ -72,9 +140,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
-    set("spark.sql.dialect", "sql")
+    setConf("spark.sql.dialect", "sql")
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
-    set("spark.sql.dialect", "hiveql")
+    setConf("spark.sql.dialect", "hiveql")
 
   }
 
@@ -241,7 +309,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
-  createQueryTest("case sensitivity: Hive table",
+  createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
@@ -259,7 +327,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
+    explanation.exists(_ == "== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -433,18 +501,18 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testVal = "val0,val_1,val2.3,my_table"
 
     sql(s"set $testKey=$testVal")
-    assert(get(testKey, testVal + "_") == testVal)
+    assert(getConf(testKey, testVal + "_") == testVal)
 
     sql("set some.property=20")
-    assert(get("some.property", "0") == "20")
+    assert(getConf("some.property", "0") == "20")
     sql("set some.property = 40")
-    assert(get("some.property", "0") == "40")
+    assert(getConf("some.property", "0") == "40")
 
     sql(s"set $testKey=$testVal")
-    assert(get(testKey, "0") == testVal)
+    assert(getConf(testKey, "0") == testVal)
 
     sql(s"set $testKey=")
-    assert(get(testKey, "0") == "")
+    assert(getConf(testKey, "0") == "")
   }
 
   test("SET commands semantics for a HiveContext") {

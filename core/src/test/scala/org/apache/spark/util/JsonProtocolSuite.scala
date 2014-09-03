@@ -35,13 +35,13 @@ class JsonProtocolSuite extends FunSuite {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, makeTaskInfo(222L, 333, 1, 444L, false))
+    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 444L, false))
     val taskGettingResult =
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
-    val taskEnd = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
+    val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false))
-    val taskEndWithHadoopInput = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
+    val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
@@ -53,9 +53,9 @@ class JsonProtocolSuite extends FunSuite {
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(
-      BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(
-      BlockManagerId("Scarce", "to be counted...", 100, 200))
+      BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
@@ -81,7 +81,7 @@ class JsonProtocolSuite extends FunSuite {
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
-    testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
+    testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -104,7 +104,7 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15, 16), 17, 18, 19)
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19)
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
@@ -123,15 +123,22 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(StreamBlockId(1, 2L))
   }
 
-  test("StageInfo.details backward compatibility") {
-    // StageInfo.details was added after 1.0.0.
+  test("StageInfo backward compatibility") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
-    assert(info.details.nonEmpty)
     val newJson = JsonProtocol.stageInfoToJson(info)
-    val oldJson = newJson.removeField { case (field, _) => field == "Details" }
+
+    // Fields added after 1.0.0.
+    assert(info.details.nonEmpty)
+    assert(info.accumulables.nonEmpty)
+    val oldJson = newJson
+      .removeField { case (field, _) => field == "Details" }
+      .removeField { case (field, _) => field == "Accumulables" }
+
     val newInfo = JsonProtocol.stageInfoFromJson(oldJson)
+
     assert(info.name === newInfo.name)
     assert("" === newInfo.details)
+    assert(0 === newInfo.accumulables.size)
   }
 
   test("InputMetrics backward compatibility") {
@@ -261,6 +268,7 @@ class JsonProtocolSuite extends FunSuite {
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
+    assert(info1.accumulables === info2.accumulables)
     assert(info1.details === info2.details)
   }
 
@@ -293,6 +301,7 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
+    assert(info1.accumulables === info2.accumulables)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -334,7 +343,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(bm1.executorId === bm2.executorId)
     assert(bm1.host === bm2.host)
     assert(bm1.port === bm2.port)
-    assert(bm1.nettyPort === bm2.nettyPort)
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -388,7 +396,8 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertJsonStringEquals(json1: String, json2: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    assert(formatJsonString(json1) === formatJsonString(json2))
+    assert(formatJsonString(json1) === formatJsonString(json2),
+      s"input ${formatJsonString(json1)} got ${formatJsonString(json2)}")
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
@@ -476,12 +485,26 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    new StageInfo(a, "greetings", b, rddInfos, "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, "details")
+    val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
+    stageInfo.accumulables(acc1.id) = acc1
+    stageInfo.accumulables(acc2.id) = acc2
+    stageInfo
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
-    new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
+    val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
+      speculative)
+    val (acc1, acc2, acc3) =
+      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3))
+    taskInfo.accumulables += acc1
+    taskInfo.accumulables += acc2
+    taskInfo.accumulables += acc3
+    taskInfo
   }
+
+  private def makeAccumulableInfo(id: Int): AccumulableInfo =
+    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -516,7 +539,7 @@ class JsonProtocolSuite extends FunSuite {
       sr.localBlocksFetched = e
       sr.fetchWaitTime = a + d
       sr.remoteBlocksFetched = f
-      t.updateShuffleReadMetrics(sr)
+      t.setShuffleReadMetrics(Some(sr))
     }
     sw.shuffleBytesWritten = a + b + c
     sw.shuffleWriteTime = b + c + d
@@ -535,72 +558,246 @@ class JsonProtocolSuite extends FunSuite {
 
   private val stageSubmittedJsonString =
     """
-      {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
-      "greetings","Number of Tasks":200,"RDD Info":[],"Details":"details"},"Properties":
-      {"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      |{
+      |  "Event": "SparkListenerStageSubmitted",
+      |  "Stage Info": {
+      |    "Stage ID": 100,
+      |    "Stage Attempt ID": 0,
+      |    "Stage Name": "greetings",
+      |    "Number of Tasks": 200,
+      |    "RDD Info": [],
+      |    "Details": "details",
+      |    "Accumulables": [
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      }
+      |    ]
+      |  },
+      |  "Properties": {
+      |    "France": "Paris",
+      |    "Germany": "Berlin",
+      |    "Russia": "Moscow",
+      |    "Ukraine": "Kiev"
+      |  }
+      |}
     """
 
   private val stageCompletedJsonString =
     """
-      {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
-      "greetings","Number of Tasks":201,"RDD Info":[{"RDD ID":101,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
-      "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
-      "Memory Size":401,"Tachyon Size":0,"Disk Size":501}],"Details":"details"}}
+      |{
+      |  "Event": "SparkListenerStageCompleted",
+      |  "Stage Info": {
+      |    "Stage ID": 101,
+      |    "Stage Attempt ID": 0,
+      |    "Stage Name": "greetings",
+      |    "Number of Tasks": 201,
+      |    "RDD Info": [
+      |      {
+      |        "RDD ID": 101,
+      |        "Name": "mayor",
+      |        "Storage Level": {
+      |          "Use Disk": true,
+      |          "Use Memory": true,
+      |          "Use Tachyon": false,
+      |          "Deserialized": true,
+      |          "Replication": 1
+      |        },
+      |        "Number of Partitions": 201,
+      |        "Number of Cached Partitions": 301,
+      |        "Memory Size": 401,
+      |        "Tachyon Size": 0,
+      |        "Disk Size": 501
+      |      }
+      |    ],
+      |    "Details": "details",
+      |    "Accumulables": [
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      }
+      |    ]
+      |  }
+      |}
     """
 
   private val taskStartJsonString =
     """
-      |{"Event":"SparkListenerTaskStart","Stage ID":111,"Task Info":{"Task ID":222,
-      |"Index":333,"Attempt":1,"Launch Time":444,"Executor ID":"executor","Host":"your kind sir",
-      |"Locality":"NODE_LOCAL","Speculative":false,"Getting Result Time":0,"Finish Time":0,
-      |"Failed":false}}
+      |{
+      |  "Event": "SparkListenerTaskStart",
+      |  "Stage ID": 111,
+      |  "Stage Attempt ID": 0,
+      |  "Task Info": {
+      |    "Task ID": 222,
+      |    "Index": 333,
+      |    "Attempt": 1,
+      |    "Launch Time": 444,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": false,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3"
+      |      }
+      |    ]
+      |  }
+      |}
     """.stripMargin
 
   private val taskGettingResultJsonString =
     """
-      |{"Event":"SparkListenerTaskGettingResult","Task Info":
-      |  {"Task ID":1000,"Index":2000,"Attempt":5,"Launch Time":3000,"Executor ID":"executor",
-      |   "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":true,"Getting Result Time":0,
-      |   "Finish Time":0,"Failed":false
+      |{
+      |  "Event": "SparkListenerTaskGettingResult",
+      |  "Task Info": {
+      |    "Task ID": 1000,
+      |    "Index": 2000,
+      |    "Attempt": 5,
+      |    "Launch Time": 3000,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": true,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3"
+      |      }
+      |    ]
       |  }
       |}
     """.stripMargin
 
   private val taskEndJsonString =
     """
-      |{"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
-      |"Task End Reason":{"Reason":"Success"},
-      |"Task Info":{
-      |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
-      |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
-      |  "Getting Result Time":0,"Finish Time":0,"Failed":false
-      |},
-      |"Task Metrics":{
-      |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
-      |  "Result Size":500,"JVM GC Time":600,"Result Serialization Time":700,
-      |  "Memory Bytes Spilled":800,"Disk Bytes Spilled":0,
-      |  "Shuffle Read Metrics":{
-      |    "Shuffle Finish Time":900,
-      |    "Remote Blocks Fetched":800,
-      |    "Local Blocks Fetched":700,
-      |    "Fetch Wait Time":900,
-      |    "Remote Bytes Read":1000
+      |{
+      |  "Event": "SparkListenerTaskEnd",
+      |  "Stage ID": 1,
+      |  "Stage Attempt ID": 0,
+      |  "Task Type": "ShuffleMapTask",
+      |  "Task End Reason": {
+      |    "Reason": "Success"
       |  },
-      |  "Shuffle Write Metrics":{
-      |    "Shuffle Bytes Written":1200,
-      |    "Shuffle Write Time":1500
-      |  },
-      |  "Updated Blocks":[
-      |    {"Block ID":"rdd_0_0",
-      |      "Status":{
-      |        "Storage Level":{
-      |          "Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
-      |          "Replication":2
-      |        },
-      |        "Memory Size":0,"Tachyon Size":0,"Disk Size":0
+      |  "Task Info": {
+      |    "Task ID": 123,
+      |    "Index": 234,
+      |    "Attempt": 67,
+      |    "Launch Time": 345,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": false,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3"
       |      }
-      |    }
+      |    ]
+      |  },
+      |  "Task Metrics": {
+      |    "Host Name": "localhost",
+      |    "Executor Deserialize Time": 300,
+      |    "Executor Run Time": 400,
+      |    "Result Size": 500,
+      |    "JVM GC Time": 600,
+      |    "Result Serialization Time": 700,
+      |    "Memory Bytes Spilled": 800,
+      |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Read Metrics": {
+      |      "Shuffle Finish Time": 900,
+      |      "Remote Blocks Fetched": 800,
+      |      "Local Blocks Fetched": 700,
+      |      "Fetch Wait Time": 900,
+      |      "Remote Bytes Read": 1000
+      |    },
+      |    "Shuffle Write Metrics": {
+      |      "Shuffle Bytes Written": 1200,
+      |      "Shuffle Write Time": 1500
+      |    },
+      |    "Updated Blocks": [
+      |      {
+      |        "Block ID": "rdd_0_0",
+      |        "Status": {
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": false,
+      |            "Replication": 2
+      |          },
+      |          "Memory Size": 0,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 0
+      |        }
+      |      }
       |    ]
       |  }
       |}
@@ -608,77 +805,185 @@ class JsonProtocolSuite extends FunSuite {
 
   private val taskEndWithHadoopInputJsonString =
     """
-      |{"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
-      |"Task End Reason":{"Reason":"Success"},
-      |"Task Info":{
-      |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
-      |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
-      |  "Getting Result Time":0,"Finish Time":0,"Failed":false
-      |},
-      |"Task Metrics":{
-      |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
-      |  "Result Size":500,"JVM GC Time":600,"Result Serialization Time":700,
-      |  "Memory Bytes Spilled":800,"Disk Bytes Spilled":0,
-      |  "Shuffle Write Metrics":{"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},
-      |  "Input Metrics":{"Data Read Method":"Hadoop","Bytes Read":2100},
-      |  "Updated Blocks":[
-      |    {"Block ID":"rdd_0_0",
-      |      "Status":{
-      |        "Storage Level":{
-      |          "Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
-      |          "Replication":2
-      |        },
-      |        "Memory Size":0,"Tachyon Size":0,"Disk Size":0
+      |{
+      |  "Event": "SparkListenerTaskEnd",
+      |  "Stage ID": 1,
+      |  "Stage Attempt ID": 0,
+      |  "Task Type": "ShuffleMapTask",
+      |  "Task End Reason": {
+      |    "Reason": "Success"
+      |  },
+      |  "Task Info": {
+      |    "Task ID": 123,
+      |    "Index": 234,
+      |    "Attempt": 67,
+      |    "Launch Time": 345,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": false,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3"
       |      }
-      |    }
-      |  ]}
+      |    ]
+      |  },
+      |  "Task Metrics": {
+      |    "Host Name": "localhost",
+      |    "Executor Deserialize Time": 300,
+      |    "Executor Run Time": 400,
+      |    "Result Size": 500,
+      |    "JVM GC Time": 600,
+      |    "Result Serialization Time": 700,
+      |    "Memory Bytes Spilled": 800,
+      |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Write Metrics": {
+      |      "Shuffle Bytes Written": 1200,
+      |      "Shuffle Write Time": 1500
+      |    },
+      |    "Input Metrics": {
+      |      "Data Read Method": "Hadoop",
+      |      "Bytes Read": 2100
+      |    },
+      |    "Updated Blocks": [
+      |      {
+      |        "Block ID": "rdd_0_0",
+      |        "Status": {
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": false,
+      |            "Replication": 2
+      |          },
+      |          "Memory Size": 0,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 0
+      |        }
+      |      }
+      |    ]
+      |  }
       |}
     """
 
   private val jobStartJsonString =
     """
-      {"Event":"SparkListenerJobStart","Job ID":10,"Stage IDs":[1,2,3,4],"Properties":
-      {"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      |{
+      |  "Event": "SparkListenerJobStart",
+      |  "Job ID": 10,
+      |  "Stage IDs": [
+      |    1,
+      |    2,
+      |    3,
+      |    4
+      |  ],
+      |  "Properties": {
+      |    "France": "Paris",
+      |    "Germany": "Berlin",
+      |    "Russia": "Moscow",
+      |    "Ukraine": "Kiev"
+      |  }
+      |}
     """
 
   private val jobEndJsonString =
     """
-      {"Event":"SparkListenerJobEnd","Job ID":20,"Job Result":{"Result":"JobSucceeded"}}
+      |{
+      |  "Event": "SparkListenerJobEnd",
+      |  "Job ID": 20,
+      |  "Job Result": {
+      |    "Result": "JobSucceeded"
+      |  }
+      |}
     """
 
   private val environmentUpdateJsonString =
     """
-      {"Event":"SparkListenerEnvironmentUpdate","JVM Information":{"GC speed":"9999 objects/s",
-      "Java home":"Land of coffee"},"Spark Properties":{"Job throughput":"80000 jobs/s,
-      regardless of job type"},"System Properties":{"Username":"guest","Password":"guest"},
-      "Classpath Entries":{"Super library":"/tmp/super_library"}}
+      |{
+      |  "Event": "SparkListenerEnvironmentUpdate",
+      |  "JVM Information": {
+      |    "GC speed": "9999 objects/s",
+      |    "Java home": "Land of coffee"
+      |  },
+      |  "Spark Properties": {
+      |    "Job throughput": "80000 jobs/s, regardless of job type"
+      |  },
+      |  "System Properties": {
+      |    "Username": "guest",
+      |    "Password": "guest"
+      |  },
+      |  "Classpath Entries": {
+      |    "Super library": "/tmp/super_library"
+      |  }
+      |}
     """
 
   private val blockManagerAddedJsonString =
     """
-      {"Event":"SparkListenerBlockManagerAdded","Block Manager ID":{"Executor ID":"Stars",
-      "Host":"In your multitude...","Port":300,"Netty Port":400},"Maximum Memory":500}
+      |{
+      |  "Event": "SparkListenerBlockManagerAdded",
+      |  "Block Manager ID": {
+      |    "Executor ID": "Stars",
+      |    "Host": "In your multitude...",
+      |    "Port": 300
+      |  },
+      |  "Maximum Memory": 500
+      |}
     """
 
   private val blockManagerRemovedJsonString =
     """
-      {"Event":"SparkListenerBlockManagerRemoved","Block Manager ID":{"Executor ID":"Scarce",
-      "Host":"to be counted...","Port":100,"Netty Port":200}}
+      |{
+      |  "Event": "SparkListenerBlockManagerRemoved",
+      |  "Block Manager ID": {
+      |    "Executor ID": "Scarce",
+      |    "Host": "to be counted...",
+      |    "Port": 100
+      |  }
+      |}
     """
 
   private val unpersistRDDJsonString =
     """
-      {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
+      |{
+      |  "Event": "SparkListenerUnpersistRDD",
+      |  "RDD ID": 12345
+      |}
     """
 
   private val applicationStartJsonString =
     """
-      {"Event":"SparkListenerApplicationStart","App Name":"The winner of all","Timestamp":42,
-      "User":"Garfield"}
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "Timestamp": 42,
+      |  "User": "Garfield"
+      |}
     """
 
   private val applicationEndJsonString =
     """
-      {"Event":"SparkListenerApplicationEnd","Timestamp":42}
+      |{
+      |  "Event": "SparkListenerApplicationEnd",
+      |  "Timestamp": 42
+      |}
     """
 }

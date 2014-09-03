@@ -35,7 +35,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 object KinesisUtils {
   /**
    * Create an InputDStream that pulls messages from a Kinesis stream.
-   *
+   * :: Experimental ::
    * @param ssc    StreamingContext object
    * @param streamName   Kinesis stream name
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
@@ -52,6 +52,7 @@ object KinesisUtils {
    *
    * @return ReceiverInputDStream[Array[Byte]]
    */
+  @Experimental
   def createStream(
       ssc: StreamingContext,
       streamName: String,
@@ -65,9 +66,8 @@ object KinesisUtils {
 
   /**
    * Create a Java-friendly InputDStream that pulls messages from a Kinesis stream.
-   *
+   * :: Experimental ::
    * @param jssc Java StreamingContext object
-   * @param ssc    StreamingContext object
    * @param streamName   Kinesis stream name
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
    * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
@@ -83,6 +83,7 @@ object KinesisUtils {
    *
    * @return JavaReceiverInputDStream[Array[Byte]]
    */
+  @Experimental
   def createStream(
       jssc: JavaStreamingContext, 
       streamName: String, 

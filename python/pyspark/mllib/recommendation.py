@@ -26,6 +26,7 @@ from pyspark.rdd import RDD
 
 
 class MatrixFactorizationModel(object):
+
     """A matrix factorisation model trained by regularized alternating
     least-squares.
 
@@ -58,6 +59,7 @@ class MatrixFactorizationModel(object):
 
 
 class ALS(object):
+
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
         sc = ratings.context

@@ -45,7 +45,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private val settings = new HashMap[String, String]()
+  private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
@@ -210,6 +210,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     new SparkConf(false).setAll(settings)
   }
 
+  /**
+   * By using this instead of System.getenv(), environment variables can be mocked
+   * in unit tests.
+   */
+  private[spark] def getenv(name: String): String = System.getenv(name)
+
   /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
     * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
   private[spark] def validateSettings() {
@@ -227,7 +233,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>
       if (javaOpts.contains("-Dspark")) {
-        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts)'. " +
+        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
           "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }
@@ -235,6 +241,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). " +
           "Use spark.executor.memory instead."
         throw new Exception(msg)
+      }
+    }
+
+    // Validate memory fractions
+    val memoryKeys = Seq(
+      "spark.storage.memoryFraction",
+      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.safetyFraction",
+      "spark.storage.unrollFraction",
+      "spark.storage.safetyFraction")
+    for (key <- memoryKeys) {
+      val value = getDouble(key, 0.5)
+      if (value > 1 || value < 0) {
+        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
       }
     }
 
@@ -309,6 +329,14 @@ private[spark] object SparkConf {
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
-    isAkkaConf(name) || name.startsWith("spark.akka") || name.startsWith("spark.auth")
+    isAkkaConf(name) ||
+    name.startsWith("spark.akka") ||
+    name.startsWith("spark.auth") ||
+    isSparkPortConf(name)
   }
+
+  /**
+   * Return whether the given config is a Spark port config.
+   */
+  def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
 }

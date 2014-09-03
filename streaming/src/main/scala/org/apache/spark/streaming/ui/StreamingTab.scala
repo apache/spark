@@ -19,15 +19,13 @@ package org.apache.spark.streaming.ui
 
 import org.apache.spark.Logging
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.WebUITab
+import org.apache.spark.ui.SparkUITab
 
 /** Spark Web UI tab that shows statistics of a streaming job */
 private[spark] class StreamingTab(ssc: StreamingContext)
-  extends WebUITab(ssc.sc.ui, "streaming") with Logging {
+  extends SparkUITab(ssc.sc.ui, "streaming") with Logging {
 
   val parent = ssc.sc.ui
-  val appName = parent.appName
-  val basePath = parent.basePath
   val listener = new StreamingJobProgressListener(ssc)
 
   ssc.addStreamingListener(listener)

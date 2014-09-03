@@ -24,7 +24,7 @@ class DataTypeSuite extends FunSuite {
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
 
-    assert(ArrayType(StringType, false) === array)
+    assert(ArrayType(StringType, true) === array)
   }
 
   test("construct an MapType") {

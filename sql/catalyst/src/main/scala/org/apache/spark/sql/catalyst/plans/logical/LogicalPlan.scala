@@ -41,21 +41,20 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   case class Statistics(
     sizeInBytes: BigInt
   )
-  lazy val statistics: Statistics = Statistics(
-    sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product
-  )
+  lazy val statistics: Statistics = {
+    if (children.size == 0) {
+      throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
+    }
 
-  /**
-   * Returns the set of attributes that are referenced by this node
-   * during evaluation.
-   */
-  def references: Set[Attribute]
+    Statistics(
+      sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
+  }
 
   /**
    * Returns the set of attributes that this node takes as
    * input from its children.
    */
-  lazy val inputSet: Set[Attribute] = children.flatMap(_.output).toSet
+  lazy val inputSet: AttributeSet = AttributeSet(children.flatMap(_.output))
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -72,16 +71,29 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   def childrenResolved: Boolean = !children.exists(!_.resolved)
 
   /**
-   * Optionally resolves the given string to a [[NamedExpression]]. The attribute is expressed as
+   * Optionally resolves the given string to a [[NamedExpression]] using the input from all child
+   * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
-  def resolve(name: String): Option[NamedExpression] = {
+  def resolveChildren(name: String): Option[NamedExpression] =
+    resolve(name, children.flatMap(_.output))
+
+  /**
+   * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
+   * LogicalPlan. The attribute is expressed as string in the following form:
+   * `[scope].AttributeName.[nested].[fields]...`.
+   */
+  def resolve(name: String): Option[NamedExpression] =
+    resolve(name, output)
+
+  /** Performs attribute resolution given a name and a sequence of possible attributes. */
+  protected def resolve(name: String, input: Seq[Attribute]): Option[NamedExpression] = {
     val parts = name.split("\\.")
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
     // name.  Return these matches along with any remaining parts, which represent dotted access to
     // struct fields.
-    val options = children.flatMap(_.output).flatMap { option =>
+    val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
         if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
@@ -89,15 +101,15 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     }
 
     options.distinct match {
-      case (a, Nil) :: Nil => Some(a) // One match, no nested fields, use it.
+      case Seq((a, Nil)) => Some(a) // One match, no nested fields, use it.
       // One match, but we also need to extract the requested nested field.
-      case (a, nestedFields) :: Nil =>
+      case Seq((a, nestedFields)) =>
         a.dataType match {
           case StructType(fields) =>
             Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
           case _ => None // Don't know how to resolve these field references
         }
-      case Nil => None         // No matches.
+      case Seq() => None         // No matches.
       case ambiguousReferences =>
         throw new TreeNodeException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
@@ -110,12 +122,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
-
-  override lazy val statistics: Statistics =
-    throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
-
-  // Leaf nodes by definition cannot reference any input attributes.
-  override def references = Set.empty
 }
 
 /**
