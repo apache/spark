@@ -60,3 +60,24 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
     Seq.empty[Row]
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class AddJar(path: String) extends LeafNode with Command {
+
+  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+  override def output = Seq.empty
+
+  override protected[sql] lazy val sideEffectResult: Seq[Any] = {
+    hiveContext.sparkContext.addJar(path)
+    Seq.empty[Any]
+  }
+
+  override def execute(): RDD[Row] = {
+    sideEffectResult
+    hiveContext.emptyResult
+  }
+}

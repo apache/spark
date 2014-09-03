@@ -200,6 +200,8 @@ private[hive] trait HiveStrategies {
 
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
+      case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
       case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 
       case describe: logical.DescribeCommand =>
