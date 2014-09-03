@@ -26,8 +26,16 @@ import org.apache.spark.sql.catalyst.types._
 /**
  * Provides experimental support for generating catalyst schemas for scala objects.
  */
-object ScalaReflection {
-  import scala.reflect.runtime.universe._
+object ScalaReflection extends ScalaReflection {
+  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+}
+
+trait ScalaReflection {
+
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  import universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
