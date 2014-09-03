@@ -46,10 +46,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   client: YarnRMClient) extends Logging {
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
-  private val ALLOCATE_HEARTBEAT_INTERVAL = 100
 
   private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = new YarnConfiguration(new Configuration())
+  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    .asInstanceOf[YarnConfiguration]
   private val isDriver = args.userClass != null
 
   // Default to numExecutors * 2, with minimum of 3

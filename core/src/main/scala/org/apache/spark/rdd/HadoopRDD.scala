@@ -42,7 +42,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.NextIterator
+import org.apache.spark.util.{NextIterator, Utils}
+
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -228,7 +229,11 @@ class HadoopRDD[K, V](
         try {
           reader.close()
         } catch {
-          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+          case e: Exception => {
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }

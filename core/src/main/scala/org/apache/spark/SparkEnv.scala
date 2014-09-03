@@ -80,7 +80,6 @@ class SparkEnv (
     Option(httpFileServer).foreach(_.stop())
     mapOutputTracker.stop()
     shuffleManager.stop()
-    blockTransferService.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
@@ -90,6 +89,8 @@ class SparkEnv (
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
     // actorSystem.awaitTermination()
+
+    // Note that blockTransferService is stopped by BlockManager since it is started by it.
   }
 
   private[spark]

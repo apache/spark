@@ -188,7 +188,8 @@ final class ShuffleBlockFetcherIterator(
     for (id <- localBlocks) {
       try {
         shuffleMetrics.localBlocksFetched += 1
-        results.put(new FetchResult(id, 0, () => blockManager.getLocalFromDisk(id, serializer).get))
+        results.put(new FetchResult(
+          id, 0, () => blockManager.getLocalShuffleFromDisk(id, serializer).get))
         logDebug("Got local block " + id)
       } catch {
         case e: Exception =>

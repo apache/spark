@@ -44,7 +44,7 @@ fi
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python $PEP8_SCRIPT_PATH ./python > "$PEP8_REPORT_PATH"
+python $PEP8_SCRIPT_PATH ./python/pyspark > "$PEP8_REPORT_PATH"
 pep8_status=${PIPESTATUS[0]} #$?
 
 if [ $pep8_status -ne 0 ]; then
