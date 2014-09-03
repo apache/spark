@@ -40,8 +40,7 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext",
-    "SchemaRDD", "Row"]
+    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
 
 
 class DataType(object):
@@ -1037,7 +1036,7 @@ class SQLContext:
                              "can not infer schema")
         if type(first) is dict:
             warnings.warn("Using RDD of dict to inferSchema is deprecated,"
-                          "please use pyspark.Row instead")
+                          "please use pyspark.sql.Row instead")
 
         schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
@@ -1487,6 +1486,21 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join(self)
 
 
+def inherit_doc(cls):
+    for name, func in vars(cls).items():
+        # only inherit docstring for public functions
+        if name.startswith("_"):
+            continue
+        if not func.__doc__:
+            for parent in cls.__bases__:
+                parent_func = getattr(parent, name, None)
+                if parent_func and getattr(parent_func, "__doc__", None):
+                    func.__doc__ = parent_func.__doc__
+                    break
+    return cls
+
+
+@inherit_doc
 class SchemaRDD(RDD):
 
     """An RDD of L{Row} objects that has an associated schema.
@@ -1563,6 +1577,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.registerTempTable(name)
 
     def registerAsTable(self, name):
+        """DEPRECATED: use registerTempTable() instead"""
         warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
         self.registerTempTable(name)
 
