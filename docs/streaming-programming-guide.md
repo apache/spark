@@ -12,7 +12,7 @@ fault-tolerant stream processing of live data streams. Data can be ingested from
 like Kafka, Flume, Twitter, ZeroMQ, Kinesis or plain old TCP sockets and be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
-and live dashboards. In fact, you can apply Spark's in-built
+and live dashboards. In fact, you can apply Spark's
 [machine learning](mllib-guide.html) algorithms, and
 [graph processing](graphx-programming-guide.html) algorithms on data streams.
 
@@ -73,11 +73,11 @@ val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
-Using this context, we then create a new DStream
-by specifying the IP address and port of the data server.
+Using this context, we can create a DStream that represents streaming data from a TCP
+source hostname, e.g. `localhost`, and port, e.g. `9999`
 
 {% highlight scala %}
-// Create a DStream that will connect to serverIP:serverPort, like localhost:9999
+// Create a DStream that will connect to hostname:port, like localhost:9999
 val lines = ssc.socketTextStream("localhost", 9999)
 {% endhighlight %}
 
@@ -101,7 +101,7 @@ import org.apache.spark.streaming.StreamingContext._
 val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
 
-// Print a few of the counts to the console
+// Print the first ten elements of each RDD generated in this DStream to the console
 wordCounts.print()
 {% endhighlight %}
 
@@ -142,11 +142,11 @@ val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 JavaStreamingContext jssc = new JavaStreamingContext(conf, new Duration(1000))
 {% endhighlight %}
 
-Using this context, we then create a new DStream
-by specifying the IP address and port of the data server.
+Using this context, we can create a DStream that represents streaming data from a TCP
+source hostname, e.g. `localhost`, and port, e.g. `9999`
 
 {% highlight java %}
-// Create a DStream that will connect to serverIP:serverPort, like localhost:9999
+// Create a DStream that will connect to hostname:port, like localhost:9999
 JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999);
 {% endhighlight %}
 
@@ -188,7 +188,9 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCounts.print();     // Print a few of the counts to the console
+
+// Print the first ten elements of each RDD generated in this DStream to the console
+wordCounts.print();
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -198,8 +200,8 @@ using a [Function2](api/scala/index.html#org.apache.spark.api.java.function.Func
 Finally, `wordCounts.print()` will print a few of the counts generated every second.
 
 Note that when these lines are executed, Spark Streaming only sets up the computation it
-will perform when it is started, and no real processing has started yet. To start the processing
-after all the transformations have been setup, we finally call
+will perform after it is started, and no real processing has started yet. To start the processing
+after all the transformations have been setup, we finally call `start` method.
 
 {% highlight java %}
 jssc.start();              // Start the computation
@@ -226,12 +228,12 @@ Then, in a different terminal, you can start the example by using
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount localhost 9999
+$ ./bin/run-example streaming.NetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount localhost 9999
+$ ./bin/run-example JavaNetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 </div>
@@ -336,7 +338,7 @@ or a special __"local[\*]"__ string to run in local mode. In practice, when runn
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
 receive it there. However, for local testing and unit tests, you can pass "local[\*]" to run Spark Streaming
-in-process. Note that this internally creates a [SparkContext](api/scala/index.html#org.apache.spark.SparkContext) (starting point of all Spark functionality) which can be accessed as `ssc.sparkContext`. 
+in-process (detects the number of cores in the local system). Note that this internally creates a [SparkContext](api/scala/index.html#org.apache.spark.SparkContext) (starting point of all Spark functionality) which can be accessed as `ssc.sparkContext`.
 
 The batch interval must be set based on the latency requirements of your application
 and available cluster resources. See the [Performance Tuning](#setting-the-right-batch-size)
@@ -408,8 +410,8 @@ After a context is defined, you have to do the follow steps.
 **Discretized Stream** or **DStream** is the basic abstraction provided by Spark Streaming.
 It represents a continuous stream of data, either the input data stream received from source,
 or the processed data stream generated by transforming the input stream. Internally,
-it is represented by a continuous sequence of RDDs, which is Spark's abstraction of an immutable,
-distributed dataset. Each RDD in a DStream contains data from a certain interval,
+a DStream is represented by a continuous series of RDDs, which is Spark's abstraction of an immutable,
+distributed dataset (see [Spark Programming Guide](programming-guide.html#resilient-distributed-datasets-rdds) for more details). Each RDD in a DStream contains data from a certain interval,
 as shown in the following figure.
 
 <p style="text-align: center;">
@@ -421,7 +423,7 @@ as shown in the following figure.
 
 Any operation applied on a DStream translates to operations on the underlying RDDs. For example,
 in the [earlier example](#a-quick-example) of converting a stream of lines to words,
-the `flatmap` operation is applied on each RDD in the `lines` DStream to generate the RDDs of the
+the `flatMap` operation is applied on each RDD in the `lines` DStream to generate the RDDs of the
  `words` DStream. This is shown in the following figure.
 
 <p style="text-align: center;">
@@ -433,7 +435,7 @@ the `flatmap` operation is applied on each RDD in the `lines` DStream to generat
 
 
 These underlying RDD transformations are computed by the Spark engine. The DStream operations
-hide most of these details and provides the developer with higher-level API for convenience.
+hide most of these details and provide the developer with higher-level API for convenience.
 These operations are discussed in detail in later sections.
 
 ***
@@ -1190,7 +1192,7 @@ Even though keeping the data serialized incurs higher serialization/deserializat
 it significantly reduces GC pauses.
 
 * **Clearing persistent RDDs**: By default, all persistent RDDs generated by Spark Streaming will
- be cleared from memory based on Spark's in-built policy (LRU). If `spark.cleaner.ttl` is set,
+ be cleared from memory based on Spark's built-in policy (LRU). If `spark.cleaner.ttl` is set,
  then persistent RDDs that are older than that value are periodically cleared. As mentioned
  [earlier](#operation), this needs to be careful set based on operations used in the Spark
  Streaming program. However, a smarter unpersisting of RDDs can be enabled by setting the
@@ -1278,7 +1280,7 @@ def functionToCreateContext(): StreamingContext = {
     ssc
 }
 
-// Get StreaminContext from checkpoint data or create a new one
+// Get StreamingContext from checkpoint data or create a new one
 val context = StreamingContext.getOrCreate(checkpointDirectory, functionToCreateContext _)
 
 // Do additional setup on context that needs to be done,
