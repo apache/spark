@@ -135,7 +135,6 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
         sc.parallelize(1 to 10, 2).foreach { x => if (x == 1) System.exit(42) }
       }
       assert(thrown.getClass === classOf[SparkException])
-      System.out.println(thrown.getMessage)
       assert(thrown.getMessage.contains("failed 4 times"))
     }
   }
@@ -268,8 +267,6 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
-      println("i = " + i)
-      Console.out.flush()
       val data = sc.parallelize(Seq(true, true), 2)
       assert(data.count === 2)
       assert(data.map(markNodeIfIdentity).collect.size === 2)
