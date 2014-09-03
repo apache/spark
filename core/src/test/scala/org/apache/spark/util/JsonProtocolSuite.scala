@@ -60,7 +60,7 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
+    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -176,6 +176,13 @@ class JsonProtocolSuite extends FunSuite {
       deserializedBmRemoved)
   }
 
+  test("SparkListenerApplicationStart backwards compatibility") {
+    // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
+      .removeField({ _._1 == "App ID" })
+    assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
+  }
 
   /** -------------------------- *
    | Helper test running methods |
