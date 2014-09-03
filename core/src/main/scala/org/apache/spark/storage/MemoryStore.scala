@@ -324,6 +324,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           if (currentSize > memoryThreshold) {
             val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
             if (freeMemoryForUnroll < amountToRequest) {
+              keepUnrolling = false
               var selectedMemory = 0L
               val selectedBlocks = new ArrayBuffer[BlockId]()
               val ensureSpaceResult = ensureFreeSpace(
@@ -352,8 +353,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
                 // update reservedUnrollMemoryMap, indicate the tobeDroppedBlocks that marked by 
                 // current thread has been dropped
                 decreaseReservedUnrollMemoryForThisThread(amountToRequest)
-              } else {
-                keepUnrolling = false
+                keepUnrolling = true
               }
             } else {
               increaseUnrollMemoryForThisThread(amountToRequest)
