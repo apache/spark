@@ -1036,7 +1036,7 @@ class SQLContext:
                              "can not infer schema")
         if type(first) is dict:
             warnings.warn("Using RDD of dict to inferSchema is deprecated,"
-                          "please use pyspark.Row instead")
+                          "please use pyspark.sql.Row instead")
 
         schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
