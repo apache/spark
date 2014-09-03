@@ -132,20 +132,6 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 }
 
 /**
- * A function that get the absolute value of the numeric value.
- */
-case class Abs(child: Expression) extends UnaryExpression  {
-  type EvaluatedType = Any
-
-  def dataType = child.dataType
-  override def foldable = child.foldable
-  def nullable = child.nullable
-  override def toString = s"Abs($child)"
-
-  override def eval(input: Row): Any = n1(child, input, _.abs(_))
-}
-
-/**
  * A function that get the power value of two parameters.
  * First one is taken as base while second one taken as exponent
  */

@@ -81,7 +81,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val DISTINCT = Keyword("DISTINCT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
-  protected val LAST = Keyword("LAST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
@@ -125,7 +124,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SQRT = Keyword("SQRT")
-  protected val ABS = Keyword("ABS")
   protected val POW = Keyword("POW")
   protected val POWER = Keyword("POWER")
 
@@ -315,7 +313,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
     } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
-    LAST ~> "(" ~> expression <~ ")" ^^ { case exp => Last(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
     MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
@@ -331,7 +328,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
     SQRT ~> "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) } |
-    ABS ~> "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) } |
     (POW | POWER) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p => Power(s,p)
     } |
