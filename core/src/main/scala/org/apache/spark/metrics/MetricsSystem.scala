@@ -96,11 +96,11 @@ private[spark] class MetricsSystem private (val instance: String,
   }
 
   def buildRegistryName(source: Source) = {
-    val appName = conf.get("spark.unique.app.name")
-    val executorId = conf.get("spark.executor.id")
+    val appNameOpt = conf.getOption("spark.unique.app.name")
+    val executorIdOpt = conf.getOption("spark.executor.id")
     val registryName = {
-      if (appName != null && executorId != null) {
-        MetricRegistry.name(appName, executorId, source.sourceName)
+      if (appNameOpt.isDefined && executorIdOpt.isDefined) {
+        MetricRegistry.name(appNameOpt.get, executorIdOpt.get, source.sourceName)
       } else {
         MetricRegistry.name(source.sourceName)
       }
