@@ -140,7 +140,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = x => true,
-      vpred: (VertexId, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD) => Boolean = (a, b) => true,
+      trim: Boolean = false): Graph[VD, ED] = {
     vertices.cache()
     // Filter the vertices, reusing the partitioner and the index from this graph
     val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
@@ -148,20 +149,36 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // on both src and dst vertices
     replicatedVertexView.upgrade(vertices, true, true)
     val newEdges = replicatedVertexView.edges.filter(epred, vpred)
-    new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
+    if(trim) {
+      val trimmedVertex = newVerts.withEdges(newEdges)
+      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
+    } else {
+      new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
+    }
   }
 
   override def mask[VD2: ClassTag, ED2: ClassTag] (
-      other: Graph[VD2, ED2]): Graph[VD, ED] = {
+      other: Graph[VD2, ED2],
+      trim: Boolean = false): Graph[VD, ED] = {
     val newVerts = vertices.innerJoin(other.vertices) { (vid, v, w) => v }
     val newEdges = replicatedVertexView.edges.innerJoin(other.edges) { (src, dst, v, w) => v }
-    new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
+    if(trim) {
+      val trimmedVertex = newVerts.withEdges(newEdges)
+      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
+    } else {
+      new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
+    }
   }
 
-  override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
+  override def groupEdges(merge: (ED, ED) => ED, trim: Boolean = false): Graph[VD, ED] = {
     val newEdges = replicatedVertexView.edges.mapEdgePartitions(
       (pid, part) => part.groupEdges(merge))
-    new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
+    if(trim) {
+      val trimmedVertex = vertices.withEdges(newEdges)
+      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
+    } else {
+      new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
+    }
   }
 
   // ///////////////////////////////////////////////////////////////////////////////////////////////
