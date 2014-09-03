@@ -21,6 +21,9 @@ import java.util.Properties
 
 import scala.collection.Map
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -52,9 +55,9 @@ class JsonProtocolSuite extends FunSuite {
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
-    val blockManagerAdded = SparkListenerBlockManagerAdded(
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
       BlockManagerId("Stars", "In your multitude...", 300), 500)
-    val blockManagerRemoved = SparkListenerBlockManagerRemoved(
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
@@ -151,6 +154,28 @@ class JsonProtocolSuite extends FunSuite {
     assert(newMetrics.inputMetrics.isEmpty)
   }
 
+  test("BlockManager events backward compatibility") {
+    // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
+      BlockManagerId("Scarce", "to be counted...", 100))
+
+    val oldBmAdded = JsonProtocol.blockManagerAddedToJson(blockManagerAdded)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmAdded = JsonProtocol.blockManagerAddedFromJson(oldBmAdded)
+    assert(SparkListenerBlockManagerAdded(-1L, blockManagerAdded.blockManagerId,
+      blockManagerAdded.maxMem) === deserializedBmAdded)
+
+    val oldBmRemoved = JsonProtocol.blockManagerRemovedToJson(blockManagerRemoved)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmRemoved = JsonProtocol.blockManagerRemovedFromJson(oldBmRemoved)
+    assert(SparkListenerBlockManagerRemoved(-1L, blockManagerRemoved.blockManagerId) ===
+      deserializedBmRemoved)
+  }
+
 
   /** -------------------------- *
    | Helper test running methods |
@@ -242,8 +267,10 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem === e2.maxMem)
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
@@ -945,7 +972,8 @@ class JsonProtocolSuite extends FunSuite {
       |    "Host": "In your multitude...",
       |    "Port": 300
       |  },
-      |  "Maximum Memory": 500
+      |  "Maximum Memory": 500,
+      |  "Timestamp": 1
       |}
     """
 
@@ -957,7 +985,8 @@ class JsonProtocolSuite extends FunSuite {
       |    "Executor ID": "Scarce",
       |    "Host": "to be counted...",
       |    "Port": 100
-      |  }
+      |  },
+      |  "Timestamp": 2
       |}
     """
 

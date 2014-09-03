@@ -152,13 +152,15 @@ private[spark] object JsonProtocol {
     val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
     ("Event" -> Utils.getFormattedClassName(blockManagerAdded)) ~
     ("Block Manager ID" -> blockManagerId) ~
-    ("Maximum Memory" -> blockManagerAdded.maxMem)
+    ("Maximum Memory" -> blockManagerAdded.maxMem) ~
+    ("Timestamp" -> blockManagerAdded.time)
   }
 
   def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
     val blockManagerId = blockManagerIdToJson(blockManagerRemoved.blockManagerId)
     ("Event" -> Utils.getFormattedClassName(blockManagerRemoved)) ~
-    ("Block Manager ID" -> blockManagerId)
+    ("Block Manager ID" -> blockManagerId) ~
+    ("Timestamp" -> blockManagerRemoved.time)
   }
 
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
@@ -466,12 +468,14 @@ private[spark] object JsonProtocol {
   def blockManagerAddedFromJson(json: JValue): SparkListenerBlockManagerAdded = {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
     val maxMem = (json \ "Maximum Memory").extract[Long]
-    SparkListenerBlockManagerAdded(blockManagerId, maxMem)
+    val time = Utils.jsonOption(json \ "Timestamp").map(_.extract[Long]).getOrElse(-1L)
+    SparkListenerBlockManagerAdded(time, blockManagerId, maxMem)
   }
 
   def blockManagerRemovedFromJson(json: JValue): SparkListenerBlockManagerRemoved = {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
-    SparkListenerBlockManagerRemoved(blockManagerId)
+    val time = Utils.jsonOption(json \ "Timestamp").map(_.extract[Long]).getOrElse(-1L)
+    SparkListenerBlockManagerRemoved(time, blockManagerId)
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
