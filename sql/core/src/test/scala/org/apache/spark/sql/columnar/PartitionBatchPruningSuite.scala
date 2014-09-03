@@ -25,17 +25,22 @@ import org.apache.spark.sql.test.TestSQLContext._
 case class IntegerData(i: Int)
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  var originalColumnBatchSize = columnBatchSize
+  val originalColumnBatchSize = columnBatchSize
+  val originalInMemoryPartitionPruning = inMemoryPartitionPruning
 
   override protected def beforeAll() {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
     val rawData = sparkContext.makeRDD(1 to 100, 5).map(IntegerData)
     rawData.registerTempTable("intData")
+
+    // Enable in-memory partition pruning
+    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
   }
 
   override protected def afterAll() {
     setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
+    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
   }
 
   before {
