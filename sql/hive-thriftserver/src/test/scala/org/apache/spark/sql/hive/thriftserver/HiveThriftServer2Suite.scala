@@ -41,6 +41,8 @@ import org.apache.spark.sql.catalyst.util.getTempFilePath
 class HiveThriftServer2Suite extends FunSuite with Logging {
   Class.forName(classOf[HiveDriver].getCanonicalName)
 
+  val verbose = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).isDefined
+
   def startThriftServerWithin(timeout: FiniteDuration = 30.seconds)(f: Statement => Unit) {
     val serverScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
     val warehousePath = getTempFilePath("warehouse")
@@ -70,6 +72,9 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     val buffer = new ArrayBuffer[String]()
 
     def captureOutput(source: String)(line: String) {
+      if (verbose) {
+        logInfo(s"$source> $line")
+      }
       buffer += s"$source> $line"
       if (line.contains("ThriftBinaryCLIService listening on")) {
         serverRunning.success(())
