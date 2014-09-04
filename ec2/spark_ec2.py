@@ -102,9 +102,14 @@ def parse_args():
              "(for debugging)")
     parser.add_option(
         "--ebs-vol-size", metavar="SIZE", type="int", default=0,
-        help="Attach a new EBS volume of size SIZE (in GB) to each node as " +
-             "/vol. The volumes will be deleted when the instances terminate. " +
-             "Only possible on EBS-backed AMIs.")
+        help="Size (in GB) of each EBS volume.")
+    parser.add_option(
+        "--ebs-vol-num", type="int", default=1,
+        help="Number of EBS volumes to attach to each node as /vol[x]. " +
+             "The volumes will be deleted when the instances terminate. " +
+             "Only possible on EBS-backed AMIs. " +
+             "EBS volumes are only attached if --ebs-vol-size > 0." +
+             "Only support up to 5 EBS volumes.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: 1024)")
@@ -348,13 +353,16 @@ def launch_cluster(conn, opts, cluster_name):
         print >> stderr, "Could not find AMI " + opts.ami
         sys.exit(1)
 
-    # Create block device mapping so that we can add an EBS volume if asked to
+    # Create block device mapping so that we can add EBS volumes if asked to.
+    # The first drive is attached as /dev/sdv, 2nd as /dev/sdw, ... /dev/sdz
     block_map = BlockDeviceMapping()
     if opts.ebs_vol_size > 0:
-        device = EBSBlockDeviceType()
-        device.size = opts.ebs_vol_size
-        device.delete_on_termination = True
-        block_map["/dev/sdv"] = device
+        for i in range(opts.ebs_vol_num):
+            device = EBSBlockDeviceType()
+            device.size = opts.ebs_vol_size
+            device.volume_type="gp2"
+            device.delete_on_termination = True
+            block_map["/dev/sd" + chr(ord('v') + i)] = device
 
     # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
     if opts.instance_type.startswith('m3.'):
@@ -563,7 +571,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git -b v3")
+    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/rxin/spark-ec2.git -b v3-ebs")
 
     print "Deploying files to master..."
     deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes, modules)
@@ -828,6 +836,12 @@ def get_partition(total, num_partitions, current_partitions):
 
 def real_main():
     (opts, action, cluster_name) = parse_args()
+
+    # Input parameter validation
+    if opts.ebs_vol_num > 5:
+        print >> stderr, "ebs-vol-num cannot be greater than 5"
+        sys.exit(1)
+
     try:
         conn = ec2.connect_to_region(opts.region)
     except Exception as e:
