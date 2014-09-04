@@ -942,9 +942,7 @@ class SQLContext:
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
-
-        if sqlContext:
-            self._scala_SQLContext = sqlContext
+        self._scala_SQLContext = sqlContext
 
     @property
     def _ssql_ctx(self):
@@ -953,7 +951,7 @@ class SQLContext:
         Subclasses can override this property to provide their own
         JVM Contexts.
         """
-        if not hasattr(self, '_scala_SQLContext'):
+        if self._scala_SQLContext is None:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
@@ -970,23 +968,26 @@ class SQLContext:
         >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
         [Row(c0=4)]
-        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
-        [Row(c0=5)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
+        pickled_command = CloudPickleSerializer().dumps(command)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
+            self._sc._gateway._gateway_client)
+        self._sc._pickled_broadcast_vars.clear()
         env = MapConverter().convert(self._sc.environment,
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
                                            self._sc._gateway._gateway_client)
         self._ssql_ctx.registerPython(name,
-                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      bytearray(pickled_command),
                                       env,
                                       includes,
                                       self._sc.pythonExec,
+                                      broadcast_vars,
                                       self._sc._javaAccumulator,
                                       str(returnType))
 

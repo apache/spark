@@ -128,7 +128,7 @@ class LeastSquaresGradient extends Gradient {
 class HingeGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val dotProduct = dot(data, weights)
-    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
     if (1.0 > labelScaled * dotProduct) {
@@ -146,7 +146,7 @@ class HingeGradient extends Gradient {
       weights: Vector,
       cumGradient: Vector): Double = {
     val dotProduct = dot(data, weights)
-    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
     if (1.0 > labelScaled * dotProduct) {

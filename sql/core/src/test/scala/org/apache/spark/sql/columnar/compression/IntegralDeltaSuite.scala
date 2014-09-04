@@ -29,7 +29,7 @@ class IntegralDeltaSuite extends FunSuite {
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
   def testIntegralDelta[I <: IntegralType](
-      columnStats: NativeColumnStats[I],
+      columnStats: ColumnStats,
       columnType: NativeColumnType[I],
       scheme: IntegralDelta[I]) {
 
