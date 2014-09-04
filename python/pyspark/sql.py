@@ -900,7 +900,7 @@ def _create_cls(dataType):
 
 class SQLContext:
 
-    """Main entry point for SparkSQL functionality.
+    """Main entry point for Spark SQL functionality.
 
     A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -946,7 +946,7 @@ class SQLContext:
 
     @property
     def _ssql_ctx(self):
-        """Accessor for the JVM SparkSQL context.
+        """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
         JVM Contexts.
@@ -1507,7 +1507,7 @@ class SchemaRDD(RDD):
     """An RDD of L{Row} objects that has an associated schema.
 
     The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
-    utilize the relational query api exposed by SparkSQL.
+    utilize the relational query api exposed by Spark SQL.
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
