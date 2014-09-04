@@ -23,7 +23,11 @@ object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
 
+import numpy
 from numpy import array, array_equal, ndarray, float64, int32
+
+
+__all__ = ['SparseVector', 'Vectors']
 
 
 class SparseVector(object):
@@ -159,6 +163,15 @@ class SparseVector(object):
                 result += other.values[j] * other.values[j]
                 j += 1
             return result
+
+    def toArray(self):
+        """
+        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        """
+        arr = numpy.zeros(self.size)
+        for i in xrange(self.indices.size):
+            arr[self.indices[i]] = self.values[i]
+        return arr
 
     def __str__(self):
         inds = "[" + ",".join([str(i) for i in self.indices]) + "]"

@@ -214,6 +214,16 @@ Apart from these, the following properties are also available, and may be useful
     process. The user can specify multiple of these and to set multiple environment variables. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -373,10 +383,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
+  <td>snappy</td>
   <td>
-    The codec used to compress internal data such as RDD partitions and shuffle outputs.
-    By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default,
+    Spark provides three codecs: <code>lz4</code>, <code>lzf</code>, and <code>snappy</code>. You
+    can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
@@ -560,7 +572,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-    <td>spark.hadoop.validateOutputSpecs</td>
+    <td><code>spark.hadoop.validateOutputSpecs</code></td>
     <td>true</td>
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
@@ -568,7 +580,7 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 <tr>
-    <td>spark.executor.heartbeatInterval</td>
+    <td><code>spark.executor.heartbeatInterval</code></td>
     <td>10000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
@@ -844,6 +856,15 @@ Apart from these, the following properties are also available, and may be useful
     (in milliseconds).  
   </td>
 </tr>
+<tr>
+  <td><code>spark.localExecution.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
+    tasks to the cluster. This can make certain jobs execute very quickly, but may require
+    shipping a whole partition of data to the driver.
+  </td>
+</tr>
 </table>
 
 #### Security
@@ -871,6 +892,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of seconds for the connection to wait for authentication to occur before timing
     out and giving up.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.core.connection.ack.wait.timeout</code></td>
+  <td>60</td>
+  <td>
+    Number of seconds for the connection to wait for ack to occur before timing
+    out and giving up. To avoid unwilling timeout caused by long pause like GC,
+    you can set larger value.
   </td>
 </tr>
 <tr>

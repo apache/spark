@@ -105,16 +105,16 @@ private[mllib] object RandomRDD {
   def getPointIterator[T: ClassTag](partition: RandomRDDPartition[T]): Iterator[T] = {
     val generator = partition.generator.copy()
     generator.setSeed(partition.seed)
-    Array.fill(partition.size)(generator.nextValue()).toIterator
+    Iterator.fill(partition.size)(generator.nextValue())
   }
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
-  def getVectorIterator(partition: RandomRDDPartition[Double],
-                        vectorSize: Int): Iterator[Vector] = {
+  def getVectorIterator(
+      partition: RandomRDDPartition[Double],
+      vectorSize: Int): Iterator[Vector] = {
     val generator = partition.generator.copy()
     generator.setSeed(partition.seed)
-    Array.fill(partition.size)(new DenseVector(
-      (0 until vectorSize).map { _ => generator.nextValue() }.toArray)).toIterator
+    Iterator.fill(partition.size)(new DenseVector(Array.fill(vectorSize)(generator.nextValue())))
   }
 }

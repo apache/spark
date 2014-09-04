@@ -22,7 +22,7 @@ import cern.jet.stat.Probability
 import org.apache.spark.util.StatCounter
 
 /**
- * An ApproximateEvaluator for sums. It estimates the mean and the cont and multiplies them
+ * An ApproximateEvaluator for sums. It estimates the mean and the count and multiplies them
  * together, then uses the formula for the variance of two independent random variables to get
  * a variance for the result and compute a confidence interval.
  */

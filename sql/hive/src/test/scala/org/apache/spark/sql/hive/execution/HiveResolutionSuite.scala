@@ -20,8 +20,8 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
-case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 case class Nested(a: Int, B: Int)
+case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -57,6 +57,13 @@ class HiveResolutionSuite extends HiveComparisonTest {
       .registerTempTable("caseSensitivityTest")
 
     sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+
+    println(sql("SELECT * FROM casesensitivitytest one JOIN casesensitivitytest two ON one.a = two.a").queryExecution)
+
+    sql("SELECT * FROM casesensitivitytest one JOIN casesensitivitytest two ON one.a = two.a").collect()
+
+    // TODO: sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a")
+
   }
 
   test("nested repeated resolution") {
