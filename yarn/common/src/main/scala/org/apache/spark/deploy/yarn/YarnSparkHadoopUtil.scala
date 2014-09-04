@@ -36,7 +36,6 @@ import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -54,7 +53,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
   // Always create a new config, dont reuse yarnConf.
-  override def newConfiguration(): Configuration = new YarnConfiguration(new Configuration())
+  override def newConfiguration(conf: SparkConf): Configuration =
+    new YarnConfiguration(super.newConfiguration(conf))
 
   // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
   override def addCredentials(conf: JobConf) {
@@ -152,19 +152,6 @@ object YarnSparkHadoopUtil {
       "%([A-Za-z_][A-Za-z0-9_]*?)%"
     } else {
       "\\$([A-Za-z_][A-Za-z0-9_]*)"
-    }
-  }
-
-  def getUIHistoryAddress(sc: SparkContext, conf: SparkConf) : String = {
-    val eventLogDir = sc.eventLogger match {
-      case Some(logger) => logger.getApplicationLogDir()
-      case None => ""
-    }
-    val historyServerAddress = conf.get("spark.yarn.historyServer.address", "")
-    if (historyServerAddress != "" && eventLogDir != "") {
-      historyServerAddress + HistoryServer.UI_PATH_PREFIX + s"/$eventLogDir"
-    } else {
-      ""
     }
   }
 
