@@ -109,7 +109,7 @@ def parse_args():
              "The volumes will be deleted when the instances terminate. " +
              "Only possible on EBS-backed AMIs. " +
              "EBS volumes are only attached if --ebs-vol-size > 0." +
-             "Only support up to 5 EBS volumes.")
+             "Only support up to 8 EBS volumes.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: 1024)")
@@ -354,7 +354,7 @@ def launch_cluster(conn, opts, cluster_name):
         sys.exit(1)
 
     # Create block device mapping so that we can add EBS volumes if asked to.
-    # The first drive is attached as /dev/sdv, 2nd as /dev/sdw, ... /dev/sdz
+    # The first drive is attached as /dev/sds, 2nd as /dev/sdt, ... /dev/sdz
     block_map = BlockDeviceMapping()
     if opts.ebs_vol_size > 0:
         for i in range(opts.ebs_vol_num):
@@ -362,7 +362,7 @@ def launch_cluster(conn, opts, cluster_name):
             device.size = opts.ebs_vol_size
             device.volume_type="gp2"
             device.delete_on_termination = True
-            block_map["/dev/sd" + chr(ord('v') + i)] = device
+            block_map["/dev/sd" + chr(ord('s') + i)] = device
 
     # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
     if opts.instance_type.startswith('m3.'):
@@ -838,8 +838,8 @@ def real_main():
     (opts, action, cluster_name) = parse_args()
 
     # Input parameter validation
-    if opts.ebs_vol_num > 5:
-        print >> stderr, "ebs-vol-num cannot be greater than 5"
+    if opts.ebs_vol_num > 8:
+        print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
 
     try:
