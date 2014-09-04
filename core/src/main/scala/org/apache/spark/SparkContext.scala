@@ -810,7 +810,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
     Utils.fetchCachedFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-      timestamp, hadoopConfiguration, false)
+      hadoopConfiguration, timestamp, useCache = false)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()

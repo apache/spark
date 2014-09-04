@@ -313,11 +313,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Copy cached file to targetDir, if not exists, download it from url firstly.
-   * If useCache == false, download file to targetDir directly.
+   * Download a file requested by the executor . Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * If `useCache` is true, first attempts to fetch the file from a local cache that's shared across
+   * executors running the same application.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
    */
-  def fetchCachedFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    timestamp: Long, useCache: Boolean) {
+  def fetchCachedFile(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration,
+      timestamp: Long,
+      useCache: Boolean) {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     if (useCache) {
@@ -330,10 +342,10 @@ private[spark] object Utils extends Logging {
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type(mandatory or advisory).
       val lock = raf.getChannel().lock()
-      val cachedFile = new File(localDir, cachedFileName)
+      val cachedFile = new File(SparkFiles.getRootDirectory + "../", cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          fetchFile(url, localDir, conf, securityMgr)
+          fetchFile(url, localDir, conf, securityMgr, hadoopConf)
           Files.move(new File(localDir, fileName), cachedFile)
         }
       } finally {
@@ -341,7 +353,7 @@ private[spark] object Utils extends Logging {
       }
       Files.copy(cachedFile, targetFile)
     } else {
-      fetchFile(url, targetDir, conf, securityMgr)
+      fetchFile(url, targetDir, conf, securityMgr, hadoopConf)
     }
     
     // Decompress the file if it's a .tar or .tar.gz
