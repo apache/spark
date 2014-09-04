@@ -68,11 +68,13 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   /**
    * Repartition the RDD according to the given partitioner and, within each resulting partition,
    * sort records by their keys.
+   *
+   * This is more efficient than calling `repartition` and then sorting within each partition
+   * because it can push the sorting down into the shuffle machinery.
    */
-  def repartitionAndSortWithinPartition(partitioner: Partitioner, ascending: Boolean = true)
+  def repartitionAndSortWithinPartition(partitioner: Partitioner)
       : RDD[(K, V)] = {
-    new ShuffledRDD[K, V, V](self, partitioner)
-      .setKeyOrdering(if (ascending) ordering else ordering.reverse)
+    new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
   }
 
 }
