@@ -239,6 +239,15 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   private def stopDaemon() {
     synchronized {
       if (useDaemon) {
+        while (idleWorkers.length > 0) {
+          val worker = idleWorkers.dequeue()
+          try {
+            worker.close()
+          } catch {
+            case e: Exception =>
+              logWarning("Failed to close worker socket", e)
+          }
+        }
         // Request shutdown of existing daemon by sending SIGTERM
         if (daemon != null) {
           daemon.destroy()

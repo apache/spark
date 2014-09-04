@@ -75,7 +75,16 @@ private[spark] class PythonRDD(
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-      env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+      if (!context.isInterrupted) {
+        env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+      } else {
+        try {
+          worker.close()
+        } catch {
+          case e: Exception =>
+            logWarning("Failed to close worker socket", e)
+        }
+      }
     }
 
     writerThread.start()
