@@ -162,7 +162,7 @@ class Accumulator(object):
         self.add(term)
         return self
 
-    def __str__(self):
+    def __repr__(self):
         return str(self._value)
 
     def __repr__(self):

@@ -77,7 +77,7 @@ class DecisionTreeModel(object):
     def depth(self):
         return self._java_model.depth()
 
-    def __str__(self):
+    def __repr__(self):
         return self._java_model.toString()
 
 

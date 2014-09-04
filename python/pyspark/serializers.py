@@ -205,7 +205,7 @@ class BatchedSerializer(Serializer):
         return (isinstance(other, BatchedSerializer) and
                 other.serializer == self.serializer)
 
-    def __str__(self):
+    def __repr__(self):
         return "BatchedSerializer<%s>" % str(self.serializer)
 
 
@@ -238,7 +238,7 @@ class CartesianDeserializer(FramedSerializer):
         return (isinstance(other, CartesianDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
+    def __repr__(self):
         return "CartesianDeserializer<%s, %s>" % \
                (str(self.key_ser), str(self.val_ser))
 
@@ -265,7 +265,7 @@ class PairDeserializer(CartesianDeserializer):
         return (isinstance(other, PairDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
+    def __repr__(self):
         return "PairDeserializer<%s, %s>" % (str(self.key_ser), str(self.val_ser))
 
 
