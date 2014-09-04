@@ -21,8 +21,10 @@ Python package for statistical functions in MLlib.
 
 from pyspark.mllib._common import \
     _get_unmangled_double_vector_rdd, _get_unmangled_rdd, \
-    _serialize_double, _serialize_double_vector, \
-    _deserialize_double, _deserialize_double_matrix, _deserialize_double_vector
+    _serialize_double, _deserialize_double_matrix, _deserialize_double_vector
+
+
+__all__ = ['MultivariateStatisticalSummary', 'Statistics']
 
 
 class MultivariateStatisticalSummary(object):
