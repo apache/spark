@@ -195,8 +195,7 @@ private[hive] trait HiveStrategies {
 
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.NativeCommand(sql) =>
-        NativeCommand(sql, plan.output)(context) :: Nil
+      case logical.NativeCommand(sql) => NativeCommand(sql, plan.output)(context) :: Nil
 
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 

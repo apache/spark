@@ -66,19 +66,13 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
  */
 @DeveloperApi
 case class AddJar(path: String) extends LeafNode with Command {
-
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   override def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Any] = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
-    Seq.empty[Any]
-  }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    hiveContext.emptyResult
+    Seq.empty[Row]
   }
 }
