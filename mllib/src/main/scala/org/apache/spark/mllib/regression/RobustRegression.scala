@@ -158,3 +158,19 @@ object HuberRobustRegressionWithSGD {
     train(input, numIterations, 1.0, 1.0)
   }
 }
+
+/**
+ * Train a classification model for HuberRobust Regression using Limited-memory BFGS.
+ * Standard feature scaling and L2 regularization are used by default.
+ */
+class HuberRobustRegressionWithLBFGS
+  extends GeneralizedLinearAlgorithm[HuberRobustRegressionModel] with Serializable {
+
+  this.setFeatureScaling(true)
+
+  override val optimizer = new LBFGS(new HuberRobustGradient, new SquaredL2Updater)
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new HuberRobustRegressionModel(weights, intercept)
+  }
+}

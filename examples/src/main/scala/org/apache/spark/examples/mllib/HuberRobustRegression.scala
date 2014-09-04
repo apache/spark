@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.regression.HuberRobustRegressionWithSGD
+import org.apache.spark.mllib.regression.HuberRobustRegressionWithLBFGS
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SimpleUpdater, SquaredL2Updater, L1Updater}
 
@@ -109,10 +109,9 @@ object HuberRobustRegression extends App {
       case L2 => new SquaredL2Updater()
     }
 
-    val algorithm = new HuberRobustRegressionWithSGD()
+    val algorithm = new HuberRobustRegressionWithLBFGS()
     algorithm.optimizer
       .setNumIterations(params.numIterations)
-      .setStepSize(params.stepSize)
       .setUpdater(updater)
       .setRegParam(params.regParam)
 
