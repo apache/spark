@@ -547,7 +547,7 @@ class TestRDDFunctions(PySparkTestCase):
 
     def test_repartitionAndSortWithinPartition(self):
         rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
-        
+
         repartitioned = rdd.repartitionAndSortWithinPartition(True, 2, lambda key: key % 2)
         partitions = repartitioned.glom().collect()
         self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])

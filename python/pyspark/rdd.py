@@ -525,7 +525,7 @@ class RDD(object):
         """
         Repartition the RDD according to the given partitioner and, within each resulting partition,
         sort records by their keys.
-        
+
         >>> rdd = sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)])
         >>> rdd2 = rdd.repartitionAndSortWithinPartition(True, lambda x: x % 2, 2)
         >>> rdd2.glom().collect()
@@ -541,7 +541,7 @@ class RDD(object):
         def sortPartition(iterator):
             sort = ExternalSorter(memory * 0.9, serializer).sorted if spill else sorted
             return iter(sort(iterator, key=lambda (k, v): keyfunc(k), reverse=(not ascending)))
-        
+
         return self.partitionBy(numPartitions, partitionFunc).mapPartitions(sortPartition, True)
 
     def sortByKey(self, ascending=True, numPartitions=None, keyfunc=lambda x: x):
