@@ -69,8 +69,11 @@ def main(infile, outfile):
         ser = CompressedSerializer(pickleSer)
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
-            value = ser._read_with_length(infile)
-            _broadcastRegistry[bid] = Broadcast(bid, value)
+            if bid > 0:
+                value = ser._read_with_length(infile)
+                _broadcastRegistry[bid] = Broadcast(bid, value)
+            else:
+                _broadcastRegistry.pop(-bid, None)
 
         command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command

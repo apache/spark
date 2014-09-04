@@ -23,6 +23,7 @@ import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Try, Success, Failure}
@@ -193,11 +194,26 @@ private[spark] class PythonRDD(
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
-        dataOut.writeInt(broadcastVars.length)
+        val bids = PythonRDD.getWorkerBroadcasts(worker)
+        val nbids = broadcastVars.map(_.id).toSet
+        // number of different broadcasts
+        val cnt = bids.diff(nbids).size + nbids.diff(bids).size
+        dataOut.writeInt(cnt)
+        for (bid <- bids) {
+          if (!nbids.contains(bid)) {
+            // remove the broadcast from worker
+            dataOut.writeLong(-bid)
+            bids.remove(bid)
+          }
+        }
         for (broadcast <- broadcastVars) {
-          dataOut.writeLong(broadcast.id)
-          dataOut.writeInt(broadcast.value.length)
-          dataOut.write(broadcast.value)
+          if (!bids.contains(broadcast.id)) {
+            // send new broadcast
+            dataOut.writeLong(broadcast.id)
+            dataOut.writeInt(broadcast.value.length)
+            dataOut.write(broadcast.value)
+            bids.add(broadcast.id)
+          }
         }
         dataOut.flush()
         // Serialized command:
@@ -274,6 +290,12 @@ private object SpecialLengths {
 
 private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
+
+  // remember the broadcasts sent to each worker
+  private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
+  private def getWorkerBroadcasts(worker: Socket) = {
+    workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
+  }
 
   /**
    * Adapter for calling SparkContext#runJob from Python.
