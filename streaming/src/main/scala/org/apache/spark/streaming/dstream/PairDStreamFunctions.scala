@@ -388,10 +388,10 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       updateFunc: (Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner
     ): DStream[(K, S)] = {
-    val newUpdateFunc = (iterator: Iterator[(K, Seq[V], Option[S])]) => {
-      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+    val newUpdateFunc = (time: Time, key: K, values: Seq[V], state: Option[S]) => {
+      updateFunc(values, state)
     }
-    updateStateByKey(newUpdateFunc, partitioner, true)
+    updateStateByKey(newUpdateFunc, partitioner)
   }
 
   /**
