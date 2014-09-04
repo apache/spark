@@ -49,6 +49,7 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
   }
 
   abstract override def appendFrom(row: Row, ordinal: Int) {
+    columnStats.gatherStats(row, ordinal)
     if (row.isNullAt(ordinal)) {
       nulls = ColumnBuilder.ensureFreeSpace(nulls, 4)
       nulls.putInt(pos)

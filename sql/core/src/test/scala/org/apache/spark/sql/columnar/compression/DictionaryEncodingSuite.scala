@@ -31,7 +31,7 @@ class DictionaryEncodingSuite extends FunSuite {
   testDictionaryEncoding(new StringColumnStats, STRING)
 
   def testDictionaryEncoding[T <: NativeType](
-      columnStats: NativeColumnStats[T],
+      columnStats: ColumnStats,
       columnType: NativeColumnType[T]) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")

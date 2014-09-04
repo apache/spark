@@ -24,7 +24,7 @@ import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
 class RunLengthEncodingSuite extends FunSuite {
-  testRunLengthEncoding(new BooleanColumnStats, BOOLEAN)
+  testRunLengthEncoding(new NoopColumnStats, BOOLEAN)
   testRunLengthEncoding(new ByteColumnStats,    BYTE)
   testRunLengthEncoding(new ShortColumnStats,   SHORT)
   testRunLengthEncoding(new IntColumnStats,     INT)
@@ -32,7 +32,7 @@ class RunLengthEncodingSuite extends FunSuite {
   testRunLengthEncoding(new StringColumnStats,  STRING)
 
   def testRunLengthEncoding[T <: NativeType](
-      columnStats: NativeColumnStats[T],
+      columnStats: ColumnStats,
       columnType: NativeColumnType[T]) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
