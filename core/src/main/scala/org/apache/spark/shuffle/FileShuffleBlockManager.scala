@@ -155,7 +155,7 @@ class FileShuffleBlockManager(conf: SparkConf)
           val filename = physicalFileName(shuffleId, bucketId, fileId)
           blockManager.diskBlockManager.getFile(filename)
         }
-        val fileGroup = new ShuffleFileGroup(fileId, shuffleId, files)
+        val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
         shuffleState.allFileGroups.add(fileGroup)
         fileGroup
       }
