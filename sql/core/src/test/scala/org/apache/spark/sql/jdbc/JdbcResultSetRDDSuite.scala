@@ -52,7 +52,7 @@ class JdbcResultSetRDDSuite extends QueryTest with BeforeAndAfter {
 
   test("basic functionality") {
     val jdbcResultSetRDD = jdbcResultSet("jdbc:derby:target/JdbcSchemaRDDSuiteDb", "SELECT DATA FROM FOO")
-    jdbcResultSetRDD.registerAsTable("foo")
+    jdbcResultSetRDD.registerTempTable("foo")
 
     checkAnswer(
       sql("select count(*) from foo"),

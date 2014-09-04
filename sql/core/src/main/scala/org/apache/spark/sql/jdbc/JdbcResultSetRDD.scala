@@ -45,26 +45,26 @@ private[sql] object JdbcResultSetRDD extends Logging {
     jdbcResultSet.map(asRow(_, row, schema.fields))
   }
 
-  private def asRow(rs: ResultSet, row: GenericMutableRow, schema: Seq[StructField]): Row = {
-    schema.zipWithIndex.foreach {
-      case (StructField(name, dataType, nullable), i) => {
-        dataType match {
-          case StringType  => row.update(i, rs.getString(i + 1))
-          case DecimalType => row.update(i, rs.getBigDecimal(i + 1))
-          case BooleanType => row.update(i, rs.getBoolean(i + 1))
-          case ByteType    => row.update(i, rs.getByte(i + 1))
-          case ShortType   => row.update(i, rs.getShort(i + 1))
-          case IntegerType => row.update(i, rs.getInt(i + 1))
-          case LongType    => row.update(i, rs.getLong(i + 1))
-          case FloatType   => row.update(i, rs.getFloat(i + 1))
-          case DoubleType  => row.update(i, rs.getDouble(i + 1))
-          case BinaryType  => row.update(i, rs.getBytes(i + 1))
-          case TimestampType => row.update(i, rs.getTimestamp(i + 1))
-          case _ => sys.error(
-            s"Unsupported jdbc datatype")
-        }
-        if (rs.wasNull) row.update(i, null)
+  private def asRow(rs: ResultSet, row: GenericMutableRow, schemaFields: Seq[StructField]): Row = {
+    var i = 0
+    while (i < schemaFields.length) {
+      schemaFields(i).dataType match {
+        case StringType  => row.update(i, rs.getString(i + 1))
+        case DecimalType => row.update(i, rs.getBigDecimal(i + 1))
+        case BooleanType => row.update(i, rs.getBoolean(i + 1))
+        case ByteType    => row.update(i, rs.getByte(i + 1))
+        case ShortType   => row.update(i, rs.getShort(i + 1))
+        case IntegerType => row.update(i, rs.getInt(i + 1))
+        case LongType    => row.update(i, rs.getLong(i + 1))
+        case FloatType   => row.update(i, rs.getFloat(i + 1))
+        case DoubleType  => row.update(i, rs.getDouble(i + 1))
+        case BinaryType  => row.update(i, rs.getBytes(i + 1))
+        case TimestampType => row.update(i, rs.getTimestamp(i + 1))
+        case _ => sys.error(
+          s"Unsupported jdbc datatype")
       }
+      if (rs.wasNull) row.update(i, null)
+      i += 1
     }
 
     row
