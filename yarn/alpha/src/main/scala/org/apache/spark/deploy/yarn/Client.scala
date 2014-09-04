@@ -103,10 +103,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int = {
-    args.amMemory
-  }
-
   def setupSecurityToken(amContainer: ContainerLaunchContext) = {
     // Setup security tokens.
     val dob = new DataOutputBuffer()

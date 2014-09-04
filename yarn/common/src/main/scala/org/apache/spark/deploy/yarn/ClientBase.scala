@@ -300,8 +300,6 @@ trait ClientBase extends Logging {
     retval.toString
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int
-
   def setupSecurityToken(amContainer: ContainerLaunchContext)
 
   def createContainerLaunchContext(
@@ -346,7 +344,7 @@ trait ClientBase extends Logging {
     }
     amContainer.setEnvironment(env)
 
-    val amMemory = calculateAMMemory(newApp)
+    val amMemory = args.amMemory
 
     val javaOpts = ListBuffer[String]()
 
