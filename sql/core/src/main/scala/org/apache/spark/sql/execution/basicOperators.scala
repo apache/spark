@@ -27,7 +27,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -97,6 +97,7 @@ case class Limit(limit: Int, child: SparkPlan)
   // partition local limit -> exchange into one partition -> partition local limit again
 
   override def output = child.output
+  override def outputPartitioning = SinglePartition
 
   /**
    * A custom implementation modeled after the take function on RDDs but which never runs any job
@@ -164,6 +165,7 @@ case class Limit(limit: Int, child: SparkPlan)
 case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) extends UnaryNode {
 
   override def output = child.output
+  override def outputPartitioning = SinglePartition
 
   val ordering = new RowOrdering(sortOrder, child.output)
 
