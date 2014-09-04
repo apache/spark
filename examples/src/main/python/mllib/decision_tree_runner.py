@@ -21,7 +21,9 @@ Decision tree classification and regression using MLlib.
 This example requires NumPy (http://www.numpy.org/).
 """
 
-import numpy, os, sys
+import numpy
+import os
+import sys
 
 from operator import add
 
@@ -127,7 +129,7 @@ if __name__ == "__main__":
     (reindexedData, origToNewLabels) = reindexClassLabels(points)
 
     # Train a classifier.
-    categoricalFeaturesInfo={} # no categorical features
+    categoricalFeaturesInfo = {}  # no categorical features
     model = DecisionTree.trainClassifier(reindexedData, numClasses=2,
                                          categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
