@@ -28,7 +28,7 @@ import scala.reflect.ClassTag
 private[streaming]
 class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     parent: DStream[(K, V)],
-    updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
+    updateFunc: (Time, Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
     preservePartitioning: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
@@ -65,7 +65,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
                 }
                 (t._1, t._2._1.toSeq, headOption)
               })
-              updateFuncLocal(i)
+              updateFuncLocal(validTime, i)
             }
             val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
             val stateRDD = cogroupedRDD.mapPartitions(finalFunc, preservePartitioning)
@@ -77,7 +77,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             val updateFuncLocal = updateFunc
             val finalFunc = (iterator: Iterator[(K, S)]) => {
               val i = iterator.map(t => (t._1, Seq[V](), Option(t._2)))
-              updateFuncLocal(i)
+              updateFuncLocal(validTime, i)
             }
             val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)
             Some(stateRDD)
@@ -96,7 +96,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             // and then apply the update function
             val updateFuncLocal = updateFunc
             val finalFunc = (iterator: Iterator[(K, Iterable[V])]) => {
-              updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2.toSeq, None)))
+              updateFuncLocal(validTime, iterator.map(tuple => (tuple._1, tuple._2.toSeq, None)))
             }
 
             val groupedRDD = parentRDD.groupByKey(partitioner)
