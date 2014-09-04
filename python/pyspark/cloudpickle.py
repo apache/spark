@@ -70,20 +70,6 @@ EXTENDED_ARG = chr(dis.EXTENDED_ARG)
 import logging
 cloudLog = logging.getLogger("Cloud.Transport")
 
-if PyImp == "CPython":
-    try:
-        import ctypes
-    except (MemoryError, ImportError):
-        logging.warning('Exception raised on importing ctypes. Likely python bug.. some functionality will be disabled', exc_info = True)
-        ctypes = None
-        PyObject_HEAD = None
-    else:
-
-        # for reading internal structures
-        PyObject_HEAD = [
-            ('ob_refcnt', ctypes.c_size_t),
-            ('ob_type', ctypes.c_void_p),
-        ]
 
 if PyImp == "PyPy":
     # register builtin type in `new`
@@ -232,6 +218,8 @@ class CloudPickler(pickle.Pickler):
 
         if themodule:
             self.modules.add(themodule)
+            if getattr(themodule, name, None) is obj:
+                return self.save_global(obj, name)
 
         if not self.savedDjangoEnv:
             #hack for django - if we detect the settings module, we transport it
@@ -402,6 +390,12 @@ class CloudPickler(pickle.Pickler):
 
         return (code, f_globals, defaults, closure, dct, base_globals)
 
+    def save_builtin_function(self, obj):
+        if obj.__module__ is "__builtin__":
+            return self.save_global(obj)
+        return self.save_function(obj)
+    dispatch[types.BuiltinFunctionType] = save_builtin_function
+
     def save_global(self, obj, name=None, pack=struct.pack):
         write = self.write
         memo = self.memo
@@ -486,7 +480,6 @@ class CloudPickler(pickle.Pickler):
         write(pickle.GLOBAL + modname + '\n' + name + '\n')
         self.memoize(obj)
     dispatch[types.ClassType] = save_global
-    dispatch[types.BuiltinFunctionType] = save_global
     dispatch[types.TypeType] = save_global
 
     def save_instancemethod(self, obj):
@@ -556,37 +549,31 @@ class CloudPickler(pickle.Pickler):
         self.save_reduce(property, (obj.fget, obj.fset, obj.fdel, obj.__doc__), obj=obj)
     dispatch[property] = save_property
 
-    if PyImp == "CPython":
-        def save_itemgetter(self, obj):
-            """itemgetter serializer (needed for namedtuple support)
-            a bit of a pain as we need to read ctypes internals"""
-            class ItemGetterType(ctypes.Structure):
-                _fields_ = PyObject_HEAD + [
-                    ('nitems', ctypes.c_size_t),
-                    ('item', ctypes.py_object)
-                ]
+    def save_itemgetter(self, obj):
+        """itemgetter serializer (needed for namedtuple support)"""
+        class Dummy:
+            def __getitem__(self, item):
+                return item
+        items = obj(Dummy())
+        if not isinstance(items, tuple):
+            items = (items, )
+        return self.save_reduce(operator.itemgetter, items)
 
-            obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
-            return self.save_reduce(operator.itemgetter,
-                    obj.item if obj.nitems > 1 else (obj.item,))
+    if type(operator.itemgetter) is type:
+        dispatch[operator.itemgetter] = save_itemgetter
 
-        if PyObject_HEAD:
-            dispatch[operator.itemgetter] = save_itemgetter
+    def save_attrgetter(self, obj):
+        """attrgetter serializer"""
+        class Dummy:
+            def __getattr__(self, item):
+                return item
+        items = obj(Dummy())
+        if not isinstance(items, tuple):
+            items = (items, )
+        return self.save_reduce(operator.attrgetter, items)
 
-        def save_attrgetter(self, obj):
-            """attrgetter serializer"""
-            class AttrGetterType(ctypes.Structure):
-                _fields_ = PyObject_HEAD + [
-                    ('nattrs', ctypes.c_size_t),
-                    ('attr', ctypes.py_object)
-                ]
-
-            obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(AttrGetterType)).contents
-            return self.save_reduce(operator.attrgetter,
-                                    obj.attr if obj.nattrs > 1 else (obj.attr,))
-
-        if PyObject_HEAD:
-            dispatch[operator.attrgetter] = save_attrgetter
+    if type(operator.attrgetter) is type:
+        dispatch[operator.attrgetter] = save_attrgetter
 
     def save_reduce(self, func, args, state=None,
                     listitems=None, dictitems=None, obj=None):
