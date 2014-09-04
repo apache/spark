@@ -66,9 +66,27 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   private val broadcastId = BroadcastBlockId(id)
 
   /** Total number of blocks this broadcast variable contains. */
-  private val numBlocks: Int = writeBlocks()
+  private var numBlocks: Int = writeBlocks()
 
   override protected def getValue() = _value
+
+  override def setValue(setter: (T) => T) = {
+    TorrentBroadcast.synchronized {
+
+      // Obtain latest value from blockManager
+
+      SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
+        case Some(x) =>
+          _value = setter(x.asInstanceOf[T])
+
+        case None =>
+          throw new SparkException("Failed to get value of " + broadcastId)
+      }
+
+      SparkEnv.get.blockManager.removeBroadcast(id, false)
+      numBlocks = writeBlocks()
+    }
+  }
 
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.

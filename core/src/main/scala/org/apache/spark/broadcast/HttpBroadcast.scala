@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
@@ -41,6 +41,30 @@ private[spark] class HttpBroadcast[T: ClassTag](
   extends Broadcast[T](id) with Logging with Serializable {
 
   override protected def getValue() = value_
+
+  override def setValue(setter: (T) => T) = {
+
+    HttpBroadcast.synchronized {
+
+      // Obtain latest value from blockManager
+      SparkEnv.get.blockManager.getSingle(blockId) match {
+        case Some(x) =>
+          value_ = setter(x.asInstanceOf[T])
+
+        case None =>
+          throw new SparkException("Failed to get broadcast variable " + id)
+      }
+
+      doDestroy(true)
+ 
+      logInfo("Started writing broadcast variable " + id)
+      val start = System.nanoTime
+      SparkEnv.get.blockManager.putSingle(
+        blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+      val time = (System.nanoTime - start) / 1e9
+      logInfo("Writing broadcast variable " + id + " took " + time + " s")
+    }
+  }
 
   private val blockId = BroadcastBlockId(id)
 

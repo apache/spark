@@ -109,6 +109,14 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
   protected def getValue(): T
 
   /**
+   * Actually set the broadcasted value. Concrete implementations of Broadcast class must
+   * define their own way to set the value.
+   * @param setter The function computes and returns new broadcasted value based on current value
+   */
+
+  def setValue(setter: (T) => T): Unit
+
+  /**
    * Actually unpersist the broadcasted value on the executors. Concrete implementations of
    * Broadcast class must define their own logic to unpersist their own data.
    */
