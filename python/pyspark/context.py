@@ -37,6 +37,9 @@ from pyspark.rdd import RDD
 from py4j.java_collections import ListConverter
 
 
+__all__ = ['SparkContext']
+
+
 # These are special default configs for PySpark, they will overwrite
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
