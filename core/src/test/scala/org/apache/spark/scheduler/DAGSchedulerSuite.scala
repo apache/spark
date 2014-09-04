@@ -467,7 +467,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       null,
       null))
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
-    assert(sparkListener.failedStages.contains(0))
+    assert(sparkListener.failedStages.contains(1))
 
     // The second ResultTask fails, with a fetch failure for the output from the second mapper.
     runEvent(CompletionEvent(
@@ -525,8 +525,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // Listener bus should get told about the map stage failing, but not the reduce stage
     // (since the reduce stage hasn't been started yet).
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
-    assert(sparkListener.failedStages.contains(1))
-    assert(sparkListener.failedStages.size === 1)
+    assert(sparkListener.failedStages.toSet === Set(0))
 
     assertDataStructuresEmpty
   }
@@ -573,14 +572,12 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
 
-    assert(cancelledStages.contains(1))
+    assert(cancelledStages.toSet === Set(0, 2))
 
     // Make sure the listeners got told about both failed stages.
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.successfulStages.isEmpty)
-    assert(sparkListener.failedStages.contains(1))
-    assert(sparkListener.failedStages.contains(3))
-    assert(sparkListener.failedStages.size === 2)
+    assert(sparkListener.failedStages.toSet === Set(0, 2))
 
     assert(listener1.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assert(listener2.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
