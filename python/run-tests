@@ -28,7 +28,7 @@ FAILED=0
 
 rm -f unit-tests.log
 
-# Remove the metastore and warehouse directory created by the HiveContext tests in SparkSQL
+# Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
 rm -rf metastore warehouse
 
 function run_test() {

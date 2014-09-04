@@ -25,7 +25,7 @@ import scala.math.BigDecimal
 import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
 
 /**
- * A result row from a SparkSQL query.
+ * A result row from a Spark SQL query.
  */
 class Row(private[spark] val row: ScalaRow) extends Serializable {
 

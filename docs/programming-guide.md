@@ -385,7 +385,7 @@ Apart from text files, Spark's Python API also supports several other data forma
 
 * SequenceFile and Hadoop Input/Output Formats
 
-**Note** this feature is currently marked ```Experimental``` and is intended for advanced users. It may be replaced in future with read/write support based on SparkSQL, in which case SparkSQL is the preferred approach.
+**Note** this feature is currently marked ```Experimental``` and is intended for advanced users. It may be replaced in future with read/write support based on Spark SQL, in which case Spark SQL is the preferred approach.
 
 **Writable Support**
 

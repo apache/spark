@@ -89,7 +89,7 @@ echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
-# Build Spark; we always build with Hive because the PySpark SparkSQL tests need it.
+# Build Spark; we always build with Hive because the PySpark Spark SQL tests need it.
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.
