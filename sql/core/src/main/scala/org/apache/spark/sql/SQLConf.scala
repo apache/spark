@@ -26,6 +26,7 @@ import java.util.Properties
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
+  val IN_MEMORY_PARTITION_PRUNING = "spark.sql.inMemoryColumnarStorage.partitionPruning"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
@@ -123,6 +124,12 @@ trait SQLConf {
    */
   private[spark] def isParquetBinaryAsString: Boolean =
     getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
+
+  /**
+   * When set to true, partition pruning for in-memory columnar tables is enabled.
+   */
+  private[spark] def inMemoryPartitionPruning: Boolean =
+    getConf(IN_MEMORY_PARTITION_PRUNING, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
