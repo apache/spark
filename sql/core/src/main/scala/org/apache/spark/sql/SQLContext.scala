@@ -250,7 +250,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
         sql, lowerBound, upperBound, numPartitions,
         (r: ResultSet) => r
     )
-    //new SchemaRDD(this, JdbcResultSetRDD.inferSchema(resultSetRDD))
     val appliedSchema = JdbcResultSetRDD.inferSchema(resultSetRDD)
     val rowRDD = JdbcResultSetRDD.jdbcResultSetToRow(resultSetRDD, appliedSchema)
     applySchema(rowRDD, appliedSchema)
@@ -463,7 +462,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = 
+    def simpleString: String =
       s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
       """

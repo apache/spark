@@ -57,19 +57,19 @@ private[sql] object JdbcTypes extends Logging {
       // case java.sql.Types.CLOB
 
       // TODO: BLOB only works with getBlob or getBinaryStream
-      //case java.sql.Types.BLOB
+      // case java.sql.Types.BLOB
 
       // TODO: nested types
-      //case java.sql.Types.ARRAY     => ArrayType
-      //case java.sql.Types.STRUCT    => StructType
+      // case java.sql.Types.ARRAY     => ArrayType
+      // case java.sql.Types.STRUCT    => StructType
 
       // TODO: unsupported types
-      //case java.sql.Types.DISTINCT
-      //case java.sql.Types.REF
+      // case java.sql.Types.DISTINCT
+      // case java.sql.Types.REF
 
       // TODO: more about JAVA_OBJECT:
       //   http://docs.oracle.com/javase/6/docs/technotes/guides/jdbc/getstart/mapping.html#1038181
-      //case java.sql.Types.JAVA_OBJECT => BinaryType
+      // case java.sql.Types.JAVA_OBJECT => BinaryType
 
       case _ => sys.error(
         s"Unsupported jdbc datatype")
