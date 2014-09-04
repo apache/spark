@@ -168,7 +168,12 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   val ordering = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
-  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
+  override def executeCollect(): Array[Row] = {
+    if (limit == 0) {
+      return new Array[Row](0)
+    }
+    child.execute().map(_.copy()).takeOrdered(limit)(ordering)
+  }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
