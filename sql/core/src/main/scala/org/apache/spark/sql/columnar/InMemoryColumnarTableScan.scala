@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 
-object InMemoryRelation {
+private[sql] object InMemoryRelation {
   def apply(useCompression: Boolean, batchSize: Int, child: SparkPlan): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, child)()
 }
