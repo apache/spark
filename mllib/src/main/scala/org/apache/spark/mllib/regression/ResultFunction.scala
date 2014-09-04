@@ -6,7 +6,7 @@ import scala.collection.mutable.ArrayBuffer
 
 /**
  * Created by olgaoskina on 06/08/14.
- * 
+ *
  */
 
 class ResultFunction (
