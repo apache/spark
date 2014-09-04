@@ -104,11 +104,12 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   }
 
   def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
+    // It looks like -Xmx is handled in ClientBase. ?
     // TODO: Need a replacement for the following code to fix -Xmx?
-    // val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
-    // var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-    //  ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-    //    memoryOverhead )
+    val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
+    var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
+     ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
+       memoryOverhead )
     args.amMemory
   }
 
