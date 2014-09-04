@@ -130,7 +130,7 @@ class IndexedRowMatrix(
     val indexedRows = rows.map(_.index).zip(mat.rows).map { case (i, v) =>
       IndexedRow(i, v)
     }
-    new IndexedRowMatrix(indexedRows, nRows, nCols)
+    new IndexedRowMatrix(indexedRows, nRows, B.numCols)
   }
 
   /**
