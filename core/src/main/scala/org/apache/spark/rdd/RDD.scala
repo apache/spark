@@ -1128,6 +1128,9 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+    if (num == 0) {
+      return new Array[T](0)
+    }
     mapPartitions { items =>
       // Priority keeps the largest elements, so let's reverse the ordering.
       val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
