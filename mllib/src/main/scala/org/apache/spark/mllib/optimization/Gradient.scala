@@ -149,7 +149,7 @@ class HuberRobustGradient extends Gradient {
       (gradient, (-k * diff - 1.0 / 2.0 * pow(k, 2)))
     }else if(diff >= -k && diff <= k){
       scal(diff, gradient)
-      (gradient, (1.0 / 2.0 * pow(diff, 2)))
+      (gradient, (1.0 / 2.0 * loss))
     }else {
       scal(k, gradient)
       (gradient, (k * diff - 1.0 / 2.0 * pow(k, 2)))
@@ -162,8 +162,8 @@ class HuberRobustGradient extends Gradient {
                         weights: Vector,
                         cumGradient: Vector): Double = {
     val diff = dot(data, weights) - label
+    val loss = diff * diff
     val k = 1.345
-    //
     if(diff < -k){
       axpy(-k, data, cumGradient)
     }else if(diff >= -k && diff <= k){
@@ -171,11 +171,10 @@ class HuberRobustGradient extends Gradient {
     }else {
       axpy(k, data, cumGradient)
     }
-
     if(diff < -k){
       -k * diff - 1.0 / 2.0 * pow(k, 2)
     }else if(diff >= -k && diff <= k){
-      1.0 / 2.0 * pow(diff, 2)
+      1.0 / 2.0 * loss
     }else {
       k * diff - 1.0 /2.0 * pow(k, 2)
     }
