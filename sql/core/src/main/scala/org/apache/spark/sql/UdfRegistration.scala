@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.{List => JList, Map => JMap}
 
 import org.apache.spark.Accumulator
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUdf}
 import org.apache.spark.sql.execution.PythonUDF
@@ -38,6 +39,7 @@ protected[sql] trait UDFRegistration {
       envVars: JMap[String, String],
       pythonIncludes: JList[String],
       pythonExec: String,
+      broadcastVars: JList[Broadcast[Array[Byte]]],
       accumulator: Accumulator[JList[Array[Byte]]],
       stringDataType: String): Unit = {
     log.debug(
@@ -61,6 +63,7 @@ protected[sql] trait UDFRegistration {
         envVars,
         pythonIncludes,
         pythonExec,
+        broadcastVars,
         accumulator,
         dataType,
         e)

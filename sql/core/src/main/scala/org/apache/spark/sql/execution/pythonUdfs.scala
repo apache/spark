@@ -42,6 +42,7 @@ private[spark] case class PythonUDF(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
+    broadcastVars: JList[Broadcast[Array[Byte]]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
     children: Seq[Expression]) extends Expression with SparkLogging {
@@ -145,7 +146,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       udf.pythonIncludes,
       false,
       udf.pythonExec,
-      Seq[Broadcast[Array[Byte]]](),
+      udf.broadcastVars,
       udf.accumulator
     ).mapPartitions { iter =>
       val pickle = new Unpickler
