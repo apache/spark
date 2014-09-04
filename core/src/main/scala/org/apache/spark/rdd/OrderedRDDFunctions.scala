@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partitioner, Logging, RangePartitioner}
+import org.apache.spark.{Logging, Partitioner, RangePartitioner}
 import org.apache.spark.annotation.DeveloperApi
 
 /**
