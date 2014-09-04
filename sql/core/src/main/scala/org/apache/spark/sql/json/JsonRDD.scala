@@ -135,7 +135,7 @@ private[sql] object JsonRDD extends Logging {
     if (returnType.isDefined) {
       returnType.get
     } else {
-      // t1 or t2 is a StructType, ArrayType, or an unexpected type.
+      // t1 or t2 is a StructType, ArrayType, BooleanType, or an unexpected type.
       (t1, t2) match {
         case (other: DataType, NullType) => other
         case (NullType, other: DataType) => other
@@ -155,6 +155,7 @@ private[sql] object JsonRDD extends Logging {
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
         // TODO: We should use JsonObjectStringType to mark that values of field will be
         // strings and every string is a Json object.
+        case (BooleanType, BooleanType) => BooleanType
         case (_, _) => StringType
       }
     }
