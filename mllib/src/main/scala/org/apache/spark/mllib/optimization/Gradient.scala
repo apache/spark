@@ -164,6 +164,7 @@ class HuberRobustGradient extends Gradient {
     val diff = dot(data, weights) - label
     val loss = diff * diff
     val k = 1.345
+    
     if(diff < -k){
       axpy(-k, data, cumGradient)
     }else if(diff >= -k && diff <= k){
