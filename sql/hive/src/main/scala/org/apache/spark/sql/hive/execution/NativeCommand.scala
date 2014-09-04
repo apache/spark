@@ -32,16 +32,7 @@ case class NativeCommand(
     @transient context: HiveContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[String] = context.runSqlHive(sql)
-
-  override def execute(): RDD[Row] = {
-    if (sideEffectResult.size == 0) {
-      context.emptyResult
-    } else {
-      val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
-      context.sparkContext.parallelize(rows, 1)
-    }
-  }
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = context.runSqlHive(sql).map(Row(_))
 
   override def otherCopyArgs = context :: Nil
 }
