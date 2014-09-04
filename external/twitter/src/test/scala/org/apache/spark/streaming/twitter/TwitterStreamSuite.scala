@@ -36,16 +36,20 @@ class TwitterStreamSuite extends TestSuiteBase {
     val test2: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, None, filters)
     val test3: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, locations)
+      TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_AND_DISK_SER_2)
     val test4: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
-    val test5: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization))
-    val test6: ReceiverInputDStream[Status] =
+    val test5: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), filters)
+    val test6: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), filters, StorageLevel.MEMORY_AND_DISK_SER_2)
     val test7: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, locations)
+    val test8: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test9: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), filters, locations)
-    val test8: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+    val test10: ReceiverInputDStream[Status] = TwitterUtils.createStream(
       ssc, Some(authorization), filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // Note that actually testing the data receiving is hard as authentication keys are
