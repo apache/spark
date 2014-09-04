@@ -777,7 +777,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is more efficient than calling `repartition` and then sorting within each partition
    * because it can push the sorting down into the shuffle machinery.
    */
-  def repartitionAndSortWithinPartition(partitioner: Partitioner, comp: Comparator)
+  def repartitionAndSortWithinPartition(partitioner: Partitioner, comp: Comparator[K])
     : JavaPairRDD[K, V] = {
     implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(
