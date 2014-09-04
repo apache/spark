@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
@@ -81,11 +83,26 @@ class TaskMetrics extends Serializable {
   var inputMetrics: Option[InputMetrics] = None
 
   /**
-   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
+   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
+   * This includes read metrics aggregated over all the task's shuffle dependencies.
    */
   private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
   def shuffleReadMetrics = _shuffleReadMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating read metrics in
+   * executors.
+   */
+  private[spark] def setShuffleReadMetrics(shuffleReadMetrics: Option[ShuffleReadMetrics]) {
+    _shuffleReadMetrics = shuffleReadMetrics
+  }
+
+  /**
+   * ShuffleReadMetrics per dependency for collecting independently while task is in progress.
+   */
+  @transient private lazy val depsShuffleReadMetrics: ArrayBuffer[ShuffleReadMetrics] =
+    new ArrayBuffer[ShuffleReadMetrics]()
 
   /**
    * If this task writes to shuffle output, metrics on the written shuffle data will be collected
@@ -98,19 +115,31 @@ class TaskMetrics extends Serializable {
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 
-  /** Adds the given ShuffleReadMetrics to any existing shuffle metrics for this task. */
-  def updateShuffleReadMetrics(newMetrics: ShuffleReadMetrics) = synchronized {
-    _shuffleReadMetrics match {
-      case Some(existingMetrics) =>
-        existingMetrics.shuffleFinishTime = math.max(
-          existingMetrics.shuffleFinishTime, newMetrics.shuffleFinishTime)
-        existingMetrics.fetchWaitTime += newMetrics.fetchWaitTime
-        existingMetrics.localBlocksFetched += newMetrics.localBlocksFetched
-        existingMetrics.remoteBlocksFetched += newMetrics.remoteBlocksFetched
-        existingMetrics.remoteBytesRead += newMetrics.remoteBytesRead
-      case None =>
-        _shuffleReadMetrics = Some(newMetrics)
+  /**
+   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
+   * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each
+   * dependency, and merge these metrics before reporting them to the driver. This method returns
+   * a ShuffleReadMetrics for a dependency and registers it for merging later.
+   */
+  private [spark] def createShuffleReadMetricsForDependency(): ShuffleReadMetrics = synchronized {
+    val readMetrics = new ShuffleReadMetrics()
+    depsShuffleReadMetrics += readMetrics
+    readMetrics
+  }
+
+  /**
+   * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
+   */
+  private[spark] def updateShuffleReadMetrics() = synchronized {
+    val merged = new ShuffleReadMetrics()
+    for (depMetrics <- depsShuffleReadMetrics) {
+      merged.fetchWaitTime += depMetrics.fetchWaitTime
+      merged.localBlocksFetched += depMetrics.localBlocksFetched
+      merged.remoteBlocksFetched += depMetrics.remoteBlocksFetched
+      merged.remoteBytesRead += depMetrics.remoteBytesRead
+      merged.shuffleFinishTime = math.max(merged.shuffleFinishTime, depMetrics.shuffleFinishTime)
     }
+    _shuffleReadMetrics = Some(merged)
   }
 }
 
@@ -190,10 +219,10 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
    */
-  var shuffleBytesWritten: Long = _
+  @volatile var shuffleBytesWritten: Long = _
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  var shuffleWriteTime: Long = _
+  @volatile var shuffleWriteTime: Long = _
 }

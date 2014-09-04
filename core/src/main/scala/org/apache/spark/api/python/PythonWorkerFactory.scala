@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.python
 
-import java.lang.Runtime
 import java.io.{DataOutputStream, DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
@@ -25,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging {
@@ -68,7 +67,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       val socket = new Socket(daemonHost, daemonPort)
       val pid = new DataInputStream(socket.getInputStream).readInt()
       if (pid < 0) {
-        throw new IllegalStateException("Python daemon failed to launch worker")
+        throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
       daemonWorkers.put(socket, pid)
       socket

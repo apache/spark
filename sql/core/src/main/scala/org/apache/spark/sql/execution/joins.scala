@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.{ArrayBuffer, BitSet}
+import java.util.{HashMap => JavaHashMap}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.util.collection.CompactBuffer
 
 @DeveloperApi
 sealed abstract class BuildSide
@@ -65,7 +66,7 @@ trait HashJoin {
   def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] = {
     // TODO: Use Spark's HashMap implementation.
 
-    val hashTable = new java.util.HashMap[Row, ArrayBuffer[Row]]()
+    val hashTable = new java.util.HashMap[Row, CompactBuffer[Row]]()
     var currentRow: Row = null
 
     // Create a mapping of buildKeys -> rows
@@ -75,7 +76,7 @@ trait HashJoin {
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
         val matchList = if (existingMatchList == null) {
-          val newMatchList = new ArrayBuffer[Row]()
+          val newMatchList = new CompactBuffer[Row]()
           hashTable.put(rowKey, newMatchList)
           newMatchList
         } else {
@@ -87,11 +88,11 @@ trait HashJoin {
 
     new Iterator[Row] {
       private[this] var currentStreamedRow: Row = _
-      private[this] var currentHashMatches: ArrayBuffer[Row] = _
+      private[this] var currentHashMatches: CompactBuffer[Row] = _
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
-      private[this] val joinRow = new JoinedRow
+      private[this] val joinRow = new JoinedRow2
 
       private[this] val joinKeys = streamSideKeyGenerator()
 
@@ -137,16 +138,8 @@ trait HashJoin {
 }
 
 /**
- * Constant Value for Binary Join Node
- */
-object HashOuterJoin {
-  val DUMMY_LIST = Seq[Row](null)
-  val EMPTY_LIST = Seq[Row]()
-}
-
-/**
  * :: DeveloperApi ::
- * Performs a hash based outer join for two child relations by shuffling the data using 
+ * Performs a hash based outer join for two child relations by shuffling the data using
  * the join keys. This operator requires loading the associated partition in both side into memory.
  */
 @DeveloperApi
@@ -168,29 +161,43 @@ case class HashOuterJoin(
   override def requiredChildDistribution =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  def output = left.output ++ right.output
+  override def output = {
+    joinType match {
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case x =>
+        throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+    }
+  }
+
+  @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
+  @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
-  // iterator for performance purpose. 
+  // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
       key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
     val joinedRow = new JoinedRow()
     val rightNullRow = new GenericRow(right.output.length)
-    val boundCondition = 
+    val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
-    leftIter.iterator.flatMap { l => 
+    leftIter.iterator.flatMap { l =>
       joinedRow.withLeft(l)
       var matched = false
-      (if (!key.anyNull) rightIter.collect { case r if (boundCondition(joinedRow.withRight(r))) => 
+      (if (!key.anyNull) rightIter.collect { case r if (boundCondition(joinedRow.withRight(r))) =>
         matched = true
         joinedRow.copy
       } else {
         Nil
-      }) ++ HashOuterJoin.DUMMY_LIST.filter(_ => !matched).map( _ => {
-        // HashOuterJoin.DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-        // as we don't know whether we need to append it until finish iterating all of the 
+      }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
+        // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
+        // as we don't know whether we need to append it until finish iterating all of the
         // records in right side.
         // If we didn't get any proper row, then append a single row with empty right
         joinedRow.withRight(rightNullRow).copy
@@ -202,20 +209,20 @@ case class HashOuterJoin(
       key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
     val joinedRow = new JoinedRow()
     val leftNullRow = new GenericRow(left.output.length)
-    val boundCondition = 
+    val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
-    rightIter.iterator.flatMap { r => 
+    rightIter.iterator.flatMap { r =>
       joinedRow.withRight(r)
       var matched = false
-      (if (!key.anyNull) leftIter.collect { case l if (boundCondition(joinedRow.withLeft(l))) => 
+      (if (!key.anyNull) leftIter.collect { case l if (boundCondition(joinedRow.withLeft(l))) =>
         matched = true
         joinedRow.copy
       } else {
         Nil
-      }) ++ HashOuterJoin.DUMMY_LIST.filter(_ => !matched).map( _ => {
-        // HashOuterJoin.DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-        // as we don't know whether we need to append it until finish iterating all of the 
+      }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
+        // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
+        // as we don't know whether we need to append it until finish iterating all of the
         // records in left side.
         // If we didn't get any proper row, then append a single row with empty left.
         joinedRow.withLeft(leftNullRow).copy
@@ -228,7 +235,7 @@ case class HashOuterJoin(
     val joinedRow = new JoinedRow()
     val leftNullRow = new GenericRow(left.output.length)
     val rightNullRow = new GenericRow(right.output.length)
-    val boundCondition = 
+    val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
     if (!key.anyNull) {
@@ -238,8 +245,8 @@ case class HashOuterJoin(
       leftIter.iterator.flatMap[Row] { l =>
         joinedRow.withLeft(l)
         var matched = false
-        rightIter.zipWithIndex.collect { 
-          // 1. For those matched (satisfy the join condition) records with both sides filled, 
+        rightIter.zipWithIndex.collect {
+          // 1. For those matched (satisfy the join condition) records with both sides filled,
           //    append them directly
 
           case (r, idx) if (boundCondition(joinedRow.withRight(r)))=> {
@@ -248,11 +255,11 @@ case class HashOuterJoin(
             rightMatchedSet.add(idx)
             joinedRow.copy
           }
-        } ++ HashOuterJoin.DUMMY_LIST.filter(_ => !matched).map( _ => {
+        } ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
           // 2. For those unmatched records in left, append additional records with empty right.
 
-          // HashOuterJoin.DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-          // as we don't know whether we need to append it until finish iterating all 
+          // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
+          // as we don't know whether we need to append it until finish iterating all
           // of the records in right side.
           // If we didn't get any proper row, then append a single row with empty right.
           joinedRow.withRight(rightNullRow).copy
@@ -260,8 +267,8 @@ case class HashOuterJoin(
       } ++ rightIter.zipWithIndex.collect {
         // 3. For those unmatched records in right, append additional records with empty left.
 
-        // Re-visiting the records in right, and append additional row with empty left, if its not 
-        // in the matched set. 
+        // Re-visiting the records in right, and append additional row with empty left, if its not
+        // in the matched set.
         case (r, idx) if (!rightMatchedSet.contains(idx)) => {
           joinedRow(leftNullRow, r).copy
         }
@@ -276,18 +283,22 @@ case class HashOuterJoin(
   }
 
   private[this] def buildHashTable(
-      iter: Iterator[Row], keyGenerator: Projection): Map[Row, ArrayBuffer[Row]] = {
-    // TODO: Use Spark's HashMap implementation.
-    val hashTable = scala.collection.mutable.Map[Row, ArrayBuffer[Row]]()
+      iter: Iterator[Row], keyGenerator: Projection): JavaHashMap[Row, CompactBuffer[Row]] = {
+    val hashTable = new JavaHashMap[Row, CompactBuffer[Row]]()
     while (iter.hasNext) {
       val currentRow = iter.next()
       val rowKey = keyGenerator(currentRow)
 
-      val existingMatchList = hashTable.getOrElseUpdate(rowKey, {new ArrayBuffer[Row]()})
+      var existingMatchList = hashTable.get(rowKey)
+      if (existingMatchList == null) {
+        existingMatchList = new CompactBuffer[Row]()
+        hashTable.put(rowKey, existingMatchList)
+      }
+
       existingMatchList += currentRow.copy()
     }
-    
-    hashTable.toMap[Row, ArrayBuffer[Row]]
+
+    hashTable
   }
 
   def execute() = {
@@ -298,21 +309,22 @@ case class HashOuterJoin(
       // Build HashMap for current partition in right relation
       val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
 
-      val boundCondition = 
+      import scala.collection.JavaConversions._
+      val boundCondition =
         condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
       joinType match {
         case LeftOuter => leftHashTable.keysIterator.flatMap { key =>
-          leftOuterIterator(key, leftHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST), 
-            rightHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST))
+          leftOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
+            rightHashTable.getOrElse(key, EMPTY_LIST))
         }
         case RightOuter => rightHashTable.keysIterator.flatMap { key =>
-          rightOuterIterator(key, leftHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST), 
-            rightHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST))
+          rightOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
+            rightHashTable.getOrElse(key, EMPTY_LIST))
         }
         case FullOuter => (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
-          fullOuterIterator(key, 
-            leftHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST), 
-            rightHashTable.getOrElse(key, HashOuterJoin.EMPTY_LIST))
+          fullOuterIterator(key,
+            leftHashTable.getOrElse(key, EMPTY_LIST),
+            rightHashTable.getOrElse(key, EMPTY_LIST))
         }
         case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
       }
@@ -411,7 +423,7 @@ case class BroadcastHashJoin(
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
   @transient
-  lazy val broadcastFuture = future {
+  val broadcastFuture = future {
     sparkContext.broadcast(buildPlan.executeCollect())
   }
 
@@ -537,7 +549,7 @@ case class BroadcastNestedLoopJoin(
 
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
-      val matchedRows = new ArrayBuffer[Row]
+      val matchedRows = new CompactBuffer[Row]
       // TODO: Use Spark's BitSet.
       val includedBroadcastTuples =
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
@@ -589,20 +601,20 @@ case class BroadcastNestedLoopJoin(
     val rightNulls = new GenericMutableRow(right.output.size)
     /** Rows from broadcasted joined with nulls. */
     val broadcastRowsWithNulls: Seq[Row] = {
-      val arrBuf: collection.mutable.ArrayBuffer[Row] = collection.mutable.ArrayBuffer()
+      val buf: CompactBuffer[Row] = new CompactBuffer()
       var i = 0
       val rel = broadcastedRelation.value
       while (i < rel.length) {
         if (!allIncludedBroadcastTuples.contains(i)) {
           (joinType, buildSide) match {
-            case (RightOuter | FullOuter, BuildRight) => arrBuf += new JoinedRow(leftNulls, rel(i))
-            case (LeftOuter | FullOuter, BuildLeft) => arrBuf += new JoinedRow(rel(i), rightNulls)
+            case (RightOuter | FullOuter, BuildRight) => buf += new JoinedRow(leftNulls, rel(i))
+            case (LeftOuter | FullOuter, BuildLeft) => buf += new JoinedRow(rel(i), rightNulls)
             case _ =>
           }
         }
         i += 1
       }
-      arrBuf.toSeq
+      buf.toSeq
     }
 
     // TODO: Breaks lineage.
