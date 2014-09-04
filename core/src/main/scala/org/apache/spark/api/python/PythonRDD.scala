@@ -52,6 +52,7 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
+  val reuse_worker = conf.getBoolean("spark.python.reuse.worker", true)
 
   override def getPartitions = parent.partitions
 
@@ -63,6 +64,9 @@ private[spark] class PythonRDD(
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
     envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
+    if (reuse_worker) {
+      envVars += ("SPARK_REUSE_WORKER" -> "1")
+    }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
@@ -70,13 +74,7 @@ private[spark] class PythonRDD(
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-
-      // Cleanup the worker socket. This will also cause the Python worker to exit.
-      try {
-        worker.close()
-      } catch {
-        case e: Exception => logWarning("Failed to close worker socket", e)
-      }
+      env.releasePythonWorker(pythonExec, envVars.toMap, worker)
     }
 
     writerThread.start()
@@ -207,6 +205,7 @@ private[spark] class PythonRDD(
         dataOut.write(command)
         // Data values
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
+        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.flush()
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
@@ -216,8 +215,6 @@ private[spark] class PythonRDD(
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-      } finally {
-        Try(worker.shutdownOutput()) // kill Python worker process
       }
     }
   }

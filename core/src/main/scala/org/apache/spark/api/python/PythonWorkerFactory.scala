@@ -41,6 +41,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
   var daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
+  var idleWorkers = new mutable.Queue[Socket]()
 
   var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
@@ -51,6 +52,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   def create(): Socket = {
     if (useDaemon) {
+      if (idleWorkers.length > 0) {
+        return idleWorkers.dequeue()
+      }
       createThroughDaemon()
     } else {
       createSimpleWorker()
@@ -234,6 +238,20 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       simpleWorkers.get(worker).foreach(_.destroy())
     }
     worker.close()
+  }
+
+  def releaseWorker(worker: Socket) {
+    if (useDaemon && envVars.get("SPARK_REUSE_WORKER").isDefined) {
+        idleWorkers.enqueue(worker)
+    } else {
+      // Cleanup the worker socket. This will also cause the Python worker to exit.
+      try {
+        worker.close()
+      } catch {
+        case e: Exception =>
+          logWarning("Failed to close worker socket", e)
+      }
+    }
   }
 }
 
