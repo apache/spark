@@ -27,6 +27,7 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -97,10 +98,12 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
   val sparkListener = new SparkListener() {
-    val successfulStages = new HashSet[Int]()
-    val failedStages = new ArrayBuffer[Int]()
+    val successfulStages = new HashSet[Int]
+    val failedStages = new ArrayBuffer[Int]
+    val stageByOrderOfExecution = new ArrayBuffer[Int]
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
       val stageInfo = stageCompleted.stageInfo
+      stageByOrderOfExecution += stageInfo.stageId
       if (stageInfo.failureReason.isEmpty) {
         successfulStages += stageInfo.stageId
       } else {
@@ -229,6 +232,13 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   /** Sends JobCancelled to the DAG scheduler. */
   private def cancel(jobId: Int) {
     runEvent(JobCancelled(jobId))
+  }
+
+  test("[SPARK-3353] parent stage should have lower stage id") {
+    sparkListener.stageByOrderOfExecution.clear()
+    sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
+    assert(sparkListener.stageByOrderOfExecution.length === 2)
+    assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
   }
 
   test("zero split job") {
