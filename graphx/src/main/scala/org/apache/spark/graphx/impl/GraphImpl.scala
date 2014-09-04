@@ -139,9 +139,16 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def subgraph(
+      epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
+    : Graph[VD, ED] = {
+    subgraph(epred, vpred, false)
+  }
+
+  override def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = x => true,
       vpred: (VertexId, VD) => Boolean = (a, b) => true,
-      trim: Boolean = false): Graph[VD, ED] = {
+      updateRoutingTable: Boolean): Graph[VD, ED] = {
     vertices.cache()
     // Filter the vertices, reusing the partitioner and the index from this graph
     val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
@@ -149,36 +156,30 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // on both src and dst vertices
     replicatedVertexView.upgrade(vertices, true, true)
     val newEdges = replicatedVertexView.edges.filter(epred, vpred)
-    if(trim) {
-      val trimmedVertex = newVerts.withEdges(newEdges)
-      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
-    } else {
-      new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
-    }
+    rebuildRoutingTable(newVerts, newEdges, updateRoutingTable)
+  }
+
+  override def mask[VD2: ClassTag, ED2: ClassTag](
+      other: Graph[VD2, ED2]) : Graph[VD, ED] = {
+    mask(other, false)
   }
 
   override def mask[VD2: ClassTag, ED2: ClassTag] (
       other: Graph[VD2, ED2],
-      trim: Boolean = false): Graph[VD, ED] = {
+      updateRoutingTable: Boolean): Graph[VD, ED] = {
     val newVerts = vertices.innerJoin(other.vertices) { (vid, v, w) => v }
     val newEdges = replicatedVertexView.edges.innerJoin(other.edges) { (src, dst, v, w) => v }
-    if(trim) {
-      val trimmedVertex = newVerts.withEdges(newEdges)
-      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
-    } else {
-      new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
-    }
+    rebuildRoutingTable(newVerts, newEdges, updateRoutingTable)
   }
 
-  override def groupEdges(merge: (ED, ED) => ED, trim: Boolean = false): Graph[VD, ED] = {
+  override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
+    groupEdges(merge, false)
+  }
+
+  override def groupEdges(merge: (ED, ED) => ED, updateRoutingTable: Boolean): Graph[VD, ED] = {
     val newEdges = replicatedVertexView.edges.mapEdgePartitions(
       (pid, part) => part.groupEdges(merge))
-    if(trim) {
-      val trimmedVertex = vertices.withEdges(newEdges)
-      new GraphImpl(trimmedVertex, replicatedVertexView.withEdges(newEdges))
-    } else {
-      new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
-    }
+    rebuildRoutingTable(vertices, newEdges, updateRoutingTable)
   }
 
   // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,6 +277,19 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       case _: ClassNotFoundException => true // if we don't know, be conservative
     }
   }
+
+  private def rebuildRoutingTable(
+      vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED, VD],
+      updateRoutingTable: Boolean): Graph[VD, ED] = {
+    if(updateRoutingTable) {
+      val newVertex = vertices.withEdges(edges)
+      new GraphImpl(newVertex, replicatedVertexView.withEdges(edges))
+    } else {
+      new GraphImpl(vertices, replicatedVertexView.withEdges(edges))
+    }
+  }
+
 } // end of class GraphImpl
 
 
