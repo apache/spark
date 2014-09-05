@@ -84,7 +84,7 @@ object HuberRobustRegression extends App {
     sys.exit(1)
   }
 
-// If no parameter set SimpleUpdater will be used.
+  // If no parameter set SimpleUpdater will be used.
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"HuberRobustRegression with $params")
     val sc = new SparkContext(conf)
