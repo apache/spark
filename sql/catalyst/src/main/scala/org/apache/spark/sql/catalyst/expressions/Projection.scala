@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -137,6 +138,15 @@ class JoinedRow extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  def getDecimal(i: Int): BigDecimal =
+    if (i < row1.size) row1.getDecimal(i) else row2.getDecimal(i - row1.size)
+
+  def getTimestamp(i: Int): Timestamp =
+    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
+
+  def getBinary(i: Int): Array[Byte] =
+    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -226,6 +236,15 @@ class JoinedRow2 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  def getDecimal(i: Int): BigDecimal =
+    if (i < row1.size) row1.getDecimal(i) else row2.getDecimal(i - row1.size)
+
+  def getTimestamp(i: Int): Timestamp =
+    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
+
+  def getBinary(i: Int): Array[Byte] =
+    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -308,6 +327,15 @@ class JoinedRow3 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+
+  def getDecimal(i: Int): BigDecimal =
+    if (i < row1.size) row1.getDecimal(i) else row2.getDecimal(i - row1.size)
+
+  def getTimestamp(i: Int): Timestamp =
+    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
+
+  def getBinary(i: Int): Array[Byte] =
+    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
 
   def copy() = {
     val totalSize = row1.size + row2.size
@@ -392,6 +420,15 @@ class JoinedRow4 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  def getDecimal(i: Int): BigDecimal =
+    if (i < row1.size) row1.getDecimal(i) else row2.getDecimal(i - row1.size)
+
+  def getTimestamp(i: Int): Timestamp =
+    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
+
+  def getBinary(i: Int): Array[Byte] =
+    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -474,6 +511,15 @@ class JoinedRow5 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+
+  def getDecimal(i: Int): BigDecimal =
+    if (i < row1.size) row1.getDecimal(i) else row2.getDecimal(i - row1.size)
+
+  def getTimestamp(i: Int): Timestamp =
+    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
+
+  def getBinary(i: Int): Array[Byte] =
+    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
 
   def copy() = {
     val totalSize = row1.size + row2.size
