@@ -22,7 +22,7 @@ import scala.collection.{Map, Set}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.records._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler.SplitInfo
 
 /**
@@ -45,7 +45,8 @@ trait YarnRMClient {
       sparkConf: SparkConf,
       preferredNodeLocations: Map[String, Set[SplitInfo]],
       uiAddress: String,
-      uiHistoryAddress: String): YarnAllocator
+      uiHistoryAddress: String,
+      securityMgr: SecurityManager): YarnAllocator
 
   /**
    * Shuts down the AM. Guaranteed to only be called once.
