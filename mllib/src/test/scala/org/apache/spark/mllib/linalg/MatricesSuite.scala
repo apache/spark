@@ -36,4 +36,45 @@ class MatricesSuite extends FunSuite {
       Matrices.dense(3, 2, Array(0.0, 1.0, 2.0))
     }
   }
+
+  test("sparse matrix construction") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val colIndices = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val mat = Matrices.sparse(m, n, colIndices, rowIndices, values).asInstanceOf[SparseMatrix]
+    assert(mat.numRows === m)
+    assert(mat.numCols === n)
+    assert(mat.values.eq(values), "should not copy data")
+    assert(mat.toArray.eq(values), "toArray should not copy data")
+  }
+
+  test("sparse matrix construction with wrong number of elements") {
+    intercept[RuntimeException] {
+      Matrices.sparse(3, 2, Array(0, 1), Array(1, 2, 1), Array(0.0, 1.0, 2.0))
+    }
+
+    intercept[RuntimeException] {
+      Matrices.sparse(3, 2, Array(0, 1, 2), Array(1, 2), Array(0.0, 1.0, 2.0))
+    }
+  }
+
+  test("matrix copies are deep copies") {
+    val m = 3
+    val n = 2
+
+    val denseMat = Matrices.dense(m, n, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    val denseCopy = denseMat.copy
+
+    assert(!denseMat.toArray.eq(denseCopy.toArray))
+
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val colIndices = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val sparseMat = Matrices.sparse(m, n, colIndices, rowIndices, values)
+    val sparseCopy = sparseMat.copy
+
+    assert(!sparseMat.toArray.eq(sparseCopy.toArray))
+  }
 }
