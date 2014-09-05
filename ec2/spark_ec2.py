@@ -104,6 +104,9 @@ def parse_args():
         "--ebs-vol-size", metavar="SIZE", type="int", default=0,
         help="Size (in GB) of each EBS volume.")
     parser.add_option(
+        "--ebs-vol-type", default="standard",
+        help="EBS volume type (e.g. 'gp2', 'io1', 'standard').")
+    parser.add_option(
         "--ebs-vol-num", type="int", default=1,
         help="Number of EBS volumes to attach to each node as /vol[x]. " +
              "The volumes will be deleted when the instances terminate. " +
@@ -360,7 +363,7 @@ def launch_cluster(conn, opts, cluster_name):
         for i in range(opts.ebs_vol_num):
             device = EBSBlockDeviceType()
             device.size = opts.ebs_vol_size
-            device.volume_type="gp2"
+            device.volume_type=opts.ebs_vol_type
             device.delete_on_termination = True
             block_map["/dev/sd" + chr(ord('s') + i)] = device
 
