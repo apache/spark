@@ -26,7 +26,6 @@ import scala.util.Try
 
 import akka.actor._
 import akka.remote._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
@@ -107,8 +106,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
-    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, 30)
+    // Use higher priority than FileSystem.
+    ShutdownHookManager.get().addShutdownHook(cleanupHook, FileSystem.SHUTDOWN_HOOK_PRIORITY - 1)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
