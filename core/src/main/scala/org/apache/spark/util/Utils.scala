@@ -322,7 +322,7 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchCachedFile(
+  def fetchFile(
       url: String,
       targetDir: File,
       conf: SparkConf,
@@ -333,8 +333,8 @@ private[spark] object Utils extends Logging {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     if (useCache) {
-      val cachedFileName = fileName + timestamp
-      val lockFileName = fileName + timestamp + "_lock"
+      val cachedFileName = url.hashCode + timestamp + "_cach"
+      val lockFileName = url.hashCode + timestamp + "_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
       val raf = new RandomAccessFile(lockFile, "rw")
@@ -342,10 +342,10 @@ private[spark] object Utils extends Logging {
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type(mandatory or advisory).
       val lock = raf.getChannel().lock()
-      val cachedFile = new File(SparkFiles.getRootDirectory + "../", cachedFileName)
+      val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          fetchFile(url, localDir, conf, securityMgr, hadoopConf)
+          doFetchFile(url, localDir, conf, securityMgr, hadoopConf)
           Files.move(new File(localDir, fileName), cachedFile)
         }
       } finally {
@@ -353,7 +353,7 @@ private[spark] object Utils extends Logging {
       }
       Files.copy(cachedFile, targetFile)
     } else {
-      fetchFile(url, targetDir, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, conf, securityMgr, hadoopConf)
     }
     
     // Decompress the file if it's a .tar or .tar.gz
@@ -375,8 +375,12 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  private def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    hadoopConf: Configuration) {
+  private def doFetchFile(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
