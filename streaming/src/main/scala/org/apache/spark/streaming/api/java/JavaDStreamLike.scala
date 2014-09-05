@@ -50,8 +50,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Print the first ten elements of each RDD generated in this DStream. This is an output
    * operator, so this DStream will be registered as an output stream and there materialized.
    */
-  def print(): Unit = {
-    dstream.print()
+  def print(num: Int = 10): Unit = {
+    dstream.print(num)
   }
 
   /**
