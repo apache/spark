@@ -19,7 +19,6 @@ package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.regression.HuberRobustRegressionWithLBFGS
 import org.apache.spark.mllib.util.MLUtils
@@ -85,6 +84,7 @@ object HuberRobustRegression extends App {
     sys.exit(1)
   }
 
+// If no parameter set SimpleUpdater will be used.
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"HuberRobustRegression with $params")
     val sc = new SparkContext(conf)
