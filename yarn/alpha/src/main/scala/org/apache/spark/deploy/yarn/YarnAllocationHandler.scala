@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
 
 import org.apache.hadoop.conf.Configuration
@@ -41,8 +41,9 @@ private[yarn] class YarnAllocationHandler(
     resourceManager: AMRMProtocol,
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes) {
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
+    securityMgr: SecurityManager)
+  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
 
   private val lastResponseId = new AtomicInteger()
   private val releaseList: CopyOnWriteArrayList[ContainerId] = new CopyOnWriteArrayList()

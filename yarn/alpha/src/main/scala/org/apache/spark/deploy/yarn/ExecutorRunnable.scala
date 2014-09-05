@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, Logging}
 
 
 class ExecutorRunnable(
@@ -46,7 +46,8 @@ class ExecutorRunnable(
     slaveId: String,
     hostname: String,
     executorMemory: Int,
-    executorCores: Int)
+    executorCores: Int,
+    securityMgr: SecurityManager)
   extends Runnable with ExecutorRunnableUtil with Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
@@ -85,6 +86,8 @@ class ExecutorRunnable(
       localResources)
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
+
+    ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
     // Send the start request to the ContainerManager
     val startReq = Records.newRecord(classOf[StartContainerRequest])
