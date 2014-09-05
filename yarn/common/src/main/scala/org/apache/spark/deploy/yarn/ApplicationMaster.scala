@@ -21,9 +21,6 @@ import java.io.IOException
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
-import scala.util.Try
-
 import akka.actor._
 import akka.remote._
 import org.apache.hadoop.fs.{FileSystem, Path}
