@@ -54,6 +54,7 @@ from copy_reg import _extension_registry, _inverted_registry, _extension_cache
 import new
 import dis
 import traceback
+from pyspark.conf import SparkConf
 
 #relevant opcodes
 STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
@@ -115,6 +116,11 @@ printMemoization = False
 
 useForcedImports = True #Should I use forced imports for tracking?
 
+# These are special default configs for PySpark, they will overwrite
+# the default ones for Spark if they are not configured by user.
+DEFAULT_CONFIGS = {
+    "spark.cloudpickle.max_transmit_data": 1000000
+}
 
 
 class CloudPickler(pickle.Pickler):
@@ -127,6 +133,9 @@ class CloudPickler(pickle.Pickler):
         pickle.Pickler.__init__(self,file,protocol)
         self.modules = set() #set of modules needed to depickle
         self.globals_ref = {}  # map ids to dictionary. used to ensure that functions can share global env
+        self._conf = SparkConf()
+        for key, value in DEFAULT_CONFIGS.items():
+            self._conf.setIfMissing(key, value)
 
     def dump(self, obj):
         # note: not thread safe
@@ -657,7 +666,6 @@ class CloudPickler(pickle.Pickler):
     def save_file(self, obj):
         """Save a file"""
         import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
-        from ..transport.adapter import SerializingAdapter
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
@@ -691,13 +699,13 @@ class CloudPickler(pickle.Pickler):
             tmpfile.close()
             if tst != '':
                 raise pickle.PicklingError("Cannot pickle file %s as it does not appear to map to a physical, real file" % name)
-        elif fsize > SerializingAdapter.max_transmit_data:
-            raise pickle.PicklingError("Cannot pickle file %s as it exceeds cloudconf.py's max_transmit_data of %d" %
-                                       (name,SerializingAdapter.max_transmit_data))
+        elif fsize > self._conf.get("max_transmit_data"):
+            raise pickle.PicklingError("Cannot pickle file %s as it exceeds spark.cloudpickle.max_transmit_data of %d" %
+                                       (name,self._conf.get("max_transmit_data")))
         else:
             try:
                 tmpfile = file(name)
-                contents = tmpfile.read(SerializingAdapter.max_transmit_data)
+                contents = tmpfile.read(self._conf.get("max_transmit_data"))
                 tmpfile.close()
             except IOError:
                 raise pickle.PicklingError("Cannot pickle file %s as it cannot be read" % name)
