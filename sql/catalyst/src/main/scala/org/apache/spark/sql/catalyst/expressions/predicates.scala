@@ -271,7 +271,7 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     }
   }
 
-  /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
+  /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
     val len = branchesArr.length
     var i = 0
