@@ -898,7 +898,7 @@ def _create_cls(dataType):
     return Row
 
 
-class SQLContext:
+class SQLContext(object):
 
     """Main entry point for SparkSQL functionality.
 
