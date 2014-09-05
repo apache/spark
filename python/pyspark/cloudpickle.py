@@ -52,20 +52,11 @@ from functools import partial
 import itertools
 from copy_reg import _extension_registry, _inverted_registry, _extension_cache
 import new
-import dis
 import traceback
 import platform
 
 PyImp = platform.python_implementation()
 
-#relevant opcodes
-STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
-DELETE_GLOBAL = chr(dis.opname.index('DELETE_GLOBAL'))
-LOAD_GLOBAL = chr(dis.opname.index('LOAD_GLOBAL'))
-GLOBAL_OPS = [STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL]
-
-HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
-EXTENDED_ARG = chr(dis.EXTENDED_ARG)
 
 import logging
 cloudLog = logging.getLogger("Cloud.Transport")
@@ -313,31 +304,16 @@ class CloudPickler(pickle.Pickler):
         write(pickle.REDUCE)  # applies _fill_function on the tuple
 
     @staticmethod
-    def extract_code_globals(co):
+    def extract_code_globals(code):
         """
         Find all globals names read or written to by codeblock co
         """
-        code = co.co_code
-        names = co.co_names
-        out_names = set()
-
-        n = len(code)
-        i = 0
-        extended_arg = 0
-        while i < n:
-            op = code[i]
-
-            i = i+1
-            if op >= HAVE_ARGUMENT:
-                oparg = ord(code[i]) + ord(code[i+1])*256 + extended_arg
-                extended_arg = 0
-                i = i+2
-                if op == EXTENDED_ARG:
-                    extended_arg = oparg*65536L
-                if op in GLOBAL_OPS:
-                    out_names.add(names[oparg])
-        #print 'extracted', out_names, ' from ', names
-        return out_names
+        names = set(code.co_names)
+        if code.co_consts:   # see if nested function have any global refs
+            for const in code.co_consts:
+                if type(const) is types.CodeType:
+                    names |= CloudPickler.extract_code_globals(const)
+        return names
 
     def extract_func_data(self, func):
         """
@@ -348,10 +324,7 @@ class CloudPickler(pickle.Pickler):
 
         # extract all global ref's
         func_global_refs = CloudPickler.extract_code_globals(code)
-        if code.co_consts:   # see if nested function have any global refs
-            for const in code.co_consts:
-                if type(const) is types.CodeType and const.co_names:
-                    func_global_refs = func_global_refs.union( CloudPickler.extract_code_globals(const))
+
         # process all variables referenced by global environment
         f_globals = {}
         for var in func_global_refs:
@@ -663,7 +636,6 @@ class CloudPickler(pickle.Pickler):
     def save_file(self, obj):
         """Save a file"""
         import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
-        from ..transport.adapter import SerializingAdapter
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
@@ -697,13 +669,10 @@ class CloudPickler(pickle.Pickler):
             tmpfile.close()
             if tst != '':
                 raise pickle.PicklingError("Cannot pickle file %s as it does not appear to map to a physical, real file" % name)
-        elif fsize > SerializingAdapter.max_transmit_data:
-            raise pickle.PicklingError("Cannot pickle file %s as it exceeds cloudconf.py's max_transmit_data of %d" %
-                                       (name,SerializingAdapter.max_transmit_data))
         else:
             try:
                 tmpfile = file(name)
-                contents = tmpfile.read(SerializingAdapter.max_transmit_data)
+                contents = tmpfile.read()
                 tmpfile.close()
             except IOError:
                 raise pickle.PicklingError("Cannot pickle file %s as it cannot be read" % name)
