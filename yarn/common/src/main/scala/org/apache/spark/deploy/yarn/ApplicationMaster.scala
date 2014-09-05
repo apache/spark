@@ -33,10 +33,10 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{SparkHadoopUtil, SparkSubmit}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{AddWebUIFilter}
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 /**
@@ -349,7 +349,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       driverHost,
       driverPort.toString,
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
+    val clientUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+      SparkEnv.yarnClientActorSystemName,
+      driverHost,
+      "8888",
+      SparkSubmit.YARN_CLIENT_ACTOR_NAME)
+    actorSystem.actorOf(Props(new MonitorActor(driverUrl, clientUrl)), name = "YarnAM")
   }
 
   private def checkNumExecutorsFailed() = {
@@ -418,26 +423,36 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   // Actor used to monitor the driver when running in client deploy mode.
-  private class MonitorActor(driverUrl: String) extends Actor {
+  private class MonitorActor(driverUrl: String, clientUrl: String) extends Actor {
 
     var driver: ActorSelection = _
+    var client: ActorSelection = _
 
     override def preStart() = {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorSelection(driverUrl)
+      client = context.actorSelection(clientUrl)
+      client ! "handshake"
       // Send a hello message to establish the connection, after which
       // we can monitor Lifecycle Events.
-      driver ! "Hello"
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+//      driver ! "Hello"
+//      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
     override def receive = {
-      case x: DisassociatedEvent =>
-        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        finish(FinalApplicationStatus.SUCCEEDED)
+//      case x: DisassociatedEvent =>
+//        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
+//        finish(FinalApplicationStatus.SUCCEEDED)
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
+      case "failure" => {
+        finish(FinalApplicationStatus.FAILED)
+      }
+      case "succeeded" => {
+        finish(FinalApplicationStatus.SUCCEEDED)
+      }
+
     }
 
   }

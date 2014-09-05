@@ -21,10 +21,14 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.URL
 
+import akka.actor._
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.executor.ExecutorURLClassLoader
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
+
 
 /**
  * Main gateway of launching a Spark application.
@@ -33,6 +37,8 @@ import org.apache.spark.util.Utils
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
 object SparkSubmit {
+
+  val YARN_CLIENT_ACTOR_NAME = "YARN_CLIENT"
 
   // Cluster managers
   private val YARN = 1
@@ -59,6 +65,8 @@ object SparkSubmit {
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
   private[spark] var printStream: PrintStream = System.err
+  @volatile private[spark] var monitorActor: ActorRef = _
+  private[spark] var actorSystem: ActorSystem = _
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
   private[spark] def printErrorAndExit(str: String) = {
     printStream.println("Error: " + str)
@@ -105,6 +113,21 @@ object SparkSubmit {
       case "client" | null => CLIENT
       case "cluster" => CLUSTER
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
+    }
+
+    if (deployMode == CLIENT) {
+      /**
+       * Currently, SparkConf and SecurityManager is only used for
+       * ActorSystem creation in SparkSubmit.
+       */
+      val conf = new SparkConf
+      val securityMgr = new SecurityManager(conf)
+      actorSystem = AkkaUtils.createActorSystem(
+        SparkEnv.yarnClientActorSystemName,
+        Utils.localHostName, 8888,
+        conf, securityMgr)._1
+      actorSystem.actorOf(
+        Props(new YarnClientActor), name = YARN_CLIENT_ACTOR_NAME)
     }
 
     // Because "yarn-cluster" and "yarn-client" encapsulate both the master
@@ -326,10 +349,17 @@ object SparkSubmit {
 
     try {
       mainMethod.invoke(null, childArgs.toArray)
+      monitorActor ! "succeeded"
     } catch {
       case e: InvocationTargetException => e.getCause match {
-        case cause: Throwable => throw cause
-        case null => throw e
+        case cause: Throwable => {
+          monitorActor ! "failure"
+          throw cause
+        }
+        case null => {
+          monitorActor ! "failure"
+          throw e
+        }
       }
     }
   }
@@ -384,6 +414,14 @@ object SparkSubmit {
                       .mkString(",")
     if (merged == "") null else merged
   }
+
+   private class YarnClientActor extends Actor {
+
+     def receive = {
+       case "handshake" =>
+         monitorActor = sender
+     }
+   }
 }
 
 /**
