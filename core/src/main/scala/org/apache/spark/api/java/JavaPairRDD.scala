@@ -765,9 +765,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is more efficient than calling `repartition` and then sorting within each partition
    * because it can push the sorting down into the shuffle machinery.
    */
-  def repartitionAndSortWithinPartition(partitioner: Partitioner): JavaPairRDD[K, V] = {
+  def repartitionAndSortWithinPartitions(partitioner: Partitioner): JavaPairRDD[K, V] = {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
-    repartitionAndSortWithinPartition(partitioner, comp)
+    repartitionAndSortWithinPartitions(partitioner, comp)
   }
 
   /**
@@ -777,11 +777,11 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is more efficient than calling `repartition` and then sorting within each partition
    * because it can push the sorting down into the shuffle machinery.
    */
-  def repartitionAndSortWithinPartition(partitioner: Partitioner, comp: Comparator[K])
+  def repartitionAndSortWithinPartitions(partitioner: Partitioner, comp: Comparator[K])
     : JavaPairRDD[K, V] = {
     implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(
-      new OrderedRDDFunctions[K, V, (K, V)](rdd).repartitionAndSortWithinPartition(partitioner))
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).repartitionAndSortWithinPartitions(partitioner))
   }
 
   /**

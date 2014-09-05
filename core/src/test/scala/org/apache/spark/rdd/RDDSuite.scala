@@ -690,7 +690,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       def getPartition(key: Any): Int = key.asInstanceOf[Int] % 2
     }
 
-    val repartitioned = data.repartitionAndSortWithinPartition(partitioner)
+    val repartitioned = data.repartitionAndSortWithinPartitions(partitioner)
     val partitions = repartitioned.glom().collect()
     assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
     assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
