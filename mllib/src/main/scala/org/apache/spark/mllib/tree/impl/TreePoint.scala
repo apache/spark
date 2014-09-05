@@ -73,8 +73,9 @@ private[tree] object TreePoint {
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
-      arr(featureIndex) = findBin(featureIndex, labeledPoint, metadata.isContinuous(featureIndex),
-        metadata.isUnordered(featureIndex), bins, metadata.featureArity)
+      val featureArity = metadata.featureArity.getOrElse(featureIndex, 0)
+      arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity,
+        metadata.isUnordered(featureIndex), bins)
       featureIndex += 1
     }
 
@@ -84,17 +85,16 @@ private[tree] object TreePoint {
   /**
    * Find bin for one (labeledPoint, feature).
    *
+   * @param featureArity  0 for continuous features; number of categories for categorical features.
    * @param isUnorderedFeature  (only applies if feature is categorical)
    * @param bins   Bins for features, of size (numFeatures, numBins).
-   * @param categoricalFeaturesInfo  Map over categorical features: feature index --> feature arity
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
-      isFeatureContinuous: Boolean,
+      featureArity: Int,
       isUnorderedFeature: Boolean,
-      bins: Array[Array[Bin]],
-      categoricalFeaturesInfo: Map[Int, Int]): Int = {
+      bins: Array[Array[Bin]]): Int = {
 
     /**
      * Binary search helper method for continuous feature.
@@ -120,7 +120,7 @@ private[tree] object TreePoint {
       -1
     }
 
-    if (isFeatureContinuous) {
+    if (featureArity == 0) {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {
@@ -131,13 +131,12 @@ private[tree] object TreePoint {
       binIndex
     } else {
       // Categorical feature bins are indexed by feature values.
-      val featureCategories = categoricalFeaturesInfo(featureIndex)
       val featureValue = labeledPoint.features(featureIndex)
-      if (featureValue < 0 || featureValue >= featureCategories) {
+      if (featureValue < 0 || featureValue >= featureArity) {
         throw new IllegalArgumentException(
           s"DecisionTree given invalid data:" +
             s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureCategories - 1}," +
+            s" {0,...,${featureArity - 1}," +
             s" but a data point gives it value $featureValue.\n" +
             "  Bad data point: " + labeledPoint.toString)
       }

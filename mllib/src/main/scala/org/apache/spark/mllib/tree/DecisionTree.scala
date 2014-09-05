@@ -572,7 +572,7 @@ object DecisionTree extends Serializable with Logging {
     val label = treePoint.label
     val nodeOffset = agg.getNodeOffset(nodeIndex)
     // Iterate over all features.
-    val numFeatures = treePoint.binnedFeatures.size
+    val numFeatures = agg.numFeatures
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       val binIndex = treePoint.binnedFeatures(featureIndex)
