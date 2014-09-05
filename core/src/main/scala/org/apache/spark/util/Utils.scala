@@ -863,7 +863,7 @@ private[spark] object Utils extends Logging {
   private val SPARK_STREAMING_CLASS_REGEX = """^org\.apache\.spark""".r
   private val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
 
-  private def defaultRegex(className: String): Boolean = {
+  private def defaultRegexFunc(className: String): Boolean = {
     SPARK_CLASS_REGEX.findFirstIn(className).isDefined ||
     SCALA_CLASS_REGEX.findFirstIn(className).isDefined
   }
@@ -879,7 +879,7 @@ private[spark] object Utils extends Logging {
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSite(regexFunc: String => Boolean = defaultRegex(_)): CallSite = {
+  def getCallSite(regexFunc: String => Boolean = defaultRegexFunc(_)): CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot { ste:StackTraceElement =>
         // When running under some profilers, the current stack trace might contain some bogus
