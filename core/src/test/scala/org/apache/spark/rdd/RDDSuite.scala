@@ -865,6 +865,25 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors6.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 3)
   }
 
+  test("case class in distinct") {
+    val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4).map(i => Item(i)), 2)
+    val correct = Array(1, 2, 3, 4).map(i => Item(i))
+    val actual = dups.distinct()
+    assert(actual.count() === 4)
+    assert(actual.collect().sortBy(k => k.i) === correct)
+  }
+
+  test("case class in groupByKey") {
+    val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4).map(i => (Item(i),i)), 2)
+    val correct = Array((Item(1), Seq(1, 1)),
+                        (Item(2), Seq(2, 2)),
+                        (Item(3), Seq(3, 3)),
+                        (Item(4), Seq(4, 4)))
+    val actual = dups.groupByKey()
+    assert(actual.count() === 4)
+    assert(actual.collect().sortBy(k => k._1.i) === correct)
+  }
+
   /** A contrived RDD that allows the manual addition of dependencies after creation. */
   private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
     private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
