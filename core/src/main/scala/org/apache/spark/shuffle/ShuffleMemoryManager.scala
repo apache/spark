@@ -93,14 +93,16 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   }
 
   /** Release numBytes bytes for the current thread. */
-  def release(numBytes: Long): Unit = synchronized {
-    val threadId = Thread.currentThread().getId
-    val curMem = threadMemory.getOrElse(threadId, 0L)
+  def release(numBytes: Long): Unit = release(numBytes, Thread.currentThread().getId)
+
+  /** Release numBytes bytes for the specific thread. */
+  def release(numBytes: Long, tid: Long): Unit = synchronized {
+    val curMem = threadMemory.getOrElse(tid, 0L)
     if (curMem < numBytes) {
       throw new SparkException(
         s"Internal error: release called on ${numBytes} bytes but thread only has ${curMem}")
     }
-    threadMemory(threadId) -= numBytes
+    threadMemory(tid) -= numBytes
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
 
