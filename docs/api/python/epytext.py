@@ -13,7 +13,8 @@ RULES = (
     (r"L{([\w.()]+)}", r":class:`\1`"),
     (r"[LC]{(\w+\.\w+)\(\)}", r":func:`\1`"),
     (r"C{([\w.()]+)}", r":class:`\1`"),
-    ('pyspark.rdd.RDD', 'RDD')
+    (r"[IBCM]{(.+)}", r"`\1`"),
+    ('pyspark.rdd.RDD', 'RDD'),
 )
 
 def _convert_epytext(line):
