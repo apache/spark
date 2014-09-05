@@ -105,7 +105,7 @@ def parse_args():
         help="Size (in GB) of each EBS volume.")
     parser.add_option(
         "--ebs-vol-type", default="standard",
-        help="EBS volume type (e.g. 'gp2', 'io1', 'standard').")
+        help="EBS volume type (e.g. 'gp2', 'standard').")
     parser.add_option(
         "--ebs-vol-num", type="int", default=1,
         help="Number of EBS volumes to attach to each node as /vol[x]. " +
