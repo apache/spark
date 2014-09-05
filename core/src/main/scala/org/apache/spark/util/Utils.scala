@@ -34,6 +34,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -54,11 +55,6 @@ private[spark] object Utils extends Logging {
 
   private[spark] val CALL_SITE_SHORT: String = "callSite.short"
   private[spark] val CALL_SITE_LONG: String = "callSite.long"
-
-  def sparkBin(sparkHome: String, which: String): File = {
-    val suffix = if (isWindows) ".cmd" else ""
-    new File(sparkHome + File.separator + "bin", which + suffix)
-  }
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -163,30 +159,6 @@ private[spark] object Utils extends Logging {
       bb.get(bbval)
       out.write(bbval)
     }
-  }
-
-  def isAlpha(c: Char): Boolean = {
-    (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-  }
-
-  /** Split a string into words at non-alphabetic characters */
-  def splitWords(s: String): Seq[String] = {
-    val buf = new ArrayBuffer[String]
-    var i = 0
-    while (i < s.length) {
-      var j = i
-      while (j < s.length && isAlpha(s.charAt(j))) {
-        j += 1
-      }
-      if (j > i) {
-        buf += s.substring(i, j)
-      }
-      i = j
-      while (i < s.length && !isAlpha(s.charAt(i))) {
-        i += 1
-      }
-    }
-    buf
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
@@ -350,7 +322,8 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager) {
+  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
+    hadoopConf: Configuration) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
@@ -422,7 +395,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val fs = getHadoopFileSystem(uri)
+        val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -834,14 +807,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a command in the current working directory, throwing an exception if it completes
-   * with an exit code other than 0.
-   */
-  def execute(command: Seq[String]) {
-    execute(command, new File("."))
-  }
-
-  /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
   def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
@@ -893,19 +858,31 @@ private[spark] object Utils extends Logging {
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
-  private val SPARK_CLASS_REGEX = """^org\.apache\.spark""".r
-  private val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
+  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
   private val SCALA_CLASS_REGEX = """^scala""".r
+  private val SPARK_STREAMING_CLASS_REGEX = """^org\.apache\.spark""".r
+  private val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
+
+  private def defaultRegex(className: String): Boolean = {
+    SPARK_CLASS_REGEX.findFirstIn(className).isDefined ||
+    SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+  }
+
+  def streamingRegexFunc(className: String): Boolean = {
+    (SPARK_STREAMING_CLASS_REGEX.findFirstIn(className).isDefined &&
+    !SPARK_EXAMPLES_CLASS_REGEX.findFirstIn(className).isDefined) ||
+    SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSite: CallSite = {
+  def getCallSite(regexFunc: String => Boolean = defaultRegex(_)): CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot { ste:StackTraceElement => 
-        // When running under some profilers, the current stack trace might contain some bogus 
+      .filterNot { ste:StackTraceElement =>
+        // When running under some profilers, the current stack trace might contain some bogus
         // frames. This is intended to ensure that we don't crash in these situations by
         // ignoring any frames that we can't examine.
         (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
@@ -923,9 +900,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (insideSpark) {
-        if ((SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined &&
-            !SPARK_EXAMPLES_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) ||
-            SCALA_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
+        if (regexFunc(el.getClassName)) {
             lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
@@ -1223,15 +1198,15 @@ private[spark] object Utils extends Logging {
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: URI): FileSystem = {
-    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  def getHadoopFileSystem(path: URI, conf: Configuration): FileSystem = {
+    FileSystem.get(path, conf)
   }
 
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: String): FileSystem = {
-    getHadoopFileSystem(new URI(path))
+  def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
+    getHadoopFileSystem(new URI(path), conf)
   }
 
   /**
@@ -1308,7 +1283,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** 
+  /**
    * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.

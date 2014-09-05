@@ -46,12 +46,15 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().mapPartitions { iter =>
-          @transient val hashExpressions =
-            newMutableProjection(expressions, child.output)()
-
           if (sortBasedShuffleOn) {
+            @transient val hashExpressions =
+              newProjection(expressions, child.output)
+
             iter.map(r => (hashExpressions(r), r.copy()))
           } else {
+            @transient val hashExpressions =
+              newMutableProjection(expressions, child.output)()
+
             val mutablePair = new MutablePair[Row, Row]()
             iter.map(r => mutablePair.update(hashExpressions(r), r))
           }

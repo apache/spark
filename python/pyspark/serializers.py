@@ -409,7 +409,7 @@ class AutoSerializer(FramedSerializer):
 
 class CompressedSerializer(FramedSerializer):
     """
-    compress the serialized data
+    Compress the serialized data
     """
 
     def __init__(self, serializer):

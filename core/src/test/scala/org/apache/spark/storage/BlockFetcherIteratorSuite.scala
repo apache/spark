@@ -41,7 +41,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val blockManager = mock(classOf[BlockManager])
     val connManager = mock(classOf[ConnectionManager])
     doReturn(connManager).when(blockManager).connectionManager
-    doReturn(BlockManagerId("test-client", "test-client", 1, 0)).when(blockManager).blockManagerId
+    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
 
     doReturn((48 * 1024 * 1024).asInstanceOf[Long]).when(blockManager).maxBytesInFlight
 
@@ -60,13 +60,13 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     }
 
     // 3rd block is going to fail
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(0)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(1)), any())
-    doAnswer(answer).when(blockManager).getLocalFromDisk(meq(blIds(2)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(3)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(4)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(0)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(1)), any())
+    doAnswer(answer).when(blockManager).getLocalShuffleFromDisk(meq(blIds(2)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(3)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(4)), any())
 
-    val bmId = BlockManagerId("test-client", "test-client",1 , 0)
+    val bmId = BlockManagerId("test-client", "test-client", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
@@ -76,20 +76,24 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 
     iterator.initialize()
 
-    // 3rd getLocalFromDisk invocation should be failed
-    verify(blockManager, times(3)).getLocalFromDisk(any(), any())
+    // Without exhausting the iterator, the iterator should be lazy and not call getLocalShuffleFromDisk.
+    verify(blockManager, times(0)).getLocalShuffleFromDisk(any(), any())
 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
     // the 2nd element of the tuple returned by iterator.next should be defined when fetching successfully
-    assert(iterator.next._2.isDefined, "1st element should be defined but is not actually defined") 
+    assert(iterator.next()._2.isDefined, "1st element should be defined but is not actually defined")
+    verify(blockManager, times(1)).getLocalShuffleFromDisk(any(), any())
+
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 1 element")
-    assert(iterator.next._2.isDefined, "2nd element should be defined but is not actually defined") 
+    assert(iterator.next()._2.isDefined, "2nd element should be defined but is not actually defined")
+    verify(blockManager, times(2)).getLocalShuffleFromDisk(any(), any())
+
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 2 elements")
     // 3rd fetch should be failed
-    assert(!iterator.next._2.isDefined, "3rd element should not be defined but is actually defined") 
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
-    // Don't call next() after fetching non-defined element even if thare are rest of elements in the iterator.
-    // Otherwise, BasicBlockFetcherIterator hangs up.
+    intercept[Exception] {
+      iterator.next()
+    }
+    verify(blockManager, times(3)).getLocalShuffleFromDisk(any(), any())
   }
 
 
@@ -97,7 +101,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val blockManager = mock(classOf[BlockManager])
     val connManager = mock(classOf[ConnectionManager])
     doReturn(connManager).when(blockManager).connectionManager
-    doReturn(BlockManagerId("test-client", "test-client", 1, 0)).when(blockManager).blockManagerId
+    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
 
     doReturn((48 * 1024 * 1024).asInstanceOf[Long]).when(blockManager).maxBytesInFlight
 
@@ -111,13 +115,13 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     val optItr = mock(classOf[Option[Iterator[Any]]])
  
    // All blocks should be fetched successfully
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(0)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(1)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(2)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(3)), any())
-    doReturn(optItr).when(blockManager).getLocalFromDisk(meq(blIds(4)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(0)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(1)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(2)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(3)), any())
+    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(4)), any())
 
-    val bmId = BlockManagerId("test-client", "test-client",1 , 0)
+    val bmId = BlockManagerId("test-client", "test-client", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
     )
@@ -127,8 +131,8 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
 
     iterator.initialize()
 
-    // getLocalFromDis should be invoked for all of 5 blocks
-    verify(blockManager, times(5)).getLocalFromDisk(any(), any())
+    // Without exhausting the iterator, the iterator should be lazy and not call getLocalShuffleFromDisk.
+    verify(blockManager, times(0)).getLocalShuffleFromDisk(any(), any())
 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
     assert(iterator.next._2.isDefined, "All elements should be defined but 1st element is not actually defined") 
@@ -139,7 +143,9 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
     assert(iterator.next._2.isDefined, "All elements should be defined but 4th element is not actually defined") 
     assert(iterator.hasNext, "iterator should have 5 elements but actually has 4 elements")
-    assert(iterator.next._2.isDefined, "All elements should be defined but 5th element is not actually defined") 
+    assert(iterator.next._2.isDefined, "All elements should be defined but 5th element is not actually defined")
+
+    verify(blockManager, times(5)).getLocalShuffleFromDisk(any(), any())
   }
 
   test("block fetch from remote fails using BasicBlockFetcherIterator") {
@@ -155,12 +161,12 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     when(blockManager.futureExecContext).thenReturn(global)
 
     when(blockManager.blockManagerId).thenReturn(
-      BlockManagerId("test-client", "test-client", 1, 0))
+      BlockManagerId("test-client", "test-client", 1))
     when(blockManager.maxBytesInFlight).thenReturn(48 * 1024 * 1024)
 
     val blId1 = ShuffleBlockId(0,0,0)
     val blId2 = ShuffleBlockId(0,1,0)
-    val bmId = BlockManagerId("test-server", "test-server",1 , 0)
+    val bmId = BlockManagerId("test-server", "test-server", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, Seq((blId1, 1L), (blId2, 1L)))
     )
@@ -211,10 +217,10 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     when(blockManager.futureExecContext).thenReturn(global)
 
     when(blockManager.blockManagerId).thenReturn(
-      BlockManagerId("test-client", "test-client", 1, 0))
+      BlockManagerId("test-client", "test-client", 1))
     when(blockManager.maxBytesInFlight).thenReturn(48 * 1024 * 1024)
 
-    val bmId = BlockManagerId("test-server", "test-server",1 , 0)
+    val bmId = BlockManagerId("test-server", "test-server", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (bmId, Seq((blId1, 1L), (blId2, 1L)))
     )

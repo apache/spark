@@ -26,6 +26,7 @@ import os
 import pipes
 import random
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -34,12 +35,11 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
-
 
 class UsageError(Exception):
     pass
@@ -141,6 +141,12 @@ def parse_args():
     parser.add_option(
         "--security-group-prefix", type="string", default=None,
         help="Use this prefix for the security group rather than the cluster name.")
+    parser.add_option(
+        "--authorized-address", type="string", default="0.0.0.0/0",
+        help="Address to authorize on created security groups (default: 0.0.0.0/0)")
+    parser.add_option(
+        "--additional-security-group", type="string", default="",
+        help="Additional security group to place the machines in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -228,10 +234,10 @@ def get_spark_ami(opts):
         "cg1.4xlarge": "hvm",
         "hs1.8xlarge": "pvm",
         "hi1.4xlarge": "pvm",
-        "m3.medium":   "pvm",
-        "m3.large":    "pvm",
-        "m3.xlarge":   "pvm",
-        "m3.2xlarge":  "pvm",
+        "m3.medium":   "hvm",
+        "m3.large":    "hvm",
+        "m3.xlarge":   "hvm",
+        "m3.2xlarge":  "hvm",
         "cr1.8xlarge": "hvm",
         "i2.xlarge":   "hvm",
         "i2.2xlarge":  "hvm",
@@ -293,28 +299,29 @@ def launch_cluster(conn, opts, cluster_name):
     else:
         master_group = get_or_make_group(conn, opts.security_group_prefix + "-master")
         slave_group = get_or_make_group(conn, opts.security_group_prefix + "-slaves")
+    authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
         master_group.authorize(src_group=master_group)
         master_group.authorize(src_group=slave_group)
-        master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        master_group.authorize('tcp', 18080, 18080, '0.0.0.0/0')
-        master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
-        master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-        master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-        master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-        master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+        master_group.authorize('tcp', 22, 22, authorized_address)
+        master_group.authorize('tcp', 8080, 8081, authorized_address)
+        master_group.authorize('tcp', 18080, 18080, authorized_address)
+        master_group.authorize('tcp', 19999, 19999, authorized_address)
+        master_group.authorize('tcp', 50030, 50030, authorized_address)
+        master_group.authorize('tcp', 50070, 50070, authorized_address)
+        master_group.authorize('tcp', 60070, 60070, authorized_address)
+        master_group.authorize('tcp', 4040, 4045, authorized_address)
         if opts.ganglia:
-            master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+            master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
         slave_group.authorize(src_group=master_group)
         slave_group.authorize(src_group=slave_group)
-        slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+        slave_group.authorize('tcp', 22, 22, authorized_address)
+        slave_group.authorize('tcp', 8080, 8081, authorized_address)
+        slave_group.authorize('tcp', 50060, 50060, authorized_address)
+        slave_group.authorize('tcp', 50075, 50075, authorized_address)
+        slave_group.authorize('tcp', 60060, 60060, authorized_address)
+        slave_group.authorize('tcp', 60075, 60075, authorized_address)
 
     # Check if instances are already running with the cluster name
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
@@ -326,6 +333,13 @@ def launch_cluster(conn, opts, cluster_name):
     # Figure out Spark AMI
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
+
+
+    additional_groups = []
+    if opts.additional_security_group:
+        additional_groups = [sg
+                             for sg in conn.get_all_security_groups()
+                             if opts.additional_security_group in (sg.name, sg.id)]
     print "Launching instances..."
 
     try:
@@ -341,6 +355,15 @@ def launch_cluster(conn, opts, cluster_name):
         device.size = opts.ebs_vol_size
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
+
+    # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
+    if opts.instance_type.startswith('m3.'):
+        for i in range(get_num_disks(opts.instance_type)):
+            dev = BlockDeviceType()
+            dev.ephemeral_name = 'ephemeral%d' % i
+            # The first ephemeral drive is /dev/sdb.
+            name = '/dev/sd' + string.letters[i + 1]
+            block_map[name] = dev
 
     # Launch slaves
     if opts.spot_price is not None:
@@ -360,7 +383,7 @@ def launch_cluster(conn, opts, cluster_name):
                 placement=zone,
                 count=num_slaves_this_zone,
                 key_name=opts.key_pair,
-                security_groups=[slave_group],
+                security_groups=[slave_group] + additional_groups,
                 instance_type=opts.instance_type,
                 block_device_map=block_map,
                 user_data=user_data_content)
@@ -413,7 +436,7 @@ def launch_cluster(conn, opts, cluster_name):
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
                 slave_res = image.run(key_name=opts.key_pair,
-                                      security_groups=[slave_group],
+                                      security_groups=[slave_group] + additional_groups,
                                       instance_type=opts.instance_type,
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
@@ -439,48 +462,56 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
         master_res = image.run(key_name=opts.key_pair,
-                               security_groups=[master_group],
+                               security_groups=[master_group] + additional_groups,
                                instance_type=master_type,
                                placement=opts.zone,
                                min_count=1,
                                max_count=1,
-                               block_device_map=block_map)
+                               block_device_map=block_map,
+                               user_data=user_data_content)
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
     # Give the instances descriptive names
-    # TODO: Add retry logic for tagging with name since it's used to identify a cluster.
     for master in master_nodes:
         name = '{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id)
-        for i in range(0, 5):
-            try:
-                master.add_tag(key='Name', value=name)
-            except:
-                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-                if (i == 5):
-                    raise "Error - failed max attempts to add name tag"
-                time.sleep(5)
-
+        tag_instance(master, name)
 
     for slave in slave_nodes:
         name = '{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id)
-        for i in range(0, 5):
-            try:
-                slave.add_tag(key='Name', value=name)
-            except:
-                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-                if (i == 5):
-                    raise "Error - failed max attempts to add name tag"
-                time.sleep(5)
+        tag_instance(slave, name)
 
     # Return all the instances
     return (master_nodes, slave_nodes)
 
+def tag_instance(instance, name):
+    for i in range(0, 5):
+        try:
+            instance.add_tag(key='Name', value=name)
+        except:
+            print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
+            if (i == 5):
+                raise "Error - failed max attempts to add name tag"
+            time.sleep(5)
 
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
+    # Search all the spot instance requests, and copy any tags from the spot instance request to the cluster.
+    spot_instance_requests = conn.get_all_spot_instance_requests()
+    for req in spot_instance_requests:
+        if req.state != u'active':
+            continue
+        name = req.tags.get(u'Name', "")
+        if name.startswith(cluster_name):
+            reservations = conn.get_all_instances(instance_ids=[req.instance_id])
+            for res in reservations:
+                active = [i for i in res.instances if is_active(i)]
+                for instance in active:
+                    if (instance.tags.get(u'Name') == None):
+                        tag_instance(instance, name)
+    # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
     master_nodes = []
     slave_nodes = []
@@ -502,7 +533,6 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         else:
             print >> sys.stderr, "ERROR: Could not find any existing cluster"
         sys.exit(1)
-
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
