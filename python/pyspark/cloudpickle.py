@@ -537,13 +537,22 @@ class CloudPickler(pickle.Pickler):
 
     def save_attrgetter(self, obj):
         """attrgetter serializer"""
-        class Dummy:
-            def __getattr__(self, item):
-                return item
-        items = obj(Dummy())
-        if not isinstance(items, tuple):
-            items = (items, )
-        return self.save_reduce(operator.attrgetter, items)
+        class Dummy(object):
+            def __init__(self, attrs, index=None):
+                self.attrs = attrs
+                self.index = index
+            def __getattribute__(self, item):
+                attrs = object.__getattribute__(self, "attrs")
+                index = object.__getattribute__(self, "index")
+                if index is None:
+                    index = len(attrs)
+                    attrs.append(item)
+                else:
+                    attrs[index] = ".".join([attrs[index], item])
+                return type(self)(attrs, index)
+        attrs = []
+        obj(Dummy(attrs))
+        return self.save_reduce(operator.attrgetter, tuple(attrs))
 
     if type(operator.attrgetter) is type:
         dispatch[operator.attrgetter] = save_attrgetter
