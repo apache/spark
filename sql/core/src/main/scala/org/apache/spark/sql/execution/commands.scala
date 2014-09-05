@@ -60,10 +60,10 @@ case class SetCommand(
         logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
         context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
-        Array(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$v"))
+        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$v"))
       } else {
         context.setConf(k, v)
-        Array(Row(s"$k=$v"))
+        Seq(Row(s"$k=$v"))
       }
 
     // Query the value bound to key k.
@@ -78,11 +78,19 @@ case class SetCommand(
           "hive-hwi-0.12.0.jar",
           "hive-0.12.0.jar").mkString(":")
 
-        Array(
+        context.getAllConfs.map { case (k, v) =>
+          Row(s"$k=$v")
+        }.toSeq ++ Seq(
           Row("system:java.class.path=" + hiveJars),
           Row("system:sun.java.command=shark.SharkServer2"))
       } else {
-        Array(Row(s"$k=${context.getConf(k, "<undefined>")}"))
+        if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
+          logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+          Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
+        } else {
+          Seq(Row(s"$k=${context.getConf(k, "<undefined>")}"))
+        }
       }
 
     // Query all key-value pairs that are set in the SQLConf of the context.
