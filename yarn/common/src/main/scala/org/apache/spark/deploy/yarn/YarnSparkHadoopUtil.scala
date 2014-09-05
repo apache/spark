@@ -32,11 +32,11 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringInterner
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -156,19 +156,6 @@ object YarnSparkHadoopUtil {
     }
   }
 
-  def getUIHistoryAddress(sc: SparkContext, conf: SparkConf) : String = {
-    val eventLogDir = sc.eventLogger match {
-      case Some(logger) => logger.getApplicationLogDir()
-      case None => ""
-    }
-    val historyServerAddress = conf.get("spark.yarn.historyServer.address", "")
-    if (historyServerAddress != "" && eventLogDir != "") {
-      historyServerAddress + HistoryServer.UI_PATH_PREFIX + s"/$eventLogDir"
-    } else {
-      ""
-    }
-  }
-
   /**
    * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
    * using `bash -c "command arg1 arg2"` and that means plain quoting doesn't really work. The
@@ -223,6 +210,14 @@ object YarnSparkHadoopUtil {
         hostToRack.put(hostname, null)
       } */
     }
+  }
+
+  private[spark] def getApplicationAclsForYarn(securityMgr: SecurityManager):
+      Map[ApplicationAccessType, String] = {
+    Map[ApplicationAccessType, String] (
+      ApplicationAccessType.VIEW_APP -> securityMgr.getViewAcls,
+      ApplicationAccessType.MODIFY_APP -> securityMgr.getModifyAcls
+    )
   }
 
 }

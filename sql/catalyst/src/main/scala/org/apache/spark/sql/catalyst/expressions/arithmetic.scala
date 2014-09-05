@@ -36,7 +36,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 case class Sqrt(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
   
-  def dataType = child.dataType
+  def dataType = DoubleType
   override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"SQRT($child)"
