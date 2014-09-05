@@ -85,6 +85,8 @@ export PYSPARK_SUBMIT_ARGS
 
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
     exec "$PYSPARK_PYTHON" -m doctest $1
   else
