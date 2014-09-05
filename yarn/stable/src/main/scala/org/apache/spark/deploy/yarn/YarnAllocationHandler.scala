@@ -88,9 +88,11 @@ private[yarn] class YarnAllocationHandler(
 
   private def addResourceRequests(numExecutors: Int) {
     val containerRequests: List[ContainerRequest] =
-      if (numExecutors <= 0 || preferredHostToCount.isEmpty) {
-        logDebug("numExecutors: " + numExecutors + ", host preferences: " +
-          preferredHostToCount.isEmpty)
+      if (numExecutors <= 0) {
+        logDebug("numExecutors: " + numExecutors)
+        List()
+      } else if (preferredHostToCount.isEmpty) {
+        logDebug("host preferences is empty")
         createResourceRequests(
           AllocationType.ANY,
           resource = null,

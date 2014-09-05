@@ -51,12 +51,13 @@ private[yarn] class YarnAllocationHandler(
   override protected def allocateContainers(count: Int): YarnAllocateResponse = {
     var resourceRequests: List[ResourceRequest] = null
 
-    // default.
-    if (count <= 0 || preferredHostToCount.isEmpty) {
-      logDebug("numExecutors: " + count + ", host preferences: " +
-        preferredHostToCount.isEmpty)
-      resourceRequests = List(createResourceRequest(
-        AllocationType.ANY, null, count, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
+    logDebug("numExecutors: " + count)
+    if (count <= 0) {
+      resourceRequests = List()
+    } else if (preferredHostToCount.isEmpty) {
+        logDebug("host preferences is empty")
+        resourceRequests = List(createResourceRequest(
+          AllocationType.ANY, null, count, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
     } else {
       // request for all hosts in preferred nodes and for numExecutors -
       // candidates.size, request by default allocation policy.
