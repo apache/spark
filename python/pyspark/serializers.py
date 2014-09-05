@@ -110,6 +110,9 @@ class Serializer(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __repr__(self):
+        return "<%s object>" % self.__class__.__name__
+
 
 class FramedSerializer(Serializer):
 
@@ -355,7 +358,8 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return cPickle.dumps(obj, 2)
 
-    loads = cPickle.loads
+    def loads(self, string):
+        return cPickle.loads(string)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -373,9 +377,11 @@ class MarshalSerializer(FramedSerializer):
 
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
+    def dumps(self, obj):
+        return marshal.dumps(obj)
 
-    dumps = marshal.dumps
-    loads = marshal.loads
+    def loads(self, string):
+        return marshal.loads(string)
 
 
 class AutoSerializer(FramedSerializer):
