@@ -1120,25 +1120,6 @@ class TestWorker(PySparkTestCase):
         rdd = self.sc.parallelize(range(N), N)
         self.assertEquals(N, rdd.count())
 
-class TestCloudPickle(unittest.TestCase):
-    class TestClass(object):
-        def __init__(self, out = sys.stderr):
-            self.out = out
-        def getOk(self):
-            return 'ok'
-    def SetUp(self):
-        ok = 'ok'
-        PySparkTestCase.setUp(self)
-        t = TestClass()
-        a = [ 1 , 2, 3, 4, 5 ]
-        b = self.sc.parallelize(a)
-        c = b.map(lambda x: f())
-        self.assertEquals(ok, c.first())
-    def tearDown(self):
-        PySparkTestCase.tearDown(self)
-    def f():
-        return t.getOk()
-
 class TestSparkSubmit(unittest.TestCase):
 
     def setUp(self):
