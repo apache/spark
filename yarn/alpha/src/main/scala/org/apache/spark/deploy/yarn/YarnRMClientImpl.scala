@@ -96,6 +96,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     // Users can then monitor stderr/stdout on that node if required.
     appMasterRequest.setHost(Utils.localHostName())
     appMasterRequest.setRpcPort(0)
+    //remove the scheme from the url if it exists since Hadoop does not expect scheme
     appMasterRequest.setTrackingUrl(uiAddress.replaceAll("^http(\\w)*://", ""))
     resourceManager.registerApplicationMaster(appMasterRequest)
   }
