@@ -26,6 +26,7 @@ import os
 import pipes
 import random
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
@@ -34,7 +35,7 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
@@ -101,9 +102,17 @@ def parse_args():
              "(for debugging)")
     parser.add_option(
         "--ebs-vol-size", metavar="SIZE", type="int", default=0,
-        help="Attach a new EBS volume of size SIZE (in GB) to each node as " +
-             "/vol. The volumes will be deleted when the instances terminate. " +
-             "Only possible on EBS-backed AMIs.")
+        help="Size (in GB) of each EBS volume.")
+    parser.add_option(
+        "--ebs-vol-type", default="standard",
+        help="EBS volume type (e.g. 'gp2', 'standard').")
+    parser.add_option(
+        "--ebs-vol-num", type="int", default=1,
+        help="Number of EBS volumes to attach to each node as /vol[x]. " +
+             "The volumes will be deleted when the instances terminate. " +
+             "Only possible on EBS-backed AMIs. " +
+             "EBS volumes are only attached if --ebs-vol-size > 0." +
+             "Only support up to 8 EBS volumes.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: 1024)")
@@ -233,10 +242,10 @@ def get_spark_ami(opts):
         "cg1.4xlarge": "hvm",
         "hs1.8xlarge": "pvm",
         "hi1.4xlarge": "pvm",
-        "m3.medium":   "pvm",
-        "m3.large":    "pvm",
-        "m3.xlarge":   "pvm",
-        "m3.2xlarge":  "pvm",
+        "m3.medium":   "hvm",
+        "m3.large":    "hvm",
+        "m3.xlarge":   "hvm",
+        "m3.2xlarge":  "hvm",
         "cr1.8xlarge": "hvm",
         "i2.xlarge":   "hvm",
         "i2.2xlarge":  "hvm",
@@ -347,13 +356,25 @@ def launch_cluster(conn, opts, cluster_name):
         print >> stderr, "Could not find AMI " + opts.ami
         sys.exit(1)
 
-    # Create block device mapping so that we can add an EBS volume if asked to
+    # Create block device mapping so that we can add EBS volumes if asked to.
+    # The first drive is attached as /dev/sds, 2nd as /dev/sdt, ... /dev/sdz
     block_map = BlockDeviceMapping()
     if opts.ebs_vol_size > 0:
-        device = EBSBlockDeviceType()
-        device.size = opts.ebs_vol_size
-        device.delete_on_termination = True
-        block_map["/dev/sdv"] = device
+        for i in range(opts.ebs_vol_num):
+            device = EBSBlockDeviceType()
+            device.size = opts.ebs_vol_size
+            device.volume_type=opts.ebs_vol_type
+            device.delete_on_termination = True
+            block_map["/dev/sd" + chr(ord('s') + i)] = device
+
+    # AWS ignores the AMI-specified block device mapping for M3 (see SPARK-3342).
+    if opts.instance_type.startswith('m3.'):
+        for i in range(get_num_disks(opts.instance_type)):
+            dev = BlockDeviceType()
+            dev.ephemeral_name = 'ephemeral%d' % i
+            # The first ephemeral drive is /dev/sdb.
+            name = '/dev/sd' + string.letters[i + 1]
+            block_map[name] = dev
 
     # Launch slaves
     if opts.spot_price is not None:
@@ -818,6 +839,12 @@ def get_partition(total, num_partitions, current_partitions):
 
 def real_main():
     (opts, action, cluster_name) = parse_args()
+
+    # Input parameter validation
+    if opts.ebs_vol_num > 8:
+        print >> stderr, "ebs-vol-num cannot be greater than 8"
+        sys.exit(1)
+
     try:
         conn = ec2.connect_to_region(opts.region)
     except Exception as e:
