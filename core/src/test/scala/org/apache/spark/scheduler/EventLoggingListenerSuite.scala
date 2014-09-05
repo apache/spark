@@ -229,7 +229,8 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     val conf = getLoggingConf(logDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
     val listenerBus = new LiveListenerBus
-    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", 125L, "Mickey")
+    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
+      125L, "Mickey")
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite

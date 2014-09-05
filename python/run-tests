@@ -28,12 +28,12 @@ FAILED=0
 
 rm -f unit-tests.log
 
-# Remove the metastore and warehouse directory created by the HiveContext tests in SparkSQL
+# Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
 rm -rf metastore warehouse
 
 function run_test() {
     echo "Running test: $1"
-    SPARK_TESTING=1 $FWDIR/bin/pyspark $1 2>&1 | tee -a > unit-tests.log
+    SPARK_TESTING=1 $FWDIR/bin/pyspark $1 2>&1 | tee -a unit-tests.log
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
     # Fail and exit on the first test failure.
