@@ -220,8 +220,7 @@ class RDD(object):
         If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
 
         >>> rdd = sc.parallelize(["b", "a", "c"])
-        >>> rdd.persist()
-        >>> rdd.is_cached
+        >>> rdd.persist().is_cached
         True
         """
         self.is_cached = True
