@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
-
 import scala.util.Try
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -512,6 +509,28 @@ class HiveQuerySuite extends HiveComparisonTest {
         |WITH serdeproperties('s1'='9')
       """.stripMargin)
     sql("DROP TABLE alter1")
+  }
+
+  case class LogEntry(filename: String, message: String)
+  case class LogFile(name: String)
+
+  test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
+    sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
+    sparkContext.makeRDD(Seq.empty[LogFile]).registerTempTable("logFiles")
+
+    sql(
+      """
+      SELECT name, message
+      FROM rawLogs
+      JOIN (
+        SELECT name
+        FROM logFiles
+      ) files
+      ON rawLogs.filename = files.name
+      """).registerTempTable("boom")
+
+    // This should be successfully analyzed
+    sql("SELECT * FROM boom").queryExecution.analyzed
   }
 
   test("parse HQL set commands") {
