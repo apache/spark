@@ -55,4 +55,38 @@ class DataTypeSuite extends FunSuite {
       struct(Set("b", "d", "e", "f"))
     }
   }
+
+  test("StructField.toString") {
+    def structFieldWithName(name: String) = StructField(name, StringType, nullable = true)
+
+    assertResult("""StructField("a",StringType,true)""") {
+      structFieldWithName("a").toString
+    }
+
+    assertResult("""StructField("(a)",StringType,true)""") {
+      structFieldWithName("(a)").toString
+    }
+
+    assertResult("""StructField("a\\b\"",StringType,true)""") {
+      structFieldWithName("""a\b"""").toString
+    }
+  }
+
+  test("parsing StructField string") {
+    val expected = StructType(
+      StructField("a", StringType, true) ::
+      StructField("\"b\"", StringType, true) ::
+      StructField("\"c\\", StringType, true) ::
+      Nil)
+
+    val structTypeString = Seq(
+      """StructType(List(""",
+      """StructField("a",StringType,true),""",
+      """StructField("\"b\"",StringType,true),""",
+      """StructField("\"c\\",StringType,true)""",
+      """))"""
+    ).mkString
+
+    assert(catalyst.types.DataType(structTypeString) === expected)
+  }
 }

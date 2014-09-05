@@ -55,9 +55,14 @@ object DataType extends RegexParsers {
     }
 
   protected lazy val structField: Parser[StructField] =
-    ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-      case name ~ tpe ~ nullable  =>
-          StructField(name, tpe, nullable = nullable)
+    "StructField(" ~> quotedString ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
+      case name ~ tpe ~ nullable =>
+        StructField(name, tpe, nullable = nullable)
+    }
+
+  protected lazy val quotedString: Parser[String] =
+    "\"" ~> rep("[^\\\\\"]".r | ("\\" ~> "[\\\\\"]".r)) <~ "\"" ^^ {
+      case ch => ch.mkString
     }
 
   protected lazy val boolVal: Parser[Boolean] =
@@ -65,7 +70,7 @@ object DataType extends RegexParsers {
     "false" ^^^ false
 
   protected lazy val structType: Parser[DataType] =
-    "StructType\\([A-zA-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
+    "StructType\\([A-Za-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
       case fields => new StructType(fields)
     }
 
@@ -298,10 +303,14 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param nullable Indicates if values of this field can be `null` values.
  */
 case class StructField(name: String, dataType: DataType, nullable: Boolean) {
-
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- ${name}: ${dataType.simpleString} (nullable = ${nullable})\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
+  }
+
+  override def toString = {
+    val escapedName = name.flatMap(ch => if ("\"\\".contains(ch)) s"\\$ch" else s"$ch")
+    s"""StructField("$escapedName",$dataType,$nullable)"""
   }
 }
 
