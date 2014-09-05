@@ -86,36 +86,29 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   def resolve(name: String): Option[NamedExpression] =
     resolve(name, output)
 
-  /**
-   * Performs attribute resolution given a name and a sequence of possible attributes.
-   * The only possible formats of name are "ident" and "ident.ident".
-   */
+  /** Performs attribute resolution given a name and a sequence of possible attributes. */
   protected def resolve(name: String, input: Seq[Attribute]): Option[NamedExpression] = {
-    def handleResult[A <: NamedExpression](result: Seq[A]) = {
-      result.distinct match {
-        case Seq(a) => Some(a)
-        case Seq() => None
-        case ambiguousReferences =>
-          throw new TreeNodeException(
-            this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
-      }
+    val parts = name.split("\\.")
+    // Collect all attributes that are output by this nodes children where either the first part
+    // matches the name or where the first part matches the scope and the second part matches the
+    // name.  Return these matches along with any remaining parts, which represent dotted access to
+    // struct fields.
+    val options = input.flatMap { option =>
+      // If the first part of the desired name matches a qualifier for this possible match, drop it.
+      val remainingParts =
+        if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
+      if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
     }
 
-    name.split("\\.") match {
-      // the format of name is "ident", it should match the name of a possible attribute
-      case Array(s) => handleResult(input.filter(_.name == s))
-
-      // The format of name is "ident.ident", the first part should matches the scope
-      // and the second part should matches the name. Or the first part matches the
-      // name and this attribute is struct type.
-      case Array(s1, s2) =>
-        handleResult(input.collect {
-          case a if (a.qualifiers.contains(s1) && a.name == s2) => a
-          case a if (a.name == s1 && a.dataType.isInstanceOf[StructType]) =>
-            Alias(GetField(a, s2), s2)()
-        })
-
-      case _ => None
+    options.distinct match {
+      case Seq((a, Nil)) => Some(a) // One match, no nested fields, use it.
+      // One match, but we also need to extract the requested nested field.
+      case Seq((a, nestedFields)) =>
+        Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
+      case Seq() => None         // No matches.
+      case ambiguousReferences =>
+        throw new TreeNodeException(
+          this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
     }
   }
 }

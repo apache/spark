@@ -357,8 +357,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
     } |
-    expression ~ "." ~ ident ^^ {
-      case base ~ _ ~ fieldName => GetField(base, fieldName)
+    (expression <~ ".") ~ ident ^^ {
+      case base ~ fieldName => GetField(base, fieldName)
     } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
@@ -372,8 +372,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     literal
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
-    ident ~ "." ~ ident ^^ {
-      case i1 ~ _ ~ i2 => UnresolvedAttribute(i1 + "." + i2)
+    (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
+      case i1 ~ i2 ~ rest => UnresolvedAttribute(i1 + "." + i2 + rest.mkString(".", ".", ""))
     }
 
   protected lazy val dataType: Parser[DataType] =

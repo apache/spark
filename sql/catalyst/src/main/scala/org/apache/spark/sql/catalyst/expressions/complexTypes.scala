@@ -71,18 +71,50 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
 }
 
 /**
- * Returns the value of fields in the Struct `child`.
+ * Returns the value of fields in the `child`.
+ * The type of `child` can be struct, or array of struct,
+ * or array of array of struct, or array of array ... of struct.
  */
 case class GetField(child: Expression, fieldName: String) extends UnaryExpression {
   type EvaluatedType = Any
 
-  def dataType = field.dataType
+  lazy val dataType = {
+    structType
+    buildDataType(field.dataType)
+  }
+
   override def nullable = child.nullable || field.nullable
   override def foldable = child.foldable
 
-  protected def structType = child.dataType match {
+  private var _buildDataType = identity[DataType] _
+  private lazy val buildDataType = {
+    structType
+    _buildDataType
+  }
+
+  private var _nestedArrayCount = 0
+  private lazy val nestedArrayCount = {
+    structType
+    _nestedArrayCount
+  }
+
+  private def getStructType(t: DataType): StructType = t match {
+    case ArrayType(elementType, containsNull) =>
+      _buildDataType = {(t: DataType) => ArrayType(t, containsNull)} andThen _buildDataType
+      _nestedArrayCount += 1
+      getStructType(elementType)
     case s: StructType => s
     case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+  }
+
+  protected lazy val structType: StructType = {
+    child match {
+      case n: GetField =>
+        this._buildDataType = n._buildDataType
+        this._nestedArrayCount = n._nestedArrayCount
+        getStructType(n.field.dataType)
+      case _ => getStructType(child.dataType)
+    }
   }
 
   lazy val field =
@@ -92,11 +124,21 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 
   lazy val ordinal = structType.fields.indexOf(field)
 
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
+  override lazy val resolved = childrenResolved
 
   override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Row]
-    if (baseValue == null) null else baseValue(ordinal)
+    val baseValue = child.eval(input)
+    evaluateValue(baseValue, nestedArrayCount)
+  }
+
+  private def evaluateValue(v: Any, count: Int): Any = {
+    if (v == null) {
+      null
+    } else if (count > 0) {
+      v.asInstanceOf[Seq[_]].map(r => evaluateValue(r, count - 1))
+    } else {
+      v.asInstanceOf[Row](ordinal)
+    }
   }
 
   override def toString = s"$child.$fieldName"

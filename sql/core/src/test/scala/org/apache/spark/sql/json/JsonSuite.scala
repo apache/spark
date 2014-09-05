@@ -585,6 +585,7 @@ class JsonSuite extends QueryTest {
   test("SPARK-2096 Correctly parse dot notations") {
     val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
     jsonSchemaRDD.registerTempTable("jsonTable")
+
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       (true, "str1") :: Nil
@@ -592,6 +593,34 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1] from jsonTable"),
       ("str2", 6) :: Nil
+    )
+
+    checkAnswer(
+      sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
+      (Seq(true, false, null), Seq("str1", null, null)) :: Nil
+    )
+
+    checkAnswer(
+      sql("select complexNestedArray.field, complexNestedArray.field.innerField from jsonTable"),
+      (
+        Seq(
+          Seq(
+            Seq("str1", null),
+            Seq("str2", null)
+          ),
+          Seq(
+            Seq("str3", null),
+            Seq(null, "str4")
+          ),
+          null
+        ),
+
+        Seq(
+          Seq("str1", "str2"),
+          Seq("str3", null),
+          null
+        )
+      ) :: Nil
     )
   }
 }
