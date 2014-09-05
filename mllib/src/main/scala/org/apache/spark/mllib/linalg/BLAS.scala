@@ -235,12 +235,10 @@ private[mllib] object BLAS extends Serializable {
     var nB: Int = B.numCols
     var kA: Int = A.numCols
     var kB: Int = B.numRows
-    var transposeA: Boolean = false
-    var transposeB: Boolean = false
+
     if (transA == "T" || transA=="t"){
       mA = A.numCols
       kA = A.numRows
-      transposeA = true
     }
     require(transA == "T" || transA == "t" || transA == "N" || transA == "n",
       s"Invalid argument used for transA: $transA. " +
@@ -248,7 +246,6 @@ private[mllib] object BLAS extends Serializable {
     if (transB == "T" || transB=="t"){
       nB = B.numRows
       kB = B.numCols
-      transposeB = true
     }
     require(transB == "T" || transB == "t" || transB == "N" || transB == "n",
       s"Invalid argument used for transB: $transB. " +
@@ -261,7 +258,7 @@ private[mllib] object BLAS extends Serializable {
 
     A match {
       case sparse: SparseMatrix =>
-        gemm(transA, transB, alpha, sparse, B, beta, C, transposeA, transposeB, mA, kA, nB)
+        gemm(transA, transB, alpha, sparse, B, beta, C, mA, kA, nB)
       case dense: DenseMatrix =>
         gemm(transA, transB, alpha, dense, B, beta, C, mA, kA, nB)
       case _ =>
@@ -370,19 +367,19 @@ private[mllib] object BLAS extends Serializable {
    * For `SparseMatrix` A.
    */
   private def gemm(
-            transA: String,
-            transB: String,
-            alpha: Double,
-            A: SparseMatrix,
-            B: DenseMatrix,
-            beta: Double,
-            C: DenseMatrix,
-            transposeA: Boolean,
-            transposeB: Boolean,
-            mA: Int,
-            kA: Int,
-            nB: Int) {
+      transA: String,
+      transB: String,
+      alpha: Double,
+      A: SparseMatrix,
+      B: DenseMatrix,
+      beta: Double,
+      C: DenseMatrix,
+      mA: Int,
+      kA: Int,
+      nB: Int) {
 
+    val transposeA = A.numCols == mA
+    val transposeB = B.numRows == nB
 
     val Avals = A.toArray
     val Arows = if (!transposeA) A.rowIndices else A.colIndices
@@ -446,7 +443,6 @@ private[mllib] object BLAS extends Serializable {
 
             colCounterForB += 1
           }
-
           elementCount += 1
         }
         colCounterForA += 1

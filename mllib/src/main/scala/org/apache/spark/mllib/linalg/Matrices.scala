@@ -78,7 +78,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   private[mllib] override def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 
   private[mllib] override def apply(i: Int): Double = values(i)
-  private[mllib] override def apply(r: Int, c: Int): Double = values(index(r,c))
+  private[mllib] override def apply(r: Int, c: Int): Double = values(index(r, c))
 
   private[mllib] def index(r: Int, c: Int): Int = r + numRows * c
 
@@ -98,32 +98,32 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
  */
 object DenseMatrix {
 
-  def zeros(rows: Int, cols: Int) = new DenseMatrix(rows, cols, Array.fill(rows*cols)(0.0))
+  def zeros(rows: Int, cols: Int) = new DenseMatrix(rows, cols, Array.fill(rows * cols)(0.0))
 
-  def ones(rows: Int, cols: Int) = new DenseMatrix(rows, cols, Array.fill(rows*cols)(1.0))
+  def ones(rows: Int, cols: Int) = new DenseMatrix(rows, cols, Array.fill(rows * cols)(1.0))
 
   def eye(n: Int) = {
     val identity = DenseMatrix.zeros(n,n)
     for (i <- 0 until n){
-      identity.update(i,i,1.0)
+      identity.update(i, i, 1.0)
     }
     identity
   }
 
   def rand(rows: Int, cols: Int) = {
     val rand = new scala.util.Random
-    new DenseMatrix(rows,cols, Array.fill(rows*cols)(rand.nextDouble()))
+    new DenseMatrix(rows,cols, Array.fill(rows * cols)(rand.nextDouble()))
   }
 
   def randn(rows: Int, cols: Int) = {
     val rand = new scala.util.Random
-    new DenseMatrix(rows,cols, Array.fill(rows*cols)(rand.nextGaussian()))
+    new DenseMatrix(rows,cols, Array.fill(rows * cols)(rand.nextGaussian()))
   }
 
   def diag(values: Array[Double]) = {
     val n = values.length
     val matrix = DenseMatrix.eye(n)
-    for (i <- 0 until n) matrix.update(i,i,values(i))
+    for (i <- 0 until n) matrix.update(i, i, values(i))
     matrix
   }
 }
@@ -169,7 +169,7 @@ class SparseMatrix(val numRows: Int,
 
   private[mllib] def index(r: Int, c: Int): Int = {
     val regionStart = colIndices(c)
-    val regionEnd = colIndices(c+1)
+    val regionEnd = colIndices(c + 1)
     val region = rowIndices.slice(regionStart, regionEnd)
     if (region.contains(r)){
       region.indexOf(r) + regionStart
@@ -181,7 +181,7 @@ class SparseMatrix(val numRows: Int,
   // TODO(Burak): Maybe convert to Breeze to update zero entries? I can't think of any MLlib
   // TODO: algorithm that would use mutable Sparse Matrices
   private[mllib] override def update(r: Int, c: Int, v: Double){
-    val ind = index(r,c)
+    val ind = index(r, c)
     if (ind == -1){
       throw new IllegalArgumentException("The given row and column indices correspond to a zero " +
         "value. Sparse Matrices are currently immutable.")
