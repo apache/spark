@@ -47,7 +47,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'pyspark'
+project = u'PySpark'
 copyright = u'2014, Author'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -55,7 +55,7 @@ copyright = u'2014, Author'
 # built documents.
 #
 # The short X.Y version.
-version = ''
+version = '1.1'
 # The full version, including alpha/beta/rc tags.
 release = ''
 
