@@ -287,7 +287,7 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual(id, rdd.id())
         rdd2 = rdd.map(str).filter(bool)
         id2 = rdd2.id()
-        self.assertEqual(id+1, id2)
+        self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
 
     def test_failed_sparkcontext_creation(self):
