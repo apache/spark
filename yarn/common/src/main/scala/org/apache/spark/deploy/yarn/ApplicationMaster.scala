@@ -104,7 +104,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       }
     }
     // Use higher priority than FileSystem.
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, FileSystem.SHUTDOWN_HOOK_PRIORITY - 1)
+    ShutdownHookManager.get().addShutdownHook(cleanupHook, FileSystem.SHUTDOWN_HOOK_PRIORITY + 1)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
