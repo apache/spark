@@ -23,16 +23,13 @@ import org.apache.spark.sql.catalyst.types._
 
 class HiveTypeCoercionSuite extends FunSuite {
 
-  val rules = new HiveTypeCoercion { }
-  import rules._
-
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = WidenTypes.findTightestCommonType(t1, t2)
+      var found = HiveTypeCoercion.findTightestCommonType(t1, t2)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
       // Test both directions to make sure the widening is symmetric.
-      found = WidenTypes.findTightestCommonType(t2, t1)
+      found = HiveTypeCoercion.findTightestCommonType(t2, t1)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
