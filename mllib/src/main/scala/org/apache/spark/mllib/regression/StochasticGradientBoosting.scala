@@ -1,19 +1,19 @@
 package org.apache.spark.mllib.regression
 
 import java.util.Random
-
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.configuration.Algo.Algo
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.{DoubleRDDFunctions, RDD}
+
 /**
  * Created by olgaoskina on 06/08/14.
  *
  * Read about the algorithm "Gradient boosting" here:
- * 1. Russian: http://www.machinelearning.ru/wiki/images/5/57/Ml.mmp.2.s3.pdf
- * 2. English: http://www.montefiore.ulg.ac.be/services/stochastic/pubs/2007/GWD07/geurts-icml2007.pdf
+ * http://www.montefiore.ulg.ac.be/services/stochastic/pubs/2007/GWD07/geurts-icml2007.pdf
  *
  * Libraries that implement the algorithm "Gradient boosting"
  * https://code.google.com/p/jforests/
@@ -30,14 +30,12 @@ class StochasticGradientBoosting ()
        samplingSizeRatio : Double,
        strategy: Strategy): StochasticGradientBoostingModel = {
 
-    val resultFunction = new ResultFunction(leaningRate)
     val featureDimension = input.count()
     val mean = new DoubleRDDFunctions(input.map(l => l.label)).mean()
+    val boostingModel = new StochasticGradientBoostingModel(M, mean, leaningRate)
 
-    resultFunction.setInitValue(mean)
-
-    for (i <- 0 to M) {
-      val gradient = input.map(l => l.label - resultFunction.computeValue(l.features))
+    for (i <- 0 to M - 1) {
+      val gradient = input.map(l => l.label - boostingModel.computeValue(l.features))
 
       val newInput: RDD[LabeledPoint] = input
         .zip(gradient)
@@ -51,14 +49,45 @@ class StochasticGradientBoosting ()
       )
 
       val model = DecisionTree.train(randomSample, strategy)
-      resultFunction.addTree(model)
+      boostingModel.addTree(model)
     }
-    new StochasticGradientBoostingModel(resultFunction)
+    boostingModel
   }
 }
 
 class StochasticGradientBoostingModel (
-    val function : ResultFunction) extends Serializable with RegressionModel {
+    private val countOfTrees: Int,
+    private var initValue: Double,
+    private val learningRate: Double) extends Serializable with RegressionModel {
+
+  val trees: Array[DecisionTreeModel] = new Array[DecisionTreeModel](countOfTrees)
+  var index: Int = 0
+
+  def this(M:Int, learning_rate: Double) = {
+    this(M, 0, learning_rate)
+  }
+
+  def computeValue(feature_x: Vector): Double = {
+    var re_res = initValue
+
+    if (index == 0) {
+      return re_res
+    }
+    for (i <- 0 to index - 1) {
+      re_res += learningRate * trees(i).predict(feature_x)
+    }
+    re_res
+  }
+
+  def addTree(tree : DecisionTreeModel) = {
+    trees(index) = tree
+    index += 1
+  }
+
+  def setInitValue (value : Double) = {
+    initValue = value
+  }
+
   /**
    * Predict values for the given data set using the model trained.
    *
@@ -76,7 +105,7 @@ class StochasticGradientBoostingModel (
    * @return Double prediction from the trained model
    */
   override def predict(testData: Vector): Double = {
-    function.computeValue(testData)
+    computeValue(testData)
   }
 }
 
@@ -86,7 +115,7 @@ object StochasticGradientBoosting {
        algo : Algo,
        impurity : Impurity,
        maxDepth : Int) : StochasticGradientBoostingModel= {
-    train(input, 0.05, 1, 0.5, algo, impurity, maxDepth)
+    train(input, 0.05, 100, 0.5, algo, impurity, maxDepth)
   }
 
   def train(
