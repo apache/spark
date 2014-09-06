@@ -79,6 +79,7 @@ To run the example,
 - Set up the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_KEY with your AWS credentials.
 
 - In the Spark root directory, run the example as
+
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
