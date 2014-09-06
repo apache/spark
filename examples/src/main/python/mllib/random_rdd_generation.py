@@ -32,8 +32,8 @@ if __name__ == "__main__":
 
     sc = SparkContext(appName="PythonRandomRDDGeneration")
 
-    numExamples = 10000 # number of examples to generate
-    fraction = 0.1 # fraction of data to sample
+    numExamples = 10000  # number of examples to generate
+    fraction = 0.1  # fraction of data to sample
 
     # Example: RandomRDDs.normalRDD
     normalRDD = RandomRDDs.normalRDD(sc, numExamples)
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     print
 
     # Example: RandomRDDs.normalVectorRDD
-    normalVectorRDD = RandomRDDs.normalVectorRDD(sc, numRows = numExamples, numCols = 2)
+    normalVectorRDD = RandomRDDs.normalVectorRDD(sc, numRows=numExamples, numCols=2)
     print 'Generated RDD of %d examples of length-2 vectors.' % normalVectorRDD.count()
     print '  First 5 samples:'
     for sample in normalVectorRDD.take(5):

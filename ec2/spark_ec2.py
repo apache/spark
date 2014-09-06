@@ -41,6 +41,7 @@ from boto import ec2
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
 
+
 class UsageError(Exception):
     pass
 
@@ -342,7 +343,6 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
 
-
     additional_groups = []
     if opts.additional_security_group:
         additional_groups = [sg
@@ -363,7 +363,7 @@ def launch_cluster(conn, opts, cluster_name):
         for i in range(opts.ebs_vol_num):
             device = EBSBlockDeviceType()
             device.size = opts.ebs_vol_size
-            device.volume_type=opts.ebs_vol_type
+            device.volume_type = opts.ebs_vol_type
             device.delete_on_termination = True
             block_map["/dev/sd" + chr(ord('s') + i)] = device
 
@@ -495,6 +495,7 @@ def launch_cluster(conn, opts, cluster_name):
     # Return all the instances
     return (master_nodes, slave_nodes)
 
+
 def tag_instance(instance, name):
     for i in range(0, 5):
         try:
@@ -507,9 +508,12 @@ def tag_instance(instance, name):
 
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
+
+
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
-    # Search all the spot instance requests, and copy any tags from the spot instance request to the cluster.
+    # Search all the spot instance requests, and copy any tags from the spot
+    # instance request to the cluster.
     spot_instance_requests = conn.get_all_spot_instance_requests()
     for req in spot_instance_requests:
         if req.state != u'active':
@@ -520,7 +524,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             for res in reservations:
                 active = [i for i in res.instances if is_active(i)]
                 for instance in active:
-                    if (instance.tags.get(u'Name') == None):
+                    if (instance.tags.get(u'Name') is None):
                         tag_instance(instance, name)
     # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
@@ -540,13 +544,16 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in with name " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in with name " + \
+                cluster_name + "-master"
         else:
             print >> sys.stderr, "ERROR: Could not find any existing cluster"
         sys.exit(1)
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
+
+
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     master = master_nodes[0].public_dns_name
     if deploy_ssh_key:
@@ -890,7 +897,8 @@ def real_main():
                 if opts.security_group_prefix is None:
                     group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 else:
-                    group_names = [opts.security_group_prefix + "-master", opts.security_group_prefix + "-slaves"]
+                    group_names = [opts.security_group_prefix + "-master",
+                                   opts.security_group_prefix + "-slaves"]
 
                 attempt = 1
                 while attempt <= 3:
