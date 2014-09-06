@@ -161,8 +161,8 @@ class BLASSuite extends FunSuite {
     val sAT =
       new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
 
-    assert(dAT transpose_times B ~== expected absTol 1e-15)
-    assert(sAT transpose_times B ~== expected absTol 1e-15)
+    assert(dAT transposeTimes B ~== expected absTol 1e-15)
+    assert(sAT transposeTimes B ~== expected absTol 1e-15)
 
     gemm("T", "N", 1.0, dAT, B, 2.0, C3)
     gemm("T", "N", 1.0, sAT, B, 2.0, C4)
@@ -205,8 +205,8 @@ class BLASSuite extends FunSuite {
     val sAT =
       new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
 
-    assert(dAT transpose_times x ~== expected absTol 1e-15)
-    assert(sAT transpose_times x ~== expected absTol 1e-15)
+    assert(dAT transposeTimes x ~== expected absTol 1e-15)
+    assert(sAT transposeTimes x ~== expected absTol 1e-15)
 
     gemv("T", 1.0, dAT, x, 2.0, y3)
     gemv("T", 1.0, sAT, x, 2.0, y4)
