@@ -100,8 +100,8 @@ class MatricesSuite extends FunSuite {
     val sparseMat = new SparseMatrix(m, n, colIndices, rowIndices, sparseValues)
 
     assert(sparseMat(0, 1) == 3.0)
-    assert(sparseMat(0, 1) == denseMat.values(2))
-    assert(sparseMat(0, 1) == denseMat(2))
+    assert(sparseMat(0, 1) == sparseMat.values(2))
+    assert(sparseMat(0, 1) == sparseMat(2))
     assert(sparseMat(0, 0) == 0.0)
 
     intercept[IllegalArgumentException] {
