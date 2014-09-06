@@ -267,6 +267,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.safetyFraction</code></td>
+  <td>0.8</td>
+  <td>
+    An additional margin of safety fraction of Java heap to use for aggregation and cogroups during
+    shuffles, in case the size estimation of maps used for shuffle is not sufficiently accurate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -296,9 +304,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>HASH</td>
   <td>
     Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
-    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
+    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more
     memory-efficient in environments with small executors, such as YARN. To use that, change
     this value to <code>SORT</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.spill.batchSize</code></td>
+  <td>10000</td>
+  <td>
+    Size of object batches when reading/writing from serializers.
   </td>
 </tr>
 <tr>
