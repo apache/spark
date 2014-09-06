@@ -29,6 +29,7 @@ from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+from pyspark.storagelevel import StorageLevel
 
 from itertools import chain, ifilter, imap
 
@@ -1665,7 +1666,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.cache()
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
         self._jschema_rdd.persist(javaStorageLevel)
