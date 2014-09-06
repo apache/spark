@@ -180,22 +180,16 @@ class PySparkTestCase(unittest.TestCase):
         self.sc.stop()
         sys.path = self._old_sys_path
 
+# Regression test for SPARK-3415
 class CloudPickleTestCase(PySparkTestCase):
-    def SetUp(self):
-        PySparkTestCase.setUp(self)
-    def tearDown(self):
-        PySparkTestCase.tearDown(self)
-    def test_CloudPickle(self):
-        self.t = self.CloudPickleTestClass()
-        a = [ 1 , 2, 3, 4, 5 ]
-        b = self.sc.parallelize(a)
-        c = b.map(self.t.getOk)
-        self.assertEquals('ok', c.first())
-    class CloudPickleTestClass(object):
-        def __init__(self, out = sys.stderr):
-            self.out = out
-        def getOk(self, args):
-            return 'ok'
+    def test_pickling_file_handles(self):
+        from pyspark.cloudpickle import CloudPickler
+        from StringIO import StringIO
+        file = StringIO()
+        out = sys.stderr
+        self.cp = CloudPickler(file)
+        r = self.cp.save_file(out)
+        self.assertEquals(None, r)
 
 class TestCheckpoint(PySparkTestCase):
 
@@ -1119,6 +1113,7 @@ class TestWorker(PySparkTestCase):
         N = 1100  # fd limit is 1024 by default
         rdd = self.sc.parallelize(range(N), N)
         self.assertEquals(N, rdd.count())
+
 
 class TestSparkSubmit(unittest.TestCase):
 
