@@ -182,15 +182,14 @@ class PySparkTestCase(unittest.TestCase):
 
 
 # Regression test for SPARK-3415
-class CloudPickleTestCase(PySparkTestCase):
+class CloudPickleTest(unittest.TestCase):
     def test_pickling_file_handles(self):
-        from pyspark.cloudpickle import CloudPickler
-        from StringIO import StringIO
-        file = StringIO()
+        from pyspark.cloudpickle import dumps
         out = sys.stderr
-        self.cp = CloudPickler(file)
-        r = self.cp.save_file(out)
-        self.assertEquals(None, r)
+        r = dumps(out)
+        exp = ('\x80\x02c__builtin__\ngetattr\nq\x00cpyspark.cloudpickle\n'
+               'subimport\nq\x01U\x03sysq\x02\x85q\x03Rq\x04U\x06stderrq\x05\x86q\x06Rq\x07.')
+        self.assertEquals(exp, r)
 
 
 class TestCheckpoint(PySparkTestCase):
