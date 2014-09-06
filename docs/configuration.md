@@ -248,14 +248,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.spill.compress</code></td>
-  <td>true</td>
-  <td>
-    Whether to compress data spilled during shuffles. Compression will use
-    <code>spark.io.compression.codec</code>.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.memoryFraction</code></td>
   <td>0.2</td>
   <td>
