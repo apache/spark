@@ -49,6 +49,7 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkD
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
@@ -825,7 +826,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** The version of Spark on which this application is running. */
-  def version = SparkContext.SPARK_VERSION
+  def version = SPARK_VERSION
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
@@ -1296,8 +1297,6 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-
-  private[spark] val SPARK_VERSION = "1.2.0-SNAPSHOT"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
