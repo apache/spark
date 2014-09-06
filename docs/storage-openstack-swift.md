@@ -1,13 +1,7 @@
 ---
 layout: global
-title: OpenStack Swift Integration
+title: Accessing OpenStack Swift from Spark
 ---
-
-* This will become a table of contents (this text will be scraped).
-{:toc}
-
-
-# Accessing OpenStack Swift from Spark
 
 Spark's support for Hadoop InputFormat allows it to process data in OpenStack Swift using the
 same URI formats as in Hadoop. You can specify a path in Swift as input through a 
