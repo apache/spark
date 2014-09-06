@@ -32,9 +32,9 @@ acquire_rat_jar () {
     printf "Attempting to fetch rat\n"
     JAR_DL=${JAR}.part
     if hash curl 2>/dev/null; then
-      (curl --progress-bar ${URL1} > "$JAR_DL" || curl --progress-bar ${URL2} > "$JAR_DL") && mv "$JAR_DL" "$JAR"
+      (curl --silent ${URL1} > "$JAR_DL" || curl --silent ${URL2} > "$JAR_DL") && mv "$JAR_DL" "$JAR"
     elif hash wget 2>/dev/null; then
-      (wget --progress=bar ${URL1} -O "$JAR_DL" || wget --progress=bar ${URL2} -O "$JAR_DL") && mv "$JAR_DL" "$JAR"
+      (wget --quiet ${URL1} -O "$JAR_DL" || wget --quiet ${URL2} -O "$JAR_DL") && mv "$JAR_DL" "$JAR"
     else
       printf "You do not have curl or wget installed, please install rat manually.\n"
       exit -1
