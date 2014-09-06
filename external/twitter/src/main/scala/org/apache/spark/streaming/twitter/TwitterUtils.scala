@@ -50,6 +50,25 @@ object TwitterUtils {
   }
 
   /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param ssc         StreamingContext object
+   * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
+   *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
+   *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   *        twitter4j.oauth.accessTokenSecret
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createStream(
+      ssc: StreamingContext,
+      twitterAuth: Option[Authorization],
+      filters: Seq[String],
+      storageLevel: StorageLevel
+    ): ReceiverInputDStream[Status] = {
+    createStream(ssc, twitterAuth, filters, Nil, storageLevel)
+  }
+
+  /**
    * Create a input stream that returns tweets received from Twitter using Twitter4J's default
    * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
    * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and

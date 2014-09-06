@@ -48,15 +48,6 @@ class TwitterInputDStream(
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
-  def this(
-      @transient ssc_ : StreamingContext,
-      twitterAuth: Option[Authorization],
-      filters: Seq[String],
-      storageLevel: StorageLevel
-    ) {
-    this(ssc_, twitterAuth, filters, Nil, storageLevel)
-  }
-
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
   }
