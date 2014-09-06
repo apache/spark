@@ -1089,11 +1089,11 @@ class RDD(object):
             # we actually cap it at totalParts in runJob.
             numPartsToTry = 1
             if partsScanned > 0:
-                # If we didn't find any rows after the first iteration, just
-                # try all partitions next. Otherwise, interpolate the number
-                # of partitions we need to try, but overestimate it by 50%.
+                # If we didn't find any rows after the previous iteration,
+                # quadruple and retry.  Otherwise, interpolate the number of
+                # partitions we need to try, but overestimate it by 50%.
                 if len(items) == 0:
-                    numPartsToTry = totalParts - 1
+                    numPartsToTry = partsScanned * 4
                 else:
                     numPartsToTry = int(1.5 * num * partsScanned / len(items))
 
