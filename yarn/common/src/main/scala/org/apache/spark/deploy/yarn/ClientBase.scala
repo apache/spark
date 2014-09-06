@@ -430,10 +430,8 @@ trait ClientBase extends Logging {
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
-    val acls = Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityManager.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityManager.getModifyAcls)
-    amContainer.setApplicationACLs(acls)
+    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+
     amContainer
   }
 }
