@@ -276,14 +276,16 @@ class SparkContext(object):
         with SparkContext._lock:
             SparkContext._active_spark_context = None
 
-    def parallelize(self, c, numSlices=None):
+    def parallelize(self, c, numPartitions=None, numSlices=None):
         """
         Distribute a local Python collection to form an RDD.
+
+        Note: numSlices is deprecated, don't use named parameters or use numPartitions
 
         >>> sc.parallelize(range(5), 5).glom().collect()
         [[0], [1], [2], [3], [4]]
         """
-        numSlices = numSlices or self.defaultParallelism
+        numSlices = (numPartitions or numSlices) or self.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().

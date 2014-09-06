@@ -1105,6 +1105,17 @@ class TestWorker(PySparkTestCase):
         self.assertEquals(N, rdd.count())
 
 
+class TestParallelize(PySparkTestCase):
+
+    def test_numSlices_compat(self):
+        rdd = self.sc.parallelize([1, 2, 3, 4], numSlices=4)
+        self.assertEqual(4, rdd.getNumPartitions())
+
+    def test_numPartitions_compat(self):
+        rdd = self.sc.parallelize([1, 2, 3, 4], numPartitions=4)
+        self.assertEqual(4, rdd.getNumPartitions())
+
+
 class TestSparkSubmit(unittest.TestCase):
 
     def setUp(self):
