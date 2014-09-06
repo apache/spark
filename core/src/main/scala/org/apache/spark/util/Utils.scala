@@ -859,18 +859,10 @@ private[spark] object Utils extends Logging {
    * finding the call site of a method.
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
-  private val SCALA_CLASS_REGEX = """^scala""".r
-  private val SPARK_STREAMING_CLASS_REGEX = """^org\.apache\.spark""".r
-  private val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
+  val SCALA_CLASS_REGEX = """^scala""".r
 
   private def defaultRegexFunc(className: String): Boolean = {
     SPARK_CLASS_REGEX.findFirstIn(className).isDefined ||
-    SCALA_CLASS_REGEX.findFirstIn(className).isDefined
-  }
-
-  def streamingRegexFunc(className: String): Boolean = {
-    (SPARK_STREAMING_CLASS_REGEX.findFirstIn(className).isDefined &&
-    !SPARK_EXAMPLES_CLASS_REGEX.findFirstIn(className).isDefined) ||
     SCALA_CLASS_REGEX.findFirstIn(className).isDefined
   }
 

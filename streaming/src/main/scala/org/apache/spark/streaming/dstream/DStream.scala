@@ -107,7 +107,7 @@ abstract class DStream[T: ClassTag] (
   def context = ssc
 
   /* Find the creation callSite */
-  val creationSite = Utils.getCallSite(Utils.streamingRegexFunc)
+  val creationSite = Utils.getCallSite(org.apache.spark.streaming.util.Utils.streamingRegexFunc)
 
   /* Store the RDD creation callSite in threadlocal */
   private def setRDDCreationCallSite(callSite: CallSite = creationSite) = {
