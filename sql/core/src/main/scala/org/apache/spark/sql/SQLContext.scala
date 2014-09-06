@@ -272,7 +272,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val currentTable = table(tableName).queryExecution.analyzed
     val asInMemoryRelation = currentTable match {
       case _: InMemoryRelation =>
-        currentTable.logicalPlan
+        currentTable
 
       case _ =>
         InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
