@@ -205,7 +205,8 @@ class SparseMatrix(
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match!")
   require(colPointers.length == numCols + 1, "The length of the column indices should be the " +
-    s"number of columns + 1. Currently, colPointers.length: ${colPointers.length}, numCols: $numCols")
+    s"number of columns + 1. Currently, colPointers.length: ${colPointers.length}, " +
+    s"numCols: $numCols")
 
   override def toArray: Array[Double] = values
 
