@@ -19,8 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.lang.management.ManagementFactory
 
-import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 import org.apache.spark.SparkConf
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the worker.
@@ -55,6 +55,8 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
 
   parse(args.toList)
+
+  checkWorkerMemory()
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
@@ -152,5 +154,12 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
     }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
     math.max(totalMb - 1024, 512)
+  }
+
+  def checkWorkerMemory(): Unit = {
+    if (memory <= 0) {
+      val message = "Memory can't be 0, missing a M or G on the end of the memory specification?"
+      throw new IllegalStateException(message)
+    }
   }
 }
