@@ -1525,7 +1525,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
-
+        self._id = None
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
@@ -1543,9 +1543,10 @@ class SchemaRDD(RDD):
             self._lazy_jrdd = self._jschema_rdd.javaToPython()
         return self._lazy_jrdd
 
-    @property
-    def _id(self):
-        return self._jrdd.id()
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.

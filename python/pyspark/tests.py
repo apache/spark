@@ -281,6 +281,15 @@ class TestAddFile(PySparkTestCase):
 
 class TestRDDFunctions(PySparkTestCase):
 
+    def test_id(self):
+        rdd = self.sc.parallelize(range(10))
+        id = rdd.id()
+        self.assertEqual(id, rdd.id())
+        rdd2 = rdd.map(str).filter(bool)
+        id2 = rdd2.id()
+        self.assertEqual(id + 1, id2)
+        self.assertEqual(id2, rdd2.id())
+
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
         self.sc.stop()
