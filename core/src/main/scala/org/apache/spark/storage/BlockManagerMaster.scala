@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
@@ -38,6 +39,9 @@ class BlockManagerMaster(
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
   val timeout = AkkaUtils.askTimeout(conf)
+
+  val removeBlocksTimeout = conf.getLong("spark.storage.removeBlocksTimeout",
+    timeout.toSeconds * 10).seconds
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -109,7 +113,7 @@ class BlockManagerMaster(
         logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      Await.result(future, removeBlocksTimeout)
     }
   }
 
@@ -121,7 +125,7 @@ class BlockManagerMaster(
         logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      Await.result(future, removeBlocksTimeout)
     }
   }
 
@@ -135,7 +139,7 @@ class BlockManagerMaster(
           s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
     }
     if (blocking) {
-      Await.result(future, timeout)
+      Await.result(future, removeBlocksTimeout)
     }
   }
 
