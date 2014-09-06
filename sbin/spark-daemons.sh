@@ -30,6 +30,24 @@ fi
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+# Check if --config is passed as an argument. It is an optional parameter.
+# Exit if the argument is not a directory.
+
+if [ "$1" == "--config" ]
+then
+  shift
+  conf_dir=$1
+  if [ ! -d "$conf_dir" ]
+  then
+    echo "ERROR : $conf_dir is not a directory"
+    echo $usage
+    exit 1
+  else
+    export SPARK_CONF_DIR=$conf_dir
+  fi
+  shift
+fi
+
 . "$sbin/spark-config.sh"
 
-exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/spark-daemon.sh" "$@"
+exec "$sbin/slaves.sh" --config $SPARK_CONF_DIR cd "$SPARK_HOME" \; "$sbin/spark-daemon.sh" --config $SPARK_CONF_DIR "$@"
