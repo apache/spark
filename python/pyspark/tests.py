@@ -180,6 +180,7 @@ class PySparkTestCase(unittest.TestCase):
         self.sc.stop()
         sys.path = self._old_sys_path
 
+
 # Regression test for SPARK-3415
 class CloudPickleTestCase(PySparkTestCase):
     def test_pickling_file_handles(self):
@@ -190,6 +191,7 @@ class CloudPickleTestCase(PySparkTestCase):
         self.cp = CloudPickler(file)
         r = self.cp.save_file(out)
         self.assertEquals(None, r)
+
 
 class TestCheckpoint(PySparkTestCase):
 
