@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -313,7 +315,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
@@ -467,7 +469,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     // Describe a registered temporary table.
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
@@ -493,6 +495,23 @@ class HiveQuerySuite extends HiveComparisonTest {
         assert(map.size === 1)
         assert(map.head === (key, value))
     }
+  }
+
+  test("ADD JAR command") {
+    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    sql("CREATE TABLE alter1(a INT, b INT)")
+    intercept[Exception] {
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+        |WITH serdeproperties('s1'='9')
+      """.stripMargin)
+    sql("DROP TABLE alter1")
   }
 
   test("parse HQL set commands") {
