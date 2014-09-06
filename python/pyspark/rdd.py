@@ -2075,6 +2075,7 @@ class PipelinedRDD(RDD):
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
+        self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
@@ -2104,6 +2105,11 @@ class PipelinedRDD(RDD):
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
+
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
