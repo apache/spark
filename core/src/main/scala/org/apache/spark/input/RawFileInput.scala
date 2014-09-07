@@ -58,9 +58,6 @@ abstract class StreamFileInputFormat[T]
 /**
  * A class that allows DataStreams to be serialized and moved around by not creating them
  * until they need to be read
- * @param split
- * @param context
- * @param index
  */
 class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, index: Integer)
   extends Serializable {
@@ -68,7 +65,10 @@ class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, i
   private var fileIn: FSDataInputStream = null.asInstanceOf[FSDataInputStream]
   private var isOpen = false
 
-  def open(): FSDataInputStream= {
+  /**
+   * create a new DataInputStream from the split and context
+   */
+  def open(): FSDataInputStream = {
     val pathp = split.getPath(index)
     path = pathp.toString
     val fs = pathp.getFileSystem(context.getConfiguration)
@@ -77,6 +77,9 @@ class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, i
     fileIn
   }
 
+  /**
+   * close the file (if it is already open)
+   */
   def close() = {
     if (isOpen) {
       try {

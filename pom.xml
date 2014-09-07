@@ -743,10 +743,6 @@
         <artifactId>jackson-mapper-asl</artifactId>
         <version>1.8.8</version>
       </dependency>
-      <dependency>
-        <groupId>io.scif</groupId>
-        <artifactId>pom-scifio</artifactId>
-      </dependency>
     </dependencies>
   </dependencyManagement>
 
