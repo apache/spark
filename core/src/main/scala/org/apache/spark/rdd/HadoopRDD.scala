@@ -209,6 +209,10 @@ class HadoopRDD[K, V](
          * always at record boundaries, so tasks may need to read into other splits to complete
          * a record. */
         inputMetrics.bytesRead = split.inputSplit.value.getLength()
+
+        // In situations where compute() is called multiple times in the same task (such as for
+        // each partition in CoalescedRDD#compute(), keep a cumulative sum of bytesRead
+        inputMetrics.bytesRead += context.taskMetrics.inputMetrics.map(_.bytesRead).getOrElse(0L)
       } catch {
         case e: java.io.IOException =>
           logWarning("Unable to get input size to set InputMetrics for task", e)
