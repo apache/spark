@@ -25,6 +25,8 @@ from pyspark.mllib._common import \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper
 from pyspark.mllib.linalg import SparseVector
 
+__all__ = ['KMeansModel', 'KMeans']
+
 
 class KMeansModel(object):
 

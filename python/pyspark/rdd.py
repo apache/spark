@@ -48,6 +48,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
 
 from py4j.java_collections import ListConverter, MapConverter
 
+
 __all__ = ["RDD"]
 
 
@@ -211,11 +212,16 @@ class RDD(object):
         self.persist(StorageLevel.MEMORY_ONLY_SER)
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         """
         Set this RDD's storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
+        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+
+        >>> rdd = sc.parallelize(["b", "a", "c"])
+        >>> rdd.persist().is_cached
+        True
         """
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
@@ -1088,11 +1094,11 @@ class RDD(object):
             # we actually cap it at totalParts in runJob.
             numPartsToTry = 1
             if partsScanned > 0:
-                # If we didn't find any rows after the first iteration, just
-                # try all partitions next. Otherwise, interpolate the number
-                # of partitions we need to try, but overestimate it by 50%.
+                # If we didn't find any rows after the previous iteration,
+                # quadruple and retry.  Otherwise, interpolate the number of
+                # partitions we need to try, but overestimate it by 50%.
                 if len(items) == 0:
-                    numPartsToTry = totalParts - 1
+                    numPartsToTry = partsScanned * 4
                 else:
                     numPartsToTry = int(1.5 * num * partsScanned / len(items))
 
@@ -2069,6 +2075,7 @@ class PipelinedRDD(RDD):
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
+        self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
@@ -2098,6 +2105,11 @@ class PipelinedRDD(RDD):
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
+
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
