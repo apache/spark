@@ -104,6 +104,13 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.logging.exceptionPrintInterval</code></td>
+  <td>10000</td>
+  <td>
+    Frequency to reprint duplicate exceptions in full, in milliseconds
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
