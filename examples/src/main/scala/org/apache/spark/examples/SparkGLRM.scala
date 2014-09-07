@@ -92,19 +92,19 @@ object SparkGLRM {
 
     options.toArray match {
       case Array(m, u, nn, trank, iters, reg) =>
-        M = m.getOrElse("10").toInt
-        U = u.getOrElse("5").toInt
-        NNZ = nn.getOrElse("23").toInt
+        M = m.getOrElse("10000").toInt
+        U = u.getOrElse("500").toInt
+        NNZ = nn.getOrElse("23000").toInt
         rank = trank.getOrElse("2").toInt
         ITERATIONS = iters.getOrElse("5").toInt
-        REG = reg.getOrElse("100").toInt
+        REG = reg.getOrElse("100000").toInt
 
       case _ =>
         System.err.println("Usage: SparkGLRM [M] [U] [nnz] [rank] [iters] [regularization]")
         System.exit(1)
     }
 
-    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
+    printf("Running with M=%d, U=%d, nnz=10*%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkGLRM")
     val sc = new SparkContext(sparkConf)
@@ -114,7 +114,7 @@ object SparkGLRM {
       val i = math.abs(math.round(math.random * (M - 1)).toInt)
       val j = math.abs(math.round(math.random * (U - 1)).toInt)
       List.fill(10)((i, j, math.random))
-    }//.reduceByKey(_ + _).map{case (a, b) => (a._1, a._2, b)}
+    }
 
     // Transpose data
     val RT = R.map { case (i, j, rij) => (j, i, rij) }
