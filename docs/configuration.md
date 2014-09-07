@@ -622,6 +622,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.blockManagerTimeoutIntervalMs</code></td>
+  <td>60000ms</code></td>
+  <td>
+    The interval length between two checking of timeout BlockManagerSlaves.
+  </td>
+</tr>
+<tr>
   <td><code>spark.storage.blockManagerSlaveTimeoutMs</code></td>
   <td><code>max(<code>spark.executor.heartbeatInterval</code>, 10000) * 3, 45000)</code></td>
   <td>
