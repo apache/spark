@@ -309,6 +309,27 @@ Apart from these, the following properties are also available, and may be useful
     map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.port</code></td>
+  <td>Random</td>
+  <td>
+    Port the Netty-based BlockServer listens on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.mode</code></td>
+  <td>nio</td>
+  <td>
+    IO mode of the Netty-based BlockServer, nio, oio, epoll, or auto.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>60s</td>
+  <td>
+    Connect timeout of Netty-based BlockServer.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
