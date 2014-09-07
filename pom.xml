@@ -90,7 +90,6 @@
     <module>bagel</module>
     <module>graphx</module>
     <module>mllib</module>
-    <module>imglib</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
