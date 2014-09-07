@@ -287,7 +287,7 @@ class StructType(DataType):
 
     """Spark SQL StructType
 
-    The data type representing tuple or list values.
+    The data type representing rows.
     A StructType object comprises a list of L{StructField}s.
 
     """

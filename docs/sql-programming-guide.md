@@ -453,11 +453,7 @@ people = parts.map(lambda p: (p[0], p[1].strip()))
 # The schema is encoded in a string.
 schemaString = "name age"
 
-# Generate the schema based on the string of schema.
-fields = []
-for field_name in schemaString.split():
-  fields.append(StructField(field_name, StringType(), True))
-
+fields = [StructField(field_name, StringType(), True) for field_name in schemaString.split()]
 schema = StructType(fields)
 
 # Apply the schema to the RDD.
