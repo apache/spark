@@ -586,6 +586,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.safetyFraction</code></td>
+  <td>0.9</td>
+  <td>
+    Specify the safety margin of the memory space used by storage. The total size of memory size used by 
+        Shuffle is (Runtime.getRuntime.maxMemory * <code>spark.storage.memoryFraction</code> * 
+        <code>spark.storage.safetyFraction</code>)
+  </td>
+</tr>
+<tr>
   <td><code>spark.storage.unrollFraction</code></td>
   <td>0.2</td>
   <td>
