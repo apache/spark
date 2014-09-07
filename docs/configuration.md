@@ -224,31 +224,6 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.executor.uri</code>.
   </td>
 </tr>
-<tr>
-  <td><code>spark.deploy.recoveryDirectory</code></td>
-  <td>""</td>
-  <td>
-    The user can specify the directory for the master recovery file when using FileSystemPersistenceEngine.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.deploy.spreadOut</code></td>
-  <td>true</td>
-  <td>
-    Whether the standalone cluster manager should spread applications out across nodes or try
-       to consolidate them onto as few nodes as possible. Spreading out is usually better for
-      data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
-       <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-      applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.worker.timeout</code></td>
-  <td>60s</td>
-  <td>
-    Communication timeout before the master takes a worker as dead
-  </td>
-</tr>
 </table>
 
 #### Shuffle Behavior
@@ -383,31 +358,6 @@ Apart from these, the following properties are also available, and may be useful
     Within this base directory, Spark creates a sub-directory for each application, and logs the
     events specific to the application in this directory. Users may want to set this to
     a unified location like an HDFS directory so history files can be read by the history server.
-  </td>
-</tr>
-<tr>
-  <td>spark.deploy.retainedApplications</td>
-  <td>200</td>
-  <td>
-    The maximum number of records on completed applications kept in the Master node. When the completed
-    application number exceeds the threshold, the first Max(spark.deploy.retainedApplications, 1) will be
-    discarded.
-  </td>
-</tr>
-<tr>
-  <td>spark.dead.worker.persistence</td>
-  <td>15</td>
-  <td>
-    This parameter controls when Spark will remove the worker information from the UI if it is dead.
-        If it has been longer than (<code>spark.dead.worker.persistence</code> + 1) * <code> spark.worker.timeout
-        </code> seconds since the worker is dead, Spark will remove it from UI.
-  </td>
-</tr>
-<tr>
-  <td>spark.master.ui.port</td>
-  <td>8080</td>
-  <td>
-    The port number of the web UI of Master.  
   </td>
 </tr>
 </table>
