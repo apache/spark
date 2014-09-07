@@ -376,6 +376,15 @@ Apart from these, the following properties are also available, and may be useful
     discarded.
   </td>
 </tr>
+<tr>
+  <td>spark.dead.worker.persistence</td>
+  <td>15</td>
+  <td>
+    This parameter controls when Spark will remove the worker information from the UI if it is dead.
+        If it has been longer than (<code>spark.dead.worker.persistence</code> + 1) * <code> spark.worker.timeout
+        </code> seconds since the worker is dead, Spark will remove it from UI.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
