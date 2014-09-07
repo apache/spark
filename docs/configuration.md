@@ -622,6 +622,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.blockManagerSlaveTimeoutMs</code></td>
+  <td><code>max(<code>spark.executor.heartbeatInterval</code>, 10000) * 3, 45000)</code></td>
+  <td>
+    Communication timeout between BlockManagerMaster and BlockManagerSlave.
+  </td>
+</tr>
+<tr>
   <td><code>spark.tachyonStore.url</code></td>
   <td>tachyon://localhost:19998</td>
   <td>
