@@ -22,24 +22,26 @@ import random
 class RDDSamplerBase(object):
 
     def __init__(self, withReplacement, seed=None):
-        try:
-            import numpy
-            self._use_numpy = True
-        except ImportError:
-            print >> sys.stderr, (
-                "NumPy does not appear to be installed. "
-                "Falling back to default random generator for sampling.")
-            self._use_numpy = False
-
         self._seed = seed if seed is not None else random.randint(0, sys.maxint)
         self._withReplacement = withReplacement
         self._random = None
         self._split = None
         self._rand_initialized = False
+        self._tried_numpy = False
 
     def initRandomGenerator(self, split):
+        if not self._tried_numpy:
+            try:
+                import numpy
+                self._use_numpy = True
+            except ImportError:
+                print >> sys.stderr, (
+                    "NumPy does not appear to be installed. "
+                    "Falling back to default random generator for sampling.")
+                self._use_numpy = False
+            self._tried_numpy = True
+
         if self._use_numpy:
-            import numpy
             self._random = numpy.random.RandomState(self._seed)
         else:
             self._random = random.Random(self._seed)
