@@ -387,6 +387,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.overwrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to overwrite the log directory if it already exists.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.dir</code></td>
   <td>file:///tmp/spark-events</td>
   <td>
