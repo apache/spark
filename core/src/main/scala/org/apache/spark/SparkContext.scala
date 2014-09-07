@@ -40,7 +40,7 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.{StreamInputFormat, StreamFileInputFormat, WholeTextFileInputFormat, ByteInputFormat, FixedLengthBinaryInputFormat}
+import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat, ByteInputFormat, FixedLengthBinaryInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -533,7 +533,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset as DataInputStreams for each file
+   * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
    * (useful for binary data)
    *
    *
@@ -544,7 +544,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions):
-  RDD[(String, DataInputStream)] = {
+  RDD[(String, PortableDataStream)] = {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -552,7 +552,7 @@ class SparkContext(config: SparkConf) extends Logging {
       this,
       classOf[StreamInputFormat],
       classOf[String],
-      classOf[DataInputStream],
+      classOf[PortableDataStream],
       updateConf,
       minPartitions).setName(path)
   }

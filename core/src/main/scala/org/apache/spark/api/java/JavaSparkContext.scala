@@ -23,7 +23,7 @@ import java.util.{Map => JMap}
 import java.io.DataInputStream
 
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
-import org.apache.spark.input.FixedLengthBinaryInputFormat
+import org.apache.spark.input.{PortableDataStream, FixedLengthBinaryInputFormat}
 
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
@@ -257,7 +257,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions):
-  JavaPairRDD[String,DataInputStream] = new JavaPairRDD(sc.dataStreamFiles(path,minPartitions))
+  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.dataStreamFiles(path,minPartitions))
 
   /**
    * Read a directory of files as DataInputStream from HDFS,

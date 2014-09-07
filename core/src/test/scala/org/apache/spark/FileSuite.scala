@@ -226,9 +226,8 @@ class FileSuite extends FunSuite with LocalSparkContext {
 
   test("binary file input as byte array") {
     sc = new SparkContext("local", "test")
-    val outputDir = new File(tempDir).getAbsolutePath
-    val outFile = new File(outputDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.toPath().toString()
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
 
     // create file
     val testOutput = Array[Byte](1,2,3,4,5,6)
@@ -252,10 +251,8 @@ class FileSuite extends FunSuite with LocalSparkContext {
     // a fixed length of 6 bytes
 
     sc = new SparkContext("local", "test")
-
-    val outputDir = new File(tempDir).getAbsolutePath
-    val outFile = new File(outputDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.toPath().toString()
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
 
     // create file
     val testOutput = Array[Byte](1,2,3,4,5,6)
