@@ -330,6 +330,21 @@ Apart from these, the following properties are also available, and may be useful
     Connect timeout of Netty-based BlockServer.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.netty.ioRatio</code></td>
+  <td>80</td>
+  <td>
+    Percentage of the desired amount of time spent for I/O in the child event loops. Only applicable in nio and epoll of 
+    Netty-based BlockServer
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.backLog</code></td>
+  <td>50</td>
+  <td>
+    Requested maximum length of the queue of incoming connections (for Netty-based BlockServer).
+  </td>
+</tr>
 </table>
 
 #### Spark UI
