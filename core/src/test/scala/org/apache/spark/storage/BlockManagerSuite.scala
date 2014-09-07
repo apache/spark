@@ -49,6 +49,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
+import org.apache.spark.shuffle.ShuffleBlockManager
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {
@@ -92,7 +93,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf)
+      conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -139,9 +140,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("BlockManagerId object caching") {
-    val id1 = BlockManagerId("e1", "XXX", 1, 0)
-    val id2 = BlockManagerId("e1", "XXX", 1, 0) // this should return the same object as id1
-    val id3 = BlockManagerId("e1", "XXX", 2, 0) // this should return a different object
+    val id1 = BlockManagerId("e1", "XXX", 1)
+    val id2 = BlockManagerId("e1", "XXX", 1) // this should return the same object as id1
+    val id3 = BlockManagerId("e1", "XXX", 2) // this should return a different object
     assert(id2 === id1, "id2 is not same as id1")
     assert(id2.eq(id1), "id2 is not the same object as id1")
     assert(id3 != id1, "id3 is same as id1")
@@ -823,12 +824,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     // be nice to refactor classes involved in disk storage in a way that
     // allows for easier testing.
     val blockManager = mock(classOf[BlockManager])
-    val shuffleBlockManager = mock(classOf[ShuffleBlockManager])
-    when(shuffleBlockManager.conf).thenReturn(conf)
-    val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
-      System.getProperty("java.io.tmpdir"))
-
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
+    val diskBlockManager = new DiskBlockManager(blockManager, conf)
+
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val mapped = diskStoreMapped.getBytes(blockId).get

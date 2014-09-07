@@ -68,7 +68,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
-          context.taskMetrics.updatedBlocks = Some(updatedBlocks)
+          val metrics = context.taskMetrics
+          val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+          metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
           new InterruptibleIterator(context, cachedValues)
 
         } finally {

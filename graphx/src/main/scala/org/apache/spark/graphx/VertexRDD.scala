@@ -108,7 +108,7 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /** The number of vertices in the RDD. */
   override def count(): Long = {
-    partitionsRDD.map(_.size).reduce(_ + _)
+    partitionsRDD.map(_.size.toLong).reduce(_ + _)
   }
 
   /**

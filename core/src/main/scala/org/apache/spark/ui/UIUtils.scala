@@ -239,10 +239,9 @@ private[spark] object UIUtils extends Logging {
   def listingTable[T](
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
-      data: Seq[T],
+      data: Iterable[T],
       fixedWidth: Boolean = false,
       simpleTable: Boolean = false): Seq[Node] = {
-
     var listingTableClass = TABLE_CLASS
     if (simpleTable) {
       listingTableClass = "spark-simple-table sortable"
@@ -323,13 +322,19 @@ private[spark] object UIUtils extends Logging {
 
   /** Returns an HTML containing Javascript that fills the table with that tableId using
     * a JSON representation under the given path. You can optionally pass an id param */
-  def fillTableJavascript(path: String, tableId: String, id: Option[Integer] = None): Seq[Node] = {
+  def fillTableJavascript(path: String, tableId: String,
+                          id: Option[Integer] = None,
+                          attemptId: Option[Integer] = None ): Seq[Node] = {
     val paramId = id match {
       case Some(s) => "id: " + s
       case None => ""
     }
+    val paramAttemptId = attemptId match {
+      case Some(s) => ", attempt: " + s
+      case None => ""
+    }
     <script>
-      $.get('/{path}/json', {{ {paramId} }})
+      $.get('/{path}/json', {{ {paramId} {paramAttemptId} }})
       .done( function(data) {{
         $('#' + '{tableId}' + 'Text').text('Received data. Rendering table...');
         Spark.UI.fillTable(data, '{tableId}') }});

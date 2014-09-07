@@ -61,7 +61,7 @@ object SparkBuild extends PomBuild {
   def backwardCompatibility = {
     import scala.collection.mutable
     var isAlphaYarn = false
-    var profiles: mutable.Seq[String] = mutable.Seq.empty
+    var profiles: mutable.Seq[String] = mutable.Seq("sbt")
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
       println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
@@ -116,7 +116,7 @@ object SparkBuild extends PomBuild {
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
-  
+
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
@@ -290,9 +290,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -314,7 +314,7 @@ object Unidoc {
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
         "streaming.api.java", "streaming.flume", "streaming.kafka",
-        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",

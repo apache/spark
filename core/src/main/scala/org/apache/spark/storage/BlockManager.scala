@@ -25,7 +25,7 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
 
-import akka.actor.{ActorSystem, Cancellable, Props}
+import akka.actor.{ActorSystem, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
@@ -35,6 +35,7 @@ import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
+
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -60,12 +61,11 @@ private[spark] class BlockManager(
     securityManager: SecurityManager,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager)
-  extends Logging {
+  extends BlockDataProvider with Logging {
 
   private val port = conf.getInt("spark.blockManager.port", 0)
-  val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
-  val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
-    conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
+
+  val diskBlockManager = new DiskBlockManager(this, conf)
   val connectionManager =
     new ConnectionManager(port, conf, securityManager, "Connection manager for block manager")
 
@@ -83,20 +83,13 @@ private[spark] class BlockManager(
     val tachyonStorePath = s"$storeDir/$appFolderName/${this.executorId}"
     val tachyonMaster = conf.get("spark.tachyonStore.url",  "tachyon://localhost:19998")
     val tachyonBlockManager =
-      new TachyonBlockManager(shuffleBlockManager, tachyonStorePath, tachyonMaster)
+      new TachyonBlockManager(this, tachyonStorePath, tachyonMaster)
     tachyonInitialized = true
     new TachyonStore(this, tachyonBlockManager)
   }
 
-  // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
-  private val nettyPort: Int = {
-    val useNetty = conf.getBoolean("spark.shuffle.use.netty", false)
-    val nettyPortConfig = conf.getInt("spark.shuffle.sender.port", 0)
-    if (useNetty) diskBlockManager.startShuffleBlockSender(nettyPortConfig) else 0
-  }
-
   val blockManagerId = BlockManagerId(
-    executorId, connectionManager.id.host, connectionManager.id.port, nettyPort)
+    executorId, connectionManager.id.host, connectionManager.id.port)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -219,6 +212,20 @@ private[spark] class BlockManager(
     }
   }
 
+  override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
+    val bid = BlockId(blockId)
+    if (bid.isShuffle) {
+      shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId])
+    } else {
+      val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      if (blockBytesOpt.isDefined) {
+        Right(blockBytesOpt.get)
+      } else {
+        throw new BlockNotFoundException(blockId)
+      }
+    }
+  }
+
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
    * NOTE: This is mainly for testing, and it doesn't fetch information from Tachyon.
@@ -326,8 +333,14 @@ private[spark] class BlockManager(
    * shuffle blocks. It is safe to do so without a lock on block info since disk store
    * never deletes (recent) items.
    */
-  def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer).orElse {
+  def getLocalShuffleFromDisk(
+      blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+
+    val shuffleBlockManager = shuffleManager.shuffleBlockManager
+    val values = shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]).map(
+      bytes => this.dataDeserialize(blockId, bytes, serializer))
+
+    values.orElse {
       throw new BlockException(blockId, s"Block $blockId not found on disk, though it should be")
     }
   }
@@ -348,7 +361,8 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      diskStore.getBytes(blockId) match {
+      val shuffleBlockManager = shuffleManager.shuffleBlockManager
+      shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
         case Some(bytes) =>
           Some(bytes)
         case None =>
@@ -544,14 +558,8 @@ private[spark] class BlockManager(
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
       serializer: Serializer,
       readMetrics: ShuffleReadMetrics): BlockFetcherIterator = {
-    val iter =
-      if (conf.getBoolean("spark.shuffle.use.netty", false)) {
-        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      } else {
-        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
-          readMetrics)
-      }
+    val iter = new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
+      readMetrics)
     iter.initialize()
     iter
   }
@@ -1038,31 +1046,12 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
-
-    def getIterator: Iterator[Any] = {
-      val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
-      serializer.newInstance().deserializeStream(stream).asIterator
-    }
-
-    if (blockId.isShuffle) {
-      /* Reducer may need to read many local shuffle blocks and will wrap them into Iterators
-       * at the beginning. The wrapping will cost some memory (compression instance
-       * initialization, etc.). Reducer reads shuffle blocks one by one so we could do the
-       * wrapping lazily to save memory. */
-      class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
-        lazy val proxy = f
-        override def hasNext: Boolean = proxy.hasNext
-        override def next(): Any = proxy.next()
-      }
-      new LazyProxyIterator(getIterator)
-    } else {
-      getIterator
-    }
+    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    serializer.newInstance().deserializeStream(stream).asIterator
   }
 
   def stop(): Unit = {
     connectionManager.stop()
-    shuffleBlockManager.stop()
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

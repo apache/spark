@@ -41,7 +41,8 @@ private[ui] class TasksPage(parent: JobProgressTab) extends WebUIPage("stage/tas
   override def renderJson(request: HttpServletRequest): JValue = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
-      val stageDataOption = listener.stageIdToData.get(stageId)
+      val stageAttemptId = request.getParameter("attempt").toInt
+      val stageDataOption = listener.stageIdToData.get((stageId,stageAttemptId))
 
       if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
         return JNothing

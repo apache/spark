@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -31,6 +33,71 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+
+  createQueryTest("count distinct 0 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 0) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value strings",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 'a' AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 'b' AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values including null",
+    """
+      |SELECT COUNT(DISTINCT a, 1) FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null",
+  """
+    |SELECT COUNT(DISTINCT a) FROM (
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+    |  SELECT null AS a FROM src LIMIT 1) table
+  """.stripMargin)
+
+  createQueryTest("count distinct 1 value long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 2 values long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2L AS a FROM src LIMIT 1) table
+    """.stripMargin)
+
+  createQueryTest("count distinct 1 value + null long",
+    """
+      |SELECT COUNT(DISTINCT a) FROM (
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT null AS a FROM src LIMIT 1) table
+    """.stripMargin)
 
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
@@ -244,11 +311,11 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
-  createQueryTest("case sensitivity: Hive table",
+  createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
@@ -262,7 +329,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
+    explanation.exists(_ == "== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -402,7 +469,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     // Describe a registered temporary table.
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
@@ -428,6 +495,23 @@ class HiveQuerySuite extends HiveComparisonTest {
         assert(map.size === 1)
         assert(map.head === (key, value))
     }
+  }
+
+  test("ADD JAR command") {
+    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    sql("CREATE TABLE alter1(a INT, b INT)")
+    intercept[Exception] {
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+        |WITH serdeproperties('s1'='9')
+      """.stripMargin)
+    sql("DROP TABLE alter1")
   }
 
   test("parse HQL set commands") {

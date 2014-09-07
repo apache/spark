@@ -25,6 +25,9 @@ from pyspark.mllib._common import _deserialize_double, _deserialize_double_vecto
 from pyspark.serializers import NoOpSerializer
 
 
+__all__ = ['RandomRDDs', ]
+
+
 class RandomRDDs:
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
@@ -35,10 +38,10 @@ class RandomRDDs:
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
-        uniform distribution on [0.0, 1.0].
+        uniform distribution U(0.0, 1.0).
 
-        To transform the distribution in the generated RDD from U[0.0, 1.0]
-        to U[a, b], use
+        To transform the distribution in the generated RDD from U(0.0, 1.0)
+        to U(a, b), use
         C{RandomRDDs.uniformRDD(sc, n, p, seed)\
           .map(lambda v: a + (b - a) * v)}
 
@@ -60,11 +63,11 @@ class RandomRDDs:
     @staticmethod
     def normalRDD(sc, size, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of i.i.d samples from the standard normal
+        Generates an RDD comprised of i.i.d. samples from the standard normal
         distribution.
 
         To transform the distribution in the generated RDD from standard normal
-        to some other normal N(mean, sigma), use
+        to some other normal N(mean, sigma^2), use
         C{RandomRDDs.normal(sc, n, p, seed)\
           .map(lambda v: mean + sigma * v)}
 
@@ -84,7 +87,7 @@ class RandomRDDs:
     @staticmethod
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of i.i.d samples from the Poisson
+        Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
 
         >>> mean = 100.0
@@ -105,8 +108,8 @@ class RandomRDDs:
     @staticmethod
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
-        from the uniform distribution on [0.0 1.0].
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
+        from the uniform distribution U(0.0, 1.0).
 
         >>> import numpy as np
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
@@ -125,7 +128,7 @@ class RandomRDDs:
     @staticmethod
     def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
 
         >>> import numpy as np
@@ -145,7 +148,7 @@ class RandomRDDs:
     @staticmethod
     def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
 
         >>> import numpy as np
