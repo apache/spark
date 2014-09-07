@@ -159,8 +159,6 @@ private[spark] object UIUtils extends Logging {
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
           type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/spark.css")}
-          type="text/css" />
     <script src={prependBaseUri("/static/sorttable.js")}></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
@@ -240,12 +238,8 @@ private[spark] object UIUtils extends Logging {
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
-      fixedWidth: Boolean = false,
-      simpleTable: Boolean = false): Seq[Node] = {
+      fixedWidth: Boolean = false): Seq[Node] = {
     var listingTableClass = TABLE_CLASS
-    if (simpleTable) {
-      listingTableClass = "spark-simple-table sortable"
-    }
     if (fixedWidth) {
       listingTableClass += " table-fixed"
     }
@@ -279,13 +273,8 @@ private[spark] object UIUtils extends Logging {
   def listingEmptyTable[T](
                        headers: Seq[String],
                        tableId: String,
-                       fixedWidth: Boolean = false,
-                       simpleTable: Boolean = false): Seq[Node] = {
-
+                       fixedWidth: Boolean = false): Seq[Node] = {
     var listingTableClass = TABLE_CLASS
-    if (simpleTable) {
-      listingTableClass = "spark-simple-table sortable"
-    }
     if (fixedWidth) {
       listingTableClass += " table-fixed"
     }

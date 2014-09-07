@@ -33,7 +33,7 @@ Spark.UI = (function ($) {
     // define a function that fills a table with the rows given
     // from a JSON data input: [{row1},{row2},...]
     //  - If a value of an entry in a row is an array it will further expand it with <span>
-    //  - If a value is a subobject with the syntax {value: nnn, attr: something}
+    //  - If a value is a sub-object with the syntax {value: nnn, attr: something}
     // then the cell will contain that value and the list of given attributes
     //  - If an entry contains </td> then we use it directly in the table as cell
     // without wrapping in with <td>

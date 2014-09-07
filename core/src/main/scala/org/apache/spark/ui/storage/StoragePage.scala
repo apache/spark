@@ -38,10 +38,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     val rdds = listener.rddInfoList
     val tableId = "storageTable"
     val content = if (jsRenderingEnabled) {
-      UIUtils.listingEmptyTable(rddHeader, tableId, simpleTable = true) ++
+      UIUtils.listingEmptyTable(rddHeader, tableId) ++
         UIUtils.fillTableJavascript(parent.prefix, tableId)
     } else {
-      UIUtils.listingTable(rddHeader, rddRow, rdds, simpleTable = true)
+      UIUtils.listingTable(rddHeader, rddRow, rdds)
     }
     UIUtils.headerSparkPage("Storage ", content, parent)
   }

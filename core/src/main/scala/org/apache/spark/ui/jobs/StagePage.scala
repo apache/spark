@@ -114,12 +114,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val taskTableId = "taskTable"
       val taskTable = if (jsRenderingEnabled) {
-         UIUtils.listingEmptyTable(taskHeaders, taskTableId, simpleTable = true)
+         UIUtils.listingEmptyTable(taskHeaders, taskTableId)
       }
       else {
         UIUtils.listingTable(
-          taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks,
-          simpleTable = true)
+          taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
       }
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)

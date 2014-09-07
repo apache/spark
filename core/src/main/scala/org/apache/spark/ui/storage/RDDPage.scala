@@ -46,18 +46,18 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val workers = StorageUtils.workersFromRDDId(rddId, storageStatusList)
     val workerTableId = "workerTable"
     val workerTable = if (jsRenderingEnabled) {
-      UIUtils.listingEmptyTable(workerHeader, workerTableId, simpleTable = true)
+      UIUtils.listingEmptyTable(workerHeader, workerTableId)
     } else {
-      UIUtils.listingTable(workerHeader, workerRow, workers, simpleTable = true)
+      UIUtils.listingTable(workerHeader, workerRow, workers)
     }
 
     // Block table
     val blocks = StorageUtils.blocksFromRDDId(rddId, storageStatusList)
     val blockTableId = "blockTable"
     val blockTable = if (jsRenderingEnabled) {
-      UIUtils.listingEmptyTable(blockHeader, blockTableId, simpleTable = true)
+      UIUtils.listingEmptyTable(blockHeader, blockTableId)
     } else {
-      UIUtils.listingTable(blockHeader, blockRow, blocks, simpleTable = true)
+      UIUtils.listingTable(blockHeader, blockRow, blocks)
     }
 
     var content =
