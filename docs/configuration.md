@@ -225,6 +225,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.deploy.recoveryDirectory</code></td>
+  <td>""</td>
+  <td>
+    The user can specify the directory for the master recovery file when using FileSystemPersistenceEngine.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60s</td>
   <td>
