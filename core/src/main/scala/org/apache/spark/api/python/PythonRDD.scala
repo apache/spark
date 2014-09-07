@@ -53,7 +53,7 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuse_worker = conf.getBoolean("spark.python.reuse.worker", true)
+  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions = parent.partitions
 
