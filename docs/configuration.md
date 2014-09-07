@@ -403,6 +403,13 @@ Apart from these, the following properties are also available, and may be useful
         </code> seconds since the worker is dead, Spark will remove it from UI.
   </td>
 </tr>
+<tr>
+  <td>spark.master.ui.port</td>
+  <td>8080</td>
+  <td>
+    The port number of the web UI of Master.  
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
