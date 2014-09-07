@@ -900,6 +900,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.executorTaskBlacklistTime</code></td>
+  <td>0</td>
+  <td>
+    The allowed failure number of a task before the executor is put into black list. 
+  </td>
+</tr>
+<tr>
   <td><code>spark.localExecution.enabled</code></td>
   <td>false</td>
   <td>
