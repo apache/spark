@@ -847,7 +847,7 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
       statistics are only supported for Hive Metastore tables where the command
-      `ANALYZE TABLE &gt;tableName&lt; COMPUTE STATISTICS noscan` has been run.
+      `ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan` has been run.
     </td>
   </tr>
   <tr>
