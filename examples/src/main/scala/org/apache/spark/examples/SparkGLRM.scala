@@ -110,10 +110,10 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val R = sc.parallelize(1 to NNZ).map{x =>
+    val R = sc.parallelize(1 to NNZ).flatMap{x =>
       val i = math.abs(math.round(math.random * (M - 1)).toInt)
       val j = math.abs(math.round(math.random * (U - 1)).toInt)
-      ((i, j), math.random)
+      List.fill(10)(((i, j), math.random))
     }.reduceByKey(_ + _).map{case (a, b) => (a._1, a._2, b)}
 
     // Transpose data
