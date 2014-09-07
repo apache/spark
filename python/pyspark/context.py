@@ -322,7 +322,7 @@ class SparkContext(object):
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in
-        Spark 1.1)
+        Spark 1.2)
 
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
@@ -345,7 +345,7 @@ class SparkContext(object):
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in
-        Spark 1.1)
+        Spark 1.2)
 
         For example, if you have the following files::
 
