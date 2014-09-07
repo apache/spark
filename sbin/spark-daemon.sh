@@ -21,7 +21,7 @@
 #
 # Environment Variables
 #
-#   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_PREFIX}/conf.
+#   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_HOME}/conf.
 #   SPARK_LOG_DIR   Where log files are stored.  PWD by default.
 #   SPARK_MASTER    host:path where spark code should be rsync'd from
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
@@ -37,10 +37,16 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
 # get arguments
 
@@ -86,7 +92,7 @@ spark_rotate_log ()
     fi
 }
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
@@ -142,8 +148,8 @@ case $startStop in
 
     spark_rotate_log "$log"
     echo starting $command, logging to $log
-    cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    cd "$SPARK_HOME"
+    nohup nice -n $SPARK_NICENESS "$SPARK_HOME/bin/spark-class" $command "$@" >> "$log" 2>&1 < /dev/null &
     newpid=$!
     echo $newpid > $pid
     sleep 2

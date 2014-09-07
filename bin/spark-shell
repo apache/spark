@@ -28,8 +28,14 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-## Global script variables
-FWDIR="$(cd `dirname $0`/..; pwd)"
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
 
 function usage() {
   echo "Usage: ./bin/spark-shell [options]"

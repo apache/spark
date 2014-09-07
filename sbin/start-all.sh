@@ -21,8 +21,14 @@
 # Starts the master on this node.
 # Starts a worker on each node specified in conf/slaves
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
 TACHYON_STR=""
 
@@ -36,10 +42,10 @@ shift
 done
 
 # Load the Spark configuration
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
 # Start Master
-"$sbin"/start-master.sh $TACHYON_STR
+"$SPARK_HOME/sbin/start-master.sh" $TACHYON_STR
 
 # Start Workers
-"$sbin"/start-slaves.sh $TACHYON_STR
+"$SPARK_HOME/sbin/start-slaves.sh" $TACHYON_STR

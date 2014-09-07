@@ -36,10 +36,16 @@ if [ $# -le 0 ]; then
   exit 1
 fi
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# Figure out where Spark is installed
+SOURCE=$0
+while [ -h "$SOURCE" ]
+do
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
 
-. "$sbin/spark-config.sh"
+. "$SPARK_HOME/sbin/spark-config.sh"
 
 # If the slaves file is specified in the command line,
 # then it takes precedence over the definition in
@@ -63,7 +69,7 @@ then
   shift
 fi
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "$SPARK_HOME/bin/load-spark-env.sh"
 
 if [ "$HOSTLIST" = "" ]; then
   if [ "$SPARK_SLAVES" = "" ]; then
