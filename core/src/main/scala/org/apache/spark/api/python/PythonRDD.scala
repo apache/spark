@@ -211,7 +211,7 @@ private[spark] class PythonRDD(
         for (bid <- bids) {
           if (!nbids.contains(bid)) {
             // remove the broadcast from worker
-            dataOut.writeLong(-bid)
+            dataOut.writeLong(- bid - 1)  // bid >= 0
             bids.remove(bid)
           }
         }
