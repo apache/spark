@@ -187,15 +187,16 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * Extract the decision tree node information for the given tree level and node index
    */
   private def extractNodeInfo(
-      nodeSplitStats: (Split, InformationGainStats),
+      nodeSplitStats: (Split, InformationGainStats, Predict),
       level: Int,
       index: Int,
       nodes: Array[Node]): Unit = {
     val split = nodeSplitStats._1
     val stats = nodeSplitStats._2
+    val predict = nodeSplitStats._3
     val nodeIndex = (1 << level) - 1 + index
     val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth)
-    val node = new Node(nodeIndex, stats.predict, isLeaf, Some(split), None, None, Some(stats))
+    val node = new Node(nodeIndex, predict.predict, isLeaf, Some(split), None, None, Some(stats))
     logDebug("Node = " + node)
     nodes(nodeIndex) = node
   }
@@ -207,7 +208,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       level: Int,
       index: Int,
       maxDepth: Int,
-      nodeSplitStats: (Split, InformationGainStats),
+      nodeSplitStats: (Split, InformationGainStats, Predict),
       parentImpurities: Array[Double]): Unit = {
 
     if (level >= maxDepth) {
@@ -450,7 +451,7 @@ object DecisionTree extends Serializable with Logging {
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       maxLevelForSingleGroup: Int,
-      timer: TimeTracker = new TimeTracker): Array[(Split, InformationGainStats)] = {
+      timer: TimeTracker = new TimeTracker): Array[(Split, InformationGainStats, Predict)] = {
     // split into groups to avoid memory overflow during aggregation
     if (level > maxLevelForSingleGroup) {
       // When information for all nodes at a given level cannot be stored in memory,
@@ -459,7 +460,7 @@ object DecisionTree extends Serializable with Logging {
       // numGroups is equal to 2 at level 11 and 4 at level 12, respectively.
       val numGroups = 1 << level - maxLevelForSingleGroup
       logDebug("numGroups = " + numGroups)
-      var bestSplits = new Array[(Split, InformationGainStats)](0)
+      var bestSplits = new Array[(Split, InformationGainStats, Predict)](0)
       // Iterate over each group of nodes at a level.
       var groupIndex = 0
       while (groupIndex < numGroups) {
@@ -497,7 +498,7 @@ object DecisionTree extends Serializable with Logging {
       bins: Array[Array[Bin]],
       timer: TimeTracker,
       numGroups: Int = 1,
-      groupIndex: Int = 0): Array[(Split, InformationGainStats)] = {
+      groupIndex: Int = 0): Array[(Split, InformationGainStats, Predict)] = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -596,14 +597,6 @@ object DecisionTree extends Serializable with Logging {
             predictNodeIndex(node.rightNode.get, binnedFeatures)
           }
         }
-      }
-    }
-
-    def nodeIndexToLevel(idx: Int): Int = {
-      if (idx == 0) {
-        0
-      } else {
-        math.floor(math.log(idx) / math.log(2)).toInt
       }
     }
 
@@ -865,33 +858,8 @@ object DecisionTree extends Serializable with Logging {
         val totalCount = leftTotalCount + rightTotalCount
         if (totalCount == 0) {
           // Return arbitrary prediction.
-          return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
+          return new InformationGainStats(0, topImpurity, topImpurity, topImpurity)
         }
-
-        // Sum of count for each label
-        val leftrightNodeAgg: Array[Double] =
-          leftNodeAgg.zip(rightNodeAgg).map { case (leftCount, rightCount) =>
-            leftCount + rightCount
-          }
-
-        def indexOfLargestArrayElement(array: Array[Double]): Int = {
-          val result = array.foldLeft(-1, Double.MinValue, 0) {
-            case ((maxIndex, maxValue, currentIndex), currentValue) =>
-              if (currentValue > maxValue) {
-                (currentIndex, currentValue, currentIndex + 1)
-              } else {
-                (maxIndex, maxValue, currentIndex + 1)
-              }
-          }
-          if (result._1 < 0) {
-            throw new RuntimeException("DecisionTree internal error:" +
-              " calculateGainForSplit failed in indexOfLargestArrayElement")
-          }
-          result._1
-        }
-
-        val predict = indexOfLargestArrayElement(leftrightNodeAgg)
-        val prob = leftrightNodeAgg(predict) / totalCount
 
         val leftImpurity = if (leftTotalCount == 0) {
           topImpurity
@@ -909,7 +877,7 @@ object DecisionTree extends Serializable with Logging {
 
         val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 
-        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict, prob)
+        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity)
 
       } else {
         // Regression
@@ -935,12 +903,11 @@ object DecisionTree extends Serializable with Logging {
         }
 
         if (leftCount == 0) {
-          return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity,
-            rightSum / rightCount)
+          return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity)
         }
         if (rightCount == 0) {
           return new InformationGainStats(0, topImpurity, topImpurity,
-            Double.MinValue, leftSum / leftCount)
+            Double.MinValue)
         }
 
         val leftImpurity = metadata.impurity.calculate(leftCount, leftSum, leftSumSquares)
@@ -951,8 +918,7 @@ object DecisionTree extends Serializable with Logging {
 
         val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 
-        val predict = (leftSum + rightSum) / (leftCount + rightCount)
-        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
+        new InformationGainStats(gain, impurity, leftImpurity, rightImpurity)
       }
     }
 
@@ -1162,6 +1128,46 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
+    def calculatePredict(leftNodeAgg: Array[Double], rightNodeAgg: Array[Double]) = {
+      if (metadata.isClassification) {
+        val totalCount = leftNodeAgg.sum + rightNodeAgg.sum
+        val leftrightNodeAgg: Array[Double] =
+          leftNodeAgg.zip(rightNodeAgg).map { case (leftCount, rightCount) =>
+            leftCount + rightCount
+          }
+
+        def indexOfLargestArrayElement(array: Array[Double]): Int = {
+          val result = array.foldLeft(-1, Double.MinValue, 0) {
+            case ((maxIndex, maxValue, currentIndex), currentValue) =>
+              if (currentValue > maxValue) {
+                (currentIndex, currentValue, currentIndex + 1)
+              } else {
+                (maxIndex, maxValue, currentIndex + 1)
+              }
+          }
+          if (result._1 < 0) {
+            throw new RuntimeException("DecisionTree internal error:" +
+              " calculateGainForSplit failed in indexOfLargestArrayElement")
+          }
+          result._1
+        }
+
+        val predict = indexOfLargestArrayElement(leftrightNodeAgg)
+        val prob = leftrightNodeAgg(predict) / totalCount
+
+        new Predict(predict, prob)
+      } else {
+        val leftCount = leftNodeAgg(0)
+        val leftSum = leftNodeAgg(1)
+
+        val rightCount = rightNodeAgg(0)
+        val rightSum = rightNodeAgg(1)
+
+        val predict = (leftSum + rightSum) / (leftCount + rightCount)
+        new Predict(predict)
+      }
+    }
+
     /**
      * Find the best split for a node.
      * @param binData Bin data slice for this node, given by getBinDataForNode.
@@ -1170,12 +1176,15 @@ object DecisionTree extends Serializable with Logging {
      */
     def binsToBestSplit(
         binData: Array[Double],
-        nodeImpurity: Double): (Split, InformationGainStats) = {
+        nodeImpurity: Double): (Split, InformationGainStats, Predict) = {
 
       logDebug("node impurity = " + nodeImpurity)
 
       // Extract left right node aggregates.
       val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData)
+
+      // Calculate prediction value for current node.
+      val predict = calculatePredict(leftNodeAgg(0)(0), rightNodeAgg(0)(0))
 
       // Calculate gains for all splits.
       val gains = calculateGainsForAllNodeSplits(leftNodeAgg, rightNodeAgg, nodeImpurity)
@@ -1184,7 +1193,7 @@ object DecisionTree extends Serializable with Logging {
         // Initialize with infeasible values.
         var bestFeatureIndex = Int.MinValue
         var bestSplitIndex = Int.MinValue
-        var bestGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, -1.0)
+        var bestGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0)
         // Iterate over features.
         var featureIndex = 0
         while (featureIndex < numFeatures) {
@@ -1208,7 +1217,7 @@ object DecisionTree extends Serializable with Logging {
       logDebug("best split = " + splits(bestFeatureIndex)(bestSplitIndex))
       logDebug("best split bin = " + bins(bestFeatureIndex)(bestSplitIndex))
 
-      (splits(bestFeatureIndex)(bestSplitIndex), gainStats)
+      (splits(bestFeatureIndex)(bestSplitIndex), gainStats, predict)
     }
 
     /**
@@ -1243,7 +1252,7 @@ object DecisionTree extends Serializable with Logging {
 
     // Calculate best splits for all nodes at a given level
     timer.start("chooseSplits")
-    val bestSplits = new Array[(Split, InformationGainStats)](numNodes)
+    val bestSplits = new Array[(Split, InformationGainStats, Predict)](numNodes)
     // Iterating over all nodes at this level
     var node = 0
     while (node < numNodes) {

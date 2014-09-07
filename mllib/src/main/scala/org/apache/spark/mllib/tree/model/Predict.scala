@@ -21,21 +21,16 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Information gain statistics for each split
- * @param gain information gain value
- * @param impurity current node impurity
- * @param leftImpurity left node impurity
- * @param rightImpurity right node impurity
+ * Predicted value for a node
+ * @param predict predicted value
+ * @param prob probability of the label (classification only)
  */
 @DeveloperApi
-class InformationGainStats(
-    val gain: Double,
-    val impurity: Double,
-    val leftImpurity: Double,
-    val rightImpurity: Double) extends Serializable {
+class Predict(
+    val predict: Double,
+    val prob: Double = 0.0) extends Serializable{
 
-  override def toString = {
-    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
-      .format(gain, impurity, leftImpurity, rightImpurity)
+  override def toString() = {
+    "predict = %f, prob = %f".format(predict, prob)
   }
 }
