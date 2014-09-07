@@ -224,6 +224,13 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.executor.uri</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.worker.timeout</code></td>
+  <td>60s</td>
+  <td>
+    Communication timeout before the master takes a worker as dead
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
