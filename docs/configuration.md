@@ -367,6 +367,15 @@ Apart from these, the following properties are also available, and may be useful
     a unified location like an HDFS directory so history files can be read by the history server.
   </td>
 </tr>
+<tr>
+  <td>spark.deploy.retainedApplications</td>
+  <td>200</td>
+  <td>
+    The maximum number of records on completed applications kept in the Master node. When the completed
+    application number exceeds the threshold, the first Max(spark.deploy.retainedApplications, 1) will be
+    discarded.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
