@@ -27,7 +27,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.Utils
 
@@ -45,7 +45,8 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
       sparkConf: SparkConf,
       preferredNodeLocations: Map[String, Set[SplitInfo]],
       uiAddress: String,
-      uiHistoryAddress: String) = {
+      uiHistoryAddress: String,
+      securityMgr: SecurityManager) = {
     this.rpc = YarnRPC.create(conf)
     this.uiHistoryAddress = uiHistoryAddress
 
@@ -53,7 +54,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     registerApplicationMaster(uiAddress)
 
     new YarnAllocationHandler(conf, sparkConf, resourceManager, getAttemptId(), args,
-      preferredNodeLocations)
+      preferredNodeLocations, securityMgr)
   }
 
   override def getAttemptId() = {

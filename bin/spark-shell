@@ -29,11 +29,11 @@ esac
 set -o posix
 
 ## Global script variables
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 function usage() {
   echo "Usage: ./bin/spark-shell [options]"
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
 }
 
@@ -41,7 +41,7 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
 fi
 
-source $FWDIR/bin/utils.sh
+source "$FWDIR"/bin/utils.sh
 SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 
@@ -54,11 +54,11 @@ function main() {
     # (see https://github.com/sbt/sbt/issues/562).
     stty -icanon min 1 -echo > /dev/null 2>&1
     export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-    $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+    "$FWDIR"/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
     stty icanon echo > /dev/null 2>&1
   else
     export SPARK_SUBMIT_OPTS
-    $FWDIR/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+    "$FWDIR"/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
   fi
 }
 

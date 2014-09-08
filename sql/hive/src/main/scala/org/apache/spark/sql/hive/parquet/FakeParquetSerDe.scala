@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
 import org.apache.hadoop.io.Writable
 
 /**
- * A placeholder that allows SparkSQL users to create metastore tables that are stored as
+ * A placeholder that allows Spark SQL users to create metastore tables that are stored as
  * parquet files.  It is only intended to pass the checks that the serde is valid and exists
  * when a CREATE TABLE is run.  The actual work of decoding will be done by ParquetTableScan
  * when "spark.sql.hive.convertMetastoreParquet" is set to true.

@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
@@ -55,7 +55,8 @@ private[yarn] abstract class YarnAllocator(
     conf: Configuration,
     sparkConf: SparkConf,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
+    securityMgr: SecurityManager)
   extends Logging {
 
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
@@ -280,7 +281,8 @@ private[yarn] abstract class YarnAllocator(
             executorId,
             executorHostname,
             executorMemory,
-            executorCores)
+            executorCores,
+            securityMgr)
           new Thread(executorRunnable).start()
         }
       }

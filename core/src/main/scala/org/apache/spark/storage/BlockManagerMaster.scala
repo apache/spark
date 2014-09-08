@@ -27,7 +27,11 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Logging {
+class BlockManagerMaster(
+    var driverActor: ActorRef,
+    conf: SparkConf,
+    isDriver: Boolean)
+  extends Logging {
   private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
   private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
@@ -196,7 +200,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
 
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
-    if (driverActor != null) {
+    if (driverActor != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverActor = null
       logInfo("BlockManagerMaster stopped")
