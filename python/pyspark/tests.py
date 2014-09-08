@@ -43,6 +43,7 @@ from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.sql import SQLContext, IntegerType
 
 _have_scipy = False
 _have_numpy = False
@@ -424,6 +425,22 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(a.count(), b.count())
         self.assertRaises(Exception, lambda: a.zip(b).count())
 
+    def test_count_approx_distinct(self):
+        rdd = self.sc.parallelize(range(1000))
+        self.assertTrue(950 < rdd.countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.04) < 1050)
+        self.assertTrue(950 < rdd.map(lambda x: (x, -x)).countApproxDistinct(0.04) < 1050)
+
+        rdd = self.sc.parallelize([i % 20 for i in range(1000)], 7)
+        self.assertTrue(18 < rdd.countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(float).countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(str).countApproxDistinct() < 22)
+        self.assertTrue(18 < rdd.map(lambda x: (x, -x)).countApproxDistinct() < 22)
+
+        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
+        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.5))
+
     def test_histogram(self):
         # empty
         rdd = self.sc.parallelize([])
@@ -535,6 +552,27 @@ class TestRDDFunctions(PySparkTestCase):
         partitions = repartitioned.glom().collect()
         self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+
+class TestSQL(PySparkTestCase):
+
+    def setUp(self):
+        PySparkTestCase.setUp(self)
+        self.sqlCtx = SQLContext(self.sc)
+
+    def test_udf(self):
+        self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_broadcast_in_udf(self):
+        bar = {"a": "aa", "b": "bb", "c": "abc"}
+        foo = self.sc.broadcast(bar)
+        self.sqlCtx.registerFunction("MYUDF", lambda x: foo.value[x] if x else '')
+        [res] = self.sqlCtx.sql("SELECT MYUDF('c')").collect()
+        self.assertEqual("abc", res[0])
+        [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
+        self.assertEqual("", res[0])
 
 
 class TestIO(PySparkTestCase):
