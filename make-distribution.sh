@@ -28,7 +28,7 @@ set -o pipefail
 set -e
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$FWDIR/dist"
 
 SPARK_TACHYON=false
