@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-assembly_2.10</artifactId>
+  <artifactId>spark-assembly</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
   <packaging>pom</packaging>
@@ -51,37 +51,37 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
+      <artifactId>spark-bagel</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+      <artifactId>spark-mllib</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala.binary.version}</artifactId>
+      <artifactId>spark-repl</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-graphx_${scala.binary.version}</artifactId>
+      <artifactId>spark-graphx</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <artifactId>spark-sql</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>
@@ -158,7 +158,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn-alpha_${scala.binary.version}</artifactId>
+          <artifactId>spark-yarn-alpha</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -168,7 +168,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn_${scala.binary.version}</artifactId>
+          <artifactId>spark-yarn</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -178,12 +178,12 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <artifactId>spark-hive</artifactId>
           <version>${project.version}</version>
         </dependency>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
+          <artifactId>spark-hive-thriftserver</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -193,7 +193,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-ganglia-lgpl_${scala.binary.version}</artifactId>
+          <artifactId>spark-ganglia-lgpl</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

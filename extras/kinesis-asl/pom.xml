@@ -26,7 +26,7 @@
 
   <!-- Kinesis integration is not included by default due to ASL-licensed code. -->
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-kinesis-asl_2.10</artifactId>
+  <artifactId>spark-streaming-kinesis-asl</artifactId>
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 
@@ -37,12 +37,12 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
@@ -87,6 +87,52 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <version>2.5.2</version>
+        <executions>
+          <execution>
+            <id>1</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <file>${project.build.directory}/${project.build.finalName}.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+            </configuration>
+          </execution>
+          <execution>
+            <id>2</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <generatePom>false</generatePom>
+              <pomFile>pom.xml</pomFile>
+              <file>${project.build.directory}/${project.build.finalName}-sources.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+              <classifier>sources</classifier>
+            </configuration>
+          </execution>
+          <execution>
+            <id>3</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <generatePom>false</generatePom>
+              <pomFile>pom.xml</pomFile>
+              <file>${project.build.directory}/${project.build.finalName}-javadoc.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+              <classifier>javadoc</classifier>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>

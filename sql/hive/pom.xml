@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-hive_2.10</artifactId>
+  <artifactId>spark-hive</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
   <url>http://spark.apache.org/</url>
@@ -43,12 +43,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <artifactId>spark-sql</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -141,6 +141,52 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <version>2.5.2</version>
+        <executions>
+          <execution>
+            <id>1</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <file>${project.build.directory}/${project.build.finalName}.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+            </configuration>
+          </execution>
+          <execution>
+            <id>2</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <generatePom>false</generatePom>
+              <pomFile>pom.xml</pomFile>
+              <file>${project.build.directory}/${project.build.finalName}-sources.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+              <classifier>sources</classifier>
+            </configuration>
+          </execution>
+          <execution>
+            <id>3</id>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <generatePom>false</generatePom>
+              <pomFile>pom.xml</pomFile>
+              <file>${project.build.directory}/${project.build.finalName}-javadoc.jar</file>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+              <classifier>javadoc</classifier>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
