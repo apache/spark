@@ -15,32 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
 import java.io.IOException
+import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
-import java.net._
-import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{LinkedBlockingDeque, ThreadPoolExecutor, TimeUnit}
+import java.util.{Timer, TimerTask}
 
-import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.SynchronizedMap
-import scala.collection.mutable.SynchronizedQueue
-
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, SynchronizedMap, SynchronizedQueue}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
 
-private[spark] class ConnectionManager(
+
+private[nio] class ConnectionManager(
     port: Int,
     conf: SparkConf,
     securityManager: SecurityManager,
@@ -904,7 +899,7 @@ private[spark] class ConnectionManager(
 
 
 private[spark] object ConnectionManager {
-  import ExecutionContext.Implicits.global
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   def main(args: Array[String]) {
     val conf = new SparkConf

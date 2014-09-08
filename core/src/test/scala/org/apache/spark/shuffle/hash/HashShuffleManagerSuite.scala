@@ -25,6 +25,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.{SparkEnv, SparkContext, LocalSparkContext, SparkConf}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FileShuffleBlockManager
 import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
@@ -32,10 +33,12 @@ import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
 class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
   private val testConf = new SparkConf(false)
 
-  private def checkSegments(segment1: FileSegment, segment2: FileSegment) {
-    assert (segment1.file.getCanonicalPath === segment2.file.getCanonicalPath)
-    assert (segment1.offset === segment2.offset)
-    assert (segment1.length === segment2.length)
+  private def checkSegments(expected: FileSegment, buffer: ManagedBuffer) {
+    assert(buffer.isInstanceOf[FileSegmentManagedBuffer])
+    val segment = buffer.asInstanceOf[FileSegmentManagedBuffer]
+    assert(expected.file.getCanonicalPath === segment.file.getCanonicalPath)
+    assert(expected.offset === segment.offset)
+    assert(expected.length === segment.length)
   }
 
   test("consolidated shuffle can write to shuffle group without messing existing offsets/lengths") {
@@ -95,13 +98,11 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
       writer.commitAndClose()
     }
     // check before we register.
-    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)).left.get)
+    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)))
     shuffle3.releaseWriters(success = true)
-    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)).left.get)
+    checkSegments(shuffle2Segment, shuffleBlockManager.getBlockData(ShuffleBlockId(1, 2, 0)))
     shuffleBlockManager.removeShuffle(1)
-
   }
-
 
   def writeToFile(file: File, numBytes: Int) {
     val writer = new FileWriter(file, true)

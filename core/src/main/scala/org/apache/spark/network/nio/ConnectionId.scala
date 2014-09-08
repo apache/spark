@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
-import java.nio.ByteBuffer
+private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
+  override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
+}
 
-import scala.collection.mutable.ArrayBuffer
+private[nio] object ConnectionId {
 
-private[network]
-class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
-
-  val size = if (buffer == null) 0 else buffer.remaining
-
-  lazy val buffers = {
-    val ab = new ArrayBuffer[ByteBuffer]()
-    ab += header.buffer
-    if (buffer != null) {
-      ab += buffer
+  def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
+    val res = connectionIdString.split("_").map(_.trim())
+    if (res.size != 3) {
+      throw new Exception("Error converting ConnectionId string: " + connectionIdString +
+        " to a ConnectionId Object")
     }
-    ab
-  }
-
-  override def toString = {
-    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
+    new ConnectionId(new ConnectionManagerId(res(0), res(1).toInt), res(2).toInt)
   }
 }

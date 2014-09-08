@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
+import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.shuffle.hash.HashShuffleManager
 
 import scala.collection.mutable
@@ -52,7 +53,6 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
     rootDir1 = Files.createTempDir()
     rootDir1.deleteOnExit()
     rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
-    println("Created root dirs: " + rootDirs)
   }
 
   override def afterAll() {

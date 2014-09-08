@@ -21,6 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.network.{ManagedBuffer, FileSegmentManagedBuffer}
 import org.apache.spark.storage._
 
 /**
@@ -89,10 +90,11 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
     }
   }
 
-  /**
-   * Get the location of a block in a map output file. Uses the index file we create for it.
-   * */
-  private def getBlockLocation(blockId: ShuffleBlockId): FileSegment = {
+  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+    Some(getBlockData(blockId).nioByteBuffer())
+  }
+
+  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
@@ -102,19 +104,13 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
       in.skip(blockId.reduceId * 8)
       val offset = in.readLong()
       val nextOffset = in.readLong()
-      new FileSegment(getDataFile(blockId.shuffleId, blockId.mapId), offset, nextOffset - offset)
+      new FileSegmentManagedBuffer(
+        getDataFile(blockId.shuffleId, blockId.mapId),
+        offset,
+        nextOffset - offset)
     } finally {
       in.close()
     }
-  }
-
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    val segment = getBlockLocation(blockId)
-    blockManager.diskStore.getBytes(segment)
-  }
-
-  override def getBlockData(blockId: ShuffleBlockId): Either[FileSegment, ByteBuffer] = {
-    Left(getBlockLocation(blockId.asInstanceOf[ShuffleBlockId]))
   }
 
   override def stop() = {}
