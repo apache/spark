@@ -24,7 +24,7 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 CLASS_NOT_FOUND_EXIT_STATUS=1
@@ -38,10 +38,10 @@ function usage {
   pattern+="\|======="
   pattern+="\|--help"
 
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   echo
   echo "Thrift server options:"
-  $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -49,7 +49,7 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-source $FWDIR/bin/utils.sh
+source "$FWDIR"/bin/utils.sh
 SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 

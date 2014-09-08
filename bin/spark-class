@@ -27,12 +27,12 @@ esac
 SCALA_VERSION=2.10
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
-. $FWDIR/bin/load-spark-env.sh
+. "$FWDIR"/bin/load-spark-env.sh
 
 if [ -z "$1" ]; then
   echo "Usage: spark-class <class> [<args>]" 1>&2
@@ -105,7 +105,7 @@ else
     exit 1
   fi
 fi
-JAVA_VERSION=$($RUNNER -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
+JAVA_VERSION=$("$RUNNER" -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 if [ "$JAVA_VERSION" -ge 18 ]; then
@@ -117,7 +117,7 @@ JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
-  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
+  JAVA_OPTS="$JAVA_OPTS `cat "$FWDIR"/conf/java-opts`"
 fi
 
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
@@ -126,21 +126,21 @@ TOOLS_DIR="$FWDIR"/tools
 SPARK_TOOLS_JAR=""
 if [ -e "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the SBT build
-  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar`
+  export SPARK_TOOLS_JAR="`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar`"
 fi
 if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the Maven build
   # TODO: this also needs to become an assembly!
-  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar`
+  export SPARK_TOOLS_JAR="`ls "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar`"
 fi
 
 # Compute classpath using external script
-classpath_output=$($FWDIR/bin/compute-classpath.sh)
+classpath_output=$("$FWDIR"/bin/compute-classpath.sh)
 if [[ "$?" != "0" ]]; then
   echo "$classpath_output"
   exit 1
 else
-  CLASSPATH=$classpath_output
+  CLASSPATH="$classpath_output"
 fi
 
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
@@ -153,9 +153,9 @@ if [[ "$1" =~ org.apache.spark.tools.* ]]; then
 fi
 
 if $cygwin; then
-  CLASSPATH=`cygpath -wp $CLASSPATH`
+  CLASSPATH="`cygpath -wp "$CLASSPATH"`"
   if [ "$1" == "org.apache.spark.tools.JavaAPICompletenessChecker" ]; then
-    export SPARK_TOOLS_JAR=`cygpath -w $SPARK_TOOLS_JAR`
+    export SPARK_TOOLS_JAR="`cygpath -w "$SPARK_TOOLS_JAR"`"
   fi
 fi
 export CLASSPATH
