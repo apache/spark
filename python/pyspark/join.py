@@ -95,6 +95,7 @@ def python_full_outer_join(rdd, other, numPartitions):
         return [(v, w) for v in vbuf for w in wbuf]
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
+
 def python_cogroup(rdds, numPartitions):
     def make_mapper(i):
         return lambda (k, v): (k, (i, v))
