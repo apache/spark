@@ -10,10 +10,12 @@ Swift security credentials, through <code>core-sites.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
 Current Swift driver requires Swift to use Keystone authentication method.
 
-# Configuring Swift 
-Proxy server of Swift should include <code>list_endpoints</code> middleware. More information
-available
-[here](https://github.com/openstack/swift/blob/master/swift/common/middleware/list_endpoints.py)
+# Configuring Swift for Better Data Locality
+
+Although not mandatory, it is recommended to configure the proxy server of Swift with
+<code>list_endpoints</code> to have better data locality. More information is
+[available here](https://github.com/openstack/swift/blob/master/swift/common/middleware/list_endpoints.py).
+
 
 # Dependencies
 
@@ -49,7 +51,7 @@ Configuration of Hadoop to use Swift File system achieved via
 </tr>
 </table>
 
-Additional parameters required by Keystone and should be provided to the Swift driver. Those 
+Additional parameters required by Keystone (v2.0) and should be provided to the Swift driver. Those 
 parameters will be used to perform authentication in Keystone to access Swift. The following table 
 contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be any name.
 
@@ -98,7 +100,7 @@ contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be a
 </table>
 
 For example, assume <code>PROVIDER=SparkTest</code> and Keystone contains user <code>tester</code> with password <code>testing</code>
-defined for tenant <code>tenant</code>. Than <code>core-sites.xml</code> should include:
+defined for tenant <code>test</code>. Than <code>core-sites.xml</code> should include:
 
 {% highlight xml %}
 <configuration>
