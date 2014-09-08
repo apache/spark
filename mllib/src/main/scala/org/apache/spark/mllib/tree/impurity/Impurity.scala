@@ -22,6 +22,9 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 /**
  * :: Experimental ::
  * Trait for calculating information gain.
+ * This trait is used for
+ *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
+ *  (b) calculating impurity values from sufficient statistics.
  */
 @Experimental
 trait Impurity extends Serializable {
@@ -46,4 +49,128 @@ trait Impurity extends Serializable {
    */
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
+}
+
+/**
+ * Interface for updating views of a vector of sufficient statistics,
+ * in order to compute impurity from a sample.
+ * Note: Instances of this class do not hold the data; they operate on views of the data.
+ * @param statsSize  Length of the vector of sufficient statistics for one bin.
+ */
+private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
+
+  /**
+   * Merge the stats from one bin into another.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for (node, feature, bin) which is modified by the merge.
+   * @param otherOffset  Start index of stats for (node, feature, other bin) which is not modified.
+   */
+  def merge(allStats: Array[Double], offset: Int, otherOffset: Int): Unit = {
+    var i = 0
+    while (i < statsSize) {
+      allStats(offset + i) += allStats(otherOffset + i)
+      i += 1
+    }
+  }
+
+  /**
+   * Update stats for one (node, feature, bin) with the given label.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def update(allStats: Array[Double], offset: Int, label: Double): Unit
+
+  /**
+   * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param offset    Start index of stats for this (node, feature, bin).
+   */
+  def getCalculator(allStats: Array[Double], offset: Int): ImpurityCalculator
+
+}
+
+/**
+ * Stores statistics for one (node, feature, bin) for calculating impurity.
+ * Unlike [[ImpurityAggregator]], this class stores its own data and is for a specific
+ * (node, feature, bin).
+ * @param stats  Array of sufficient statistics for a (node, feature, bin).
+ */
+private[tree] abstract class ImpurityCalculator(val stats: Array[Double]) {
+
+  /**
+   * Make a deep copy of this [[ImpurityCalculator]].
+   */
+  def copy: ImpurityCalculator
+
+  /**
+   * Calculate the impurity from the stored sufficient statistics.
+   */
+  def calculate(): Double
+
+  /**
+   * Add the stats from another calculator into this one, modifying and returning this calculator.
+   */
+  def add(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.size == other.stats.size,
+      s"Two ImpurityCalculator instances cannot be added with different counts sizes." +
+        s"  Sizes are ${stats.size} and ${other.stats.size}.")
+    var i = 0
+    while (i < other.stats.size) {
+      stats(i) += other.stats(i)
+      i += 1
+    }
+    this
+  }
+
+  /**
+   * Subtract the stats from another calculator from this one, modifying and returning this
+   * calculator.
+   */
+  def subtract(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.size == other.stats.size,
+      s"Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
+      s"  Sizes are ${stats.size} and ${other.stats.size}.")
+    var i = 0
+    while (i < other.stats.size) {
+      stats(i) -= other.stats(i)
+      i += 1
+    }
+    this
+  }
+
+  /**
+   * Number of data points accounted for in the sufficient statistics.
+   */
+  def count: Long
+
+  /**
+   * Prediction which should be made based on the sufficient statistics.
+   */
+  def predict: Double
+
+  /**
+   * Probability of the label given by [[predict]], or -1 if no probability is available.
+   */
+  def prob(label: Double): Double = -1
+
+  /**
+   * Return the index of the largest array element.
+   * Fails if the array is empty.
+   */
+  protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
+    val result = array.foldLeft(-1, Double.MinValue, 0) {
+      case ((maxIndex, maxValue, currentIndex), currentValue) =>
+        if (currentValue > maxValue) {
+          (currentIndex, currentValue, currentIndex + 1)
+        } else {
+          (maxIndex, maxValue, currentIndex + 1)
+        }
+    }
+    if (result._1 < 0) {
+      throw new RuntimeException("ImpurityCalculator internal error:" +
+        " indexOfLargestArrayElement failed")
+    }
+    result._1
+  }
+
 }
