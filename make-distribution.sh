@@ -28,7 +28,7 @@ set -o pipefail
 set -e
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$FWDIR/dist"
 
 SPARK_TACHYON=false
@@ -50,7 +50,8 @@ while (( "$#" )); do
   case $1 in
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
-      echo "Error: use Maven options -Phadoop.version and -Pyarn.version"
+      echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
+      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -219,10 +220,10 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
-  cp "tachyon-${TACHYON_VERSION}/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
+  cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
-  cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/tachyon/src/main/java/tachyon/web"
+  cp -r "tachyon-${TACHYON_VERSION}"/core/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
 
   if [[ `uname -a` == Darwin* ]]; then
     # need to run sed differently on osx

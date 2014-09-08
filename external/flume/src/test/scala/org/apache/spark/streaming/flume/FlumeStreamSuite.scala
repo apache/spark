@@ -109,11 +109,11 @@ class FlumeStreamSuite extends TestSuiteBase {
   }
 
   class CompressionChannelFactory(compressionLevel: Int) extends NioClientSocketChannelFactory {
-    override def newChannel(pipeline:ChannelPipeline) : SocketChannel = {
-      var encoder : ZlibEncoder = new ZlibEncoder(compressionLevel);
-      pipeline.addFirst("deflater", encoder);
-      pipeline.addFirst("inflater", new ZlibDecoder());
-      super.newChannel(pipeline);
+    override def newChannel(pipeline: ChannelPipeline): SocketChannel = {
+      val encoder = new ZlibEncoder(compressionLevel)
+      pipeline.addFirst("deflater", encoder)
+      pipeline.addFirst("inflater", new ZlibDecoder())
+      super.newChannel(pipeline)
     }
   }
 }

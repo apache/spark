@@ -27,6 +27,9 @@ import numpy
 from numpy import array, array_equal, ndarray, float64, int32
 
 
+__all__ = ['SparseVector', 'Vectors']
+
+
 class SparseVector(object):
 
     """
