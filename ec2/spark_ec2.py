@@ -712,8 +712,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "hadoop_major_version": opts.hadoop_major_version,
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts,
-        "aws_access_key_id": os.getenv('AWS_ACCESS_KEY_ID'),
-        "aws_secret_access_key": os.getenv('AWS_SECRET_ACCESS_KEY')
+        "aws_access_key_id": conn.aws_access_key_id,
+        "aws_secret_access_key": conn.aws_secret_access_key
     }
 
     # Create a temp directory in which we will place all the files to be
