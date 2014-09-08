@@ -37,7 +37,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
 
 # Configuration Parameters
 
-Create <code>core-site.xml</code> and place it inside <code>/spark/conf</code> directory.
+Create <code>core-site.xml</code> and place it inside Spark's <code>conf</code> directory.
 There are two main categories of parameters that should to be configured: declaration of the
 Swift driver and the parameters that are required by Keystone. 
 
@@ -100,7 +100,7 @@ contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be a
 </table>
 
 For example, assume <code>PROVIDER=SparkTest</code> and Keystone contains user <code>tester</code> with password <code>testing</code>
-defined for tenant <code>test</code>. Than <code>core-site.xml</code> should include:
+defined for tenant <code>test</code>. Then <code>core-site.xml</code> should include:
 
 {% highlight xml %}
 <configuration>
