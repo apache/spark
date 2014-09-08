@@ -28,7 +28,7 @@ from pyspark.serializers import NoOpSerializer
 __all__ = ['RandomRDDs', ]
 
 
-class RandomRDDs:
+class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
