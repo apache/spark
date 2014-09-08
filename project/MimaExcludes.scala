@@ -34,7 +34,10 @@ object MimaExcludes {
     def excludes(version: String) =
       version match {
         case v if v.startsWith("1.2") =>
-          Seq.empty
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx")
+          )
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
