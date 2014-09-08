@@ -41,6 +41,39 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
+  test("SPARK-3176 Added Parser of SQL POWER()") {
+    checkAnswer(
+      sql("SELECT POWER(0, 512.0)"),
+      0.0)
+    checkAnswer(
+      sql("SELECT POW(1.0, 256.0)"),
+      1.0)
+    checkAnswer(
+      sql("SELECT POWER(1, -128)"),
+      1.0)
+    checkAnswer(
+      sql("SELECT POW(-1.0, -63)"),
+      -1.0)
+    checkAnswer(
+      sql("SELECT POWER(-1, 32.0)"),
+      1.0)
+    checkAnswer(
+      sql("SELECT POW(2, 8)"),
+      256.0)
+    checkAnswer(
+      sql("SELECT POWER(0.5, 2)"),
+      0.25)
+    checkAnswer(
+      sql("SELECT POW(2, -2)"),
+      0.25)
+    checkAnswer(
+      sql("SELECT POWER(8, 1)"),
+      8.0)
+    checkAnswer(
+      sql("SELECT POW(16, 0.5)"),
+      4.0)
+  }
+
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
@@ -53,14 +86,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SQRT with automatic string casts") {
     checkAnswer(
       sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),

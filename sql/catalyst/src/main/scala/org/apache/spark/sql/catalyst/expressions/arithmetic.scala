@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
+import scala.math.pow
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
@@ -128,4 +129,41 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
   }
 
   override def toString = s"MaxOf($left, $right)"
+}
+
+/**
+ * A function that get the power value of two parameters.
+ * First one is taken as base while second one taken as exponent
+ */
+case class Power(base: Expression, exponent: Expression) extends Expression {
+  type EvaluatedType = Any
+
+  def dataType: DataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
+    }
+    DoubleType
+  }
+  override def foldable = base.foldable && exponent.foldable
+  def nullable: Boolean = base.nullable || exponent.nullable
+  override def toString = s"Power($base, $exponent)"
+
+  override def children = base :: exponent :: Nil
+
+  override def eval(input: Row): Any = {
+    def convertToDouble(num: EvaluatedType): Double = {
+      num match {
+        case d:Double => d
+        case i:Integer => i.doubleValue()
+        case f:Float => f.toDouble
+      }
+    }
+
+    val base_v = base.eval(input)
+    val exponent_v = exponent.eval(input)
+
+    if ((base_v == null) || (exponent_v == null))  null
+    else pow(convertToDouble(base_v), convertToDouble(exponent_v))
+  }
+
 }
