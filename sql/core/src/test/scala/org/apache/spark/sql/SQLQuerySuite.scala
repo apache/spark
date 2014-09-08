@@ -359,6 +359,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (null, null, 6, "F") :: Nil)
   }
 
+  test("SPARK-3349 partitioning after limit") {
+    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
+      .limit(2)
+      .registerTempTable("subset1")
+    sql("SELECT DISTINCT n FROM lowerCaseData")
+      .limit(2)
+      .registerTempTable("subset2")
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
+      (3, "c", 3) ::
+      (4, "d", 4) :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
+      (1, "a", 1) ::
+      (2, "b", 2) :: Nil)
+  }
+
   test("mixed-case keywords") {
     checkAnswer(
       sql(
