@@ -50,6 +50,8 @@ function run_test() {
 
 echo "Running PySpark tests. Output is in python/unit-tests.log."
 
+export PYSPARK_PYTHON="python"
+
 # Try to test with Python 2.6, since that's the minimum version that we support:
 if [ $(which python2.6) ]; then
     export PYSPARK_PYTHON="python2.6"
