@@ -169,6 +169,17 @@ class SerializationTestCase(unittest.TestCase):
         self.assertEquals(p1, p2)
 
 
+# Regression test for SPARK-3415
+class CloudPickleTest(unittest.TestCase):
+    def test_pickling_file_handles(self):
+        from pyspark.cloudpickle import dumps
+        from StringIO import StringIO
+        from pickle import load
+        out1 = sys.stderr
+        out2 = load(StringIO(dumps(out1)))
+        self.assertEquals(out1, out2)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
