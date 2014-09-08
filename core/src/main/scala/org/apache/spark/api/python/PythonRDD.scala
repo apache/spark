@@ -303,7 +303,9 @@ private[spark] object PythonRDD extends Logging {
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
   private def getWorkerBroadcasts(worker: Socket) = {
-    workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
+    synchronized {
+      workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
+    }
   }
 
   /**
