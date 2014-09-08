@@ -189,6 +189,7 @@ final class ShuffleBlockFetcherIterator(
         // Filter out zero-sized blocks
         localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
         numBlocksToFetch += localBlocks.size
+        shuffleMetrics.incLocalBytesRead(blockInfos.map(_._2).sum)
       } else {
         val iterator = blockInfos.iterator
         var curRequestSize = 0L
@@ -228,6 +229,7 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks() {
+    val startTime = System.currentTimeMillis
     val iter = localBlocks.iterator
     while (iter.hasNext) {
       val blockId = iter.next()
@@ -244,6 +246,7 @@ final class ShuffleBlockFetcherIterator(
           return
       }
     }
+    shuffleMetrics.incLocalReadTime(System.currentTimeMillis - startTime)
   }
 
   private[this] def initialize(): Unit = {

@@ -138,8 +138,8 @@ private[ui] class StageTableBase(
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
     val outputWrite = stageData.outputBytes
     val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
-    val shuffleRead = stageData.shuffleReadBytes
-    val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
+    val shuffleRead = stageData.shuffleReadTotalBytes
+    val shuffleReadWithUnit = if (shuffleRead > 0) s"${Utils.bytesToString(shuffleRead)}" else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 

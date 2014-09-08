@@ -201,6 +201,8 @@ class TaskMetrics extends Serializable {
       merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
       merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
       merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
+      merged.incLocalBytesRead(depMetrics.localBytesRead)
+      merged.incLocalReadTime(depMetrics.localReadTime)
       merged.incRecordsRead(depMetrics.recordsRead)
     }
     _shuffleReadMetrics = Some(merged)
@@ -340,6 +342,20 @@ class ShuffleReadMetrics extends Serializable {
   def remoteBytesRead = _remoteBytesRead
   private[spark] def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
   private[spark] def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
+
+  /**
+   * Time the task spent (in milliseconds) reading local shuffle blocks (from the local disk).
+   */
+  private var _localReadTime: Long = _
+  def localReadTime = _localReadTime
+  private[spark] def incLocalReadTime(value: Long) = _localReadTime += value
+
+  /**
+   * Shuffle data that was read from the local disk (as opposed to from a remote executor).
+   */
+  private var _localBytesRead: Long = _
+  def localBytesRead = _localBytesRead
+  private[spark] def incLocalBytesRead(value: Long) = _localBytesRead += value
 
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)

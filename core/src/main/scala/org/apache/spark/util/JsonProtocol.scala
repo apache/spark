@@ -294,6 +294,8 @@ private[spark] object JsonProtocol {
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
     ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead) ~
+    ("Local Read Time" -> shuffleReadMetrics.localReadTime) ~
+    ("Local Bytes Read" -> shuffleReadMetrics.localBytesRead) ~
     ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
 
@@ -674,6 +676,8 @@ private[spark] object JsonProtocol {
     metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
     metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
     metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
+    metrics.incLocalReadTime((json \ "Local Read Time").extractOpt[Long].getOrElse(0))
+    metrics.incLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
     metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }

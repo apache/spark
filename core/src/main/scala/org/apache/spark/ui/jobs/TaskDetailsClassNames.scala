@@ -28,6 +28,7 @@ private[spark] object TaskDetailsClassNames {
   val SCHEDULER_DELAY = "scheduler_delay"
   val TASK_DESERIALIZATION_TIME = "deserialization_time"
   val SHUFFLE_READ_BLOCKED_TIME = "fetch_wait_time"
+  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
   val RESULT_SERIALIZATION_TIME = "serialization_time"
   val GETTING_RESULT_TIME = "getting_result_time"
 }

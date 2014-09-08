@@ -37,8 +37,12 @@ private[spark] object ToolTips {
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
 
   val SHUFFLE_READ =
-    """Bytes and records read from remote executors. Typically less than shuffle write bytes
-       because this does not include shuffle data read locally."""
+    """Total shuffle bytes and records read (includes both data read locally and data read from
+       remote executors). """
+
+  val SHUFFLE_READ_REMOTE_SIZE =
+    """Total shuffle bytes read from remote executors. This is a subset of the shuffle
+       read bytes; the remaining shuffle data is read locally. """
 
   val GETTING_RESULT_TIME =
     """Time that the driver spends fetching task results from workers. If this is large, consider
