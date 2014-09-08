@@ -13,10 +13,10 @@ title: Spark SQL Programming Guide
 
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
-[SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed
-[Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects along with
+[SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed of
+[Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects, along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
-in a traditional relational database.  A SchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
+in a traditional relational database.  A SchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
 All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`.
@@ -26,10 +26,10 @@ All of the examples on this page use sample data included in the Spark distribut
 <div data-lang="java"  markdown="1">
 Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
 Spark.  At the core of this component is a new type of RDD,
-[JavaSchemaRDD](api/scala/index.html#org.apache.spark.sql.api.java.JavaSchemaRDD).  JavaSchemaRDDs are composed
-[Row](api/scala/index.html#org.apache.spark.sql.api.java.Row) objects along with
+[JavaSchemaRDD](api/scala/index.html#org.apache.spark.sql.api.java.JavaSchemaRDD).  JavaSchemaRDDs are composed of
+[Row](api/scala/index.html#org.apache.spark.sql.api.java.Row) objects, along with
 a schema that describes the data types of each column in the row.  A JavaSchemaRDD is similar to a table
-in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
+in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 </div>
 
@@ -37,10 +37,10 @@ file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](
 
 Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
 Spark.  At the core of this component is a new type of RDD,
-[SchemaRDD](api/python/pyspark.sql.SchemaRDD-class.html).  SchemaRDDs are composed
-[Row](api/python/pyspark.sql.Row-class.html) objects along with
+[SchemaRDD](api/python/pyspark.sql.SchemaRDD-class.html).  SchemaRDDs are composed of
+[Row](api/python/pyspark.sql.Row-class.html) objects, along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
-in a traditional relational database.  A SchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
+in a traditional relational database.  A SchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
 All of the examples on this page use sample data included in the Spark distribution and can be run in the `pyspark` shell.
@@ -68,11 +68,11 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext.createSchemaRDD
 {% endhighlight %}
 
-In addition to the basic SQLContext, you can also create a HiveContext, which provides a strict
-super set of the functionality provided by the basic SQLContext. Additional features include
+In addition to the basic SQLContext, you can also create a HiveContext, which provides a
+superset of the functionality provided by the basic SQLContext. Additional features include
 the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
 ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing hive setup, and all of the data sources available to a SQLContext are still available.
+existing Hive setup, and all of the data sources available to a SQLContext are still available.
 HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
 Spark build.  If these dependencies are not a problem for your application then using HiveContext
 is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
@@ -95,7 +95,7 @@ In addition to the basic SQLContext, you can also create a HiveContext, which pr
 super set of the functionality provided by the basic SQLContext. Additional features include
 the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
 ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing hive setup, and all of the data sources available to a SQLContext are still available.
+existing Hive setup, and all of the data sources available to a SQLContext are still available.
 HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
 Spark build.  If these dependencies are not a problem for your application then using HiveContext
 is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
@@ -118,7 +118,7 @@ In addition to the basic SQLContext, you can also create a HiveContext, which pr
 super set of the functionality provided by the basic SQLContext. Additional features include
 the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
 ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing hive setup, and all of the data sources available to a SQLContext are still available.
+existing Hive setup, and all of the data sources available to a SQLContext are still available.
 HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
 Spark build.  If these dependencies are not a problem for your application then using HiveContext
 is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
@@ -146,11 +146,11 @@ describes the various methods for loading data into a SchemaRDD.
 
 Spark SQL supports two different methods for converting existing RDDs into SchemaRDDs.  The first
 method uses reflection to infer the schema of an RDD that contains specific types of objects.  This
-reflection based approach leads to more concise code and works well went the schema is known ahead
-of time, while you are writing your Spark application.
+reflection based approach leads to more concise code and works well when you already know the schema 
+while writing your Spark application.
 
 The second method for creating SchemaRDDs is through a programmatic interface that allows you to
-construct a schema and then apply it to and existing RDD.  While this method is more verbose, it allows
+construct a schema and then apply it to an existing RDD.  While this method is more verbose, it allows
 you to construct SchemaRDDs when the columns and their types are not known until runtime.
  
 ### Inferring the Schema Using Reflection
@@ -266,10 +266,10 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 
 <div data-lang="python"  markdown="1">
 
-Spark SQL can convert an RDD of Row objects to a SchemaRDD, inferring the datatypes .  Rows are constructed by passing a list of
-key/value pairs as kwargs to the Row class. The keys of this list define the columns names of the table,
+Spark SQL can convert an RDD of Row objects to a SchemaRDD, inferring the datatypes.  Rows are constructed by passing a list of
+key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
 and the types are inferred by looking at the first row.  Since we currently only look at the first
-row, it is important that there is no missing data in the first row of the RDD. In future version we
+row, it is important that there is no missing data in the first row of the RDD. In future versions we
 plan to more completely infer the schema by looking at more data, similar to the inference that is
 performed on JSON files.
 
@@ -306,14 +306,14 @@ for teenName in teenNames.collect():
 
 <div data-lang="scala"  markdown="1">
 
-In cases that case classes cannot be defined ahead of time (for example,
-the structure of records is encoded in a string or a text dataset will be parsed
+When case classes cannot be defined ahead of time (for example,
+the structure of records is encoded in a string, or a text dataset will be parsed
 and fields will be projected differently for different users),
 a `SchemaRDD` can be created programmatically with three steps.
 
 1. Create an RDD of `Row`s from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
-`Row`s in the RDD created in the step 1.
+`Row`s in the RDD created in Step 1.
 3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
 by `SQLContext`.
 
@@ -358,14 +358,14 @@ results.map(t => "Name: " + t(0)).collect().foreach(println)
 
 <div data-lang="java"  markdown="1">
 
-In cases that JavaBean classes cannot be defined ahead of time (for example,
-the structure of records is encoded in a string or a text dataset will be parsed and
+When JavaBean classes cannot be defined ahead of time (for example,
+the structure of records is encoded in a string, or a text dataset will be parsed and
 fields will be projected differently for different users),
 a `SchemaRDD` can be created programmatically with three steps.
 
 1. Create an RDD of `Row`s from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
-`Row`s in the RDD created in the step 1.
+`Row`s in the RDD created in Step 1.
 3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
 by `JavaSQLContext`.
 
@@ -427,10 +427,10 @@ List<String> names = results.map(new Function<Row, String>() {
 
 <div data-lang="python"  markdown="1">
 
-For some cases (for example, the structure of records is encoded in a string or
-a text dataset will be parsed and fields will be projected differently for
-different users), it is desired to create `SchemaRDD` with a programmatically way.
-It can be done with three steps.
+When a dictionary of kwargs cannot be defined ahead of time (for example,
+the structure of records is encoded in a string, or a text dataset will be parsed and
+fields will be projected differently for different users),
+a `SchemaRDD` can be created programmatically with three steps.
 
 1. Create an RDD of tuples or lists from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
@@ -566,7 +566,7 @@ for teenName in teenNames.collect():
 
 ### Configuration
 
-Configuration of parquet can be done using the `setConf` method on SQLContext or by running 
+Configuration of Parquet can be done using the `setConf` method on SQLContext or by running 
 `SET key=value` commands using SQL.
 
 <table class="table">
@@ -575,8 +575,8 @@ Configuration of parquet can be done using the `setConf` method on SQLContext or
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
-    Some other parquet producing systems, in particular Impala and older versions of Spark SQL, do 
-    not differentiate between binary data and strings when writing out the parquet schema.  This 
+    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do 
+    not differentiate between binary data and strings when writing out the Parquet schema.  This 
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
 </tr>
@@ -584,14 +584,14 @@ Configuration of parquet can be done using the `setConf` method on SQLContext or
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
   <td>false</td>
   <td>
-    Turns on caching of parquet schema metadata.  Can speed up querying 
+    Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
   </td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
-    Sets the compression codec use when writing parquet files. Acceptable values include: 
+    Sets the compression codec use when writing Parquet files. Acceptable values include: 
     uncompressed, snappy, gzip, lzo.
   </td>
 </tr>
@@ -805,9 +805,8 @@ Spark SQL can cache tables using an in-memory columnar format by calling `cacheT
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `uncacheTable("tableName")` to remove the table from memory.
 
-Note that if you just call `cache` rather than `cacheTable`, tables will _not_ be cached in
-in-memory columnar format. So we strongly recommend using `cacheTable` whenever you want to
-cache tables.
+Note that if you call `cache` rather than `cacheTable`, tables will _not_ be cached using
+the in-memory columnar format, and therefore `cacheTable` is strongly recommended for this use case.
 
 Configuration of in-memory caching can be done using the `setConf` method on SQLContext or by running 
 `SET key=value` commands using SQL.
@@ -833,7 +832,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 
 </table>
 
-## Other Configuration
+## Other Configuration Options
 
 The following options can also be used to tune the performance of query execution.  It is possible
 that these options will be deprecated in future release as more optimizations are performed automatically.
@@ -842,7 +841,7 @@ that these options will be deprecated in future release as more optimizations ar
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>false</td>
+    <td>10000</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
@@ -876,7 +875,7 @@ code.
 ## Running the Thrift JDBC server
 
 The Thrift JDBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 0.12. You can test the JDBC server with the beeline script comes with either Spark or Hive 0.12.
+in Hive 0.12. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.12.
 
 To start the JDBC server, run the following in the Spark directory:
 
@@ -899,12 +898,12 @@ your machine and a blank password. For secure mode, please follow the instructio
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
-You may also use the beeline script comes with Hive.
+You may also use the beeline script that comes with Hive.
 
 ## Running the Spark SQL CLI
 
 The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
-queries input from command line. Note: the Spark SQL CLI cannot talk to the Thrift JDBC server.
+queries input from the command line. Note that the Spark SQL CLI cannot talk to the Thrift JDBC server.
 
 To start the Spark SQL CLI, run the following in the Spark directory:
 
@@ -916,7 +915,10 @@ options.
 
 # Compatibility with Other Systems
 
-## Migration Guide for Shark Users
+## Migration Guide for Shark User
+
+### Scheduling 
+s
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
 users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 
@@ -925,7 +927,7 @@ users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 ### Reducer number
 
 In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark
-SQL deprecates this property by a new property `spark.sql.shuffle.partitions`, whose default value
+SQL deprecates this property in favor of `spark.sql.shuffle.partitions`, whose default value
 is 200. Users may customize this property via `SET`:
 
     SET spark.sql.shuffle.partitions=10;
