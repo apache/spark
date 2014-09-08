@@ -6,7 +6,7 @@ title: Accessing OpenStack Swift from Spark
 Spark's support for Hadoop InputFormat allows it to process data in OpenStack Swift using the
 same URI formats as in Hadoop. You can specify a path in Swift as input through a 
 URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
-Swift security credentials, through <code>core-sites.xml</code> or via
+Swift security credentials, through <code>core-site.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
 Current Swift driver requires Swift to use Keystone authentication method.
 
@@ -37,7 +37,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
 
 # Configuration Parameters
 
-Create <code>core-sites.xml</code> and place it inside <code>/spark/conf</code> directory.
+Create <code>core-site.xml</code> and place it inside <code>/spark/conf</code> directory.
 There are two main categories of parameters that should to be configured: declaration of the
 Swift driver and the parameters that are required by Keystone. 
 
@@ -100,7 +100,7 @@ contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be a
 </table>
 
 For example, assume <code>PROVIDER=SparkTest</code> and Keystone contains user <code>tester</code> with password <code>testing</code>
-defined for tenant <code>test</code>. Than <code>core-sites.xml</code> should include:
+defined for tenant <code>test</code>. Than <code>core-site.xml</code> should include:
 
 {% highlight xml %}
 <configuration>
@@ -146,7 +146,7 @@ Notice that
 <code>fs.swift.service.PROVIDER.tenant</code>,
 <code>fs.swift.service.PROVIDER.username</code>, 
 <code>fs.swift.service.PROVIDER.password</code> contains sensitive information and keeping them in
-<code>core-sites.xml</code> is not always a good approach.
-We suggest to keep those parameters in <code>core-sites.xml</code> for testing purposes when running Spark
+<code>core-site.xml</code> is not always a good approach.
+We suggest to keep those parameters in <code>core-site.xml</code> for testing purposes when running Spark
 via <code>spark-shell</code>.
 For job submissions they should be provided via <code>sparkContext.hadoopConfiguration</code>.
