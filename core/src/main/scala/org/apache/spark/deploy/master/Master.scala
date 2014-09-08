@@ -481,7 +481,8 @@ private[spark] class Master(
     if (state != RecoveryState.ALIVE) { return }
 
     // First schedule drivers, they take strict precedence over applications
-    val shuffledAliveWorkers = Random.shuffle(workers.filter(_.state == WorkerState.ALIVE)) // Randomization helps balance drivers
+    // Randomization helps balance drivers
+    val shuffledAliveWorkers = Random.shuffle(workers.filter(_.state == WorkerState.ALIVE))
     val aliveWorkerNum = shuffledAliveWorkers.size
     var curPos = aliveWorkerNum - 1
     for (driver <- List(waitingDrivers: _*)) {
