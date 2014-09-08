@@ -203,25 +203,25 @@ private[spark] class PythonRDD(
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
-        val bids = PythonRDD.getWorkerBroadcasts(worker)
-        val nbids = broadcastVars.map(_.id).toSet
+        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
+        val newBids = broadcastVars.map(_.id).toSet
         // number of different broadcasts
-        val cnt = bids.diff(nbids).size + nbids.diff(bids).size
+        val cnt = oldBids.diff(newBids).size + newBids.diff(oldBids).size
         dataOut.writeInt(cnt)
-        for (bid <- bids) {
-          if (!nbids.contains(bid)) {
+        for (bid <- oldBids) {
+          if (!newBids.contains(bid)) {
             // remove the broadcast from worker
             dataOut.writeLong(- bid - 1)  // bid >= 0
-            bids.remove(bid)
+            oldBids.remove(bid)
           }
         }
         for (broadcast <- broadcastVars) {
-          if (!bids.contains(broadcast.id)) {
+          if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
             dataOut.writeInt(broadcast.value.length)
             dataOut.write(broadcast.value)
-            bids.add(broadcast.id)
+            oldBids.add(broadcast.id)
           }
         }
         dataOut.flush()
