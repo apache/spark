@@ -51,9 +51,9 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
   abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
     compressionEncoders =
       if (useCompression) {
-        schemes.filter(_.supports(columnType)).map(_.encoder[T])
+        schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
       } else {
-        Seq(PassThrough.encoder)
+        Seq(PassThrough.encoder(columnType))
       }
     super.initialize(initialSize, columnName, useCompression)
   }
@@ -63,11 +63,9 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
   }
 
   private def gatherCompressibilityStats(row: Row, ordinal: Int) {
-    val field = columnType.getField(row, ordinal)
-
     var i = 0
     while (i < compressionEncoders.length) {
-      compressionEncoders(i).gatherCompressibilityStats(field, columnType)
+      compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
       i += 1
     }
   }
@@ -84,7 +82,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
-      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder
+      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder(columnType)
     }
 
     // Header = column type ID + null count + null positions
@@ -105,6 +103,6 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
       .put(nulls)
 
     logInfo(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
-    encoder.compress(nonNullBuffer, compressedBuffer, columnType)
+    encoder.compress(nonNullBuffer, compressedBuffer)
   }
 }

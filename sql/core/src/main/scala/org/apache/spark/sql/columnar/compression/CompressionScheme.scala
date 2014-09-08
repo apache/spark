@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
 
 private[sql] trait Encoder[T <: NativeType] {
-  def gatherCompressibilityStats(value: T#JvmType, columnType: NativeColumnType[T]) {}
+  def gatherCompressibilityStats(row: Row, ordinal: Int) {}
 
   def compressedSize: Int
 
@@ -33,7 +34,7 @@ private[sql] trait Encoder[T <: NativeType] {
     if (uncompressedSize > 0) compressedSize.toDouble / uncompressedSize else 1.0
   }
 
-  def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[T]): ByteBuffer
+  def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer
 }
 
 private[sql] trait Decoder[T <: NativeType] extends Iterator[T#JvmType]
@@ -43,7 +44,7 @@ private[sql] trait CompressionScheme {
 
   def supports(columnType: ColumnType[_, _]): Boolean
 
-  def encoder[T <: NativeType]: Encoder[T]
+  def encoder[T <: NativeType](columnType: NativeColumnType[T]): Encoder[T]
 
   def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]): Decoder[T]
 }

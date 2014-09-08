@@ -23,6 +23,7 @@ import java.sql.Timestamp
 import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Row}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -49,7 +50,9 @@ class ColumnTypeSuite extends FunSuite with Logging {
         expected: Int) {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
-        columnType.actualSize(value)
+        val row = new GenericMutableRow(1)
+        columnType.setField(row, 0, value)
+        columnType.actualSize(row, 0)
       }
     }
 

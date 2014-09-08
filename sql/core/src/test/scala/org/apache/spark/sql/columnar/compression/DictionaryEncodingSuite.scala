@@ -67,7 +67,7 @@ class DictionaryEncodingSuite extends FunSuite {
         val buffer = builder.build()
         val headerSize = CompressionScheme.columnHeaderSize(buffer)
         // 4 extra bytes for dictionary size
-        val dictionarySize = 4 + values.map(columnType.actualSize).sum
+        val dictionarySize = 4 + rows.map(columnType.actualSize(_, 0)).sum
         // 2 bytes for each `Short`
         val compressedSize = 4 + dictionarySize + 2 * inputSeq.length
         // 4 extra bytes for compression scheme type ID

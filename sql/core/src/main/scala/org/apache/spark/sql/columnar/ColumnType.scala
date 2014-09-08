@@ -18,13 +18,12 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
+import java.sql.Timestamp
 
 import scala.reflect.runtime.universe.TypeTag
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableAny, MutableRow, MutableValue}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
@@ -41,6 +40,8 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
     val typeId: Int,
     val defaultSize: Int) {
 
+  val mutable: MutableValue = new MutableAny
+
   /**
    * Extracts a value out of the buffer at the buffer's current position.
    */
@@ -52,10 +53,10 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
   def append(v: JvmType, buffer: ByteBuffer)
 
   /**
-   * Returns the size of the value. This is used to calculate the size of variable length types
-   * such as byte arrays and strings.
+   * Returns the size of the value `row(ordinal)`. This is used to calculate the size of variable
+   * length types such as byte arrays and strings.
    */
-  def actualSize(v: JvmType): Int = defaultSize
+  def actualSize(row: Row, ordinal: Int): Int = defaultSize
 
   /**
    * Returns `row(ordinal)`. Subclasses should override this method to avoid boxing/unboxing costs
@@ -200,7 +201,9 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
 }
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
-  override def actualSize(v: String): Int = v.getBytes("utf-8").length + 4
+  override def actualSize(row: Row, ordinal: Int): Int = {
+    row.getString(ordinal).getBytes("utf-8").length + 4
+  }
 
   override def append(v: String, buffer: ByteBuffer) {
     val stringBytes = v.getBytes("utf-8")
@@ -246,7 +249,9 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
     defaultSize: Int)
   extends ColumnType[T, Array[Byte]](typeId, defaultSize) {
 
-  override def actualSize(v: Array[Byte]) = v.length + 4
+  override def actualSize(row: Row, ordinal: Int) = {
+    getField(row, ordinal).length + 4
+  }
 
   override def append(v: Array[Byte], buffer: ByteBuffer) {
     buffer.putInt(v.length).put(v, 0, v.length)
