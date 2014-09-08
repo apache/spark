@@ -339,16 +339,10 @@ private[spark] class BlockManager(
    * shuffle blocks. It is safe to do so without a lock on block info since disk store
    * never deletes (recent) items.
    */
-  def getLocalShuffleFromDisk(
-      blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-
-    val shuffleBlockManager = shuffleManager.shuffleBlockManager
-    val values = shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]).map(
-      bytes => this.dataDeserialize(blockId, bytes, serializer))
-
-    values.orElse {
-      throw new BlockException(blockId, s"Block $blockId not found on disk, though it should be")
-    }
+  def getLocalShuffleFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+    val buf = shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+    val is = wrapForCompression(blockId, buf.inputStream())
+    Some(serializer.newInstance().deserializeStream(is).asIterator)
   }
 
   /**

@@ -21,6 +21,7 @@ import java.io.{FileInputStream, RandomAccessFile, File, InputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
+import com.google.common.io.ByteStreams
 import io.netty.buffer.{ByteBufInputStream, ByteBuf}
 
 import org.apache.spark.util.ByteBufferInputStream
@@ -72,7 +73,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
   override def inputStream(): InputStream = {
     val is = new FileInputStream(file)
     is.skip(offset)
-    is
+    ByteStreams.limit(is, length)
   }
 }
 
@@ -84,7 +85,7 @@ final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 
   override def size: Long = buf.remaining()
 
-  override def nioByteBuffer() = buf
+  override def nioByteBuffer() = buf.duplicate()
 
   override def inputStream() = new ByteBufferInputStream(buf)
 }

@@ -112,7 +112,8 @@ final class ShuffleBlockFetcherIterator(
       new BlockFetchingListener {
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
           results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
-            () => blockManager.dataDeserialize(BlockId(blockId), data.nioByteBuffer(), serializer)
+            () => serializer.newInstance().deserializeStream(
+              blockManager.wrapForCompression(BlockId(blockId), data.inputStream())).asIterator
           ))
           shuffleMetrics.remoteBytesRead += data.size
           shuffleMetrics.remoteBlocksFetched += 1
