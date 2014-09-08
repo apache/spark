@@ -206,7 +206,7 @@ public class JavaAPISuite implements Serializable {
         return 2;
       }
       public int getPartition(Object key) {
-        return ((Integer)key).intValue();
+        return ((Integer)key).intValue() % 2;
       }
     };
 
