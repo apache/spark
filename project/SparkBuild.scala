@@ -184,7 +184,7 @@ object OldDeps {
 
   def versionArtifact(id: String): Option[sbt.ModuleID] = {
     val fullId = id + "_2.10"
-    Some("org.apache.spark" % fullId % "1.0.0")
+    Some("org.apache.spark" % fullId % "1.1.0")
   }
 
   def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
