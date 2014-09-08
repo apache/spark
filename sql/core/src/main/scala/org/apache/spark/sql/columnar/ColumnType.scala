@@ -40,8 +40,6 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
     val typeId: Int,
     val defaultSize: Int) {
 
-  val mutable: MutableValue = new MutableAny
-
   /**
    * Extracts a value out of the buffer at the buffer's current position.
    */
@@ -69,6 +67,14 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
    * costs whenever possible.
    */
   def setField(row: MutableRow, ordinal: Int, value: JvmType)
+
+  /**
+   * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to avoid
+   * boxing/unboxing costs whenever possible.
+   */
+  def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to(toOrdinal) = from(fromOrdinal)
+  }
 
   /**
    * Creates a duplicated copy of the value.
@@ -104,6 +110,10 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getInt(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setInt(toOrdinal, from.getInt(fromOrdinal))
+  }
 }
 
 private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
@@ -120,6 +130,10 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getLong(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setLong(toOrdinal, from.getLong(fromOrdinal))
+  }
 }
 
 private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
@@ -136,6 +150,10 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getFloat(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
+  }
 }
 
 private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
@@ -152,6 +170,10 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getDouble(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
+  }
 }
 
 private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
@@ -166,6 +188,10 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getBoolean(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
+  }
 }
 
 private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
@@ -182,6 +208,10 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getByte(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setByte(toOrdinal, from.getByte(fromOrdinal))
+  }
 }
 
 private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
@@ -198,6 +228,10 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getShort(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setShort(toOrdinal, from.getShort(fromOrdinal))
+  }
 }
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
@@ -222,6 +256,10 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def getField(row: Row, ordinal: Int) = row.getString(ordinal)
+
+  override def copyField(from: Row, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    to.setString(toOrdinal, from.getString(fromOrdinal))
+  }
 }
 
 private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 8, 12) {

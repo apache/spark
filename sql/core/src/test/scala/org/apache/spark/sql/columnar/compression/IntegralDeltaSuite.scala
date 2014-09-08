@@ -31,7 +31,7 @@ class IntegralDeltaSuite extends FunSuite {
   def testIntegralDelta[I <: IntegralType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[I],
-      scheme: IntegralDelta[I]) {
+      scheme: CompressionScheme) {
 
     def skeleton(input: Seq[I#JvmType]) {
       // -------------

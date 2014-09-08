@@ -97,7 +97,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
       _uncompressedSize += actualSize
 
       if (lastValue.isNullAt(0)) {
-        columnType.setField(lastValue, 0, value)
+        columnType.copyField(row, ordinal, lastValue, 0)
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
@@ -105,7 +105,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          columnType.setField(lastValue, 0, value)
+          columnType.copyField(row, ordinal, lastValue, 0)
           lastRun = 1
         }
       }
@@ -369,122 +369,160 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   }
 }
 
-private[sql] sealed abstract class IntegralDelta[I <: IntegralType](
-    columnType: NativeColumnType[I])
-  extends CompressionScheme {
+private[sql] case object IntDelta extends CompressionScheme {
+  override def typeId: Int = 4
 
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
-    new this.Decoder(buffer, columnType.asInstanceOf[NativeColumnType[I]])
-      .asInstanceOf[compression.Decoder[T]]
+    new Decoder(buffer, INT).asInstanceOf[compression.Decoder[T]]
   }
 
   override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    (new this.Encoder).asInstanceOf[compression.Encoder[T]]
+    (new Encoder).asInstanceOf[compression.Encoder[T]]
   }
 
-  /**
-   * Computes `delta = x - y`, returns `(true, delta)` if `delta` can fit into a single byte, or
-   * `(false, 0: Byte)` otherwise.
-   */
-  protected def byteSizedDelta(x: I#JvmType, y: I#JvmType): (Boolean, Byte)
+  override def supports(columnType: ColumnType[_, _]) = columnType == INT
 
-  /**
-   * Simply computes `x + delta`
-   */
-  protected def addDelta(x: I#JvmType, delta: Byte): I#JvmType
+  class Encoder extends compression.Encoder[IntegerType.type] {
+    protected var _compressedSize: Int = 0
+    protected var _uncompressedSize: Int = 0
 
-  class Encoder extends compression.Encoder[I] {
-    private var _compressedSize: Int = 0
+    override def compressedSize = _compressedSize
+    override def uncompressedSize = _uncompressedSize
 
-    private var _uncompressedSize: Int = 0
-
-    private var prev: I#JvmType = _
-
-    private var initial = true
+    private var prevValue: Int = _
 
     override def gatherCompressibilityStats(row: Row, ordinal: Int) {
-      val value = columnType.getField(row, ordinal)
-      _uncompressedSize += columnType.defaultSize
+      val value = row.getInt(ordinal)
+      val delta = value - prevValue
 
-      if (initial) {
-        initial = false
-        _compressedSize += 1 + columnType.defaultSize
-      } else {
-        val (smallEnough, _) = byteSizedDelta(value, prev)
-        _compressedSize += (if (smallEnough) 1 else 1 + columnType.defaultSize)
+      _compressedSize += 1
+
+      // If this is the first integer to be compressed, or the delta is out of byte range, then give
+      // up compressing this integer.
+      if (_uncompressedSize == 0 || delta <= Byte.MinValue || delta > Byte.MaxValue) {
+        _compressedSize += INT.defaultSize
       }
 
-      prev = value
+      _uncompressedSize += INT.defaultSize
+      prevValue = value
     }
 
-    override def compress(from: ByteBuffer, to: ByteBuffer) = {
+    override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
       to.putInt(typeId)
 
       if (from.hasRemaining) {
-        var prev = columnType.extract(from)
+        var prev = from.getInt()
         to.put(Byte.MinValue)
-        columnType.append(prev, to)
+        to.putInt(prev)
 
         while (from.hasRemaining) {
-          val current = columnType.extract(from)
-          val (smallEnough, delta) = byteSizedDelta(current, prev)
+          val current = from.getInt()
+          val delta = current - prev
           prev = current
 
-          if (smallEnough) {
-            to.put(delta)
+          if (Byte.MinValue < delta && delta <= Byte.MaxValue) {
+            to.put(delta.toByte)
           } else {
             to.put(Byte.MinValue)
-            columnType.append(current, to)
+            to.putInt(current)
           }
         }
       }
 
-      to.rewind()
-      to
+      to.rewind().asInstanceOf[ByteBuffer]
     }
-
-    override def uncompressedSize = _uncompressedSize
-
-    override def compressedSize = _compressedSize
   }
 
-  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[I])
-    extends compression.Decoder[I] {
+  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[IntegerType.type])
+    extends compression.Decoder[IntegerType.type] {
 
-    private var prev: I#JvmType = _
+    private var prev: Int = _
+
+    override def hasNext: Boolean = buffer.hasRemaining
 
     override def next() = {
       val delta = buffer.get()
-      prev = if (delta > Byte.MinValue) addDelta(prev, delta) else columnType.extract(buffer)
+      prev = if (delta > Byte.MinValue) prev + delta else buffer.getInt()
       prev
     }
-
-    override def hasNext = buffer.hasRemaining
   }
 }
 
-private[sql] case object IntDelta extends IntegralDelta[IntegerType.type](INT) {
-  override val typeId = 4
+private[sql] case object LongDelta extends CompressionScheme {
+  override def typeId: Int = 5
 
-  override def supports(columnType: ColumnType[_, _]) = columnType == INT
-
-  override protected def addDelta(x: Int, delta: Byte) = x + delta
-
-  override protected def byteSizedDelta(x: Int, y: Int): (Boolean, Byte) = {
-    val delta = x - y
-    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
+  override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
+    new Decoder(buffer, LONG).asInstanceOf[compression.Decoder[T]]
   }
-}
 
-private[sql] case object LongDelta extends IntegralDelta[LongType.type](LONG) {
-  override val typeId = 5
+  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
+    (new Encoder).asInstanceOf[compression.Encoder[T]]
+  }
 
   override def supports(columnType: ColumnType[_, _]) = columnType == LONG
 
-  override protected def addDelta(x: Long, delta: Byte) = x + delta
+  class Encoder extends compression.Encoder[LongType.type] {
+    protected var _compressedSize: Int = 0
+    protected var _uncompressedSize: Int = 0
 
-  override protected def byteSizedDelta(x: Long, y: Long): (Boolean, Byte) = {
-    val delta = x - y
-    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
+    override def compressedSize = _compressedSize
+    override def uncompressedSize = _uncompressedSize
+
+    private var prevValue: Long = _
+
+    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+      val value = row.getLong(ordinal)
+      val delta = value - prevValue
+
+      _compressedSize += 1
+
+      // If this is the first long integer to be compressed, or the delta is out of byte range, then
+      // give up compressing this long integer.
+      if (_uncompressedSize == 0 || delta <= Byte.MinValue || delta > Byte.MaxValue) {
+        _compressedSize += LONG.defaultSize
+      }
+
+      _uncompressedSize += LONG.defaultSize
+      prevValue = value
+    }
+
+    override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
+      to.putInt(typeId)
+
+      if (from.hasRemaining) {
+        var prev = from.getLong()
+        to.put(Byte.MinValue)
+        to.putLong(prev)
+
+        while (from.hasRemaining) {
+          val current = from.getLong()
+          val delta = current - prev
+          prev = current
+
+          if (Byte.MinValue < delta && delta <= Byte.MaxValue) {
+            to.put(delta.toByte)
+          } else {
+            to.put(Byte.MinValue)
+            to.putLong(current)
+          }
+        }
+      }
+
+      to.rewind().asInstanceOf[ByteBuffer]
+    }
+  }
+
+  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[LongType.type])
+    extends compression.Decoder[LongType.type] {
+
+    private var prev: Long = _
+
+    override def hasNext: Boolean = buffer.hasRemaining
+
+    override def next() = {
+      val delta = buffer.get()
+      prev = if (delta > Byte.MinValue) prev + delta else buffer.getLong()
+      prev
+    }
   }
 }
