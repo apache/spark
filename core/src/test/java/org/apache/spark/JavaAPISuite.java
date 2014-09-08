@@ -190,6 +190,36 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void repartitionAndSortWithinPartitions() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 5));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(2, 6));
+    pairs.add(new Tuple2<Integer, Integer>(0, 8));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(1, 3));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
+
+    Partitioner partitioner = new Partitioner() {
+      public int numPartitions() {
+        return 2;
+      }
+      public int getPartition(Object key) {
+        return ((Integer)key).intValue() % 2;
+      }
+    };
+
+    JavaPairRDD<Integer, Integer> repartitioned =
+        rdd.repartitionAndSortWithinPartitions(partitioner);
+    List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
+    Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
+        new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));
+    Assert.assertEquals(partitions.get(1), Arrays.asList(new Tuple2<Integer, Integer>(1, 3),
+        new Tuple2<Integer, Integer>(3, 8), new Tuple2<Integer, Integer>(3, 8)));
+  }
+
+  @Test
   public void emptyRDD() {
     JavaRDD<String> rdd = sc.emptyRDD();
     Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());

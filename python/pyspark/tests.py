@@ -545,6 +545,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
+    def test_repartitionAndSortWithinPartitions(self):
+        rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
+
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2)
+        partitions = repartitioned.glom().collect()
+        self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
+        self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
 
 class TestSQL(PySparkTestCase):
 
