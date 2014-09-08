@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
 
 import org.apache.hadoop.conf.Configuration
@@ -41,8 +41,9 @@ private[yarn] class YarnAllocationHandler(
     resourceManager: AMRMProtocol,
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes) {
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
+    securityMgr: SecurityManager)
+  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
 
   private val lastResponseId = new AtomicInteger()
   private val releaseList: CopyOnWriteArrayList[ContainerId] = new CopyOnWriteArrayList()
@@ -50,12 +51,13 @@ private[yarn] class YarnAllocationHandler(
   override protected def allocateContainers(count: Int): YarnAllocateResponse = {
     var resourceRequests: List[ResourceRequest] = null
 
-    // default.
-    if (count <= 0 || preferredHostToCount.isEmpty) {
-      logDebug("numExecutors: " + count + ", host preferences: " +
-        preferredHostToCount.isEmpty)
-      resourceRequests = List(createResourceRequest(
-        AllocationType.ANY, null, count, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
+    logDebug("numExecutors: " + count)
+    if (count <= 0) {
+      resourceRequests = List()
+    } else if (preferredHostToCount.isEmpty) {
+        logDebug("host preferences is empty")
+        resourceRequests = List(createResourceRequest(
+          AllocationType.ANY, null, count, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
     } else {
       // request for all hosts in preferred nodes and for numExecutors -
       // candidates.size, request by default allocation policy.

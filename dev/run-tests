@@ -18,7 +18,7 @@
 #
 
 # Go to the Spark project root directory
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
 if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
@@ -89,7 +89,7 @@ echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
-# Build Spark; we always build with Hive because the PySpark SparkSQL tests need it.
+# Build Spark; we always build with Hive because the PySpark Spark SQL tests need it.
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.

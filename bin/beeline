@@ -24,7 +24,7 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 CLASS="org.apache.hive.beeline.BeeLine"
 exec "$FWDIR/bin/spark-class" $CLASS "$@"

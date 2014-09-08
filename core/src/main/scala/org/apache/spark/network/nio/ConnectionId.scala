@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
-private[spark] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
+private[nio] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
   override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
 }
 
-private[spark] object ConnectionId {
+private[nio] object ConnectionId {
 
   def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
     val res = connectionIdString.split("_").map(_.trim())

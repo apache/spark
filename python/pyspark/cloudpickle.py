@@ -657,7 +657,6 @@ class CloudPickler(pickle.Pickler):
     def save_file(self, obj):
         """Save a file"""
         import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
-        from ..transport.adapter import SerializingAdapter
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
@@ -691,13 +690,10 @@ class CloudPickler(pickle.Pickler):
             tmpfile.close()
             if tst != '':
                 raise pickle.PicklingError("Cannot pickle file %s as it does not appear to map to a physical, real file" % name)
-        elif fsize > SerializingAdapter.max_transmit_data:
-            raise pickle.PicklingError("Cannot pickle file %s as it exceeds cloudconf.py's max_transmit_data of %d" %
-                                       (name,SerializingAdapter.max_transmit_data))
         else:
             try:
                 tmpfile = file(name)
-                contents = tmpfile.read(SerializingAdapter.max_transmit_data)
+                contents = tmpfile.read()
                 tmpfile.close()
             except IOError:
                 raise pickle.PicklingError("Cannot pickle file %s as it cannot be read" % name)

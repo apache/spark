@@ -29,6 +29,7 @@ from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+from pyspark.storagelevel import StorageLevel
 
 from itertools import chain, ifilter, imap
 
@@ -898,9 +899,9 @@ def _create_cls(dataType):
     return Row
 
 
-class SQLContext:
+class SQLContext(object):
 
-    """Main entry point for SparkSQL functionality.
+    """Main entry point for Spark SQL functionality.
 
     A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -942,18 +943,16 @@ class SQLContext:
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
-
-        if sqlContext:
-            self._scala_SQLContext = sqlContext
+        self._scala_SQLContext = sqlContext
 
     @property
     def _ssql_ctx(self):
-        """Accessor for the JVM SparkSQL context.
+        """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
         JVM Contexts.
         """
-        if not hasattr(self, '_scala_SQLContext'):
+        if self._scala_SQLContext is None:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
@@ -970,23 +969,26 @@ class SQLContext:
         >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
         [Row(c0=4)]
-        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
-        [Row(c0=5)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
+        pickled_command = CloudPickleSerializer().dumps(command)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
+            self._sc._gateway._gateway_client)
+        self._sc._pickled_broadcast_vars.clear()
         env = MapConverter().convert(self._sc.environment,
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
                                            self._sc._gateway._gateway_client)
         self._ssql_ctx.registerPython(name,
-                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      bytearray(pickled_command),
                                       env,
                                       includes,
                                       self._sc.pythonExec,
+                                      broadcast_vars,
                                       self._sc._javaAccumulator,
                                       str(returnType))
 
@@ -1506,7 +1508,7 @@ class SchemaRDD(RDD):
     """An RDD of L{Row} objects that has an associated schema.
 
     The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
-    utilize the relational query api exposed by SparkSQL.
+    utilize the relational query api exposed by Spark SQL.
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
@@ -1523,7 +1525,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
-
+        self._id = None
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
@@ -1541,9 +1543,10 @@ class SchemaRDD(RDD):
             self._lazy_jrdd = self._jschema_rdd.javaToPython()
         return self._lazy_jrdd
 
-    @property
-    def _id(self):
-        return self._jrdd.id()
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
@@ -1664,7 +1667,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.cache()
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
         self._jschema_rdd.persist(javaStorageLevel)
