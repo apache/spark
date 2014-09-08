@@ -54,7 +54,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   def create(): Socket = {
     if (useDaemon) {
-      idleWorkers.synchronized {
+      synchronized {
         if (idleWorkers.size > 0) {
           return idleWorkers.dequeue()
         }
@@ -216,18 +216,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     override def run() {
       while (true) {
-        idleWorkers.synchronized {
+        synchronized {
           if (lastActivity + IDLE_WORKER_TIMEOUT_MS < System.currentTimeMillis()) {
-            while (idleWorkers.length > 0) {
-              val worker = idleWorkers.dequeue()
-              try {
-                // the Python worker will exit after closing the socket
-                worker.close()
-              } catch {
-                case e: Exception =>
-                  logWarning("Failed to close worker socket", e)
-              }
-            }
+            cleanupIdleWorkers()
             lastActivity = System.currentTimeMillis()
           }
         }
@@ -236,18 +227,24 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
+  private def cleanupIdleWorkers() {
+    while (idleWorkers.length > 0) {
+      val worker = idleWorkers.dequeue()
+      try {
+        // the worker will exit after closing the socket
+        worker.close()
+      } catch {
+        case e: Exception =>
+          logWarning("Failed to close worker socket", e)
+      }
+    }
+  }
+
   private def stopDaemon() {
     synchronized {
       if (useDaemon) {
-        while (idleWorkers.length > 0) {
-          val worker = idleWorkers.dequeue()
-          try {
-            worker.close()
-          } catch {
-            case e: Exception =>
-              logWarning("Failed to close worker socket", e)
-          }
-        }
+        cleanupIdleWorkers()
+
         // Request shutdown of existing daemon by sending SIGTERM
         if (daemon != null) {
           daemon.destroy()
@@ -266,25 +263,27 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   def stopWorker(worker: Socket) {
-    if (useDaemon) {
-      if (daemon != null) {
-        daemonWorkers.get(worker).foreach { pid =>
-          // tell daemon to kill worker by pid
-          val output = new DataOutputStream(daemon.getOutputStream)
-          output.writeInt(pid)
-          output.flush()
-          daemon.getOutputStream.flush()
+    synchronized {
+      if (useDaemon) {
+        if (daemon != null) {
+          daemonWorkers.get(worker).foreach { pid =>
+            // tell daemon to kill worker by pid
+            val output = new DataOutputStream(daemon.getOutputStream)
+            output.writeInt(pid)
+            output.flush()
+            daemon.getOutputStream.flush()
+          }
         }
+      } else {
+        simpleWorkers.get(worker).foreach(_.destroy())
       }
-    } else {
-      simpleWorkers.get(worker).foreach(_.destroy())
     }
     worker.close()
   }
 
   def releaseWorker(worker: Socket) {
     if (useDaemon && envVars.get("SPARK_REUSE_WORKER").isDefined) {
-      idleWorkers.synchronized {
+      synchronized {
         lastActivity = System.currentTimeMillis()
         idleWorkers.enqueue(worker)
       }
@@ -302,5 +301,5 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
 private object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
-  val IDLE_WORKER_TIMEOUT_MS = 60000
+  val IDLE_WORKER_TIMEOUT_MS = 60000  // kill idle workers after 1 minute
 }
