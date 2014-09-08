@@ -17,6 +17,10 @@
 
 package org.apache.spark
 
+import com.google.common.io.Files
+import java.io.File
+import java.nio.charset.Charset
+
 import org.scalatest.FunSuite
 
 class SparkConfSuite extends FunSuite with LocalSparkContext {
@@ -27,6 +31,24 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
       assert(conf.get("spark.test.testProperty") === "2")
     } finally {
       System.clearProperty("spark.test.testProperty")
+    }
+  }
+
+  test("loading from file") {
+    val outFile = File.createTempFile("sparkConf-loading-from-file", "")
+    try {
+      Files.write("spark.test.fileNameLoad true\n", outFile, Charset.forName("UTF-8"))
+      assert(new SparkConf(true, Some(outFile.getAbsolutePath)).
+        get("spark.test.fileNameLoad") === "true")
+
+      System.setProperty("spark.test.fileNameLoad", "false")
+      val conf = new SparkConf(true, Some(outFile.getAbsolutePath))
+      assert(conf.get("spark.test.fileNameLoad") === "false")
+    } finally {
+      System.clearProperty("spark.test.fileNameLoad")
+      if (outFile != null) {
+        outFile.delete()
+      }
     }
   }
 

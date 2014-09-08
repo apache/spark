@@ -17,14 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, FileInputStream, IOException}
-import java.util.Properties
 import java.util.jar.JarFile
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.SparkException
 import org.apache.spark.util.Utils
 
 /**
@@ -66,9 +63,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
-      val file = new File(filename)
-      SparkSubmitArguments.getPropertiesFromFile(file).foreach { case (k, v) =>
-        if (k.startsWith("spark")) {
+      Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
+        if (k.startsWith("spark.")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
         } else {
@@ -85,27 +81,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
    */
   private def mergeSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
-    if (propertiesFile == null) {
-      sys.env.get("SPARK_CONF_DIR").foreach { sparkConfDir =>
-        val sep = File.separator
-        val defaultPath = s"${sparkConfDir}${sep}spark-defaults.conf"
-        val file = new File(defaultPath)
-        if (file.exists()) {
-          propertiesFile = file.getAbsolutePath
-        }
-      }
-    }
-
-    if (propertiesFile == null) {
-      sys.env.get("SPARK_HOME").foreach { sparkHome =>
-        val sep = File.separator
-        val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.conf"
-        val file = new File(defaultPath)
-        if (file.exists()) {
-          propertiesFile = file.getAbsolutePath
-        }
-      }
-    }
+    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultConfigFile)
 
     val properties = getDefaultSparkProperties
     properties.putAll(sparkProperties)
@@ -398,25 +374,5 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |                              working directory of each executor.""".stripMargin
     )
     SparkSubmit.exitFn()
-  }
-}
-
-object SparkSubmitArguments {
-  /** Load properties present in the given file. */
-  def getPropertiesFromFile(file: File): Seq[(String, String)] = {
-    require(file.exists(), s"Properties file $file does not exist")
-    require(file.isFile(), s"Properties file $file is not a normal file")
-    val inputStream = new FileInputStream(file)
-    try {
-      val properties = new Properties()
-      properties.load(inputStream)
-      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
-    } catch {
-      case e: IOException =>
-        val message = s"Failed when loading Spark properties file $file"
-        throw new SparkException(message, e)
-    } finally {
-      inputStream.close()
-    }
   }
 }
