@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.network
 
-import java.nio.ByteBuffer
+import org.apache.spark.storage.StorageLevel
 
-import org.apache.spark.network.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
 
-private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+trait BlockDataManager {
 
   /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
+   * Interface to get local block data.
+   *
+   * @return Some(buffer) if the block exists locally, and None if it doesn't.
    */
-  def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer]
+  def getBlockData(blockId: String): Option[ManagedBuffer]
 
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
-
-  def stop(): Unit
+  /**
+   * Put the block locally, using the given storage level.
+   */
+  def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit
 }
