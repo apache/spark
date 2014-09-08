@@ -37,6 +37,13 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
+          ) ++
+          // This is @DeveloperAPI, but Mima still gives false-positives:
+          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
+          Seq(
+            // This is @Experimental, but Mima still gives false-positives:
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync")
           )
         case v if v.startsWith("1.1") =>
           Seq(
