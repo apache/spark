@@ -482,7 +482,7 @@ private[spark] class Master(
 
     // First schedule drivers, they take strict precedence over applications
     // Randomization helps balance drivers
-    val shuffledAliveWorkers = Random.shuffle(workers.filter(_.state == WorkerState.ALIVE))
+    val shuffledAliveWorkers = Random.shuffle(workers).toArray
     val aliveWorkerNum = shuffledAliveWorkers.size
     var curPos = aliveWorkerNum - 1
     for (driver <- List(waitingDrivers: _*)) {
@@ -491,7 +491,8 @@ private[spark] class Master(
       var launched = false
       while (curPos != startFlag && !launched) {
         val worker = shuffledAliveWorkers(curPos)
-        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+        if (worker.state == WorkerState.ALIVE
+          && worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
           launched = true
