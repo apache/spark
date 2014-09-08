@@ -293,12 +293,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.manager</code></td>
-  <td>HASH</td>
+  <td>sort</td>
   <td>
-    Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
-    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
-    memory-efficient in environments with small executors, such as YARN. To use that, change
-    this value to <code>SORT</code>.
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
+    the default option starting in 1.2.
   </td>
 </tr>
 <tr>
