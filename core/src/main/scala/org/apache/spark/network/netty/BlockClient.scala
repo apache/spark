@@ -15,36 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty.client
+package org.apache.spark.network.netty
 
 import java.util.concurrent.TimeoutException
 
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel.socket.SocketChannel
-import io.netty.channel.{ChannelFutureListener, ChannelFuture, ChannelInitializer, ChannelOption}
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder
-import io.netty.handler.codec.string.StringEncoder
-import io.netty.util.CharsetUtil
+import io.netty.channel.{ChannelFuture, ChannelFutureListener, ChannelInitializer, ChannelOption}
 
 import org.apache.spark.Logging
+import org.apache.spark.network.BlockFetchingListener
+
 
 /**
- * Client for fetching data blocks from [[org.apache.spark.network.netty.server.BlockServer]].
- * Use [[BlockFetchingClientFactory]] to instantiate this client.
+ * Client for [[NettyBlockTransferService]]. Use [[BlockClientFactory]] to
+ * instantiate this client.
  *
  * The constructor blocks until a connection is successfully established.
- *
- * See [[org.apache.spark.network.netty.server.BlockServer]] for client/server protocol.
  *
  * Concurrency: thread safe and can be called from multiple threads.
  */
 @throws[TimeoutException]
-private[spark]
-class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String, port: Int)
+private[netty]
+class BlockClient(factory: BlockClientFactory, hostname: String, port: Int)
   extends Logging {
 
-  private val handler = new BlockFetchingClientHandler
+  private val handler = new BlockClientHandler
+  private val encoder = new ClientRequestEncoder
+  private val decoder = new ServerResponseDecoder
 
   /** Netty Bootstrap for creating the TCP connection. */
   private val bootstrap: Bootstrap = {
@@ -61,9 +60,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
     b.handler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline
-          .addLast("encoder", new StringEncoder(CharsetUtil.UTF_8))
-          // maxFrameLength = 2G, lengthFieldOffset = 0, lengthFieldLength = 4
-          .addLast("framedLengthDecoder", new LengthFieldBasedFrameDecoder(Int.MaxValue, 0, 4))
+          .addLast("clientRequestEncoder", encoder)
+          .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
+          .addLast("serverResponseDecoder", decoder)
           .addLast("handler", handler)
       }
     })
@@ -86,12 +85,7 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
    * @param blockIds sequence of block ids to fetch.
    * @param listener callback to fire on fetch success / failure.
    */
-  def fetchBlocks(blockIds: Seq[String], listener: BlockClientListener): Unit = {
-    // It's best to limit the number of "write" calls since it needs to traverse the whole pipeline.
-    // It's also best to limit the number of "flush" calls since it requires system calls.
-    // Let's concatenate the string and then call writeAndFlush once.
-    // This is also why this implementation might be more efficient than multiple, separate
-    // fetch block calls.
+  def fetchBlocks(blockIds: Seq[String], listener: BlockFetchingListener): Unit = {
     var startTime: Long = 0
     logTrace {
       startTime = System.nanoTime
@@ -102,8 +96,7 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
       handler.addRequest(blockId, listener)
     }
 
-    val writeFuture = cf.channel().writeAndFlush(blockIds.mkString("\n") + "\n")
-    writeFuture.addListener(new ChannelFutureListener {
+    cf.channel().writeAndFlush(BlockFetchRequest(blockIds)).addListener(new ChannelFutureListener {
       override def operationComplete(future: ChannelFuture): Unit = {
         if (future.isSuccess) {
           logTrace {
@@ -116,9 +109,9 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
             s"Failed to send request $blockIds to $hostname:$port: ${future.cause.getMessage}"
           logError(errorMsg, future.cause)
           blockIds.foreach { blockId =>
-            listener.onFetchFailure(blockId, errorMsg)
             handler.removeRequest(blockId)
           }
+          listener.onBlockFetchFailure(new RuntimeException(errorMsg))
         }
       }
     })

@@ -15,36 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty.client
+package org.apache.spark.network.netty
 
-import io.netty.channel.epoll.{EpollEventLoopGroup, EpollSocketChannel}
+import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
-import io.netty.channel.{EventLoopGroup, Channel}
+import io.netty.channel.{Channel, EventLoopGroup}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.netty.NettyConfig
 import org.apache.spark.util.Utils
 
+
 /**
- * Factory for creating [[BlockFetchingClient]] by using createClient. This factory reuses
+ * Factory for creating [[BlockClient]] by using createClient. This factory reuses
  * the worker thread pool for Netty.
- *
- * Concurrency: createClient is safe to be called from multiple threads concurrently.
  */
-private[spark]
-class BlockFetchingClientFactory(val conf: NettyConfig) {
+private[netty]
+class BlockClientFactory(val conf: NettyConfig) {
 
   def this(sparkConf: SparkConf) = this(new NettyConfig(sparkConf))
 
   /** A thread factory so the threads are named (for debugging). */
-  val threadFactory = Utils.namedThreadFactory("spark-shuffle-client")
+  private[netty] val threadFactory = Utils.namedThreadFactory("spark-shuffle-client")
 
   /** The following two are instantiated by the [[init]] method, depending ioMode. */
-  var socketChannelClass: Class[_ <: Channel] = _
-  var workerGroup: EventLoopGroup = _
+  private[netty] var socketChannelClass: Class[_ <: Channel] = _
+  private[netty] var workerGroup: EventLoopGroup = _
 
   init()
 
@@ -63,20 +61,12 @@ class BlockFetchingClientFactory(val conf: NettyConfig) {
       workerGroup = new EpollEventLoopGroup(0, threadFactory)
     }
 
+    // For auto mode, first try epoll (only available on Linux), then nio.
     conf.ioMode match {
       case "nio" => initNio()
       case "oio" => initOio()
       case "epoll" => initEpoll()
-      case "auto" =>
-        // For auto mode, first try epoll (only available on Linux), then nio.
-        try {
-          initEpoll()
-        } catch {
-          // TODO: Should we log the throwable? But that always happen on non-Linux systems.
-          // Perhaps the right thing to do is to check whether the system is Linux, and then only
-          // call initEpoll on Linux.
-          case e: Throwable => initNio()
-        }
+      case "auto" => if (Epoll.isAvailable) initEpoll() else initNio()
     }
   }
 
@@ -87,8 +77,8 @@ class BlockFetchingClientFactory(val conf: NettyConfig) {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  def createClient(remoteHost: String, remotePort: Int): BlockFetchingClient = {
-    new BlockFetchingClient(this, remoteHost, remotePort)
+  def createClient(remoteHost: String, remotePort: Int): BlockClient = {
+    new BlockClient(this, remoteHost, remotePort)
   }
 
   def stop(): Unit = {

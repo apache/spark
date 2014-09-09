@@ -15,48 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty.server
+package org.apache.spark.network.netty
 
 import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
-import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption}
 import io.netty.channel.epoll.{EpollEventLoopGroup, EpollServerSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
-import io.netty.handler.codec.LineBasedFrameDecoder
-import io.netty.handler.codec.string.StringDecoder
-import io.netty.util.CharsetUtil
+import io.netty.channel.{ChannelInitializer, ChannelFuture, ChannelOption}
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.network.netty.NettyConfig
-import org.apache.spark.storage.BlockDataProvider
+import org.apache.spark.network.BlockDataManager
 import org.apache.spark.util.Utils
 
 
 /**
- * Server for serving Spark data blocks.
- * This should be used together with [[org.apache.spark.network.netty.client.BlockFetchingClient]].
- *
- * Protocol for requesting blocks (client to server):
- *   One block id per line, e.g. to request 3 blocks: "block1\nblock2\nblock3\n"
- *
- * Protocol for sending blocks (server to client):
- *   frame-length (4 bytes), block-id-length (4 bytes), block-id, block-data.
- *
- *   frame-length should not include the length of itself.
- *   If block-id-length is negative, then this is an error message rather than block-data. The real
- *   length is the absolute value of the frame-length.
- *
+ * Server for the [[NettyBlockTransferService]].
  */
-private[spark]
-class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Logging {
+private[netty]
+class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Logging {
 
-  def this(sparkConf: SparkConf, dataProvider: BlockDataProvider) = {
+  def this(sparkConf: SparkConf, dataProvider: BlockDataManager) = {
     this(new NettyConfig(sparkConf), dataProvider)
   }
 
@@ -129,10 +114,10 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
-        ch.pipeline
-          .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
-          .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
-          .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
+        val p = ch.pipeline
+          .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
+          .addLast("clientRequestDecoder", new ClientRequestDecoder)
+          .addLast("serverResponseEncoder", new ServerResponseEncoder)
           .addLast("handler", new BlockServerHandler(dataProvider))
       }
     })

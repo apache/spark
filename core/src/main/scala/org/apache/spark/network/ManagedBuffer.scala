@@ -22,7 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import com.google.common.io.ByteStreams
-import io.netty.buffer.{ByteBufInputStream, ByteBuf}
+import io.netty.buffer.{Unpooled, ByteBufInputStream, ByteBuf}
+import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.util.ByteBufferInputStream
 
@@ -35,7 +36,7 @@ import org.apache.spark.util.ByteBufferInputStream
  * - NioByteBufferManagedBuffer: data backed by a NIO ByteBuffer
  * - NettyByteBufManagedBuffer: data backed by a Netty ByteBuf
  */
-sealed abstract class ManagedBuffer {
+abstract class ManagedBuffer {
   // Note that all the methods are defined with parenthesis because their implementations can
   // have side effects (io operations).
 
@@ -54,6 +55,11 @@ sealed abstract class ManagedBuffer {
    * it does not go over the limit.
    */
   def inputStream(): InputStream
+
+  /**
+   * Convert the buffer into an Netty object, used to write the data out.
+   */
+  private[network] def convertToNetty(): AnyRef
 }
 
 
@@ -75,6 +81,11 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     is.skip(offset)
     ByteStreams.limit(is, length)
   }
+
+  private[network] override def convertToNetty(): AnyRef = {
+    val fileChannel = new FileInputStream(file).getChannel
+    new DefaultFileRegion(fileChannel, offset, length)
+  }
 }
 
 
@@ -88,6 +99,8 @@ final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
   override def nioByteBuffer() = buf.duplicate()
 
   override def inputStream() = new ByteBufferInputStream(buf)
+
+  private[network] override def convertToNetty(): AnyRef = Unpooled.wrappedBuffer(buf)
 }
 
 
@@ -101,6 +114,8 @@ final class NettyByteBufManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
   override def nioByteBuffer() = buf.nioBuffer()
 
   override def inputStream() = new ByteBufInputStream(buf)
+
+  private[network] override def convertToNetty(): AnyRef = buf
 
   // TODO(rxin): Promote this to top level ManagedBuffer interface and add documentation for it.
   def release(): Unit = buf.release()
