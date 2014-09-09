@@ -58,7 +58,7 @@ private[sql] case object PassThrough extends CompressionScheme {
     extends compression.Decoder[T] {
 
     override def next(row: MutableRow, ordinal: Int) {
-      columnType.setField(row, ordinal, columnType.extract(buffer))
+      columnType.extract(buffer, row, ordinal)
     }
 
     override def hasNext = buffer.hasRemaining
@@ -117,27 +117,30 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
-        var currentValue = columnType.extract(from)
+        val currentValue = new SpecificMutableRow(Seq(columnType.dataType))
         var currentRun = 1
+        val value = new SpecificMutableRow(Seq(columnType.dataType))
+
+        columnType.extract(from, currentValue, 0)
 
         while (from.hasRemaining) {
-          val value = columnType.extract(from)
+          columnType.extract(from, value, 0)
 
-          if (value == currentValue) {
+          if (value.head == currentValue.head) {
             currentRun += 1
           } else {
             // Writes current run
-            columnType.append(currentValue, to)
+            columnType.append(currentValue, 0, to)
             to.putInt(currentRun)
 
             // Resets current run
-            currentValue = value
+            columnType.copyField(value, 0, currentValue, 0)
             currentRun = 1
           }
         }
 
         // Writes the last run
-        columnType.append(currentValue, to)
+        columnType.append(currentValue, 0, to)
         to.putInt(currentRun)
       }
 

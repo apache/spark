@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{MutableAny, MutableRow, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
@@ -46,9 +46,26 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
   def extract(buffer: ByteBuffer): JvmType
 
   /**
+   * Extracts a value out of the buffer at the buffer's current position and stores in
+   * `row(ordinal)`. Subclasses should override this method to avoid boxing/unboxing costs whenever
+   * possible.
+   */
+  def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    setField(row, ordinal, extract(buffer))
+  }
+
+  /**
    * Appends the given value v of type T into the given ByteBuffer.
    */
   def append(v: JvmType, buffer: ByteBuffer)
+
+  /**
+   * Appends `row(ordinal)` of type T into the given ByteBuffer. Subclasses should override this
+   * method to avoid boxing/unboxing costs whenever possible.
+   */
+  def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    append(getField(row, ordinal), buffer)
+  }
 
   /**
    * Returns the size of the value `row(ordinal)`. This is used to calculate the size of variable
@@ -101,8 +118,16 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
     buffer.putInt(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.putInt(row.getInt(ordinal))
+  }
+
   def extract(buffer: ByteBuffer) = {
     buffer.getInt()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setInt(ordinal, buffer.getInt())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Int) {
@@ -121,8 +146,16 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
     buffer.putLong(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.putLong(row.getLong(ordinal))
+  }
+
   override def extract(buffer: ByteBuffer) = {
     buffer.getLong()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setLong(ordinal, buffer.getLong())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Long) {
@@ -141,8 +174,16 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
     buffer.putFloat(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.putFloat(row.getFloat(ordinal))
+  }
+
   override def extract(buffer: ByteBuffer) = {
     buffer.getFloat()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setFloat(ordinal, buffer.getFloat())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Float) {
@@ -161,8 +202,16 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
     buffer.putDouble(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.putDouble(row.getDouble(ordinal))
+  }
+
   override def extract(buffer: ByteBuffer) = {
     buffer.getDouble()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setDouble(ordinal, buffer.getDouble())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Double) {
@@ -178,10 +227,18 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
 
 private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   override def append(v: Boolean, buffer: ByteBuffer) {
-    buffer.put(if (v) 1.toByte else 0.toByte)
+    buffer.put(if (v) 1: Byte else 0: Byte)
+  }
+
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.put(if (row.getBoolean(ordinal)) 1: Byte else 0: Byte)
   }
 
   override def extract(buffer: ByteBuffer) = buffer.get() == 1
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setBoolean(ordinal, buffer.get() == 1)
+  }
 
   override def setField(row: MutableRow, ordinal: Int, value: Boolean) {
     row.setBoolean(ordinal, value)
@@ -199,8 +256,16 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
     buffer.put(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.put(row.getByte(ordinal))
+  }
+
   override def extract(buffer: ByteBuffer) = {
     buffer.get()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setByte(ordinal, buffer.get())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Byte) {
@@ -219,8 +284,16 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
     buffer.putShort(v)
   }
 
+  override def append(row: Row, ordinal: Int, buffer: ByteBuffer) {
+    buffer.putShort(row.getShort(ordinal))
+  }
+
   override def extract(buffer: ByteBuffer) = {
     buffer.getShort()
+  }
+
+  override def extract(buffer: ByteBuffer, row: MutableRow, ordinal: Int) {
+    row.setShort(ordinal, buffer.getShort())
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Short) {

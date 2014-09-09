@@ -55,7 +55,7 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
   }
 
   def extractSingle(row: MutableRow, ordinal: Int) {
-    columnType.setField(row, ordinal, columnType.extract(buffer))
+    columnType.extract(buffer, row, ordinal)
   }
 
   protected def underlyingBuffer = buffer
