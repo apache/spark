@@ -43,7 +43,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
   override def beforeAll() {
     tempDir = Utils.createTempDir()
 
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1, 1, false)
+    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(new YarnConfiguration())
     yarnCluster.start()
 
