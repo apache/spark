@@ -102,7 +102,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
       .putInt(nullCount)
       .put(nulls)
 
-    logInfo(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
+    logDebug(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
     encoder.compress(nonNullBuffer, compressedBuffer)
   }
 }
