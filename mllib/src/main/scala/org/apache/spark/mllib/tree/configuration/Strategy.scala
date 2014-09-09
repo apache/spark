@@ -49,8 +49,9 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
- * @param minInstancesPerNode Minimum number of nodes each child must have after split. Default value is 0.
- *                            If a split cause left or right child to have less than minInstancesPerNode,
+ * @param minInstancesPerNode Minimum number of nodes each child must have after split.
+ *                            Default value is 0. If a split cause left or right child
+ *                            to have less than minInstancesPerNode,
  *                            this split will not be considered as a valid split.
  * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
  *                    If a split has less information gain than minInfoGain,
