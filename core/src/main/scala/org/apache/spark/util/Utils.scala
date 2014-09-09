@@ -20,8 +20,10 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Locale, Random, UUID}
+import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+
+import org.apache.log4j.PropertyConfigurator
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -869,6 +871,7 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
+      logError(s"Process $command exited with code $exitCode: ${output}")
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
     output.toString
@@ -1477,6 +1480,20 @@ private[spark] object Utils extends Logging {
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }
+  }
+
+  /**
+   * config a log4j properties used for testsuite
+   */
+  def configTestLog4j(level: String): Unit = {
+    val pro = new Properties()
+    pro.put("log4j.rootLogger", s"$level, console")
+    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
+    pro.put("log4j.appender.console.target", "System.err")
+    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
+    pro.put("log4j.appender.console.layout.ConversionPattern",
+      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
+    PropertyConfigurator.configure(pro)
   }
 
 }
