@@ -93,8 +93,17 @@ private[hive] class SparkHiveHadoopWriter(
       null)
   }
 
+  /**
+   * create an HiveRecordWriter. imitate the above function open()
+   * @param dynamicPartPath the relative path for dynamic partition
+   *
+   * since this function is used to create different writer for
+   * different dynamic partition.So we need a parameter dynamicPartPath
+   * and use it we can calculate a new path and pass the new path to
+   * the function HiveFileFormatUtils.getHiveRecordWriter
+   */
   def open(dynamicPartPath: String) {
-    val numfmt = SparkHiveHadoopWriter.threadLocalNumberFormat.get()
+    val numfmt = NumberFormat.getInstance()
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
@@ -108,7 +117,7 @@ private[hive] class SparkHiveHadoopWriter(
     if (outputPath == null) {
       throw new IOException("Undefined job output-path")
     }
-    val workPath = new Path(outputPath, dynamicPartPath.substring(1)) // remove "/"
+    val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/")) // remove "/"
     val path = new Path(workPath, outputName)
     getOutputCommitter().setupTask(getTaskContext())
     writer = HiveFileFormatUtils.getHiveRecordWriter(
@@ -218,11 +227,5 @@ private[hive] object SparkHiveHadoopWriter {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     }
     outputPath.makeQualified(fs)
-  }
-
-  val threadLocalNumberFormat = new ThreadLocal[NumberFormat] {
-    override def initialValue() = {
-      NumberFormat.getInstance()
-    }
   }
 }
