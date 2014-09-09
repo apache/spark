@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.{ArrayType, StructType}
 import org.apache.spark.sql.catalyst.trees
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
@@ -107,6 +107,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
         a.dataType match {
           case StructType(fields) =>
             Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
+          case ArrayType(fields, _) => nestedFields.length match {
+            case 1 => Some(Alias(GetArrayField(a, nestedFields.head), nestedFields.last)())
+            case _ => None // can't resolve arrayOfStruct.field1._
+          }
           case _ => None // Don't know how to resolve these field references
         }
       case Seq() => None         // No matches.
