@@ -221,36 +221,13 @@ private[mllib] object BLAS extends Serializable {
    * @param C the resulting matrix C. Size of m x n.
    */
   def gemm(
-      transA: String,
-      transB: String,
+      transA: Boolean,
+      transB: Boolean,
       alpha: Double,
       A: Matrix,
       B: DenseMatrix,
       beta: Double,
-      C: DenseMatrix) {
-    var mA: Int = A.numRows
-    var nB: Int = B.numCols
-    var kA: Int = A.numCols
-    var kB: Int = B.numRows
-
-    if (transA == "T" || transA=="t"){
-      mA = A.numCols
-      kA = A.numRows
-    }
-    require(transA == "T" || transA == "t" || transA == "N" || transA == "n",
-      s"""Invalid argument used for transA: $transA. Must be \"N\", \"n\", \"T\", or \"t\"""")
-    if (transB == "T" || transB=="t"){
-      nB = B.numRows
-      kB = B.numCols
-    }
-    require(transB == "T" || transB == "t" || transB == "N" || transB == "n",
-      s"""Invalid argument used for transB: $transB. Must be \"N\", \"n\", \"T\", or \"t\"""")
-
-    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
-    require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
-    require(nB == C.numCols,
-      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
-
+      C: DenseMatrix): Unit = {
     A match {
       case sparse: SparseMatrix =>
         gemm(transA, transB, alpha, sparse, B, beta, C)
@@ -276,62 +253,7 @@ private[mllib] object BLAS extends Serializable {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix) {
-    gemm("N", "N", alpha, A, B, beta, C)
-  }
-
-  /**
-   * C := alpha * A * B
-   *
-   * @param transA specify whether to use matrix A, or the transpose of matrix A. Should be "N" or
-   *               "n" to use A, and "T" or "t" to use the transpose of A.
-   * @param transB specify whether to use matrix B, or the transpose of matrix B. Should be "N" or
-   *               "n" to use B, and "T" or "t" to use the transpose of B.
-   * @param alpha a scalar to scale the multiplication A * B.
-   * @param A the matrix A that will be left multiplied to B. Size of m x k.
-   * @param B the matrix B that will be left multiplied by A. Size of k x n.
-   *
-   * @return The resulting matrix C. Size of m x n.
-   */
-  def gemm(
-      transA: String,
-      transB: String,
-      alpha: Double,
-      A: Matrix,
-      B: DenseMatrix) : DenseMatrix = {
-    var mA: Int = A.numRows
-    var nB: Int = B.numCols
-    var kA: Int = A.numCols
-    var kB: Int = B.numRows
-
-    if (transA == "T" || transA=="T"){
-      mA = A.numCols
-      kA = A.numRows
-    }
-    if (transB == "T" || transB=="T"){
-      nB = B.numRows
-      kB = B.numCols
-    }
-
-    val C: DenseMatrix = DenseMatrix.zeros(mA, nB)
-    gemm(transA, transB, alpha, A, B, 0.0, C)
-
-    C
-  }
-
-  /**
-   * C := alpha * A * B
-   *
-   * @param alpha a scalar to scale the multiplication A * B.
-   * @param A the matrix A that will be left multiplied to B. Size of m x k.
-   * @param B the matrix B that will be left multiplied by A. Size of k x n.
-   *
-   * @return The resulting matrix C. Size of m x n.
-   */
-  def gemm(
-     alpha: Double,
-     A: Matrix,
-     B: DenseMatrix) : DenseMatrix = {
-    gemm("N", "N", alpha, A, B)
+    gemm(false, false, alpha, A, B, beta, C)
   }
 
   /**
@@ -339,29 +261,27 @@ private[mllib] object BLAS extends Serializable {
    * For `DenseMatrix` A.
    */
   private def gemm(
-      transA: String,
-      transB: String,
+      transA: Boolean,
+      transB: Boolean,
       alpha: Double,
       A: DenseMatrix,
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix) {
-    var mA: Int = A.numRows
-    var nB: Int = B.numCols
-    var kA: Int = A.numCols
-    var kB: Int = B.numRows
+    val mA: Int = if (!transA) A.numRows else A.numCols
+    val nB: Int = if (!transB) B.numCols else B.numRows
+    val kA: Int = if (!transA) A.numCols else A.numRows
+    val kB: Int = if (!transB) B.numRows else B.numCols
+    val tAstr = if (!transA) "N" else "T"
+    val tBstr = if (!transB) "N" else "T"
 
-    if (transA == "T" || transA=="t"){
-      mA = A.numCols
-      kA = A.numRows
-    }
-    if (transB == "T" || transB=="t"){
-      nB = B.numRows
-      kB = B.numCols
-    }
+    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
+    require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
+    require(nB == C.numCols,
+      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
 
-    nativeBLAS.dgemm(transA,transB, mA, nB, kA, alpha, A.toArray, A.numRows, B.toArray, B.numRows,
-      beta, C.toArray, C.numRows)
+    nativeBLAS.dgemm(tAstr, tBstr, mA, nB, kA, alpha, A.values, A.numRows, B.values, B.numRows,
+      beta, C.values, C.numRows)
   }
 
   /**
@@ -369,56 +289,67 @@ private[mllib] object BLAS extends Serializable {
    * For `SparseMatrix` A.
    */
   private def gemm(
-      transA: String,
-      transB: String,
+      transA: Boolean,
+      transB: Boolean,
       alpha: Double,
       A: SparseMatrix,
       B: DenseMatrix,
       beta: Double,
-      C: DenseMatrix) {
-    var transposeA = false
-    var transposeB = false
-    var mA: Int = A.numRows
-    var nB: Int = B.numCols
-    var kA: Int = A.numCols
+      C: DenseMatrix): Unit = {
+    val mA: Int = if (!transA) A.numRows else A.numCols
+    val nB: Int = if (!transB) B.numCols else B.numRows
+    val kA: Int = if (!transA) A.numCols else A.numRows
+    val kB: Int = if (!transB) B.numRows else B.numCols
 
-    if (transA == "T" || transA=="t"){
-      mA = A.numCols
-      kA = A.numRows
-      transposeA = true
-    }
-    if (transB == "T" || transB=="t"){
-      nB = B.numRows
-      transposeB = true
-    }
-    val Avals = A.toArray
-    val Arows = if (!transposeA) A.rowIndices else A.colPointers
-    val Acols = if (!transposeA) A.colPointers else A.rowIndices
+    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
+    require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
+    require(nB == C.numCols,
+      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
+
+    val Avals = A.values
+    val Arows = if (!transA) A.rowIndices else A.colPtrs
+    val Acols = if (!transA) A.colPtrs else A.rowIndices
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (transposeA){
-      var colCounter = 0
-      while (colCounter < nB){ // Tests showed that the outer loop being columns was faster
-        var rowCounter = 0
-        while (rowCounter < mA){
-          val indStart = Arows(rowCounter)
-          val indEnd = Arows(rowCounter + 1)
-          var elementCount = 0 // Loop over non-zero entries in column (actually the row indices,
-                               // since this is a transposed multiplication
-          var sum = 0.0
-          while(indStart + elementCount < indEnd){
-            val AcolIndex = Acols(indStart + elementCount)
-            val Bval = if (!transposeB) B(AcolIndex, colCounter) else B(colCounter, AcolIndex)
-            sum += Avals(indStart + elementCount) * Bval
-            elementCount += 1
+    if (transA){
+      var colCounterForB = 0
+      if (!transB){ // Expensive to put the check inside the loop
+        while (colCounterForB < nB) {
+          var rowCounterForA = 0
+          val Cstart = colCounterForB * mA
+          while (rowCounterForA < mA) {
+            var i = Arows(rowCounterForA)
+            val indEnd = Arows(rowCounterForA + 1)
+            val Bstart = colCounterForB * kA
+            var sum = 0.0
+            while (i < indEnd) {
+              sum += Avals(i) * B(Bstart + Acols(i))
+              i += 1
+            }
+            C.values(rowCounterForA + Cstart) = beta * C.values(rowCounterForA + Cstart) + sum
+            rowCounterForA += 1
           }
-          C.update(rowCounter, colCounter, beta * C(rowCounter, colCounter) + sum)
-          rowCounter += 1
+          colCounterForB += 1
         }
-        colCounter += 1
+      } else {
+        while (colCounterForB < nB) {
+          var rowCounter = 0
+          val Cstart = colCounterForB * mA
+          while (rowCounter < mA) {
+            var i = Arows(rowCounter)
+            val indEnd = Arows(rowCounter + 1)
+            var sum = 0.0
+            while (i < indEnd) {
+              sum += Avals(i) * B(colCounterForB, Acols(i))
+              i += 1
+            }
+            C.values(rowCounter + Cstart) = beta * C.values(rowCounter + Cstart) + sum
+            rowCounter += 1
+          }
+          colCounterForB += 1
+        }
       }
     } else {
-
       // Scale matrix first if `beta` is not equal to 0.0
       if (beta != 0.0){
         var i = 0
@@ -428,34 +359,41 @@ private[mllib] object BLAS extends Serializable {
           i += 1
         }
       }
-
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
       // B, and added to C.
-      var colCounterForA = 0 // The column of A to multiply with the row of B
-      while (colCounterForA < kA){
-        val indStart = Acols(colCounterForA)
-        val indEnd = Acols(colCounterForA + 1)
-
-        var elementCount = 0 // Loop over non-zero entries in column
-        while (indStart + elementCount < indEnd){
-          var colCounterForB = 0 // the column to be updated in C
-          val rowIndex = Arows(indStart + elementCount) // the row to be updated in C
-          while (colCounterForB < nB){
-            val Bval =
-              if (!transposeB){
-                B(colCounterForA, colCounterForB)
-              } else {
-                B(colCounterForB, colCounterForA)
-              }
-
-            C.update(rowIndex, colCounterForB,
-              C(rowIndex, colCounterForB) + Avals(indStart + elementCount) * Bval)
-
-            colCounterForB += 1
+      var colCounterForB = 0 // the column to be updated in C
+      if (!transB) { // Expensive to put the check inside the loop
+        while (colCounterForB < nB) {
+          var colCounterForA = 0 // The column of A to multiply with the row of B
+          while (colCounterForA < kA){
+            var i = Acols(colCounterForA)
+            val indEnd = Acols(colCounterForA + 1)
+            val Bval = B(colCounterForA, colCounterForB)
+            val Cstart = colCounterForB * mA
+            while (i < indEnd){
+              C.values(Arows(i) + Cstart) += Avals(i) * Bval
+              i += 1
+            }
+            colCounterForA += 1
           }
-          elementCount += 1
+          colCounterForB += 1
         }
-        colCounterForA += 1
+      } else {
+        while (colCounterForB < nB) {
+          var colCounterForA = 0 // The column of A to multiply with the row of B
+          while (colCounterForA < kA){
+            var i = Acols(colCounterForA)
+            val indEnd = Acols(colCounterForA + 1)
+            val Bval = B(colCounterForB, colCounterForA)
+            val Cstart = colCounterForB * mA
+            while (i < indEnd){
+              C.values(Cstart + Arows(i)) += Avals(i) * Bval
+              i += 1
+            }
+            colCounterForA += 1
+          }
+          colCounterForB += 1
+        }
       }
     }
   }
@@ -471,24 +409,16 @@ private[mllib] object BLAS extends Serializable {
    * @param y the resulting vector y. Size of m x 1.
    */
   def gemv(
-      trans: String,
+      trans: Boolean,
       alpha: Double,
       A: Matrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector) {
+      y: DenseVector): Unit = {
 
-    var mA: Int = A.numRows
+    val mA: Int = if (!trans) A.numRows else A.numCols
     val nx: Int = x.size
-    var nA: Int = A.numCols
-    var transposeA: Boolean = false
-    if (trans == "T" || trans=="t"){
-      mA = A.numCols
-      nA = A.numRows
-      transposeA = true
-    }
-    require(trans == "T" || trans == "t" || trans == "N" || trans == "n",
-      s"""Invalid argument used for trans: $trans. Must be \"N\", \"n\", \"T\", or \"t\"""")
+    val nA: Int = if (!trans) A.numCols else A.numRows
 
     require(nA == nx, s"The columns of A don't match the number of elements of x. A: $nA, x: $nx")
     require(mA == y.size,
@@ -518,8 +448,8 @@ private[mllib] object BLAS extends Serializable {
       A: Matrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector) {
-    gemv("N", alpha, A, x, beta, y)
+      y: DenseVector): Unit = {
+    gemv(false, alpha, A, x, beta, y)
   }
 
   /**
@@ -534,11 +464,11 @@ private[mllib] object BLAS extends Serializable {
    * @return `DenseVector` y, the result of the matrix-vector multiplication. Size of m x 1.
    */
   def gemv(
-            trans: String,
+            trans: Boolean,
             alpha: Double,
             A: Matrix,
             x: DenseVector): DenseVector = {
-    val m = if(trans == "N" || trans == "n") A.numRows else A.numCols
+    val m = if(!trans) A.numRows else A.numCols
 
     val y: DenseVector = new DenseVector(Array.fill(m)(0.0))
     gemv(trans, alpha, A, x, 0.0, y)
@@ -559,7 +489,7 @@ private[mllib] object BLAS extends Serializable {
       alpha: Double,
       A: Matrix,
       x: DenseVector): DenseVector = {
-    gemv("N", alpha, A, x)
+    gemv(false, alpha, A, x)
   }
 
 
@@ -568,14 +498,15 @@ private[mllib] object BLAS extends Serializable {
    * For `DenseMatrix` A.
    */
   private def gemv(
-      trans: String,
+      trans: Boolean,
       alpha: Double,
       A: DenseMatrix,
       x: DenseVector,
       beta: Double,
       y: DenseVector) {
-    nativeBLAS.dgemv(trans, A.numRows, A.numCols, alpha, A.toArray, A.numRows, x.toArray, 1, beta,
-      y.toArray, 1)
+    val tStrA = if (!trans) "N" else "T"
+    nativeBLAS.dgemv(tStrA, A.numRows, A.numCols, alpha, A.values, A.numRows, x.values, 1, beta,
+      y.values, 1)
   }
 
   /**
@@ -583,37 +514,29 @@ private[mllib] object BLAS extends Serializable {
    * For `SparseMatrix` A.
    */
   private def gemv(
-      trans: String,
+      trans: Boolean,
       alpha: Double,
       A: SparseMatrix,
       x: DenseVector,
       beta: Double,
       y: DenseVector) {
 
-    var mA: Int = A.numRows
-    var nA: Int = A.numCols
-    var transposeA: Boolean = false
-    if (trans == "T" || trans=="t"){
-      mA = A.numCols
-      nA = A.numRows
-      transposeA = true
-    }
+    val mA: Int = if(!trans) A.numRows else A.numCols
+    val nA: Int = if(!trans) A.numCols else A.numRows
 
-    val Avals = A.toArray
-    val Arows = if (!transposeA) A.rowIndices else A.colPointers
-    val Acols = if (!transposeA) A.colPointers else A.rowIndices
+    val Avals = A.values
+    val Arows = if (!trans) A.rowIndices else A.colPtrs
+    val Acols = if (!trans) A.colPtrs else A.rowIndices
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (transposeA){
+    if (trans){
       var rowCounter = 0
       while (rowCounter < mA){
-        val indStart = Arows(rowCounter)
-        val indEnd = Arows(rowCounter + 1)
-        var elementCount = 0 // Number of elements already multiplied
+        var i = Arows(rowCounter)
         var sum = 0.0
-        while(indStart + elementCount < indEnd){
-          sum += Avals(indStart + elementCount) * x.values(Acols(indStart + elementCount))
-          elementCount += 1
+        while(i < Arows(rowCounter + 1)){
+          sum += Avals(i) * x.values(Acols(i))
+          i += 1
         }
         y.values(rowCounter) =  beta * y.values(rowCounter) + sum
         rowCounter += 1
@@ -628,22 +551,17 @@ private[mllib] object BLAS extends Serializable {
           i += 1
         }
       }
-
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA){
-        val indStart = Acols(colCounterForA)
-        val indEnd = Acols(colCounterForA + 1)
-
-        var elementCount = 0 // Number of non-zero entries in column
-        while (indStart + elementCount < indEnd){
-          val rowIndex = Arows(indStart + elementCount)
-          y.values(rowIndex) += Avals(indStart + elementCount) * x.values(colCounterForA)
-          elementCount += 1
+        var i = Acols(colCounterForA)
+        while (i < Acols(colCounterForA + 1)){
+          val rowIndex = Arows(i)
+          y.values(rowIndex) += Avals(i) * x.values(colCounterForA)
+          i += 1
         }
         colCounterForA += 1
       }
     }
   }
-
 }

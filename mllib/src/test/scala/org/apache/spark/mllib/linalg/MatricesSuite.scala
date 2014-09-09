@@ -47,7 +47,6 @@ class MatricesSuite extends FunSuite {
     assert(mat.numRows === m)
     assert(mat.numCols === n)
     assert(mat.values.eq(values), "should not copy data")
-    assert(mat.toArray.eq(values), "toArray should not copy data")
   }
 
   test("sparse matrix construction with wrong number of elements") {

@@ -152,7 +152,7 @@ class BLASSuite extends FunSuite {
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemm("T", "N", 1.0, dA, B, 2.0, C1)
+        gemm(true, false, 1.0, dA, B, 2.0, C1)
       }
     }
 
@@ -164,8 +164,8 @@ class BLASSuite extends FunSuite {
     assert(dAT transposeTimes B ~== expected absTol 1e-15)
     assert(sAT transposeTimes B ~== expected absTol 1e-15)
 
-    gemm("T", "N", 1.0, dAT, B, 2.0, C3)
-    gemm("T", "N", 1.0, sAT, B, 2.0, C4)
+    gemm(true, false, 1.0, dAT, B, 2.0, C3)
+    gemm(true, false, 1.0, sAT, B, 2.0, C4)
     assert(C3 ~== expected2 absTol 1e-15)
     assert(C4 ~== expected2 absTol 1e-15)
 
@@ -196,7 +196,7 @@ class BLASSuite extends FunSuite {
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemv("T", 1.0, dA, x, 2.0, y1)
+        gemv(true, 1.0, dA, x, 2.0, y1)
       }
     }
 
@@ -208,8 +208,8 @@ class BLASSuite extends FunSuite {
     assert(dAT transposeTimes x ~== expected absTol 1e-15)
     assert(sAT transposeTimes x ~== expected absTol 1e-15)
 
-    gemv("T", 1.0, dAT, x, 2.0, y3)
-    gemv("T", 1.0, sAT, x, 2.0, y4)
+    gemv(true, 1.0, dAT, x, 2.0, y3)
+    gemv(true, 1.0, sAT, x, 2.0, y4)
     assert(y3 ~== expected2 absTol 1e-15)
     assert(y4 ~== expected2 absTol 1e-15)
   }
