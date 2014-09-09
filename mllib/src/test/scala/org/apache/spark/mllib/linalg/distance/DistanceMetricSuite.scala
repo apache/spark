@@ -17,87 +17,68 @@
 
 package org.apache.spark.mllib.linalg.distance
 
+import breeze.linalg.{Vector => BV}
 import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.FunSuite
+import org.apache.spark.mllib.util.TestingUtils._
 
 class ChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
   override def distanceFactory: DistanceMetric = new ChebyshevDistanceMetric
 
   test("the distance should be 6") {
-    val vector1 = Vectors.dense(1, -1, 1, -1)
-    val vector2 = Vectors.dense(2, -3, 4, 5)
+    val vector1 = Vectors.dense(1, -1, 1, -1).toBreeze
+    val vector2 = Vectors.dense(2, -3, 4, 5).toBreeze
     val distance = distanceFactory(vector1, vector2)
-    assert(distance == 6, s"the distance should be 6, but ${distance}")
+    assert(distance == 6, s"the distance should be 6, actual ${distance}")
   }
 
   test("the distance should be 100") {
-    val vector1 = Vectors.dense(1, -1, 1, -1)
-    val vector2 = Vectors.dense(101, -3, 4, 5)
+    val vector1 = Vectors.dense(1, -1, 1, -1).toBreeze
+    val vector2 = Vectors.dense(101, -3, 4, 5).toBreeze
     val distance = distanceFactory(vector1, vector2)
-    assert(distance == 100, s"the distance should be 100, but ${distance}")
+    assert(distance == 100, s"the distance should be 100, actual ${distance}")
   }
-}
 
-class WeightedChebyshevDistanceMetricSuite extends GeneralDistanceMetricSuite {
-  override def distanceFactory: DistanceMetric = {
-    val weights = Vectors.dense(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) // size should be 6
-    new WeightedChebyshevDistanceMetric(weights)
+  test("called by the companion object") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val distance = ChebyshevDistanceMetric(vector1, vector2)
+    assert(distance ~== 2.0 absTol 1.0E-10)
   }
 }
 
 class EuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
-  override def distanceFactory = new EuclideanDistanceMetric()
+  override def distanceFactory = new EuclideanDistanceMetric
 
   test("the distance should be 6.7082039325") {
-    val v1 = Vectors.dense(2, 3)
-    val v2 = Vectors.dense(5, 9)
-
+    val v1 = Vectors.dense(2, 3).toBreeze
+    val v2 = Vectors.dense(5, 9).toBreeze
     val distance = distanceFactory(v1, v2)
-    val expected = 6.7082039325
-    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
-    assert(isNear, s"the distance should be nearly equal to ${expected}, actual ${distance}")
-  }
-}
-
-class WeightedEuclideanDistanceMetricSuite extends GeneralDistanceMetricSuite {
-
-
-  override def distanceFactory: DistanceMetric = {
-    val weights = Vectors.dense(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) // size should be 6
-    new WeightedEuclideanDistanceMetric(weights)
+    assert(distance ~== 6.7082039325 absTol 1.0E-10)
   }
 
-  test("the distance should be 5.9532344150") {
-    val v1 = Vectors.dense(1, 1, 1, 1, 1, 1)
-    val v2 = Vectors.dense(1.1, 2.2, 3.3, 4.4, 5.5, 6.6)
-
-    val distance = distanceFactory(v1, v2)
-    val expected = 5.9532344150
-    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
-    assert(isNear, s"the distance should be nearly equal to 5.9532344150, but ${distance}")
+  test("called by the companion object") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val distance = EuclideanDistanceMetric(vector1, vector2)
+    assert(distance ~== 2.8284271247461903 absTol 1.0E-10)
   }
 }
 
 class ManhattanDistanceMetricSuite extends GeneralDistanceMetricSuite {
   override def distanceFactory = new ManhattanDistanceMetric()
-}
 
-class WeightedManhattanDistanceMetricSuite extends GeneralDistanceMetricSuite {
-
-
-  override def distanceFactory: DistanceMetric = {
-    val weights = Vectors.dense(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) // size should be 6
-    new WeightedManhattanDistanceMetric(weights)
+  test("the distance should be 6.7082039325") {
+    val v1 = Vectors.dense(2, 3, 6, 8).toBreeze
+    val v2 = Vectors.dense(5, 9, 1, 4).toBreeze
+    val distance = distanceFactory(v1, v2)
+    assert(distance ~== 18.0 absTol 1.0E-10)
   }
 
-  test("the distance should be 7.91") {
-    val v1 = Vectors.dense(1, 1, 1, 1, 1, 1)
-    val v2 = Vectors.dense(1.1, 2.2, 3.3, 4.4, 5.5, 6.6)
-
-    val distance = distanceFactory(v1, v2)
-    val expected = 7.91
-    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
-    assert(isNear, s"the distance should be nearly equal to 7.91, actual ${distance}")
+  test("called by the companion object") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val distance = ManhattanDistanceMetric(vector1, vector2)
+    assert(distance ~== 4.0 absTol 1.0E-10)
   }
 }
 
@@ -105,15 +86,26 @@ class MinkowskiDistanceMetricSuite extends GeneralDistanceMetricSuite {
   override def distanceFactory: DistanceMetric = new MinkowskiDistanceMetric(4.0)
 
   test("the distance between the vectors should be expected") {
-    val vector1 = Vectors.dense(0, 0, 0)
-    val vector2 = Vectors.dense(2, 3, 4)
-
-    val measure = new MinkowskiDistanceMetric
-    assert(measure.exponent == 3.0, s"the default value for exponent should be ${measure.exponent}")
-
+    val vector1 = Vectors.dense(0, 0, 0).toBreeze
+    val vector2 = Vectors.dense(2, 3, 4).toBreeze
+    val measure = new MinkowskiDistanceMetric(3.0)
     val distance = measure(vector1, vector2)
-    val expected = 4.6260650092
-    val isNear = GeneralDistanceMetricSuite.isNearlyEqual(distance, expected)
-    assert(isNear, s"the distance between the vectors should be ${expected}")
+    assert(distance ~== 4.6260650092 absTol 1.0E-10)
+  }
+
+  test("called by the companion object") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val distance = MinkowskiDistanceMetric(4.0)(vector1, vector2)
+    assert(distance ~== 2.378414230005442 absTol 1.0E-10)
+  }
+
+  test("called by the companion object without the parameters for vectors") {
+    val vector1 = Vectors.dense(1.0, 2.0)
+    val vector2 = Vectors.dense(3.0, 4.0)
+    val measure = MinkowskiDistanceMetric(4.0) _
+    val distance = measure(vector1, vector2)
+    assert(distance ~==  2.378414230005442 absTol 1.0E-10)
   }
 }
+
