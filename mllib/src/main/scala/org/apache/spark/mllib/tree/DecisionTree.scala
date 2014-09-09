@@ -145,7 +145,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
         val stats = nodeSplitStats._2
         val predict = nodeSplitStats._3
         val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth)
-        val node = new Node(nodeIndex, predict, isLeaf, Some(split), None, None, Some(stats))
+        val node = new Node(nodeIndex, predict.predict, isLeaf, Some(split), None, None, Some(stats))
         logDebug("Node = " + node)
         nodes(nodeIndex) = node
         timer.stop("extractNodeInfo")
