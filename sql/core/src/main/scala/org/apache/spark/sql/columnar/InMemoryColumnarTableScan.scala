@@ -52,7 +52,7 @@ private[sql] case class InMemoryRelation(
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
     val output = child.output
-    val cached = child.execute().mapPartitions { baseIterator =>
+    val cached = child.execute().mapPartitions { rowIterator =>
       new Iterator[CachedBatch] {
         def next() = {
           val columnBuilders = output.map { attribute =>
@@ -64,8 +64,8 @@ private[sql] case class InMemoryRelation(
           var row: Row = null
           var rowCount = 0
 
-          while (baseIterator.hasNext && rowCount < batchSize) {
-            row = baseIterator.next()
+          while (rowIterator.hasNext && rowCount < batchSize) {
+            row = rowIterator.next()
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
@@ -80,7 +80,7 @@ private[sql] case class InMemoryRelation(
           CachedBatch(columnBuilders.map(_.build()), stats)
         }
 
-        def hasNext = baseIterator.hasNext
+        def hasNext = rowIterator.hasNext
       }
     }.cache()
 
@@ -196,11 +196,20 @@ private[sql] case class InMemoryColumnarTableScan(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         relation.partitionStatistics.schema)
 
-      // Find the ordinals of the requested columns.  If none are requested, use the first.
-      val requestedColumns = if (attributes.isEmpty) {
-        Seq(0)
+      // Find the ordinals and data types of the requested columns.  If none are requested, use the
+      // narrowest (the field with minimum default element size).
+      val (requestedColumnIndices, requestedColumnDataTypes) = if (attributes.isEmpty) {
+        val (narrowestOrdinal, narrowestDataType) =
+          relation.output.zipWithIndex.map { case (a, ordinal) =>
+            ordinal -> a.dataType
+          } minBy { case (_, dataType) =>
+            ColumnType(dataType).defaultSize
+          }
+        Seq(narrowestOrdinal) -> Seq(narrowestDataType)
       } else {
-        attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
+        attributes.map { a =>
+          relation.output.indexWhere(_.exprId == a.exprId) -> a.dataType
+        }.unzip
       }
 
       val rows = iterator
@@ -220,11 +229,11 @@ private[sql] case class InMemoryColumnarTableScan(
         }
         // Build column accessors
         .map { cachedBatch =>
-          requestedColumns.map(cachedBatch.buffers(_)).map(ColumnAccessor(_))
+          requestedColumnIndices.map(cachedBatch.buffers(_)).map(ColumnAccessor(_))
         }
         // Extract rows via column accessors
         .flatMap { columnAccessors =>
-          val nextRow = new GenericMutableRow(columnAccessors.length)
+          val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
           new Iterator[Row] {
             override def next() = {
               var i = 0
