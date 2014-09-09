@@ -81,6 +81,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
+    sparkConf.getOption("spark.yarn.maxappattempts").map(_.toInt) match {
+      case Some(v) => appContext.setMaxAppAttempts(v)
+      case None => logDebug("Not setting spark.yarn.maxappattempts. Cluster default will be used.")
+    }
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
