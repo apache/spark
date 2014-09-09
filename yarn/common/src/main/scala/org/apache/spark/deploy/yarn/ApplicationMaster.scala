@@ -189,11 +189,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-        var uiAddress = sc.ui.appUIHostPort
-        if (yarnConf.get("yarn.http.policy").equals("HTTPS_ONLY")) {
-          uiAddress = sc.ui.appUIAddress
-        }
-        registerAM(uiAddress, securityMgr)
+        registerAM(sc.ui.appUIAddress, securityMgr)
       try {
         userThread.join()
       } finally {
