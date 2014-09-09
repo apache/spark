@@ -836,10 +836,11 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
-        if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
+        if (bestFeatureGainStats.gain < metadata.minInfoGain) {
           (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        } else {
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         }
-        (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else if (metadata.isUnordered(featureIndex)) {
         // Unordered categorical feature
         val (leftChildOffset, rightChildOffset) =
@@ -855,8 +856,9 @@ object DecisionTree extends Serializable with Logging {
           }.maxBy(_._2.gain)
         if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
           (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        } else {
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         }
-        (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else {
         // Ordered categorical feature
         val nodeFeatureOffset = binAggregates.getNodeFeatureOffset(nodeIndex, featureIndex)
@@ -930,12 +932,13 @@ object DecisionTree extends Serializable with Logging {
           }.maxBy(_._2.gain)
         if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
           (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        } else {
+          val categoriesForSplit =
+            categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
+          val bestFeatureSplit =
+            new Split(featureIndex, Double.MinValue, Categorical, categoriesForSplit)
+          (bestFeatureSplit, bestFeatureGainStats)
         }
-        val categoriesForSplit =
-          categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
-        val bestFeatureSplit =
-          new Split(featureIndex, Double.MinValue, Categorical, categoriesForSplit)
-        (bestFeatureSplit, bestFeatureGainStats)
       }
     }.maxBy(_._2.gain)
 
