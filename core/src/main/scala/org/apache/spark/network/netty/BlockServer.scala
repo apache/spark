@@ -21,14 +21,13 @@ import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
-import io.netty.channel.epoll.{EpollEventLoopGroup, EpollServerSocketChannel}
+import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollServerSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.channel.{ChannelInitializer, ChannelFuture, ChannelOption}
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.network.BlockDataManager
@@ -85,16 +84,7 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
       case "nio" => initNio()
       case "oio" => initOio()
       case "epoll" => initEpoll()
-      case "auto" =>
-        // For auto mode, first try epoll (only available on Linux), then nio.
-        try {
-          initEpoll()
-        } catch {
-          // TODO: Should we log the throwable? But that always happen on non-Linux systems.
-          // Perhaps the right thing to do is to check whether the system is Linux, and then only
-          // call initEpoll on Linux.
-          case e: Throwable => initNio()
-        }
+      case "auto" => if (Epoll.isAvailable) initEpoll() else initNio()
     }
 
     // Use pooled buffers to reduce temporary buffer allocation
@@ -114,7 +104,7 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
-        val p = ch.pipeline
+        ch.pipeline
           .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
           .addLast("clientRequestDecoder", new ClientRequestDecoder)
           .addLast("serverResponseEncoder", new ServerResponseEncoder)
