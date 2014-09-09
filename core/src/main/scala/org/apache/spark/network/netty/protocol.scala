@@ -28,29 +28,40 @@ import org.apache.spark.Logging
 import org.apache.spark.network.{NettyByteBufManagedBuffer, ManagedBuffer}
 
 
+/** Messages from the client to the server. */
 sealed trait ClientRequest {
   def id: Byte
 }
 
+/**
+ * Request to fetch a sequence of blocks from the server. A single [[BlockFetchRequest]] can
+ * correspond to multiple [[ServerResponse]]s.
+ */
 final case class BlockFetchRequest(blocks: Seq[String]) extends ClientRequest {
   override def id = 0
 }
 
+/**
+ * Request to upload a block to the server. Currently the server does not ack the upload request.
+ */
 final case class BlockUploadRequest(blockId: String, data: ManagedBuffer) extends ClientRequest {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
 }
 
 
+/** Messages from server to client (usually in response to some [[ClientRequest]]. */
 sealed trait ServerResponse {
   def id: Byte
 }
 
+/** Response to [[BlockFetchRequest]] when a block exists and has been successfully fetched. */
 final case class BlockFetchSuccess(blockId: String, data: ManagedBuffer) extends ServerResponse {
   require(blockId.length <= Byte.MaxValue)
   override def id = 0
 }
 
+/** Response to [[BlockFetchRequest]] when there is an error fetching the block. */
 final case class BlockFetchFailure(blockId: String, error: String) extends ServerResponse {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
@@ -58,7 +69,9 @@ final case class BlockFetchFailure(blockId: String, error: String) extends Serve
 
 
 /**
- * Encoder used by the client side to encode client-to-server responses.
+ * Encoder for [[ClientRequest]] used in client side.
+ *
+ * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @Sharable
 final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] {
@@ -109,6 +122,7 @@ final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] 
 
 /**
  * Decoder in the server side to decode client requests.
+ * This decoder is stateless so it is safe to be shared by multiple threads.
  *
  * This assumes the inbound messages have been processed by a frame decoder created by
  * [[ProtocolUtils.createFrameDecoder()]].
@@ -138,6 +152,7 @@ final class ClientRequestDecoder extends MessageToMessageDecoder[ByteBuf] {
 
 /**
  * Encoder used by the server side to encode server-to-client responses.
+ * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @Sharable
 final class ServerResponseEncoder extends MessageToMessageEncoder[ServerResponse] with Logging {
@@ -190,6 +205,7 @@ final class ServerResponseEncoder extends MessageToMessageEncoder[ServerResponse
 
 /**
  * Decoder in the client side to decode server responses.
+ * This decoder is stateless so it is safe to be shared by multiple threads.
  *
  * This assumes the inbound messages have been processed by a frame decoder created by
  * [[ProtocolUtils.createFrameDecoder()]].
@@ -229,6 +245,7 @@ private[netty] object ProtocolUtils {
     new LengthFieldBasedFrameDecoder(Int.MaxValue, 0, 8, -8, 8)
   }
 
+  // TODO(rxin): Make sure these work for all charsets.
   def readBlockId(in: ByteBuf): String = {
     val numBytesToRead = in.readByte().toInt
     val bytes = new Array[Byte](numBytesToRead)

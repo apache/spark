@@ -24,7 +24,8 @@ import org.apache.spark.network.BlockFetchingListener
 
 
 /**
- * Handler that processes server responses.
+ * Handler that processes server responses, in response to requests issued from [[BlockClient]].
+ * It works by tracking the list of outstanding requests (and their callbacks).
  *
  * Concurrency: thread safe and can be called from multiple threads.
  */
@@ -32,7 +33,7 @@ private[netty]
 class BlockClientHandler extends SimpleChannelInboundHandler[ServerResponse] with Logging {
 
   /** Tracks the list of outstanding requests and their listeners on success/failure. */
-  private val outstandingRequests = java.util.Collections.synchronizedMap {
+  private[this] val outstandingRequests = java.util.Collections.synchronizedMap {
     new java.util.HashMap[String, BlockFetchingListener]
   }
 

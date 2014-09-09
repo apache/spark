@@ -58,8 +58,8 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
   /** Initialize the server. */
   private def init(): Unit = {
     bootstrap = new ServerBootstrap
-    val bossThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-boss")
-    val workerThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-worker")
+    val bossThreadFactory = Utils.namedThreadFactory("spark-netty-server-boss")
+    val workerThreadFactory = Utils.namedThreadFactory("spark-netty-server-worker")
 
     // Use only one thread to accept connections, and 2 * num_cores for worker.
     def initNio(): Unit = {

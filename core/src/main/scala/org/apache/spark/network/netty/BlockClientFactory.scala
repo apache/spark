@@ -17,12 +17,17 @@
 
 package org.apache.spark.network.netty
 
+import java.util.concurrent.TimeoutException
+
+import io.netty.bootstrap.Bootstrap
+import io.netty.buffer.PooledByteBufAllocator
+import io.netty.channel._
 import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
+import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
-import io.netty.channel.{Channel, EventLoopGroup}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -38,11 +43,15 @@ class BlockClientFactory(val conf: NettyConfig) {
   def this(sparkConf: SparkConf) = this(new NettyConfig(sparkConf))
 
   /** A thread factory so the threads are named (for debugging). */
-  private[netty] val threadFactory = Utils.namedThreadFactory("spark-shuffle-client")
+  private[netty] val threadFactory = Utils.namedThreadFactory("spark-netty-client")
 
   /** The following two are instantiated by the [[init]] method, depending ioMode. */
   private[netty] var socketChannelClass: Class[_ <: Channel] = _
   private[netty] var workerGroup: EventLoopGroup = _
+
+  // The encoders are stateless and can be shared among multiple clients.
+  private[this] val encoder = new ClientRequestEncoder
+  private[this] val decoder = new ServerResponseDecoder
 
   init()
 
@@ -78,7 +87,36 @@ class BlockClientFactory(val conf: NettyConfig) {
    * Concurrency: This method is safe to call from multiple threads.
    */
   def createClient(remoteHost: String, remotePort: Int): BlockClient = {
-    new BlockClient(this, remoteHost, remotePort)
+    val handler = new BlockClientHandler
+
+    val bootstrap = new Bootstrap
+    bootstrap.group(workerGroup)
+      .channel(socketChannelClass)
+      // Use pooled buffers to reduce temporary buffer allocation
+      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+      // Disable Nagle's Algorithm since we don't want packets to wait
+      .option(ChannelOption.TCP_NODELAY, java.lang.Boolean.TRUE)
+      .option(ChannelOption.SO_KEEPALIVE, java.lang.Boolean.TRUE)
+      .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectTimeoutMs)
+
+    bootstrap.handler(new ChannelInitializer[SocketChannel] {
+      override def initChannel(ch: SocketChannel): Unit = {
+        ch.pipeline
+          .addLast("clientRequestEncoder", encoder)
+          .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
+          .addLast("serverResponseDecoder", decoder)
+          .addLast("handler", handler)
+      }
+    })
+
+    // Connect to the remote server
+    val cf: ChannelFuture = bootstrap.connect(remoteHost, remotePort)
+    if (!cf.awaitUninterruptibly(conf.connectTimeoutMs)) {
+      throw new TimeoutException(
+        s"Connecting to $remoteHost:$remotePort timed out (${conf.connectTimeoutMs} ms)")
+    }
+
+    new BlockClient(cf, handler)
   }
 
   def stop(): Unit = {
