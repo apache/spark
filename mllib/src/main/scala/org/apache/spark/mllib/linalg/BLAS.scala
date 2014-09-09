@@ -252,7 +252,7 @@ private[mllib] object BLAS extends Serializable {
       A: Matrix,
       B: DenseMatrix,
       beta: Double,
-      C: DenseMatrix) {
+      C: DenseMatrix): Unit = {
     gemm(false, false, alpha, A, B, beta, C)
   }
 
@@ -267,7 +267,7 @@ private[mllib] object BLAS extends Serializable {
       A: DenseMatrix,
       B: DenseMatrix,
       beta: Double,
-      C: DenseMatrix) {
+      C: DenseMatrix): Unit = {
     val mA: Int = if (!transA) A.numRows else A.numCols
     val nB: Int = if (!transB) B.numCols else B.numRows
     val kA: Int = if (!transA) A.numCols else A.numRows
@@ -317,16 +317,17 @@ private[mllib] object BLAS extends Serializable {
         while (colCounterForB < nB) {
           var rowCounterForA = 0
           val Cstart = colCounterForB * mA
+          val Bstart = colCounterForB * kA
           while (rowCounterForA < mA) {
             var i = Arows(rowCounterForA)
             val indEnd = Arows(rowCounterForA + 1)
-            val Bstart = colCounterForB * kA
             var sum = 0.0
             while (i < indEnd) {
-              sum += Avals(i) * B(Bstart + Acols(i))
+              sum += Avals(i) * B.values(Bstart + Acols(i))
               i += 1
             }
-            C.values(rowCounterForA + Cstart) = beta * C.values(rowCounterForA + Cstart) + sum
+            val Cindex = Cstart + rowCounterForA
+            C.values(Cindex) = beta * C.values(Cindex) + sum
             rowCounterForA += 1
           }
           colCounterForB += 1
@@ -343,7 +344,8 @@ private[mllib] object BLAS extends Serializable {
               sum += Avals(i) * B(colCounterForB, Acols(i))
               i += 1
             }
-            C.values(rowCounter + Cstart) = beta * C.values(rowCounter + Cstart) + sum
+            val Cindex = Cstart + rowCounter
+            C.values(Cindex) = beta * C.values(Cindex) + sum
             rowCounter += 1
           }
           colCounterForB += 1
@@ -352,12 +354,7 @@ private[mllib] object BLAS extends Serializable {
     } else {
       // Scale matrix first if `beta` is not equal to 0.0
       if (beta != 0.0){
-        var i = 0
-        val Clength = C.numCols * C.numRows
-        while ( i < Clength) {
-          C.values(i) *= beta
-          i += 1
-        }
+        nativeBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
       // B, and added to C.
@@ -371,7 +368,7 @@ private[mllib] object BLAS extends Serializable {
             val Bval = B(colCounterForA, colCounterForB)
             val Cstart = colCounterForB * mA
             while (i < indEnd){
-              C.values(Arows(i) + Cstart) += Avals(i) * Bval
+              C.values(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
             colCounterForA += 1
@@ -503,7 +500,7 @@ private[mllib] object BLAS extends Serializable {
       A: DenseMatrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector) {
+      y: DenseVector): Unit =  {
     val tStrA = if (!trans) "N" else "T"
     nativeBLAS.dgemv(tStrA, A.numRows, A.numCols, alpha, A.values, A.numRows, x.values, 1, beta,
       y.values, 1)
@@ -519,7 +516,7 @@ private[mllib] object BLAS extends Serializable {
       A: SparseMatrix,
       x: DenseVector,
       beta: Double,
-      y: DenseVector) {
+      y: DenseVector): Unit =  {
 
     val mA: Int = if(!trans) A.numRows else A.numCols
     val nA: Int = if(!trans) A.numCols else A.numRows
@@ -544,12 +541,7 @@ private[mllib] object BLAS extends Serializable {
     } else {
       // Scale vector first if `beta` is not equal to 0.0
       if (beta != 0.0){
-        var i = 0
-        val yLength = y.size
-        while (i < yLength) {
-          y.values(i) *= beta
-          i += 1
-        }
+        scal(beta, y)
       }
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
