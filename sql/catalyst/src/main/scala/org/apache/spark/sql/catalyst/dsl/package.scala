@@ -132,6 +132,7 @@ package object dsl {
     def approxCountDistinct(e: Expression, rsd: Double = 0.05) = ApproxCountDistinct(e, rsd)
     def avg(e: Expression) = Average(e)
     def first(e: Expression) = First(e)
+    def last(e: Expression) = Last(e)
     def min(e: Expression) = Min(e)
     def max(e: Expression) = Max(e)
     def upper(e: Expression) = Upper(e)

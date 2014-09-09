@@ -41,6 +41,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
+  test("SPARK-3176 Added Parser of SQL ABS()") {
+    checkAnswer(
+      sql("SELECT ABS(-1.3)"),
+      1.3)
+    checkAnswer(
+      sql("SELECT ABS(0.0)"),
+      0.0)
+    checkAnswer(
+      sql("SELECT ABS(2.5)"),
+      2.5)
+  }
+
+  test("SPARK-3176 Added Parser of SQL LAST()") {
+    checkAnswer(
+      sql("SELECT LAST(n) FROM lowerCaseData"),
+      4)
+  }
+
+
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
@@ -53,14 +72,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SQRT with automatic string casts") {
     checkAnswer(
       sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),
