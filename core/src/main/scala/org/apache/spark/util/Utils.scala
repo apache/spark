@@ -43,6 +43,10 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import scala.Array
+import scala.Predef._
+import scala.Some
+import org.apache.spark.util.CallSite
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -451,6 +455,12 @@ private[spark] object Utils extends Logging {
    * If no directories could be created, this will return an empty list.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+    val rootDirs = getRootDirsConf(conf)
+    logDebug(s"Getting/creating local root dirs at '$rootDirs'")
+    createDirs(rootDirs)
+  }
+
+  private[spark] def getRootDirsConf(conf: SparkConf): String = {
     val confValue = if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available.
@@ -459,20 +469,22 @@ private[spark] object Utils extends Logging {
       Option(conf.getenv("SPARK_LOCAL_DIRS")).getOrElse(
         conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
     }
-    val rootDirs = confValue.split(',')
-    logDebug(s"Getting/creating local root dirs at '$confValue'")
+    confValue
+  }
 
-    rootDirs.flatMap { rootDir =>
-      val localDir: File = new File(rootDir)
+  private[spark] def createDirs(dirs: String): Array[String] = {
+    dirs.split(',').flatMap { dir =>
+      val localDir: File = new File(dir)
       val foundLocalDir = localDir.exists || localDir.mkdirs()
       if (!foundLocalDir) {
-        logError(s"Failed to create local root dir in $rootDir.  Ignoring this directory.")
+        logError(s"Failed to create local dir in $dir.  Ignoring this directory.")
         None
       } else {
-        Some(rootDir)
+        Some(dir)
       }
     }
   }
+
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {

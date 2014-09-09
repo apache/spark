@@ -46,11 +46,11 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
   }
 
   def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, 0))
+    blockManager.shuffleStore.getDiskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, 0))
   }
 
   private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, 0))
+    blockManager.shuffleStore.getDiskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, 0))
   }
 
   /**

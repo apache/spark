@@ -118,7 +118,7 @@ class FileShuffleBlockManager(conf: SparkConf)
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          val blockFile = blockManager.diskBlockManager.getFile(blockId)
+          val blockFile = blockManager.shuffleStore.getDiskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
           if (blockFile.exists) {
@@ -154,7 +154,7 @@ class FileShuffleBlockManager(conf: SparkConf)
         val fileId = shuffleState.nextFileId.getAndIncrement()
         val files = Array.tabulate[File](numBuckets) { bucketId =>
           val filename = physicalFileName(shuffleId, bucketId, fileId)
-          blockManager.diskBlockManager.getFile(filename)
+          blockManager.shuffleStore.getDiskBlockManager.getFile(filename)
         }
         val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
         shuffleState.allFileGroups.add(fileGroup)
@@ -186,7 +186,7 @@ class FileShuffleBlockManager(conf: SparkConf)
       }
       throw new IllegalStateException("Failed to find shuffle block: " + blockId)
     } else {
-      val file = blockManager.diskBlockManager.getFile(blockId)
+      val file = blockManager.shuffleStore.getDiskBlockManager.getFile(blockId)
       new FileSegmentManagedBuffer(file, 0, file.length)
     }
   }
@@ -211,7 +211,7 @@ class FileShuffleBlockManager(conf: SparkConf)
         } else {
           for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
             val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
-            blockManager.diskBlockManager.getFile(blockId).delete()
+            blockManager.shuffleStore.getDiskBlockManager.getFile(blockId).delete()
           }
         }
         logInfo("Deleted all files for shuffle " + shuffleId)

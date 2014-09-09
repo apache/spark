@@ -71,8 +71,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
-  private val diskBlockManager = blockManager.diskBlockManager
   private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
+  private val diskBlockManager = blockManager.shuffleStore.getDiskBlockManager
 
   // Number of pairs inserted since last spill; note that we count them even if a value is merged
   // with a previous key in case we're doing something like groupBy where the result grows

@@ -64,7 +64,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   override def beforeEach() {
     val conf = testConf.clone
     conf.set("spark.local.dir", rootDirs)
-    diskBlockManager = new DiskBlockManager(blockManager, conf)
+    diskBlockManager = new DefaultDiskBlockManager(conf, rootDirs)
   }
 
   override def afterEach() {

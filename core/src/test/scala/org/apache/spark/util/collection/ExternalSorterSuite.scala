@@ -135,7 +135,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       None, Some(new HashPartitioner(7)), Some(ord), None)
     assertDidNotBypassMergeSort(sorter)
     sorter.insertAll(elements)
-    assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
+    assert(sc.env.blockManager.shuffleStore.getDiskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
     assert(iter.next() === (1, List((1, 1))))
@@ -159,7 +159,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       None, Some(new HashPartitioner(7)), None, None)
     assertBypassedMergeSort(sorter)
     sorter.insertAll(elements)
-    assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
+    assert(sc.env.blockManager.shuffleStore.getDiskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
     assert(iter.next() === (1, List((1, 1))))
@@ -318,7 +318,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val ord = implicitly[Ordering[Int]]
 
@@ -345,7 +345,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
     assertBypassedMergeSort(sorter)
@@ -368,7 +368,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val ord = implicitly[Ordering[Int]]
 
@@ -393,7 +393,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
     assertBypassedMergeSort(sorter)
@@ -415,7 +415,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val data = sc.parallelize(0 until 100000, 2).map(i => (i, i))
     assert(data.reduceByKey(_ + _).count() === 100000)
@@ -430,7 +430,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
-    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+    val diskBlockManager = SparkEnv.get.blockManager.shuffleStore.getDiskBlockManager
 
     val data = sc.parallelize(0 until 100000, 2).map(i => {
       if (i == 99990) {

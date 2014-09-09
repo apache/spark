@@ -823,16 +823,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     // This sequence of mocks makes these tests fairly brittle. It would
     // be nice to refactor classes involved in disk storage in a way that
     // allows for easier testing.
+
     val blockManager = mock(classOf[BlockManager])
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
-    val diskBlockManager = new DiskBlockManager(blockManager, conf)
-
-    val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
+    val diskStoreMapped = new DefaultDiskStore("defaultStore1", blockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val mapped = diskStoreMapped.getBytes(blockId).get
 
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, (1000 * 1000).toString))
-    val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
+    val diskStoreNotMapped = new DefaultDiskStore("defaultStore1", blockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val notMapped = diskStoreNotMapped.getBytes(blockId).get
 
@@ -896,7 +895,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
         case _ => fail("Updated block is neither list2 nor list4")
       }
     }
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
+    assert(store.diskStoreManager.contains("list2"), "list2 was not in disk store")
     assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
 
     // No updated blocks - list5 is too big to fit in store and nothing is kicked out
@@ -912,11 +911,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(!store.memoryStore.contains("list5"), "list5 was in memory store")
 
     // disk store contains only list2
-    assert(!store.diskStore.contains("list1"), "list1 was in disk store")
-    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
-    assert(!store.diskStore.contains("list3"), "list3 was in disk store")
-    assert(!store.diskStore.contains("list4"), "list4 was in disk store")
-    assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+    assert(!store.diskStoreManager.contains("list1"), "list1 was in disk store")
+    assert(store.diskStoreManager.contains("list2"), "list2 was not in disk store")
+    assert(!store.diskStoreManager.contains("list3"), "list3 was in disk store")
+    assert(!store.diskStoreManager.contains("list4"), "list4 was in disk store")
+    assert(!store.diskStoreManager.contains("list5"), "list5 was in disk store")
   }
 
   test("query block statuses") {
@@ -1151,7 +1150,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = makeBlockManager(12000)
     val memAndDisk = StorageLevel.MEMORY_AND_DISK
     val memoryStore = store.memoryStore
-    val diskStore = store.diskStore
+    val diskStore = store.diskStoreManager
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
     def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]

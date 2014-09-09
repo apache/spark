@@ -136,7 +136,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           s"Free memory is $freeMemory bytes.")
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
-          val res = blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues)
+          val res = blockManager.diskStoreManager.putIterator(
+            blockId, iteratorValues, level, returnValues)
           PutResult(res.size, res.data, droppedBlocks)
         } else {
           PutResult(0, Left(iteratorValues), droppedBlocks)
