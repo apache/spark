@@ -89,8 +89,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
     // Number of nodes to allocate: max number of nodes possible given the depth of the tree, plus 1
     val maxNumNodesPlus1 = Node.startIndexInLevel(maxDepth + 1)
-    // Initialize an array to hold parent impurity calculations for each node.
-    val parentImpurities = new Array[Double](maxNumNodesPlus1)
     // dummy value for top node (updated during first split calculation)
     val nodes = new Array[Node](maxNumNodesPlus1)
 
@@ -131,7 +129,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       // Find best split for all nodes at a level.
       timer.start("findBestSplits")
       val splitsStatsForLevel: Array[(Split, InformationGainStats)] =
-        DecisionTree.findBestSplits(treeInput, parentImpurities,
+        DecisionTree.findBestSplits(treeInput,
           metadata, level, nodes, splits, bins, maxLevelForSingleGroup, timer)
       timer.stop("findBestSplits")
 
@@ -158,20 +156,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
             nodes(parentNodeIndex).rightNode = Some(nodes(nodeIndex))
           }
         }
-        // Extract info for nodes at the next lower level.
-        timer.start("extractInfoForLowerLevels")
         if (level < maxDepth) {
-          val leftChildIndex = Node.leftChildIndex(nodeIndex)
-          val leftImpurity = stats.leftImpurity
-          logDebug("leftChildIndex = " + leftChildIndex + ", impurity = " + leftImpurity)
-          parentImpurities(leftChildIndex) = leftImpurity
-
-          val rightChildIndex = Node.rightChildIndex(nodeIndex)
-          val rightImpurity = stats.rightImpurity
-          logDebug("rightChildIndex = " + rightChildIndex + ", impurity = " + rightImpurity)
-          parentImpurities(rightChildIndex) = rightImpurity
+          logDebug("leftChildIndex = " + Node.leftChildIndex(nodeIndex) +
+            ", impurity = " + stats.leftImpurity)
+          logDebug("rightChildIndex = " + Node.rightChildIndex(nodeIndex) +
+            ", impurity = " + stats.rightImpurity)
         }
-        timer.stop("extractInfoForLowerLevels")
         logDebug("final best split = " + split)
       }
       require(Node.maxNodesInLevel(level) == splitsStatsForLevel.length)
@@ -189,17 +179,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     logDebug("Extracting tree model")
     logDebug("#####################################")
 
-    // Initialize the top or root node of the tree.
-    val topNode = nodes(1)
-    // Build the full tree using the node info calculated in the level-wise best split calculations.
-    topNode.build(nodes)
-
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    new DecisionTreeModel(topNode, strategy.algo)
+    new DecisionTreeModel(nodes(1), strategy.algo)
   }
 
 }
@@ -408,7 +393,6 @@ object DecisionTree extends Serializable with Logging {
    * multiple groups if the level-wise training task could lead to memory overflow.
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
-   * @param parentImpurities Impurities for all parent nodes for the current level
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
@@ -418,7 +402,6 @@ object DecisionTree extends Serializable with Logging {
    */
   private[tree] def findBestSplits(
       input: RDD[TreePoint],
-      parentImpurities: Array[Double],
       metadata: DecisionTreeMetadata,
       level: Int,
       nodes: Array[Node],
@@ -438,14 +421,14 @@ object DecisionTree extends Serializable with Logging {
       // Iterate over each group of nodes at a level.
       var groupIndex = 0
       while (groupIndex < numGroups) {
-        val bestSplitsForGroup = findBestSplitsPerGroup(input, parentImpurities, metadata, level,
+        val bestSplitsForGroup = findBestSplitsPerGroup(input, metadata, level,
           nodes, splits, bins, timer, numGroups, groupIndex)
         bestSplits = Array.concat(bestSplits, bestSplitsForGroup)
         groupIndex += 1
       }
       bestSplits
     } else {
-      findBestSplitsPerGroup(input, parentImpurities, metadata, level, nodes, splits, bins, timer)
+      findBestSplitsPerGroup(input, metadata, level, nodes, splits, bins, timer)
     }
   }
 
@@ -585,7 +568,6 @@ object DecisionTree extends Serializable with Logging {
    * Returns an array of optimal splits for a group of nodes at a given level
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
-   * @param parentImpurities Impurities for all parent nodes for the current level
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
    * @param nodes Array of all nodes in the tree.  Used for matching data points to nodes.
@@ -597,7 +579,6 @@ object DecisionTree extends Serializable with Logging {
    */
   private def findBestSplitsPerGroup(
       input: RDD[TreePoint],
-      parentImpurities: Array[Double],
       metadata: DecisionTreeMetadata,
       level: Int,
       nodes: Array[Node],
@@ -709,10 +690,8 @@ object DecisionTree extends Serializable with Logging {
     // Iterating over all nodes at this level
     var nodeIndex = 0
     while (nodeIndex < numNodes) {
-      val nodeImpurity = parentImpurities(globalNodeIndexOffset + nodeIndex)
-      logDebug("node impurity = " + nodeImpurity)
       bestSplits(nodeIndex) =
-        binsToBestSplit(binAggregates, nodeIndex, nodeImpurity, level, metadata, splits)
+        binsToBestSplit(binAggregates, nodeIndex, level, metadata, splits)
       logDebug("best split = " + bestSplits(nodeIndex)._1)
       nodeIndex += 1
     }
@@ -725,13 +704,11 @@ object DecisionTree extends Serializable with Logging {
    * Calculate the information gain for a given (feature, split) based upon left/right aggregates.
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
    * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @param topImpurity impurity of the parent node
    * @return information gain and statistics for all splits
    */
   private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
-      topImpurity: Double,
       level: Int,
       metadata: DecisionTreeMetadata): InformationGainStats = {
 
@@ -741,18 +718,13 @@ object DecisionTree extends Serializable with Logging {
     val totalCount = leftCount + rightCount
     if (totalCount == 0) {
       // Return arbitrary prediction.
-      return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
+      return new InformationGainStats(0, 0, 0, 0, 0)
     }
 
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
-    // impurity of parent node
-    val impurity = if (level > 0) {
-      topImpurity
-    } else {
-      parentNodeAgg.calculate()
-    }
 
+    val impurity = parentNodeAgg.calculate()
     val predict = parentNodeAgg.predict
     val prob = parentNodeAgg.prob(predict)
 
@@ -771,18 +743,14 @@ object DecisionTree extends Serializable with Logging {
    * Find the best split for a node.
    * @param binAggregates Bin statistics.
    * @param nodeIndex Index for node to split in this (level, group).
-   * @param nodeImpurity Impurity of the node (nodeIndex).
    * @return tuple for best split: (Split, information gain)
    */
   private def binsToBestSplit(
       binAggregates: DTStatsAggregator,
       nodeIndex: Int,
-      nodeImpurity: Double,
       level: Int,
       metadata: DecisionTreeMetadata,
       splits: Array[Array[Split]]): (Split, InformationGainStats) = {
-
-    logDebug("node impurity = " + nodeImpurity)
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     Range(0, metadata.numFeatures).map { featureIndex =>
@@ -803,8 +771,7 @@ object DecisionTree extends Serializable with Logging {
             val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
             val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
             rightChildStats.subtract(leftChildStats)
-            val gainStats =
-              calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
+            val gainStats = calculateGainForSplit(leftChildStats, rightChildStats, level, metadata)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -816,8 +783,7 @@ object DecisionTree extends Serializable with Logging {
           Range(0, numSplits).map { splitIndex =>
             val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
             val rightChildStats = binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
-            val gainStats =
-              calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
+            val gainStats = calculateGainForSplit(leftChildStats, rightChildStats, level, metadata)
             (splitIndex, gainStats)
           }.maxBy(_._2.gain)
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -887,8 +853,7 @@ object DecisionTree extends Serializable with Logging {
             val rightChildStats =
               binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
             rightChildStats.subtract(leftChildStats)
-            val gainStats =
-              calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
+            val gainStats = calculateGainForSplit(leftChildStats, rightChildStats, level, metadata)
             (splitIndex, gainStats)
           }.maxBy(_._2.gain)
         val categoriesForSplit =
