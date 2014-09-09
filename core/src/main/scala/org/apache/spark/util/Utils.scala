@@ -333,7 +333,7 @@ private[spark] object Utils extends Logging {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     if (useCache) {
-      val cachedFileName = url.hashCode + timestamp + "_cach"
+      val cachedFileName = url.hashCode + timestamp + "_cache"
       val lockFileName = url.hashCode + timestamp + "_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
