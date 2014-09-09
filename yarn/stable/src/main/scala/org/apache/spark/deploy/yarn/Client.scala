@@ -108,10 +108,12 @@ private[spark] class Client(
   override def getApplicationReport(appId: ApplicationId): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 
-  /** */
-  // FIXME: This could throw NPE
+  /**
+   * Return the security token used by this client to communicate with the ApplicationMaster.
+   * If no security is enabled, the token returned by the report is null.
+   */
   override def getClientToken(report: ApplicationReport): String =
-    report.getClientToAMToken.toString
+    Option(report.getClientToAMToken).map(_.toString).getOrElse("")
 }
 
 private[spark] object Client {

@@ -122,8 +122,12 @@ private[spark] class Client(
     amContainer.setContainerTokens(ByteBuffer.wrap(dob.getData()))
   }
 
-  /** */
-  override def getClientToken(report: ApplicationReport): String = report.getClientToken
+  /**
+   * Return the security token used by this client to communicate with the ApplicationMaster.
+   * If no security is enabled, the token returned by the report is null.
+   */
+  override def getClientToken(report: ApplicationReport): String =
+    Option(report.getClientToken).getOrElse("")
 }
 
 private[spark] object Client {
