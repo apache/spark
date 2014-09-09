@@ -106,31 +106,6 @@ object TestJsonData {
               "inner1": "str4"
             }],
             "field2": [[5, 6], [7, 8]]
-          }],
-          "complexNestedArray": [
-          {
-            "field": [
-            {
-              "innerField": "str1"
-            },
-            {
-              "innerField": "str2"
-            }
-            ]
-          },
-          {
-            "field": [
-            {
-              "innerField": "str3"
-            },
-            {
-              "otherInner": "str4"
-            }
-            ]
-          },
-          {
-            "otherField": "str5"
-          }
-          ]
+          }]
       }""" :: Nil)
 }
