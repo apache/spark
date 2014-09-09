@@ -747,7 +747,6 @@ object DecisionTree extends Serializable with Logging {
 
     val totalCount = leftCount + rightCount
 
-
     // impurity of parent node
     val impurity = if (level > 0) {
       topImpurity
@@ -836,7 +835,7 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
-        if (bestFeatureGainStats.gain < metadata.minInfoGain) {
+        if (bestFeatureGainStats.gain == metadata.minInfoGain) {
           (Split.noSplit, InformationGainStats.invalidInformationGainStats)
         } else {
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
