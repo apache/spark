@@ -19,68 +19,35 @@ package org.apache.spark.network.netty
 
 import java.util.concurrent.TimeoutException
 
-import io.netty.bootstrap.Bootstrap
-import io.netty.buffer.PooledByteBufAllocator
-import io.netty.channel.socket.SocketChannel
-import io.netty.channel.{ChannelFuture, ChannelFutureListener, ChannelInitializer, ChannelOption}
+import io.netty.channel.{ChannelFuture, ChannelFutureListener}
 
 import org.apache.spark.Logging
 import org.apache.spark.network.BlockFetchingListener
 
 
 /**
- * Client for [[NettyBlockTransferService]]. Use [[BlockClientFactory]] to
- * instantiate this client.
+ * Client for [[NettyBlockTransferService]]. The connection to server must have been established
+ * using [[BlockClientFactory]] before instantiating this.
  *
- * The constructor blocks until a connection is successfully established.
+ * This class is used to make requests to the server , while [[BlockClientHandler]] is responsible
+ * for handling responses from the server.
  *
  * Concurrency: thread safe and can be called from multiple threads.
+ *
+ * @param cf the ChannelFuture for the connection.
+ * @param handler [[BlockClientHandler]] for handling outstanding requests.
  */
 @throws[TimeoutException]
 private[netty]
-class BlockClient(factory: BlockClientFactory, hostname: String, port: Int)
-  extends Logging {
+class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Logging {
 
-  private val handler = new BlockClientHandler
-  private val encoder = new ClientRequestEncoder
-  private val decoder = new ServerResponseDecoder
-
-  /** Netty Bootstrap for creating the TCP connection. */
-  private val bootstrap: Bootstrap = {
-    val b = new Bootstrap
-    b.group(factory.workerGroup)
-      .channel(factory.socketChannelClass)
-      // Use pooled buffers to reduce temporary buffer allocation
-      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-      // Disable Nagle's Algorithm since we don't want packets to wait
-      .option(ChannelOption.TCP_NODELAY, java.lang.Boolean.TRUE)
-      .option(ChannelOption.SO_KEEPALIVE, java.lang.Boolean.TRUE)
-      .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, factory.conf.connectTimeoutMs)
-
-    b.handler(new ChannelInitializer[SocketChannel] {
-      override def initChannel(ch: SocketChannel): Unit = {
-        ch.pipeline
-          .addLast("clientRequestEncoder", encoder)
-          .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
-          .addLast("serverResponseDecoder", decoder)
-          .addLast("handler", handler)
-      }
-    })
-    b
-  }
-
-  /** Netty ChannelFuture for the connection. */
-  private val cf: ChannelFuture = bootstrap.connect(hostname, port)
-  if (!cf.awaitUninterruptibly(factory.conf.connectTimeoutMs)) {
-    throw new TimeoutException(
-      s"Connecting to $hostname:$port timed out (${factory.conf.connectTimeoutMs} ms)")
-  }
+  private[this] val serverAddr = cf.channel().remoteAddress().toString
 
   /**
    * Ask the remote server for a sequence of blocks, and execute the callback.
    *
    * Note that this is asynchronous and returns immediately. Upstream caller should throttle the
-   * rate of fetching; otherwise we could run out of memory.
+   * rate of fetching; otherwise we could run out of memory due to large outstanding fetches.
    *
    * @param blockIds sequence of block ids to fetch.
    * @param listener callback to fire on fetch success / failure.
@@ -89,7 +56,7 @@ class BlockClient(factory: BlockClientFactory, hostname: String, port: Int)
     var startTime: Long = 0
     logTrace {
       startTime = System.nanoTime
-      s"Sending request $blockIds to $hostname:$port"
+      s"Sending request $blockIds to $serverAddr"
     }
 
     blockIds.foreach { blockId =>
@@ -101,12 +68,12 @@ class BlockClient(factory: BlockClientFactory, hostname: String, port: Int)
         if (future.isSuccess) {
           logTrace {
             val timeTaken = (System.nanoTime - startTime).toDouble / 1000000
-            s"Sending request $blockIds to $hostname:$port took $timeTaken ms"
+            s"Sending request $blockIds to $serverAddr took $timeTaken ms"
           }
         } else {
           // Fail all blocks.
           val errorMsg =
-            s"Failed to send request $blockIds to $hostname:$port: ${future.cause.getMessage}"
+            s"Failed to send request $blockIds to $serverAddr: ${future.cause.getMessage}"
           logError(errorMsg, future.cause)
           blockIds.foreach { blockId =>
             handler.removeRequest(blockId)

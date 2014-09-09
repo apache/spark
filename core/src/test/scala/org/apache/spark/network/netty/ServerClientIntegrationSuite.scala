@@ -34,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
 
 
 /**
-* Test suite that makes sure the server and the client implementations share the same protocol.
+* Test cases that create real clients and servers and connect.
 */
 class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -93,8 +93,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   /** A ByteBuf for file_block */
   lazy val fileBlockReference = Unpooled.wrappedBuffer(fileContent, 10, fileContent.length - 25)
 
-  def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ManagedBuffer], Set[String]) =
-  {
+  def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ManagedBuffer], Set[String]) = {
     val client = clientFactory.createClient(server.hostName, server.port)
     val sem = new Semaphore(0)
     val receivedBlockIds = Collections.synchronizedSet(new HashSet[String])
