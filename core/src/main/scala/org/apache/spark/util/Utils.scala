@@ -871,7 +871,7 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      logError(s"Process $command exited with code $exitCode: ${output.toString}")
+      logError(s"Process $command exited with code $exitCode: ${output}")
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
     output.toString

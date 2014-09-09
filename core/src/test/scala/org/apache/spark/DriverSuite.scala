@@ -18,9 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.util.Properties
-
-import org.apache.log4j.{PropertyConfigurator, Logger, Level}
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
