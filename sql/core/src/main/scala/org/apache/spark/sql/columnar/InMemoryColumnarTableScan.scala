@@ -61,11 +61,9 @@ private[sql] case class InMemoryRelation(
             ColumnBuilder(columnType.typeId, initialBufferSize, attribute.name, useCompression)
           }.toArray
 
-          var row: Row = null
           var rowCount = 0
-
           while (rowIterator.hasNext && rowCount < batchSize) {
-            row = rowIterator.next()
+            val row = rowIterator.next()
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
@@ -212,6 +210,7 @@ private[sql] case class InMemoryColumnarTableScan(
         }.unzip
       }
 
+      val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
       val rows = iterator
         // Skip pruned batches
         .filter { cachedBatch =>
@@ -233,7 +232,6 @@ private[sql] case class InMemoryColumnarTableScan(
         }
         // Extract rows via column accessors
         .flatMap { columnAccessors =>
-          val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
           new Iterator[Row] {
             override def next() = {
               var i = 0
