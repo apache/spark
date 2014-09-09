@@ -26,6 +26,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -241,8 +242,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           updateAggregateMetrics(stageData, executorMetricsUpdate.execId, taskMetrics,
             t.taskMetrics)
 
-          // Overwrite task metrics
-          t.taskMetrics = Some(taskMetrics)
+          // Overwrite task metrics with deepcopy
+          // TODO: only serialize it in local mode
+          t.taskMetrics = Some(Utils.deserialize[TaskMetrics](Utils.serialize(taskMetrics)))
         }
       }
     }
