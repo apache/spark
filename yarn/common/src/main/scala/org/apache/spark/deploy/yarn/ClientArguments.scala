@@ -147,7 +147,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
+      "  --arg ARG                  Argument to be passed to your application's main class.\n" +
       "                             Multiple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
