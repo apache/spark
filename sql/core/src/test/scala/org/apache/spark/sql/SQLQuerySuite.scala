@@ -597,4 +597,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (3, null) ::
       (4, 2147483644) :: Nil)
   }
+  
+  test("SPARK-3423 BETWEEN") {
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      Seq((5, "5"), (6, "6"), (7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      Seq((7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      Seq()
+    )
+    
+  }
 }
