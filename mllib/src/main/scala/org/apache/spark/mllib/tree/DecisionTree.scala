@@ -835,7 +835,7 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
-        if (bestFeatureGainStats.gain == metadata.minInfoGain) {
+        if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
           (Split.noSplit, InformationGainStats.invalidInformationGainStats)
         } else {
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
