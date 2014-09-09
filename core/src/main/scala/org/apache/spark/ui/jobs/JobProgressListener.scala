@@ -242,7 +242,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             t.taskMetrics)
 
           // Overwrite task metrics
-          t.taskMetrics = Some(taskMetrics)
+          // FIXME: deepcopy the metrics, or they will be the same object in local mode
+          t.taskMetrics = Some(scala.util.Marshal.load[TaskMetrics](scala.util.Marshal.dump(taskMetrics)))
         }
       }
     }
