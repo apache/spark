@@ -43,3 +43,8 @@ class InformationGainStats(
       .format(gain, impurity, leftImpurity, rightImpurity, predict, prob)
   }
 }
+
+
+private[tree] object InformationGainStats {
+  val invalidInformationGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, 0.0)
+}

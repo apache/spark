@@ -61,6 +61,8 @@ class Strategy (
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    val minInstancesPerNode: Int = 0,
+    val minInfoGain: Double = 0.0,
     val maxMemoryInMB: Int = 128) extends Serializable {
 
   if (algo == Classification) {

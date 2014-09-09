@@ -19,6 +19,8 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
+import org.apache.spark.mllib.tree.configuration.FeatureType
+import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**
  * :: DeveloperApi ::
@@ -66,3 +68,7 @@ private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
 private[tree] class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
 
+
+private[tree] object Split {
+  val noSplit = new Split(-1, Double.MinValue, FeatureType.Continuous, List())
+}

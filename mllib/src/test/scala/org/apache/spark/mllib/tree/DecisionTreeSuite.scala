@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
+import org.apache.spark.mllib.tree.model.{Split, DecisionTreeModel, Node}
 import org.apache.spark.mllib.util.LocalSparkContext
 
 
@@ -684,6 +684,45 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     validateClassifier(model, arr, 0.6)
   }
 
+  test("split must satisfy min instances per node requirements") {
+    val arr = new Array[LabeledPoint](3)
+    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
+    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClassesForClassification = 2, minInstancesPerNode = 4)
+
+    val model = DecisionTree.train(input, strategy)
+    assert(model.topNode.isLeaf)
+    assert(model.topNode.predict == 0.0)
+    assert(model.topNode.split.get == Split.noSplit)
+    val predicts = input.map(p => model.predict(p.features)).collect()
+    predicts.foreach { predict =>
+      assert(predict == 0.0)
+    }
+  }
+
+  test("split must satisfy min info gain requirements") {
+    val arr = new Array[LabeledPoint](3)
+    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
+    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClassesForClassification = 2, minInfoGain = 1.0)
+
+    val model = DecisionTree.train(input, strategy)
+    assert(model.topNode.isLeaf)
+    assert(model.topNode.predict == 0.0)
+    assert(model.topNode.split.get == Split.noSplit)
+    val predicts = input.map(p => model.predict(p.features)).collect()
+    predicts.foreach { predict =>
+      assert(predict == 0.0)
+    }
+  }
 }
 
 object DecisionTreeSuite {

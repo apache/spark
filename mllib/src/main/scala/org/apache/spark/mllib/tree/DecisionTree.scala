@@ -738,11 +738,14 @@ object DecisionTree extends Serializable with Logging {
     val leftCount = leftImpurityCalculator.count
     val rightCount = rightImpurityCalculator.count
 
-    val totalCount = leftCount + rightCount
-    if (totalCount == 0) {
-      // Return arbitrary prediction.
-      return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
+    // If left child or right child doesn't satisfy minimum instances per node,
+    // then this split is invalid, return invalid information gain stats
+    if ((leftCount < metadata.minInstancesPerNode) ||
+      (rightCount < metadata.minInstancesPerNode)) {
+      return InformationGainStats.invalidInformationGainStats
     }
+
+    val totalCount = leftCount + rightCount
 
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
@@ -763,6 +766,9 @@ object DecisionTree extends Serializable with Logging {
     val rightWeight = rightCount / totalCount.toDouble
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+    if (gain < metadata.minInfoGain) {
+      return InformationGainStats.invalidInformationGainStats
+    }
 
     new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict, prob)
   }
@@ -807,6 +813,9 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIdx, gainStats)
           }.maxBy(_._2.gain)
+        if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
+          (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        }
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else if (metadata.isUnordered(featureIndex)) {
         // Unordered categorical feature
@@ -820,6 +829,9 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIndex, gainStats)
           }.maxBy(_._2.gain)
+        if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
+          (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        }
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else {
         // Ordered categorical feature
@@ -891,6 +903,9 @@ object DecisionTree extends Serializable with Logging {
               calculateGainForSplit(leftChildStats, rightChildStats, nodeImpurity, level, metadata)
             (splitIndex, gainStats)
           }.maxBy(_._2.gain)
+        if (bestFeatureGainStats == InformationGainStats.invalidInformationGainStats) {
+          (Split.noSplit, InformationGainStats.invalidInformationGainStats)
+        }
         val categoriesForSplit =
           categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
         val bestFeatureSplit =
