@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Trait for a local matrix.
@@ -39,29 +40,37 @@ trait Matrix extends Serializable {
   /** Gets the i-th element in the array backing the matrix. */
   private[mllib] def apply(i: Int): Double
 
-  /** Gets the (r, c)-th element. */
-  private[mllib] def apply(r: Int, c: Int): Double
+  /** Gets the (i, j)-th element. */
+  private[mllib] def apply(i: Int, j: Int): Double
 
-  /** Return the index for the (r, c)-th element in the backing array. */
-  private[mllib] def index(r: Int, c: Int): Int
+  /** Return the index for the (i, j)-th element in the backing array. */
+  private[mllib] def index(i: Int, j: Int): Int
 
-  /** Update element at (r, c) */
-  private[mllib] def update(r: Int, c: Int, v: Double)
+  /** Update element at (i, j) */
+  private[mllib] def update(i: Int, j: Int, v: Double)
 
   /** Get a deep copy of the matrix. */
   def copy: Matrix
 
   /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
-  def times(y: DenseMatrix): DenseMatrix = BLAS.gemm(1.0, this, y)
+  def times(y: DenseMatrix): DenseMatrix = {
+    val C: DenseMatrix = Matrices.zeros(numRows, y.numCols).asInstanceOf[DenseMatrix]
+    BLAS.gemm(false, false, 1.0, this, y, 0.0, C)
+    C
+  }
 
   /** Convenience method for `Matrix`-`DenseVector` multiplication. */
   def times(y: DenseVector): DenseVector = BLAS.gemv(1.0, this, y)
 
   /** Convenience method for `Matrix`^T^-`DenseMatrix` multiplication. */
-  def transposeTimes(y: DenseMatrix): DenseMatrix = BLAS.gemm("T", "N", 1.0, this, y)
+  def transposeTimes(y: DenseMatrix): DenseMatrix = {
+    val C: DenseMatrix = Matrices.zeros(numCols, y.numCols).asInstanceOf[DenseMatrix]
+    BLAS.gemm(true, false, 1.0, this, y, 0.0, C)
+    C
+  }
 
   /** Convenience method for `Matrix`^T^-`DenseVector` multiplication. */
-  def transposeTimes(y: DenseVector): DenseVector = BLAS.gemv("T", 1.0, this, y)
+  def transposeTimes(y: DenseVector): DenseVector = BLAS.gemv(true, 1.0, this, y)
 
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
@@ -84,103 +93,29 @@ trait Matrix extends Serializable {
  */
 class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double]) extends Matrix {
 
-  require(values.length == numRows * numCols)
+  require(values.length == numRows * numCols, "The number of values supplied doesn't match the " +
+    s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
 
   override def toArray: Array[Double] = values
 
-  private [mllib] def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
+  private[mllib] def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 
-  private [mllib] def apply(i: Int): Double = values(i)
+  private[mllib] def apply(i: Int): Double = values(i)
 
-  private [mllib] def apply(r: Int, c: Int): Double = values(index(r, c))
+  private[mllib] def apply(i: Int, j: Int): Double = values(index(i, j))
 
-  private [mllib] def index(r: Int, c: Int): Int = r + numRows * c
+  private[mllib] def index(i: Int, j: Int): Int = i + numRows * j
 
-  private [mllib] def update(r: Int, c: Int, v: Double){
-    values(index(r, c)) = v
+  private[mllib] def update(i: Int, j: Int, v: Double){
+    values(index(i, j)) = v
   }
 
-  def copy = new DenseMatrix(numRows, numCols, values.clone())
-}
-
-/**
- * Factory methods for [[org.apache.spark.mllib.linalg.DenseMatrix]].
- *
- * These methods can be used to generate common matrix types such as the Identity matrix, any
- * diagonal matrix, zero matrix, and random matrices.
- */
-object DenseMatrix {
-
-  /**
-   * Generate a `DenseMatrix` consisting of zeros.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
-   */
-  def zeros(numRows: Int, numCols: Int) =
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(0.0))
-
-  /**
-   * Generate a `DenseMatrix` consisting of ones.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
-   */
-  def ones(numRows: Int, numCols: Int) =
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
-
-  /**
-   * Generate an Identity Matrix in `DenseMatrix` format.
-   * @param n number of rows and columns of the matrix
-   * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
-   */
-  def eye(n: Int) = {
-    val identity = DenseMatrix.zeros(n,n)
-    for (i <- 0 until n){
-      identity.update(i, i, 1.0)
-    }
-    identity
-  }
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
-   */
-  def rand(numRows: Int, numCols: Int) = {
-    val rand = new scala.util.Random
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextDouble()))
-  }
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
-   */
-  def randn(numRows: Int, numCols: Int) = {
-    val rand = new scala.util.Random
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextGaussian()))
-  }
-
-  /**
-   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
-   * @param values values on the diagonal of the matrix
-   * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
-   *         on the diagonal
-   */
-  def diag(values: Array[Double]) = {
-    val n = values.length
-    val matrix = DenseMatrix.eye(n)
-    for (i <- 0 until n) matrix.update(i, i, values(i))
-    matrix
-  }
+  override def copy = new DenseMatrix(numRows, numCols, values.clone())
 }
 
 /**
  * Column-majored sparse matrix.
- * The entry values are stored in Compressed-Column Storage (CCS) format.
+ * The entry values are stored in Compressed Sparse Column (CSC) format.
  * For example, the following matrix
  * {{{
  *   1.0 0.0 4.0
@@ -192,58 +127,79 @@ object DenseMatrix {
  *
  * @param numRows number of rows
  * @param numCols number of columns
- * @param colPointers the index corresponding to the start of a new column
+ * @param colPtrs the index corresponding to the start of a new column
  * @param rowIndices the row index of the entry
  * @param values non-zero matrix entries in column major
  */
 class SparseMatrix(
     val numRows: Int,
     val numCols: Int,
-    val colPointers: Array[Int],
+    val colPtrs: Array[Int],
     val rowIndices: Array[Int],
     val values: Array[Double]) extends Matrix {
 
-  require(values.length == rowIndices.length, "The number of row indices and values don't match!")
-  require(colPointers.length == numCols + 1, "The length of the column indices should be the " +
-    s"number of columns + 1. Currently, colPointers.length: ${colPointers.length}, " +
+  require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
+    s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
+  require(colPtrs.length == numCols + 1, "The length of the column indices should be the " +
+    s"number of columns + 1. Currently, colPointers.length: ${colPtrs.length}, " +
     s"numCols: $numCols")
 
-  override def toArray: Array[Double] = values
+  override def toArray: Array[Double] = {
+    val arr = Array.fill(numRows * numCols)(0.0)
+    var j = 0
+    while (j < numCols) {
+      var i = colPtrs(j)
+      val indEnd = colPtrs(j + 1)
+      val offset = j * numRows
+      while (i < indEnd) {
+        val rowIndex = rowIndices(i)
+        arr(offset + rowIndex) = values(i)
+        i += 1
+      }
+      j += 1
+    }
+    arr
+  }
 
-  private [mllib] def toBreeze: BM[Double] =
-    new BSM[Double](values, numRows, numCols, colPointers, rowIndices)
+  private[mllib] def toBreeze: BM[Double] =
+    new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)
 
-  private [mllib] def apply(i: Int): Double = values(i)
+  private[mllib] def apply(i: Int): Double = values(i)
 
-  private [mllib] def apply(r: Int, c: Int): Double = {
-    val ind = index(r,c)
+  private[mllib] def apply(i: Int, j: Int): Double = {
+    val ind = index(i, j)
     if (ind == -1) 0.0 else values(ind)
   }
 
-  private [mllib] def index(r: Int, c: Int): Int = {
-    val regionStart = colPointers(c)
-    val regionEnd = colPointers(c + 1)
-    val region = rowIndices.slice(regionStart, regionEnd)
-    if (region.contains(r)){
-      region.indexOf(r) + regionStart
-    } else {
-      -1 // return zero element
+  private[mllib] def index(i: Int, j: Int): Int = {
+    var regionStart = colPtrs(j)
+    var regionEnd = colPtrs(j + 1)
+    while (regionStart <= regionEnd) {
+      val mid = (regionStart + regionEnd) / 2
+      if (rowIndices(mid) == i){
+        return mid
+      } else if (regionStart == regionEnd) {
+        return -1
+      } else if (rowIndices(mid) > i) {
+        regionEnd = mid
+      } else {
+        regionStart = mid
+      }
     }
+    -1
   }
 
-  // TODO(Burak): Maybe convert to Breeze to update zero entries? I can't think of any MLlib
-  // TODO: algorithm that would use mutable Sparse Matrices
-  private [mllib] def update(r: Int, c: Int, v: Double){
-    val ind = index(r, c)
+  private[mllib] def update(i: Int, j: Int, v: Double){
+    val ind = index(i, j)
     if (ind == -1){
       throw new IllegalArgumentException("The given row and column indices correspond to a zero " +
-        "value. Sparse Matrices are currently immutable.")
+        "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
-      values(index(r, c)) = v
+      values(index(i, j)) = v
     }
   }
 
-  def copy = new SparseMatrix(numRows, numCols, colPointers, rowIndices, values.clone())
+  override def copy = new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
 }
 
 /**
@@ -263,7 +219,7 @@ object Matrices {
   }
 
   /**
-   * Creates a column-majored sparse matrix in Compressed Column Storage (CCS) format.
+   * Creates a column-majored sparse matrix in Compressed Sparse Column (CSC) format.
    *
    * @param numRows number of rows
    * @param numCols number of columns
@@ -285,7 +241,7 @@ object Matrices {
    * @param breeze a breeze matrix
    * @return a Matrix instance
    */
-  private [mllib] def fromBreeze(breeze: BM[Double]): Matrix = {
+  private[mllib] def fromBreeze(breeze: BM[Double]): Matrix = {
     breeze match {
       case dm: BDM[Double] =>
         require(dm.majorStride == dm.rows,
@@ -297,5 +253,78 @@ object Matrices {
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
     }
+  }
+
+  /**
+   * Generate a `DenseMatrix` consisting of zeros.
+   * @param numRows number of rows of the matrix
+   * @param numCols number of columns of the matrix
+   * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
+   */
+  def zeros(numRows: Int, numCols: Int): Matrix =
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(0.0))
+
+  /**
+   * Generate a `DenseMatrix` consisting of ones.
+   * @param numRows number of rows of the matrix
+   * @param numCols number of columns of the matrix
+   * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
+   */
+  def ones(numRows: Int, numCols: Int): Matrix =
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
+
+  /**
+   * Generate an Identity Matrix in `DenseMatrix` format.
+   * @param n number of rows and columns of the matrix
+   * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
+   */
+  def eye(n: Int): Matrix = {
+    val identity = Matrices.zeros(n, n)
+    var i = 0
+    while (i < n){
+      identity.update(i, i, 1.0)
+      i += 1
+    }
+    identity
+  }
+
+  /**
+   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
+   * @param numRows number of rows of the matrix
+   * @param numCols number of columns of the matrix
+   * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+   */
+  def rand(numRows: Int, numCols: Int): Matrix = {
+    val rand = new XORShiftRandom
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextDouble()))
+  }
+
+  /**
+   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
+   * @param numRows number of rows of the matrix
+   * @param numCols number of columns of the matrix
+   * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
+   */
+  def randn(numRows: Int, numCols: Int): Matrix = {
+    val rand = new XORShiftRandom
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextGaussian()))
+  }
+
+  /**
+   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
+   * @param vector a `Vector` tat will form the values on the diagonal of the matrix
+   * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
+   *         on the diagonal
+   */
+  def diag(vector: Vector): Matrix = {
+    val n = vector.size
+    val matrix = Matrices.eye(n)
+    val values = vector.toArray
+    var i = 0
+    while (i < n) {
+      matrix.update(i, i, values(i))
+      i += 1
+    }
+    matrix
   }
 }
