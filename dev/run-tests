@@ -93,7 +93,7 @@ echo "========================================================================="
 # echo "q" is needed because sbt on encountering a build file with failure
 # (either resolution or compilation) prompts the user for input either q, r,
 # etc to quit or retry. This echo is there to make it not block.
-BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver "
+BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive "
 echo -e "q\n" | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly | \
   grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
