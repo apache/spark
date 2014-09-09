@@ -739,7 +739,7 @@ object DecisionTree extends Serializable with Logging {
     val rightCount = rightImpurityCalculator.count
 
     // If left child or right child doesn't satisfy minimum instances per node,
-    // then this split is invalid, return invalid information gain stats
+    // then this split is invalid, return invalid information gain stats.
     if ((leftCount < metadata.minInstancesPerNode) ||
         (rightCount < metadata.minInstancesPerNode)) {
       return InformationGainStats.invalidInformationGainStats
@@ -764,6 +764,9 @@ object DecisionTree extends Serializable with Logging {
     val rightWeight = rightCount / totalCount.toDouble
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+
+    // if information gain doesn't satisfy minimum information gain,
+    // then this split is invalid, return invalid information gain stats.
     if (gain < metadata.minInfoGain) {
       return InformationGainStats.invalidInformationGainStats
     }
@@ -771,6 +774,13 @@ object DecisionTree extends Serializable with Logging {
     new InformationGainStats(gain, impurity, leftImpurity, rightImpurity)
   }
 
+  /**
+   * Calculate predict value for current node, given stats of any split.
+   * Note that this function is called only once for each node.
+   * @param leftImpurityCalculator left node aggregates for a split
+   * @param rightImpurityCalculator right node aggregates for a node
+   * @return predict value for current node
+   */
   private def calculatePredict(
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator): Predict =  {
@@ -799,6 +809,7 @@ object DecisionTree extends Serializable with Logging {
 
     logDebug("node impurity = " + nodeImpurity)
 
+    // calculate predict only once
     var predict: Option[Predict] = None
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
