@@ -246,7 +246,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    catalog.registerTable(None, tableName, rdd.queryExecution.analyzed)
   }
 
   /**
@@ -411,7 +411,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = 
+    def simpleString: String =
       s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
       """
