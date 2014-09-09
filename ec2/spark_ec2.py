@@ -649,7 +649,9 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
            'running', 'terminated', etc.
            (would be nice to replace this with a proper enum: http://stackoverflow.com/a/1695250)
     """
-    sys.stdout.write("Waiting for all instances in cluster to enter '{s}' state.".format(s=cluster_state))
+    sys.stdout.write(
+        "Waiting for all instances in cluster to enter '{s}' state.".format(s=cluster_state)
+    )
     sys.stdout.flush()
     while True:
         for i in cluster_instances:
