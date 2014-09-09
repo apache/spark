@@ -138,7 +138,7 @@ class DecisionTree(object):
 
     @staticmethod
     def trainClassifier(data, numClasses, categoricalFeaturesInfo,
-                        impurity="gini", maxDepth=4, maxBins=100):
+                        impurity="gini", maxDepth=5, maxBins=32):
         """
         Train a DecisionTreeModel for classification.
 
@@ -170,7 +170,7 @@ class DecisionTree(object):
 
     @staticmethod
     def trainRegressor(data, categoricalFeaturesInfo,
-                       impurity="variance", maxDepth=4, maxBins=100):
+                       impurity="variance", maxDepth=5, maxBins=32):
         """
         Train a DecisionTreeModel for regression.
 

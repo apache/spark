@@ -50,7 +50,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
- *                      128 MB.
+ *                      256 MB.
  */
 @Experimental
 class Strategy (
@@ -58,10 +58,10 @@ class Strategy (
     val impurity: Impurity,
     val maxDepth: Int,
     val numClassesForClassification: Int = 2,
-    val maxBins: Int = 100,
+    val maxBins: Int = 32,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128) extends Serializable {
+    val maxMemoryInMB: Int = 256) extends Serializable {
 
   if (algo == Classification) {
     require(numClassesForClassification >= 2)

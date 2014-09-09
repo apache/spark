@@ -52,9 +52,9 @@ object DecisionTreeRunner {
       input: String = null,
       dataFormat: String = "libsvm",
       algo: Algo = Classification,
-      maxDepth: Int = 4,
+      maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
-      maxBins: Int = 100,
+      maxBins: Int = 32,
       fracTest: Double = 0.2)
 
   def main(args: Array[String]) {
