@@ -60,9 +60,11 @@ def parse_args():
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
-    parser.add_option(
-        "-w", "--wait", type="int", default=120,
-        help="Seconds to wait for nodes to start (default: %default)")
+    # NOTE: For strict "API" compatibility, we should probably leave this in
+    #       and just mark it as deprecated / not used.
+    # parser.add_option(
+    #     "-w", "--wait", type="int", default=120,
+    #     help="Seconds to wait for nodes to start (default: %default)")
     parser.add_option(
         "-k", "--key-pair",
         help="Key pair to use on instances")
@@ -618,6 +620,55 @@ def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
     time.sleep(wait_secs)
 
 
+def is_ssh_available(host, opts):
+    "Checks if SSH is available on the host."
+    try:
+        with open(os.devnull, 'w') as devnull:
+            ret = subprocess.check_call(
+                ssh_command(opts) +
+                ['-t', '-t',
+                 '-o', 'ConnectTimeout=3',
+                 '%s@%s' % (opts.user, host),
+                 stringify_command('true')],
+                stdout=devnull,
+                stderr=devnull
+            )
+        if ret == 0:
+            return True
+        else:
+            return False
+    except subprocess.CalledProcessError as e:
+        return False
+
+
+def wait_for_cluster_state(cluster_instances, cluster_state, opts):
+    """
+    cluster_instances: a list of boto.ec2.instance.Instance
+    cluster_state: a string representing the desired state of all the instances in the cluster
+           value can be 'ssh-ready' or a valid value from boto.ec2.instance.InstanceState such as
+           'running', 'terminated', etc.
+           (would be nice to replace this with a proper enum: http://stackoverflow.com/a/1695250)
+    """
+    sys.stdout.write("Waiting for all instances in cluster to enter '{s}' state.".format(s=cluster_state))
+    sys.stdout.flush()
+    while True:
+        for i in cluster_instances:
+            s = i.update()  # capture output to suppress print to screen in newer versions of boto
+            # print "{instance}: {state}".format(instance=i.id, state=i.state)
+        if cluster_state == 'ssh-ready':
+            if all(i.state == 'running' for i in cluster_instances) and \
+               all(is_ssh_available(host=i.ip_address, opts=opts) for i in cluster_instances):
+                print ""  # so that next line of output starts on new line
+                return
+        else:
+            if all(i.state == cluster_state for i in cluster_instances):
+                print ""  # so that next line of output starts on new line
+                return
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        time.sleep(3)
+
+
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
@@ -872,7 +923,14 @@ def real_main():
             (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
         else:
             (master_nodes, slave_nodes) = launch_cluster(conn, opts, cluster_name)
-            wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
+            # wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
+        # NOTE: This next line means if we have a terminally broken cluster, (e.gl for a resume)
+        #       we'll keep waiting until the user exits.
+        wait_for_cluster_state(
+            cluster_instances=(master_nodes + slave_nodes),
+            cluster_state='ssh-ready',
+            opts=opts
+        )
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
@@ -901,7 +959,11 @@ def real_main():
                 else:
                     group_names = [opts.security_group_prefix + "-master",
                                    opts.security_group_prefix + "-slaves"]
-
+                wait_for_cluster_state(
+                    cluster_instances=(master_nodes + slave_nodes),
+                    cluster_state='terminated',
+                    opts=opts
+                )
                 attempt = 1
                 while attempt <= 3:
                     print "Attempt %d" % attempt
@@ -987,7 +1049,12 @@ def real_main():
         for inst in master_nodes:
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
-        wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
+        # wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
+        wait_for_cluster_state(
+            cluster_instances=(master_nodes + slave_nodes),
+            cluster_state='ssh-ready',
+            opts=opts
+        )
         setup_cluster(conn, master_nodes, slave_nodes, opts, False)
 
     else:
