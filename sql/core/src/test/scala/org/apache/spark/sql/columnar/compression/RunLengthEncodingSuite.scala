@@ -19,6 +19,7 @@ package org.apache.spark.sql.columnar.compression
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
@@ -80,11 +81,15 @@ class RunLengthEncodingSuite extends FunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
+      val mutableRow = new GenericMutableRow(1)
 
       if (inputSeq.nonEmpty) {
         inputSeq.foreach { i =>
           assert(decoder.hasNext)
-          assertResult(values(i), "Wrong decoded value")(decoder.next())
+          assertResult(values(i), "Wrong decoded value") {
+            decoder.next(mutableRow, 0)
+            columnType.getField(mutableRow, 0)
+          }
         }
       }
 

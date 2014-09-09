@@ -34,6 +34,6 @@ private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAcc
   abstract override def hasNext = super.hasNext || decoder.hasNext
 
   override def extractSingle(row: MutableRow, ordinal: Int) {
-    columnType.setField(row, ordinal, decoder.next())
+    decoder.next(row, ordinal)
   }
 }

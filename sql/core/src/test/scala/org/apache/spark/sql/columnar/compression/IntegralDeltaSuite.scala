@@ -96,10 +96,15 @@ class IntegralDeltaSuite extends FunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = scheme.decoder(buffer, columnType)
+      val mutableRow = new GenericMutableRow(1)
+
       if (input.nonEmpty) {
         input.foreach{
           assert(decoder.hasNext)
-          assertResult(_, "Wrong decoded value")(decoder.next())
+          assertResult(_, "Wrong decoded value") {
+            decoder.next(mutableRow, 0)
+            columnType.getField(mutableRow, 0)
+          }
         }
       }
       assert(!decoder.hasNext)

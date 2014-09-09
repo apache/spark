@@ -20,6 +20,7 @@ package org.apache.spark.sql.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
 
@@ -37,7 +38,11 @@ private[sql] trait Encoder[T <: NativeType] {
   def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer
 }
 
-private[sql] trait Decoder[T <: NativeType] extends Iterator[T#JvmType]
+private[sql] trait Decoder[T <: NativeType] {
+  def next(row: MutableRow, ordinal: Int): Unit
+
+  def hasNext: Boolean
+}
 
 private[sql] trait CompressionScheme {
   def typeId: Int

@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.runtimeMirror
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.util.Utils
@@ -57,7 +57,9 @@ private[sql] case object PassThrough extends CompressionScheme {
   class Decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    override def next() = columnType.extract(buffer)
+    override def next(row: MutableRow, ordinal: Int) {
+      columnType.setField(row, ordinal, columnType.extract(buffer))
+    }
 
     override def hasNext = buffer.hasRemaining
   }
@@ -151,7 +153,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     private var valueCount = 0
     private var currentValue: T#JvmType = _
 
-    override def next() = {
+    override def next(row: MutableRow, ordinal: Int) {
       if (valueCount == run) {
         currentValue = columnType.extract(buffer)
         run = buffer.getInt()
@@ -160,7 +162,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
         valueCount += 1
       }
 
-      currentValue
+      columnType.setField(row, ordinal, currentValue)
     }
 
     override def hasNext = valueCount < run || buffer.hasRemaining
@@ -274,7 +276,9 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
       }
     }
 
-    override def next() = dictionary(buffer.getShort())
+    override def next(row: MutableRow, ordinal: Int) {
+      columnType.setField(row, ordinal, dictionary(buffer.getShort()))
+    }
 
     override def hasNext = buffer.hasRemaining
   }
@@ -354,7 +358,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
 
     private var visited: Int = 0
 
-    override def next(): Boolean = {
+    override def next(row: MutableRow, ordinal: Int) {
       val bit = visited % BITS_PER_LONG
 
       visited += 1
@@ -362,7 +366,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
         currentWord = buffer.getLong()
       }
 
-      ((currentWord >> bit) & 1) != 0
+      row.setBoolean(ordinal, ((currentWord >> bit) & 1) != 0)
     }
 
     override def hasNext: Boolean = visited < count
@@ -440,10 +444,10 @@ private[sql] case object IntDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next() = {
+    override def next(row: MutableRow, ordinal: Int) {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else buffer.getInt()
-      prev
+      row.setInt(ordinal, prev)
     }
   }
 }
@@ -519,10 +523,10 @@ private[sql] case object LongDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next() = {
+    override def next(row: MutableRow, ordinal: Int) {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else buffer.getLong()
-      prev
+      row.setLong(ordinal, prev)
     }
   }
 }
