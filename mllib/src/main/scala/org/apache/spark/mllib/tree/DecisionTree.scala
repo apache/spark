@@ -330,9 +330,9 @@ object DecisionTree extends Serializable with Logging {
    *                 Supported values: "gini" (recommended) or "entropy".
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 4)
+   *                  (suggested value: 5)
    * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 100)
+   *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
    */
   def trainClassifier(
@@ -374,9 +374,9 @@ object DecisionTree extends Serializable with Logging {
    *                 Supported values: "variance".
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 4)
+   *                  (suggested value: 5)
    * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 100)
+   *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
    */
   def trainRegressor(
