@@ -28,7 +28,7 @@ import breeze.linalg.{axpy => brzAxpy, Vector => BV}
 import breeze.linalg.{Vector => BV}
 import breeze.linalg.{axpy => brzAxpy}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.regression.RegressionModel
+import org.apache.spark.mllib.regression.{LabeledPoint, RegressionModel}
 import org.apache.spark.util.random.XORShiftRandom
 
 /*
@@ -77,29 +77,24 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 
 class ParallelANNModel private[mllib] (
-    override val weights: Vector,
+    val weights: Vector,
     val topology: Array[Int] )
-  extends GeneralizedModel(weights) with RegressionModel with Serializable {
+  extends Serializable {
 
-  val L = topology.length-1
+  private val L = topology.length - 1
 
-  val ofsWeight: Array[Int] = {
-
-    var tmp = new Array[Int]( L + 1 )
-
+  private val ofsWeight: Array[Int] = {
+    val tmp = new Array[Int](L + 1)
     var curPos = 0;
-
     tmp( 0 ) = 0;
     for( l <- 1 to L ) {
       tmp( l ) = curPos
       curPos = curPos + ( topology( l - 1 ) + 1 ) * ( topology( l ) )
     }
-
     tmp
-
   }
 
-  def g( x: Double ) = 1.0 / (1.0 + math.exp( -x ) )
+  private def g( x: Double ) = 1.0 / (1.0 + math.exp( -x ) )
 
   def computeValues( arrData: Array[Double], arrWeights: Array[Double] ): Array[Double] = {
 
@@ -126,7 +121,7 @@ class ParallelANNModel private[mllib] (
 
   }
 
-  override def predictPoint( data: Vector, weights: Vector ): Double = {
+  def predictPoint( data: Vector, weights: Vector ): Double = {
     val outp = computeValues( data.toArray, weights.toArray )
     outp(0)
   }
@@ -135,6 +130,21 @@ class ParallelANNModel private[mllib] (
     Vectors.dense( computeValues( data.toArray, weights.toArray ) )
   }
 
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Vector prediction from the trained model
+   *
+   * Returns the complete vector.
+   */
+  def predictV( testData: Vector ): Vector = {
+
+    predictPointV( testData, weights )
+
+  }
+
+
 }
 
 class ParallelANN(
@@ -142,13 +152,13 @@ class ParallelANN(
     private var numIterations: Int,
     private var stepSize: Double,
     private var miniBatchFraction: Double )
-  extends GeneralizedAlgorithm[ParallelANNModel] with Serializable {
+  extends Serializable {
 
   private val rand = new XORShiftRandom
 
   private val gradient = new LeastSquaresGradientANN( topology )
   private val updater = new ANNUpdater()
-  override val optimizer = new GradientDescent(gradient, updater)
+  val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setMiniBatchFraction(miniBatchFraction)
@@ -173,7 +183,7 @@ class ParallelANN(
     this( Array( noInput, noHidden, noOutput ) )
   }
 
-  override protected def createModel( weights: Vector ) = {
+  protected def createModel( weights: Vector ) = {
     new ParallelANNModel( weights, topology )
   }
 
@@ -217,26 +227,49 @@ class ParallelANN(
 
   }
 
+  private def run(input: RDD[(Vector,Vector)], initialWeights: Vector): ParallelANNModel = {
+
+    val data = input.map( v => (
+      (0.0).toDouble,
+      Vectors.fromBreeze( DenseVector.vertcat(
+        v._1.toBreeze.toDenseVector,
+        v._2.toBreeze.toDenseVector ) )
+      ) )
+    val weights = optimizer.optimize(data, initialWeights)
+    createModel( weights )
+  }
+
 }
+
+object ParallelANN {
+
+  def train(
+             input: RDD[(Vector,Vector)],
+             numIterations: Int,
+             stepSize: Double,
+             regParam: Double,
+             miniBatchFraction: Double,
+             initialWeights: Vector): ParallelANNModel = {
+    null
+  }
+
+}
+
 
 class LeastSquaresGradientANN(
     topology: Array[Int] )
   extends Gradient {
 
-  def g( x: Double ) = 1.0 / (1.0 + math.exp( -x ) )
+  private def g( x: Double ) = 1.0 / (1.0 + math.exp( -x ) )
 
-  val L = topology.length-1
+  private val L = topology.length - 1
 
-  val noWeights = {
-
+  private val noWeights = {
     var tmp = 0
-
     for( i<-1 to L ) {
       tmp = tmp + topology(i) * ( topology( i - 1 ) + 1 )
     }
-
     tmp
-
   }
 
   val ofsWeight: Array[Int] = {
