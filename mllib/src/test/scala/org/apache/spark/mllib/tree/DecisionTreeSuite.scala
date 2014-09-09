@@ -280,9 +280,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(split.threshold === Double.MinValue)
 
     val stats = bestSplits(0)._2
+    val predict = bestSplits(0)._3
     assert(stats.gain > 0)
-    assert(stats.predict === 1)
-    assert(stats.prob === 0.6)
+    assert(predict.predict === 1)
+    assert(predict.prob === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -313,8 +314,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(split.threshold === Double.MinValue)
 
     val stats = bestSplits(0)._2
+    val predict = bestSplits(0)._3.predict
     assert(stats.gain > 0)
-    assert(stats.predict === 0.6)
+    assert(predict === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -392,7 +394,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    assert(bestSplits(0)._3.predict === 1)
   }
 
   test("Binary classification stump with fixed label 0 for Entropy") {
@@ -421,7 +423,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 0)
+    assert(bestSplits(0)._3.predict === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Entropy") {
@@ -450,7 +452,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits(0)._2.gain === 0)
     assert(bestSplits(0)._2.leftImpurity === 0)
     assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    assert(bestSplits(0)._3.predict === 1)
   }
 
   test("Second level node building with vs. without groups") {
@@ -501,7 +503,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(bestSplits(i)._2.impurity === bestSplitsWithGroups(i)._2.impurity)
       assert(bestSplits(i)._2.leftImpurity === bestSplitsWithGroups(i)._2.leftImpurity)
       assert(bestSplits(i)._2.rightImpurity === bestSplitsWithGroups(i)._2.rightImpurity)
-      assert(bestSplits(i)._2.predict === bestSplitsWithGroups(i)._2.predict)
+      assert(bestSplits(i)._3.predict === bestSplitsWithGroups(i)._3.predict)
     }
   }
 
