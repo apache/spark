@@ -40,68 +40,38 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 
 /**
- * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
- * Client submits an application to the YARN ResourceManager.
+ * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
+ * The Client submits an application to the YARN ResourceManager.
  */
 private[spark] trait ClientBase extends Logging {
   import ClientBase._
 
-  val args: ClientArguments
-  val hadoopConf: Configuration
-  val sparkConf: SparkConf
-  val yarnConf: YarnConfiguration
-  val credentials = UserGroupInformation.getCurrentUser.getCredentials
+  protected val args: ClientArguments
+  protected val hadoopConf: Configuration
+  protected val sparkConf: SparkConf
+  protected val yarnConf: YarnConfiguration
+  protected val credentials = UserGroupInformation.getCurrentUser.getCredentials
+  protected val memoryOverhead = args.memoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  // Staging directory is private! -> rwx--------
-  val STAGING_DIR_PERMISSION: FsPermission =
-    FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
-  // App files are world-wide readable and owner writable -> rw-r--r--
-  val APP_FILE_PERMISSION: FsPermission =
-    FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
+  /** Verify that we have not requested more resources than is available in the cluster. */
+  protected def verifyClusterResources(newAppResponse: GetNewApplicationResponse) = {
+    val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
+    logInfo(s"Max memory capability of a single resource in this cluster: $maxMem MB")
 
-  // Additional memory overhead - in mb.
-  protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
-
-  // TODO(harvey): This could just go in ClientArguments.
-  def validateArgs() = {
-    Map(
-      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
-      (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
-        "greater than: " + memoryOverhead),
-      (args.executorMemory <= memoryOverhead) -> ("Error: Executor memory size" +
-        "must be greater than: " + memoryOverhead.toString)
-    ).foreach { case(cond, errStr) =>
-      if (cond) {
-        logError(errStr)
-        throw new IllegalArgumentException(args.getUsageMessage())
-      }
-    }
-  }
-
-  def getAppStagingDir(appId: ApplicationId): String = {
-    SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
-  }
-
-  def verifyClusterResources(app: GetNewApplicationResponse) = {
-    val maxMem = app.getMaximumResourceCapability().getMemory()
-    logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
-
-    // If we have requested more then the clusters max for a single resource then exit.
+    // If we have requested more than the cluster maximum for a single resource, exit.
     if (args.executorMemory > maxMem) {
       val errorMessage =
         "Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster."
           .format(args.executorMemory, maxMem)
-
       logError(errorMessage)
       throw new IllegalArgumentException(errorMessage)
     }
-    val amMem = args.amMemory + memoryOverhead
+    val amMem = getAMMemory(newAppResponse) + memoryOverhead
     if (amMem > maxMem) {
-
-      val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
-        .format(amMem, maxMem)
+      val errorMessage =
+        "Required AM memory (%d MB) is above the max threshold (%d MB) of this cluster."
+          .format(amMem, maxMem)
       logError(errorMessage)
       throw new IllegalArgumentException(errorMessage)
     }
@@ -145,8 +115,8 @@ private[spark] trait ClientBase extends Logging {
     }
   }
 
-  /** Copy the file into HDFS if needed. */
-  private[yarn] def copyRemoteFile(
+  /** Copy the file into HDFS if needed. Exposed for testing. */
+  def copyRemoteFile(
       dstDir: Path,
       originalPath: Path,
       replication: Short,
@@ -205,7 +175,7 @@ private[spark] trait ClientBase extends Logging {
       (ClientBase.SPARK_JAR, ClientBase.sparkJar(sparkConf), ClientBase.CONF_SPARK_JAR),
       (ClientBase.APP_JAR, args.userJar, ClientBase.CONF_SPARK_USER_JAR),
       ("log4j.properties", oldLog4jConf.getOrElse(null), null)
-    ).foreach { case(destName, _localPath, confKey) =>
+    ).foreach { case (destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {
         val localURI = new URI(localPath)
@@ -251,11 +221,12 @@ private[spark] trait ClientBase extends Logging {
     localResources
   }
 
-  /** Get all application master environment variables set on this SparkConf */
+  /** Get all application master environment variables set on this SparkConf. */
   def getAppMasterEnv: Seq[(String, String)] = {
     val prefix = "spark.yarn.appMasterEnv."
-    sparkConf.getAll.filter{case (k, v) => k.startsWith(prefix)}
-      .map{case (k, v) => (k.substring(prefix.length), v)}
+    sparkConf.getAll
+      .filter { case (k, v) => k.startsWith(prefix) }
+      .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
   /**
@@ -319,16 +290,6 @@ private[spark] trait ClientBase extends Logging {
     }
 
     env
-  }
-
-  def userArgsToString(clientArgs: ClientArguments): String = {
-    val prefix = " --arg "
-    val args = clientArgs.userArgs
-    val retval = new StringBuilder()
-    for (arg <- args) {
-      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
-    }
-    retval.toString
   }
 
   /**
@@ -396,19 +357,27 @@ private[spark] trait ClientBase extends Logging {
       } else {
         Nil
       }
+    val userJar =
+      if (args.userJar != null) {
+        Seq("--jar", args.userJar)
+      } else {
+        Nil
+      }
     val amClass =
       if (isLaunchingDriver) {
         classOf[ApplicationMaster].getName()
       } else {
         classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
       }
+    val userArgs = args.userArgs.flatMap { arg =>
+      Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
+    }
     val amArgs =
-      Seq(amClass) ++ userClass ++
-      (if (args.userJar != null) Seq("--jar", args.userJar) else Nil) ++
-      Seq("--executor-memory", args.executorMemory.toString,
+      Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
+      Seq(
+        "--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,
-        "--num-executors ", args.numExecutors.toString,
-        userArgsToString(args))
+        "--num-executors ", args.numExecutors.toString)
 
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
@@ -417,14 +386,18 @@ private[spark] trait ClientBase extends Logging {
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
-    logInfo("Yarn AM launch context:")
-    logInfo(s"  user class: ${args.userClass}")
-    logInfo(s"  env:        $launchEnv")
-    logInfo(s"  command:    ${commands.mkString(" ")}")
-
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands)
+
+    logDebug("===============================================================================")
+    logDebug("Yarn AM launch context:")
+    logDebug(s"  user class: ${args.userClass}")
+    logDebug("  env:")
+    launchEnv.foreach { case (k, v) => logDebug(s"    $k -> $v") }
+    logDebug("  command:")
+    logDebug(s"    ${printableCommands.mkString(" ")}")
+    logDebug("===============================================================================")
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
@@ -454,7 +427,7 @@ private[spark] trait ClientBase extends Logging {
       if (logApplicationReport) {
         logInfo(s"Application report from ResourceManager for application ${appId.getId} " +
           s"(state: $state)")
-        logDebug(
+        logDebug("\n" +
           s"\t full application identifier: $appId\n" +
           s"\t clientToken: ${getClientToken(report)}\n" +
           s"\t appDiagnostics: ${report.getDiagnostics}\n" +
@@ -559,6 +532,10 @@ private[spark] object ClientBase extends Logging {
     }
   }
 
+  def getAppStagingDir(appId: ApplicationId): String = {
+    SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
+  }
+
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) = {
     val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
     for (c <- classPathElementsToAdd.flatten) {
@@ -630,8 +607,12 @@ private[spark] object ClientBase extends Logging {
     triedDefault.toOption
   }
 
-  def populateClasspath(args: ClientArguments, conf: Configuration, sparkConf: SparkConf,
-      env: HashMap[String, String], extraClassPath: Option[String] = None) {
+  def populateClasspath(
+      args: ClientArguments,
+      conf: Configuration,
+      sparkConf: SparkConf,
+      env: HashMap[String, String],
+      extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(Environment.PWD.$(), env)
 
@@ -654,8 +635,10 @@ private[spark] object ClientBase extends Logging {
    * Adds the user jars which have local: URIs (or alternate names, such as APP_JAR) explicitly
    * to the classpath.
    */
-  private def addUserClasspath(args: ClientArguments, conf: SparkConf,
-      env: HashMap[String, String]) = {
+  private def addUserClasspath(
+      args: ClientArguments,
+      conf: SparkConf,
+      env: HashMap[String, String]): Unit = {
     if (args != null) {
       addFileToClasspath(args.userJar, APP_JAR, env)
       if (args.addJars != null) {
@@ -684,8 +667,10 @@ private[spark] object ClientBase extends Logging {
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
    */
-  private def addFileToClasspath(path: String, fileName: String,
-      env: HashMap[String, String]) : Unit = {
+  private def addFileToClasspath(
+      path: String,
+      fileName: String,
+      env: HashMap[String, String]): Unit = {
     if (path != null) {
       scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
         val localPath = getLocalPath(path)
@@ -711,19 +696,22 @@ private[spark] object ClientBase extends Logging {
     null
   }
 
-  private def addClasspathEntry(path: String, env: HashMap[String, String]) =
-    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
-            File.pathSeparator)
+  private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
+    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path, File.pathSeparator)
 
   /**
    * Get the list of namenodes the user may access.
    */
-  private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get("spark.yarn.access.namenodes", "").split(",").map(_.trim()).filter(!_.isEmpty)
-      .map(new Path(_)).toSet
+  def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "")
+      .split(",")
+      .map(_.trim())
+      .filter(!_.isEmpty)
+      .map(new Path(_))
+      .toSet
   }
 
-  private[yarn] def getTokenRenewer(conf: Configuration): String = {
+  def getTokenRenewer(conf: Configuration): String = {
     val delegTokenRenewer = Master.getMasterPrincipal(conf)
     logDebug("delegation token renewer is: " + delegTokenRenewer)
     if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
@@ -737,16 +725,16 @@ private[spark] object ClientBase extends Logging {
   /**
    * Obtains tokens for the namenodes passed in and adds them to the credentials.
    */
-  private[yarn] def obtainTokensForNamenodes(paths: Set[Path], conf: Configuration,
-    creds: Credentials) {
+  def obtainTokensForNamenodes(
+      paths: Set[Path],
+      conf: Configuration,
+      creds: Credentials): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
       val delegTokenRenewer = getTokenRenewer(conf)
-
-      paths.foreach {
-        dst =>
-          val dstFs = dst.getFileSystem(conf)
-          logDebug("getting token for namenode: " + dst)
-          dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      paths.foreach { dst =>
+        val dstFs = dst.getFileSystem(conf)
+        logDebug("getting token for namenode: " + dst)
+        dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
     }
   }

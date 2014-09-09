@@ -48,8 +48,6 @@ private[spark] class Client(
 
   /** Submit an application running our ApplicationMaster to the ResourceManager. */
   override def submitApplication(): ApplicationId = {
-    validateArgs()
-
     // Initialize and start the client service.
     yarnClient.init(yarnConf)
     yarnClient.start()

@@ -82,11 +82,11 @@ private[spark] class YarnClientSchedulerBackend(
         ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
         ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
       )
-    optionTuples.foreach { case (argName, envVar, sparkProp) =>
+    optionTuples.foreach { case (optionName, envVar, sparkProp) =>
       if (System.getenv(envVar) != null) {
         extraArgs += (optionName, System.getenv(envVar))
-      } else if (sc.getConf.contains(sysProp)) {
-        extraArgs += (optionName, sc.getConf.get(sysProp))
+      } else if (sc.getConf.contains(sparkProp)) {
+        extraArgs += (optionName, sc.getConf.get(sparkProp))
       }
     }
     extraArgs
