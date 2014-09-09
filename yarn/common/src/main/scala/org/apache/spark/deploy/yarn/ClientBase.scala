@@ -435,36 +435,51 @@ private[spark] trait ClientBase extends Logging {
 
   /**
    * Report the state of an application until it has exited, either successfully or
-   * due to some failure.
+   * due to some failure, then return the application state.
+   *
+   * @param returnOnRunning Whether to also return the application state when it is RUNNING.
+   * @param logApplicationReport Whether to log details of the application report every iteration.
+   * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
    */
-  def monitorApplication(appId: ApplicationId): Unit = {
+  def monitorApplication(
+      appId: ApplicationId,
+      returnOnRunning: Boolean = false,
+      logApplicationReport: Boolean = true): YarnApplicationState = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     while (true) {
       Thread.sleep(interval)
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
 
-      logInfo(s"Application report from ResourceManager for ${appId.getId} (state: $state)")
-
-      logDebug(
-        s"\t full application identifier: $appId\n" +
-        s"\t clientToken: ${getClientToken(report)}\n" +
-        s"\t appDiagnostics: ${report.getDiagnostics}\n" +
-        s"\t appMasterHost: ${report.getHost}\n" +
-        s"\t appQueue: ${report.getQueue}\n" +
-        s"\t appMasterRpcPort: ${report.getRpcPort}\n" +
-        s"\t appStartTime: ${report.getStartTime}\n" +
-        s"\t yarnAppState: $state\n" +
-        s"\t distributedFinalState: ${report.getFinalApplicationStatus}\n" +
-        s"\t appTrackingUrl: ${report.getTrackingUrl}\n" +
-        s"\t appUser: ${report.getUser}")
+      if (logApplicationReport) {
+        logInfo(s"Application report from ResourceManager for application ${appId.getId} " +
+          s"(state: $state)")
+        logDebug(
+          s"\t full application identifier: $appId\n" +
+          s"\t clientToken: ${getClientToken(report)}\n" +
+          s"\t appDiagnostics: ${report.getDiagnostics}\n" +
+          s"\t appMasterHost: ${report.getHost}\n" +
+          s"\t appQueue: ${report.getQueue}\n" +
+          s"\t appMasterRpcPort: ${report.getRpcPort}\n" +
+          s"\t appStartTime: ${report.getStartTime}\n" +
+          s"\t yarnAppState: $state\n" +
+          s"\t distributedFinalState: ${report.getFinalApplicationStatus}\n" +
+          s"\t appTrackingUrl: ${report.getTrackingUrl}\n" +
+          s"\t appUser: ${report.getUser}")
+      }
 
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
-        return
+        return state
+      }
+
+      if (returnOnRunning && state == YarnApplicationState.RUNNING) {
+        return state
       }
     }
+    // Never reached, but keeps compiler happy
+    throw new SparkException("While loop is depleted! This should never happen...")
   }
 
   /**

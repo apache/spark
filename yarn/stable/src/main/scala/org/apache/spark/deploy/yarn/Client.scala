@@ -109,6 +109,7 @@ private[spark] class Client(
     yarnClient.getApplicationReport(appId)
 
   /** */
+  // FIXME: This could throw NPE
   override def getClientToken(report: ApplicationReport): String =
     report.getClientToAMToken.toString
 }

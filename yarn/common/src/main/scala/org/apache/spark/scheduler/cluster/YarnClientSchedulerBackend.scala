@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -36,7 +36,6 @@ private[spark] class YarnClientSchedulerBackend(
 
   var client: Client = null
   var appId: ApplicationId = null
-  var checkerThread: Thread = null
   var stopping: Boolean = false
   var totalExpectedExecutors = 0
 
@@ -83,66 +82,62 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
-    waitForApp()
-    checkerThread = yarnApplicationStateCheckerThread()
+    waitForApplication()
+    asyncMonitorApplication()
   }
 
-  def waitForApp() {
-
-    // TODO : need a better way to find out whether the executors are ready or not
-    // maybe by resource usage report?
-    while(true) {
-      val report = client.getApplicationReport(appId)
-
-      logInfo("Application report from ASM: \n" +
-        "\t appMasterRpcPort: " + report.getRpcPort() + "\n" +
-        "\t appStartTime: " + report.getStartTime() + "\n" +
-        "\t yarnAppState: " + report.getYarnApplicationState() + "\n"
-      )
-
-      // Ready to go, or already gone.
-      val state = report.getYarnApplicationState()
-      if (state == YarnApplicationState.RUNNING) {
-        return
-      } else if (state == YarnApplicationState.FINISHED ||
-        state == YarnApplicationState.FAILED ||
-        state == YarnApplicationState.KILLED) {
-        throw new SparkException("Yarn application already ended," +
-          "might be killed or not able to launch application master.")
-      }
-
-      Thread.sleep(1000)
+  /**
+   * Report the state of the application until it is running.
+   * If the application has finished, failed or been killed in the process, throw an exception.
+   * This assumes both `client` and `appId` have already been set.
+   */
+  private def waitForApplication(): Unit = {
+    assert(client != null && appId != null, "Application has not been submitted yet!")
+    val state = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    if (state == YarnApplicationState.FINISHED ||
+      state == YarnApplicationState.FAILED ||
+      state == YarnApplicationState.KILLED) {
+      throw new SparkException("Yarn application has already ended! " +
+        "It might have been killed or unable to launch application master.")
+    }
+    if (state == YarnApplicationState.RUNNING) {
+      logInfo(s"Application ${appId.getId} has started running.")
     }
   }
 
-  private def yarnApplicationStateCheckerThread(): Thread = {
+  /**
+   * Monitor the application state in a separate thread.
+   * If the application has exited for any reason, stop the SparkContext.
+   * This assumes both `client` and `appId` have already been set.
+   */
+  private def asyncMonitorApplication(): Thread = {
+    assert(client != null && appId != null, "Application has not been submitted yet!")
     val t = new Thread {
       override def run() {
-        while (!stopping) {
-          val report = client.getApplicationReport(appId)
-          val state = report.getYarnApplicationState()
-          if (state == YarnApplicationState.FINISHED || state == YarnApplicationState.KILLED
-            || state == YarnApplicationState.FAILED) {
-            logError(s"Yarn application already ended: $state")
-            sc.stop()
-            stopping = true
-          }
-          Thread.sleep(1000L)
+        val state = client.monitorApplication(appId, logApplicationReport = false) // blocking
+        if (state == YarnApplicationState.FINISHED ||
+          state == YarnApplicationState.KILLED ||
+          state == YarnApplicationState.FAILED) {
+          logWarning(s"Yarn application has exited: $state")
+          sc.stop()
+          stopping = true
         }
-        checkerThread = null
-        Thread.currentThread().interrupt()
       }
     }
-    t.setName("Yarn Application State Checker")
+    t.setName("Yarn Application State Monitor")
     t.setDaemon(true)
     t.start()
     t
   }
 
+  /**
+   * Stop the scheduler. This assumes `start()` has already been called.
+   */
   override def stop() {
+    assert(client != null, "Attempted to stop this scheduler before starting it!")
     stopping = true
     super.stop()
-    client.stop
+    client.stop()
     logInfo("Stopped")
   }
 
