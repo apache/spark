@@ -82,7 +82,7 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
-    appId = client.runApp()
+    appId = client.submitApplication()
     waitForApp()
     checkerThread = yarnApplicationStateCheckerThread()
   }

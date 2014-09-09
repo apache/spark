@@ -43,13 +43,14 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
  * Client submits an application to the YARN ResourceManager.
  */
-trait ClientBase extends Logging {
+private[spark] trait ClientBase extends Logging {
+  import ClientBase._
+
   val args: ClientArguments
-  val conf: Configuration
+  val hadoopConf: Configuration
   val sparkConf: SparkConf
   val yarnConf: YarnConfiguration
-  val credentials = UserGroupInformation.getCurrentUser().getCredentials()
-  private val SPARK_STAGING: String = ".sparkStaging"
+  val credentials = UserGroupInformation.getCurrentUser.getCredentials
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   // Staging directory is private! -> rwx--------
@@ -150,20 +151,20 @@ trait ClientBase extends Logging {
       originalPath: Path,
       replication: Short,
       setPerms: Boolean = false): Path = {
-    val fs = FileSystem.get(conf)
-    val remoteFs = originalPath.getFileSystem(conf)
+    val fs = FileSystem.get(hadoopConf)
+    val remoteFs = originalPath.getFileSystem(hadoopConf)
     var newPath = originalPath
     if (!compareFs(remoteFs, fs)) {
       newPath = new Path(dstDir, originalPath.getName())
       logInfo("Uploading " + originalPath + " to " + newPath)
-      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf)
+      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, hadoopConf)
       fs.setReplication(newPath, replication)
       if (setPerms) fs.setPermission(newPath, new FsPermission(APP_FILE_PERMISSION))
     }
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
     // version shows the specific version in the distributed cache configuration
     val qualPath = fs.makeQualified(newPath)
-    val fc = FileContext.getFileContext(qualPath.toUri(), conf)
+    val fc = FileContext.getFileContext(qualPath.toUri(), hadoopConf)
     val destPath = fc.resolvePath(qualPath)
     destPath
   }
@@ -172,7 +173,7 @@ trait ClientBase extends Logging {
     var qualifiedURI = localURI
     // If not specified, assume these are in the local filesystem to keep behavior like Hadoop
     if (qualifiedURI.getScheme() == null) {
-      qualifiedURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(qualifiedURI)).toString)
+      qualifiedURI = new URI(FileSystem.getLocal(hadoopConf).makeQualified(new Path(qualifiedURI)).toString)
     }
     new Path(qualifiedURI)
   }
@@ -181,10 +182,10 @@ trait ClientBase extends Logging {
     logInfo("Preparing Local resources")
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
     // local resources to the application master.
-    val fs = FileSystem.get(conf)
+    val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = ClientBase.getNameNodesToAccess(sparkConf) + dst
-    ClientBase.obtainTokensForNamenodes(nns, conf, credentials)
+    ClientBase.obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
     val localResources = HashMap[String, LocalResource]()
@@ -211,8 +212,8 @@ trait ClientBase extends Logging {
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
           val setPermissions = destName.equals(ClientBase.APP_JAR)
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
-          val destFs = FileSystem.get(destPath.toUri(), conf)
-          distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,
+          val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
+          distCacheMgr.addResource(destFs, hadoopConf, destPath, localResources, LocalResourceType.FILE,
             destName, statCache)
         } else if (confKey != null) {
           sparkConf.set(confKey, localPath)
@@ -232,7 +233,7 @@ trait ClientBase extends Logging {
             val localPath = new Path(localURI)
             val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
             val destPath = copyRemoteFile(dst, localPath, replication)
-            distCacheMgr.addResource(fs, conf, destPath, localResources, resType,
+            distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, resType,
               linkname, statCache)
             if (addToClasspath) {
               cachedSecondaryJarLinks += linkname
@@ -257,14 +258,12 @@ trait ClientBase extends Logging {
       .map{case (k, v) => (k.substring(prefix.length), v)}
   }
 
-
-  def setupLaunchEnv(
-      localResources: HashMap[String, LocalResource],
-      stagingDir: String): HashMap[String, String] = {
+  /**
+   *
+   */
+  def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment")
-
     val env = new HashMap[String, String]()
-
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
     ClientBase.populateClasspath(args, yarnConf, sparkConf, env, extraCp)
     env("SPARK_YARN_MODE") = "true"
@@ -283,36 +282,9 @@ trait ClientBase extends Logging {
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       // Allow users to specify some environment variables.
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs, File.pathSeparator)
-
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
       env("SPARK_YARN_USER_ENV") = userEnvs
     }
-    env
-  }
-
-  def userArgsToString(clientArgs: ClientArguments): String = {
-    val prefix = " --arg "
-    val args = clientArgs.userArgs
-    val retval = new StringBuilder()
-    for (arg <- args) {
-      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
-    }
-    retval.toString
-  }
-
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int
-
-  def setupSecurityToken(amContainer: ContainerLaunchContext)
-
-  def createContainerLaunchContext(
-        newApp: GetNewApplicationResponse,
-        localResources: HashMap[String, LocalResource],
-        env: HashMap[String, String]): ContainerLaunchContext = {
-    logInfo("Setting up container launch context")
-    val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
-    amContainer.setLocalResources(localResources)
-
-    val isLaunchingDriver = args.userClass != null
 
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
     // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
@@ -322,6 +294,7 @@ trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
+    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
@@ -344,14 +317,40 @@ trait ClientBase extends Logging {
         env("SPARK_JAVA_OPTS") = value
       }
     }
-    amContainer.setEnvironment(env)
 
-    val amMemory = calculateAMMemory(newApp)
+    env
+  }
+
+  def userArgsToString(clientArgs: ClientArguments): String = {
+    val prefix = " --arg "
+    val args = clientArgs.userArgs
+    val retval = new StringBuilder()
+    for (arg <- args) {
+      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
+    }
+    retval.toString
+  }
+
+  /**
+   * Prepare a ContainerLaunchContext to launch our AM container.
+   * This sets up the launch environment, java options, and the command for launching the AM.
+   */
+  def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
+      : ContainerLaunchContext = {
+    logInfo("Setting up container launch context")
+
+    val appId = newAppResponse.getApplicationId
+    val appStagingDir = getAppStagingDir(appId)
+    val localResources = prepareLocalResources(appStagingDir)
+    val launchEnv = setupLaunchEnv(appStagingDir)
+    val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
+    amContainer.setLocalResources(localResources)
+    amContainer.setEnvironment(launchEnv)
 
     val javaOpts = ListBuffer[String]()
 
     // Add Xmx for AM memory
-    javaOpts += "-Xmx" + amMemory + "m"
+    javaOpts += "-Xmx" + getAMMemory(newAppResponse) + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
@@ -363,8 +362,7 @@ trait ClientBase extends Logging {
     // Instead of using this, rely on cpusets by YARN to enforce "proper" Spark behavior in
     // multi-tenant environments. Not sure how default Java GC behaves if it is limited to subset
     // of cores on a node.
-    val useConcurrentAndIncrementalGC = env.isDefinedAt("SPARK_USE_CONC_INCR_GC") &&
-      java.lang.Boolean.parseBoolean(env("SPARK_USE_CONC_INCR_GC"))
+    val useConcurrentAndIncrementalGC = launchEnv.get("SPARK_USE_CONC_INCR_GC").exists(_.toBoolean)
     if (useConcurrentAndIncrementalGC) {
       // In our expts, using (default) throughput collector has severe perf ramifications in
       // multi-tenant machines
@@ -382,6 +380,8 @@ trait ClientBase extends Logging {
       javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
+    // Include driver-specific java options if we are launching a driver
+    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
@@ -419,39 +419,110 @@ trait ClientBase extends Logging {
 
     logInfo("Yarn AM launch context:")
     logInfo(s"  user class: ${args.userClass}")
-    logInfo(s"  env:        $env")
+    logInfo(s"  env:        $launchEnv")
     logInfo(s"  command:    ${commands.mkString(" ")}")
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands)
 
-    setupSecurityToken(amContainer)
-
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
-
+    setupSecurityToken(amContainer)
     amContainer
   }
+
+  /**
+   * Report the state of an application until it has exited, either successfully or
+   * due to some failure.
+   */
+  def monitorApplication(appId: ApplicationId): Unit = {
+    val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
+    while (true) {
+      Thread.sleep(interval)
+      val report = getApplicationReport(appId)
+      val state = report.getYarnApplicationState
+
+      logInfo(s"Application report from ResourceManager for ${appId.getId} (state: $state)")
+
+      logDebug(
+        s"\t full application identifier: $appId\n" +
+        s"\t clientToken: ${getClientToken(report)}\n" +
+        s"\t appDiagnostics: ${report.getDiagnostics}\n" +
+        s"\t appMasterHost: ${report.getHost}\n" +
+        s"\t appQueue: ${report.getQueue}\n" +
+        s"\t appMasterRpcPort: ${report.getRpcPort}\n" +
+        s"\t appStartTime: ${report.getStartTime}\n" +
+        s"\t yarnAppState: $state\n" +
+        s"\t distributedFinalState: ${report.getFinalApplicationStatus}\n" +
+        s"\t appTrackingUrl: ${report.getTrackingUrl}\n" +
+        s"\t appUser: ${report.getUser}")
+
+      if (state == YarnApplicationState.FINISHED ||
+        state == YarnApplicationState.FAILED ||
+        state == YarnApplicationState.KILLED) {
+        return
+      }
+    }
+  }
+
+  /**
+   * Submit an application to the ResourceManager and monitor its state.
+   * This continues until the application has exited for any reason.
+   */
+  def run(): Unit = monitorApplication(submitApplication())
+
+  /* --------------------------------------------------------------------------------------- *
+   |  Methods that cannot be implemented here due to API differences across hadoop versions  |
+   * --------------------------------------------------------------------------------------- */
+
+  /** Submit an application running our ApplicationMaster to the ResourceManager. */
+  def submitApplication(): ApplicationId
+
+  /** */
+  def setupSecurityToken(containerContext: ContainerLaunchContext): Unit
+
+  /** */
+  def getApplicationReport(appId: ApplicationId): ApplicationReport
+
+  /** */
+  def getClientToken(report: ApplicationReport): String
+
+  /** Return the amount of memory for launching the ApplicationMaster container (MB). */
+  def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = args.amMemory
 }
 
-object ClientBase extends Logging {
+private[spark] object ClientBase extends Logging {
+
+  // Alias for the Spark assembly jar and the user jar
   val SPARK_JAR: String = "__spark__.jar"
   val APP_JAR: String = "__app__.jar"
+
+  // URI scheme that identifies local resources
   val LOCAL_SCHEME = "local"
+
+  // Staging directory for any temporary jars or files
+  val SPARK_STAGING: String = ".sparkStaging"
+
+  // Location of any user-defined Spark jars
   val CONF_SPARK_JAR = "spark.yarn.jar"
-  /**
-   * This is an internal config used to propagate the location of the user's jar file to the
-   * driver/executors.
-   */
-  val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
-  /**
-   * This is an internal config used to propagate the list of extra jars to add to the classpath
-   * of executors.
-   */
-  val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
   val ENV_SPARK_JAR = "SPARK_JAR"
+
+  // Internal config to propagate the location of the user's jar to the driver/executors
+  val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
+
+  // Internal config to propagate the locations of any extra jars to add to the classpath
+  // of the executors
+  val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
+
+  // Staging directory is private! -> rwx--------
+  val STAGING_DIR_PERMISSION: FsPermission =
+    FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
+
+  // App files are world-wide readable and owner writable -> rw-r--r--
+  val APP_FILE_PERMISSION: FsPermission =
+    FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
 
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this
