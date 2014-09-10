@@ -20,25 +20,28 @@ package org.apache.spark.examples
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.collection.BitSet
 
 /**
  * Generalized Low Rank Models for Spark
  */
 object SparkGLRM {
   // Number of movies
-  var M = 0
+  var M = 100000
   // Number of users
-  var U = 0
-  // Number of nonzeros
-  var NNZ = 0
+  var U = 100000
+  // Number of nonzeros per row
+  var NNZ = 1000
   // Number of features
-  var rank = 0
+  var rank = 2
   // Number of iterations
-  var ITERATIONS = 0
+  var ITERATIONS = 2
   // Regularization parameter
-  var REG = 0
+  var REG = 10000
 
 
   /*
@@ -46,11 +49,11 @@ object SparkGLRM {
    */
 
   def loss(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    return (prediction - actual) * (prediction - actual)
+    (prediction - actual) * (prediction - actual)
   }
 
   def loss_grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    return (prediction - actual)
+    prediction - actual
   }
 
   def computeLossGrads(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
@@ -88,32 +91,19 @@ object SparkGLRM {
 
 
   def main(args: Array[String]) {
-    val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
-
-    options.toArray match {
-      case Array(m, u, nn, trank, iters, reg) =>
-        M = m.getOrElse("10000").toInt
-        U = u.getOrElse("500").toInt
-        NNZ = nn.getOrElse("23000").toInt
-        rank = trank.getOrElse("2").toInt
-        ITERATIONS = iters.getOrElse("5").toInt
-        REG = reg.getOrElse("100000").toInt
-
-      case _ =>
-        System.err.println("Usage: SparkGLRM [M] [U] [nnz] [rank] [iters] [regularization]")
-        System.exit(1)
-    }
-
     printf("Running with M=%d, U=%d, nnz=10*%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkGLRM")
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val R = sc.parallelize(1 to NNZ).flatMap{x =>
-      val i = math.abs(math.round(math.random * (M - 1)).toInt)
-      val j = math.abs(math.round(math.random * (U - 1)).toInt)
-      List.fill(10)((i, j, math.random))
+    val R = sc.parallelize(0 until M).flatMap{i =>
+      val inds = new scala.collection.mutable.TreeSet[Int]()
+      while (inds.size < NNZ) {
+        inds += scala.util.Random.nextInt(U)
+      }
+
+      inds.toArray.map(j => (i, j, scala.math.random))
     }
 
     // Transpose data
