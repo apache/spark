@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
@@ -248,6 +248,18 @@ case object TimestampType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
+}
+
+case object DateType extends NativeType {
+  private[sql] type JvmType = Date
+
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+
+  private[sql] val ordering = new Ordering[JvmType] {
+    def compare(x: Date, y: Date) = x.compareTo(y)
+  }
+
+  def simpleString: String = "date"
 }
 
 abstract class NumericType extends NativeType with PrimitiveType {

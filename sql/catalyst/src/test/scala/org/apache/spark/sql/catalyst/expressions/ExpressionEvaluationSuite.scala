@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
@@ -252,11 +252,14 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
+    val sd = "1970-01-01"
+    val d = Date.valueOf(sd)
+    val sts = sd + " 00:00:01.1"
     val ts = Timestamp.valueOf(sts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType, null)
+    checkEvaluation("abdef" cast DateType, null)
     checkEvaluation("abdef" cast TimestampType, null)
     checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
 
@@ -266,6 +269,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
+    checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
     checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
 
@@ -274,7 +279,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 0)
+      Cast("5" cast ByteType, DateType), DecimalType), LongType), StringType), ShortType), null)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast DateType, ByteType), DecimalType), LongType), StringType), ShortType), null)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast DecimalType, ByteType), DateType), LongType), StringType), ShortType), null)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(
@@ -304,6 +315,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(("abcdef" cast StringType).nullable === false)
     assert(("abcdef" cast BinaryType).nullable === false)
     assert(("abcdef" cast BooleanType).nullable === false)
+    assert(("abcdef" cast DateType).nullable === true)
     assert(("abcdef" cast TimestampType).nullable === true)
     assert(("abcdef" cast LongType).nullable === true)
     assert(("abcdef" cast IntegerType).nullable === true)
@@ -316,11 +328,28 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
 
+  test("date") {
+    val d1 = new Date(12)
+    val d2 = new Date(123)
+    checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
     checkEvaluation(Literal("ab") < Literal("abc"), true)
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
+  }
+
+  test("date casting") {
+    val millis = 15 * 1000 + 1
+    val d = new Date(millis)
+    checkEvaluation(Cast(d, ShortType), null)
+    checkEvaluation(Cast(d, IntegerType), null)
+    checkEvaluation(Cast(d, LongType), null)
+    checkEvaluation(Cast(d, FloatType), null)
+    checkEvaluation(Cast(d, DoubleType), null)
+    checkEvaluation(Cast(d, StringType), "1970-01-01")
   }
 
   test("timestamp casting") {
