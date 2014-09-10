@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.types.NativeType
 
 object Row {
@@ -64,6 +66,9 @@ trait Row extends Seq[Any] with Serializable {
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
   def getString(i: Int): String
+  def getDecimal(i: Int): BigDecimal
+  def getTimestamp(i: Int): Timestamp
+  def getBinary(i: Int): Array[Byte]
 
   override def toString() =
     s"[${this.mkString(",")}]"
@@ -98,6 +103,9 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  def setDecimal(ordinal: Int, value: BigDecimal)
+  def setTimestamp(ordinal: Int, value: Timestamp)
+  def setBinary(ordinal: Int, value: Array[Byte])
 }
 
 /**
@@ -118,6 +126,9 @@ object EmptyRow extends Row {
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
+  def getDecimal(i: Int): BigDecimal = throw new UnsupportedOperationException
+  def getTimestamp(i: Int): Timestamp = throw new UnsupportedOperationException
+  def getBinary(i: Int): Array[Byte] = throw new UnsupportedOperationException
 
   def copy() = this
 }
@@ -181,6 +192,21 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  def getDecimal(i: Int): BigDecimal = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive Decimal value.")
+    values(i).asInstanceOf[BigDecimal]
+  }
+
+  def getTimestamp(i: Int): Timestamp = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive Timestamp value.")
+    values(i).asInstanceOf[Timestamp]
+  }
+
+  def getBinary(i: Int): Array[Byte] = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive Binary value.")
+    values(i).asInstanceOf[Array[Byte]]
+  }
+
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
@@ -201,6 +227,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)
               (b ^ (b >>> 32)).toInt
+            case b: Array[Byte] => 123 // TODO need to figure out how to compute the hashcode
             case other => other.hashCode()
           }
         }
@@ -224,6 +251,9 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   override def setInt(ordinal: Int,value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int,value: Long): Unit = { values(ordinal) = value }
   override def setString(ordinal: Int,value: String): Unit = { values(ordinal) = value }
+  override def setDecimal(ordinal: Int, value: BigDecimal): Unit = { values(ordinal) = value }
+  override def setTimestamp(ordinal: Int, value: Timestamp): Unit = { values(ordinal) = value }
+  override def setBinary(ordinal: Int, value: Array[Byte]): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
