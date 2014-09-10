@@ -20,16 +20,50 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.JsonAST.JNothing
+
 import scala.xml.{Node, Unparsed}
+
+import org.json4s.{JObject, JValue}
+import org.json4s.JsonDSL._
 
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{JsonProtocol, Utils, Distribution}
 import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val stageId = request.getParameter("id").toInt
+    val stageAttemptId = request.getParameter("attempt").toInt
+
+    val stageDataOpt = listener.stageIdToData.get((stageId, stageAttemptId))
+    var retVal: JValue = JNothing
+
+    if (!stageDataOpt.isEmpty && !stageDataOpt.get.taskData.isEmpty) {
+      val stageData = stageDataOpt.get
+      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
+
+      val taskList = tasks.map {
+        case uiData: TaskUIData =>
+          var jsonTaskInfo: JValue = JsonProtocol.taskInfoToJson(uiData.taskInfo)
+          val jsonTaskMetrics: JValue =
+            if (uiData.taskMetrics.isDefined) {
+              JsonProtocol.taskMetricsToJson(uiData.taskMetrics.get)
+            } else JNothing
+
+          if (jsonTaskInfo.isInstanceOf[JObject] && jsonTaskMetrics.isInstanceOf[JObject]) {
+            jsonTaskInfo = jsonTaskInfo.asInstanceOf[JObject] ~ jsonTaskMetrics.asInstanceOf[JObject]
+          }
+          jsonTaskInfo
+      }
+      retVal = ("Task List" -> taskList)
+    }
+    retVal
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
