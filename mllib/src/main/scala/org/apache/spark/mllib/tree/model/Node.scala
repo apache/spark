@@ -94,6 +94,23 @@ class Node (
   }
 
   /**
+   * Returns a deep copy of the subtree rooted at this node.
+   */
+  private[tree] def deepCopy(): Node = {
+    val leftNodeCopy = if (leftNode.isEmpty) {
+      None
+    } else {
+      Some(leftNode.get.deepCopy())
+    }
+    val rightNodeCopy = if (rightNode.isEmpty) {
+      None
+    } else {
+      Some(rightNode.get.deepCopy())
+    }
+    new Node(id, predict, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
+  }
+
+  /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
    */
@@ -189,5 +206,23 @@ private[tree] object Node {
    * @param level  Level of tree (0 = root).
    */
   def startIndexInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Traces down from a root node to get the node with the given node index.
+   * This assumes the node exists.
+   */
+  def getNode(nodeIndex: Int, rootNode: Node): Node = {
+    var tmpNode: Node = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    while (levelsToGo > 0) {
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftNode.get
+      } else {
+        tmpNode = tmpNode.rightNode.get
+      }
+      levelsToGo -= 1
+    }
+    tmpNode
+  }
 
 }

@@ -271,15 +271,15 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 0)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode: Node, doneTraining: Boolean) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    val split = bestSplits(0)._1
+    val split = rootNode.split.get
     assert(split.categories === List(1.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 
-    val stats = bestSplits(0)._2
+    val stats = rootNode.stats.get
     assert(stats.gain > 0)
     assert(stats.predict === 1)
     assert(stats.prob === 0.6)
@@ -303,16 +303,16 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    val split = bestSplits(0)._1
+    val split = rootNode.split.get
     assert(split.categories.length === 1)
     assert(split.categories.contains(1.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 
-    val stats = bestSplits(0)._2
+    val stats = rootNode.stats.get
     assert(stats.gain > 0)
     assert(stats.predict === 0.6)
     assert(stats.impurity > 0.2)
@@ -357,13 +357,16 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
-    assert(bestSplits.length === 1)
-    assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._2.gain === 0)
-    assert(bestSplits(0)._2.leftImpurity === 0)
-    assert(bestSplits(0)._2.rightImpurity === 0)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+
+    val stats = rootNode.stats.get
+    assert(stats.gain === 0)
+    assert(stats.leftImpurity === 0)
+    assert(stats.rightImpurity === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Gini") {
@@ -385,14 +388,17 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
-    assert(bestSplits.length === 1)
-    assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._2.gain === 0)
-    assert(bestSplits(0)._2.leftImpurity === 0)
-    assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+
+    val stats = rootNode.stats.get
+    assert(stats.gain === 0)
+    assert(stats.leftImpurity === 0)
+    assert(stats.rightImpurity === 0)
+    assert(stats.predict === 1)
   }
 
   test("Binary classification stump with fixed label 0 for Entropy") {
@@ -414,14 +420,17 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
-    assert(bestSplits.length === 1)
-    assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._2.gain === 0)
-    assert(bestSplits(0)._2.leftImpurity === 0)
-    assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 0)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+
+    val stats = rootNode.stats.get
+    assert(stats.gain === 0)
+    assert(stats.leftImpurity === 0)
+    assert(stats.rightImpurity === 0)
+    assert(stats.predict === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Entropy") {
@@ -443,14 +452,17 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
-    assert(bestSplits.length === 1)
-    assert(bestSplits(0)._1.feature === 0)
-    assert(bestSplits(0)._2.gain === 0)
-    assert(bestSplits(0)._2.leftImpurity === 0)
-    assert(bestSplits(0)._2.rightImpurity === 0)
-    assert(bestSplits(0)._2.predict === 1)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+
+    val stats = rootNode.stats.get
+    assert(stats.gain === 0)
+    assert(stats.leftImpurity === 0)
+    assert(stats.rightImpurity === 0)
+    assert(stats.predict === 1)
   }
 
   test("Second level node building with vs. without groups") {
@@ -471,36 +483,43 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
       numClassesForClassification = 2, maxBins = 100)
     val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
-    val nodes: Array[Node] = new Array[Node](8)
-    nodes(1) = modelOneNode.topNode
-    nodes(1).leftNode = None
-    nodes(1).rightNode = None
+    val rootNodeCopy1 = modelOneNode.topNode.deepCopy()
+    val rootNodeCopy2 = modelOneNode.topNode.deepCopy()
 
     // Single group second level tree construction.
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 1, nodes,
-      splits, bins, 10)
-    assert(bestSplits.length === 2)
-    assert(bestSplits(0)._2.gain > 0)
-    assert(bestSplits(1)._2.gain > 0)
+    val (rootNode, _) = DecisionTree.findBestSplits(treeInput, metadata, 1,
+      rootNodeCopy1, splits, bins, 10)
+    assert(rootNode.leftNode.nonEmpty)
+    assert(rootNode.rightNode.nonEmpty)
+    val children1 = new Array[Node](2)
+    children1(0) = rootNode.leftNode.get
+    children1(1) = rootNode.rightNode.get
 
     // maxLevelForSingleGroup parameter is set to 0 to force splitting into groups for second
     // level tree construction.
-    val bestSplitsWithGroups = DecisionTree.findBestSplits(treeInput, metadata, 1,
-      nodes, splits, bins, 0)
-    assert(bestSplitsWithGroups.length === 2)
-    assert(bestSplitsWithGroups(0)._2.gain > 0)
-    assert(bestSplitsWithGroups(1)._2.gain > 0)
+    val (rootNode2, _) = DecisionTree.findBestSplits(treeInput, metadata, 1,
+      rootNodeCopy2, splits, bins, 0)
+    assert(rootNode2.leftNode.nonEmpty)
+    assert(rootNode2.rightNode.nonEmpty)
+    val children2 = new Array[Node](2)
+    children2(0) = rootNode2.leftNode.get
+    children2(1) = rootNode2.rightNode.get
 
     // Verify whether the splits obtained using single group and multiple group level
     // construction strategies are the same.
-    for (i <- 0 until bestSplits.length) {
-      assert(bestSplits(i)._1 === bestSplitsWithGroups(i)._1)
-      assert(bestSplits(i)._2.gain === bestSplitsWithGroups(i)._2.gain)
-      assert(bestSplits(i)._2.impurity === bestSplitsWithGroups(i)._2.impurity)
-      assert(bestSplits(i)._2.leftImpurity === bestSplitsWithGroups(i)._2.leftImpurity)
-      assert(bestSplits(i)._2.rightImpurity === bestSplitsWithGroups(i)._2.rightImpurity)
-      assert(bestSplits(i)._2.predict === bestSplitsWithGroups(i)._2.predict)
+    for (i <- 0 until 2) {
+      assert(children1(i).stats.nonEmpty && children1(i).stats.get.gain > 0)
+      assert(children2(i).stats.nonEmpty && children2(i).stats.get.gain > 0)
+      assert(children1(i).split === children2(i).split)
+      assert(children1(i).stats.nonEmpty && children2(i).stats.nonEmpty)
+      val stats1 = children1(i).stats.get
+      val stats2 = children2(i).stats.get
+      assert(stats1.gain === stats2.gain)
+      assert(stats1.impurity === stats2.impurity)
+      assert(stats1.leftImpurity === stats2.leftImpurity)
+      assert(stats1.rightImpurity === stats2.rightImpurity)
+      assert(stats1.predict === stats2.predict)
     }
   }
 
@@ -516,15 +535,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    assert(bestSplits.length === 1)
-    val bestSplit = bestSplits(0)._1
-    assert(bestSplit.feature === 0)
-    assert(bestSplit.categories.length === 1)
-    assert(bestSplit.categories.contains(1))
-    assert(bestSplit.featureType === Categorical)
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+    assert(split.categories.length === 1)
+    assert(split.categories.contains(1))
+    assert(split.featureType === Categorical)
   }
 
   test("Binary classification stump with 1 continuous feature, to check off-by-1 error") {
@@ -581,16 +599,16 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    assert(bestSplits.length === 1)
-    val bestSplit = bestSplits(0)._1
-    assert(bestSplit.feature === 0)
-    assert(bestSplit.categories.length === 1)
-    assert(bestSplit.categories.contains(1))
-    assert(bestSplit.featureType === Categorical)
-    val gain = bestSplits(0)._2
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+    assert(split.categories.length === 1)
+    assert(split.categories.contains(1))
+    assert(split.featureType === Categorical)
+
+    val gain = rootNode.stats.get
     assert(gain.leftImpurity === 0)
     assert(gain.rightImpurity === 0)
   }
@@ -608,16 +626,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    assert(bestSplits.length === 1)
-    val bestSplit = bestSplits(0)._1
-
-    assert(bestSplit.feature === 1)
-    assert(bestSplit.featureType === Continuous)
-    assert(bestSplit.threshold > 1980)
-    assert(bestSplit.threshold < 2020)
+    val split = rootNode.split.get
+    assert(split.feature === 1)
+    assert(split.featureType === Continuous)
+    assert(split.threshold > 1980)
+    assert(split.threshold < 2020)
 
   }
 
@@ -635,16 +651,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    assert(bestSplits.length === 1)
-    val bestSplit = bestSplits(0)._1
-
-    assert(bestSplit.feature === 1)
-    assert(bestSplit.featureType === Continuous)
-    assert(bestSplit.threshold > 1980)
-    assert(bestSplit.threshold < 2020)
+    val split = rootNode.split.get
+    assert(split.feature === 1)
+    assert(split.featureType === Continuous)
+    assert(split.threshold > 1980)
+    assert(split.threshold < 2020)
   }
 
   test("Multiclass classification stump with 10-ary (ordered) categorical features") {
@@ -659,15 +673,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val bestSplits = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      new Array[Node](0), splits, bins, 10)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
 
-    assert(bestSplits.length === 1)
-    val bestSplit = bestSplits(0)._1
-    assert(bestSplit.feature === 0)
-    assert(bestSplit.categories.length === 1)
-    assert(bestSplit.categories.contains(1.0))
-    assert(bestSplit.featureType === Categorical)
+    val split = rootNode.split.get
+    assert(split.feature === 0)
+    assert(split.categories.length === 1)
+    assert(split.categories.contains(1.0))
+    assert(split.featureType === Categorical)
   }
 
   test("Multiclass classification tree with 10-ary (ordered) categorical features," +
