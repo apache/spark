@@ -298,7 +298,6 @@ class PythonMLLibAPI extends Serializable {
     dataBytesJRDD: JavaRDD[Array[Byte]]
     ): Word2VecModel = {
     val data = dataBytesJRDD.rdd.map(SerDe.deserializeSeqString)
-    data.collect()
     val word2vec = new Word2Vec()
     val model = word2vec.fit(data)
     model
