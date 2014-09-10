@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
-  test("Calls executeOnCompleteCallbacks after failure") {
+  test("calls TaskCompletionListener after failure") {
     TaskContextSuite.completed = false
     sc = new SparkContext("local", "test")
     val rdd = new RDD[String](sc, List()) {
@@ -45,10 +45,21 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     }
     assert(TaskContextSuite.completed === true)
   }
+
+  test("all TaskCompletionListeners should be called even if some fail") {
+    val context = new TaskContext(0, 0, 0)
+    context.addTaskCompletionListener(_ => throw new Exception("blah"))
+    context.addTaskCompletionListener(_ => TaskContextSuite.callbackInvoked = true)
+    context.addTaskCompletionListener(_ => throw new Exception("blah"))
+    context.markTaskCompleted()
+    assert(TaskContextSuite.callbackInvoked === true)
+  }
 }
 
 private object TaskContextSuite {
   @volatile var completed = false
+
+  var callbackInvoked = false
 }
 
 private case class StubPartition(index: Int) extends Partition
