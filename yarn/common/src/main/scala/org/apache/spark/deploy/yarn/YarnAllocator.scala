@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
@@ -31,6 +31,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 object AllocationType extends Enumeration {
   type AllocationType = Value
@@ -94,6 +96,14 @@ private[yarn] abstract class YarnAllocator(
   protected val executorCores = args.executorCores
   protected val (preferredHostToCount, preferredRackToCount) =
     generateNodeToWeight(conf, preferredNodes)
+
+  private val launcherPool = new ThreadPoolExecutor(
+    // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
+    sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25), Integer.MAX_VALUE,
+    1, TimeUnit.MINUTES,
+    new LinkedBlockingQueue[Runnable](),
+    new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
+  launcherPool.allowCoreThreadTimeOut(true)
 
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
@@ -283,7 +293,7 @@ private[yarn] abstract class YarnAllocator(
             executorMemory,
             executorCores,
             securityMgr)
-          new Thread(executorRunnable).start()
+          launcherPool.execute(executorRunnable)
         }
       }
       logDebug("""
