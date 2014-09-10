@@ -332,7 +332,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  }'
          |)
         """.stripMargin.cmd,
-      s"INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1) SELECT title, air_date, doctor FROM episodes".cmd
+      s"""
+        INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
+        SELECT title, air_date, doctor FROM episodes
+      """.cmd
       )
   )
 
