@@ -485,15 +485,14 @@ private[spark] class Master(
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val aliveWorkerNum = shuffledAliveWorkers.size
     var curPos = 0
-    for (driver <- List(waitingDrivers: _*)) { // iterate over a copy of waitingDrivers
-      // For each waiting driver we pick a worker that has enough resources to launch it.
-      // The picking does in a round-robin fashion, starting from position behind last
-      // worker on which driver was just launched and ending with driver being launched
-      // or we have iterated over all workers.
-      val startPos = curPos
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
       curPos = (curPos + 1) % aliveWorkerNum
+      val startPos = curPos
       var launched = false
-      while (curPos - 1 != startPos && !launched) {
+      while (curPos != startPos && !launched) {
         val worker = shuffledAliveWorkers(curPos)
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
