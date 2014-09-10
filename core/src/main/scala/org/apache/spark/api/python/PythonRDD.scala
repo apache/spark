@@ -73,9 +73,10 @@ private[spark] class PythonRDD(
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
+    var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-      if (!context.isInterrupted) {
+      if (reuse_worker && complete_cleanly) {
         env.releasePythonWorker(pythonExec, envVars.toMap, worker)
       } else {
         try {
@@ -141,6 +142,7 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+               complete_cleanly = true
               null
           }
         } catch {
@@ -235,11 +237,13 @@ private[spark] class PythonRDD(
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
+          worker.shutdownOutput()
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
+          worker.shutdownOutput()
       }
     }
   }

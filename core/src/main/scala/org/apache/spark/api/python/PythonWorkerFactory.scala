@@ -282,7 +282,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   def releaseWorker(worker: Socket) {
-    if (useDaemon && envVars.get("SPARK_REUSE_WORKER").isDefined) {
+    if (useDaemon) {
       synchronized {
         lastActivity = System.currentTimeMillis()
         idleWorkers.enqueue(worker)
