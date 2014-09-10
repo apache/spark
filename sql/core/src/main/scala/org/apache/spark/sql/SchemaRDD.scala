@@ -428,7 +428,8 @@ class SchemaRDD(
    */
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext,
-      SparkLogicalPlan(ExistingRdd(queryExecution.analyzed.output, rdd))(sqlContext))
+      SparkLogicalPlan(
+        ExistingRdd(queryExecution.analyzed.output.map(_.newInstance), rdd))(sqlContext))
   }
 
   // =======================================================================
