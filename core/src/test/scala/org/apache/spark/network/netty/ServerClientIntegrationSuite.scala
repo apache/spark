@@ -30,7 +30,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.network._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{BlockNotFoundException, StorageLevel}
 
 
 /**
@@ -62,14 +62,14 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     fp.write(fileContent)
     fp.close()
 
-    server = new BlockServer(new SparkConf, new BlockDataManager {
-      override def getBlockData(blockId: String): Option[ManagedBuffer] = {
+    server = new BlockServer(new NettyConfig(new SparkConf), new BlockDataManager {
+      override def getBlockData(blockId: String): ManagedBuffer = {
         if (blockId == bufferBlockId) {
-          Some(new NioByteBufferManagedBuffer(buf))
+          new NioByteBufferManagedBuffer(buf)
         } else if (blockId == fileBlockId) {
-          Some(new FileSegmentManagedBuffer(testFile, 10, testFile.length - 25))
+          new FileSegmentManagedBuffer(testFile, 10, testFile.length - 25)
         } else {
-          None
+          throw new BlockNotFoundException(blockId)
         }
       }
 

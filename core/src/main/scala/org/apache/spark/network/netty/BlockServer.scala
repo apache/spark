@@ -40,10 +40,6 @@ import org.apache.spark.util.Utils
 private[netty]
 class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Logging {
 
-  def this(sparkConf: SparkConf, dataProvider: BlockDataManager) = {
-    this(new NettyConfig(sparkConf), dataProvider)
-  }
-
   def port: Int = _port
 
   def hostName: String = _hostName
@@ -117,7 +113,8 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
     _port = addr.getPort
-    _hostName = addr.getHostName
+    //_hostName = addr.getHostName
+    _hostName = Utils.localHostName()
   }
 
   /** Shutdown the server. */

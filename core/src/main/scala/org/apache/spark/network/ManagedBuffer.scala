@@ -35,9 +35,14 @@ import org.apache.spark.util.{ByteBufferInputStream, Utils}
  * This interface provides an immutable view for data in the form of bytes. The implementation
  * should specify how the data is provided:
  *
- * - FileSegmentManagedBuffer: data backed by part of a file
- * - NioByteBufferManagedBuffer: data backed by a NIO ByteBuffer
- * - NettyByteBufManagedBuffer: data backed by a Netty ByteBuf
+ * - [[FileSegmentManagedBuffer]]: data backed by part of a file
+ * - [[NioByteBufferManagedBuffer]]: data backed by a NIO ByteBuffer
+ * - [[NettyByteBufManagedBuffer]]: data backed by a Netty ByteBuf
+ *
+ * The concrete buffer implementation might be managed outside the JVM garbage collector.
+ * For example, in the case of [[NettyByteBufManagedBuffer]], the buffers are reference counted.
+ * In that case, if the buffer is going to be passed around to a different thread, retain/release
+ * should be called.
  */
 abstract class ManagedBuffer {
   // Note that all the methods are defined with parenthesis because their implementations can
@@ -58,6 +63,17 @@ abstract class ManagedBuffer {
    * it does not go over the limit.
    */
   def inputStream(): InputStream
+
+  /**
+   * Increment the reference count by one if applicable.
+   */
+  def retain(): this.type
+
+  /**
+   * If applicable, decrement the reference count by one and deallocates the buffer if the
+   * reference count reaches zero.
+   */
+  def release(): this.type
 
   /**
    * Convert the buffer into an Netty object, used to write the data out.
@@ -123,6 +139,10 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     val fileChannel = new FileInputStream(file).getChannel
     new DefaultFileRegion(fileChannel, offset, length)
   }
+
+  // Content of file segments are not in-memory, so no need to reference count.
+  override def retain(): this.type = this
+  override def release(): this.type = this
 }
 
 
@@ -138,6 +158,10 @@ final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
   override def inputStream() = new ByteBufferInputStream(buf)
 
   private[network] override def convertToNetty(): AnyRef = Unpooled.wrappedBuffer(buf)
+
+  // [[ByteBuffer]] is managed by the JVM garbage collector itself.
+  override def retain(): this.type = this
+  override def release(): this.type = this
 }
 
 
@@ -154,6 +178,13 @@ final class NettyByteBufManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
 
   private[network] override def convertToNetty(): AnyRef = buf
 
-  // TODO(rxin): Promote this to top level ManagedBuffer interface and add documentation for it.
-  def release(): Unit = buf.release()
+  override def retain(): this.type = {
+    buf.retain()
+    this
+  }
+
+  override def release(): this.type = {
+    buf.release()
+    this
+  }
 }

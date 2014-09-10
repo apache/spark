@@ -216,17 +216,17 @@ private[spark] class BlockManager(
    *
    * @return Some(buffer) if the block exists locally, and None if it doesn't.
    */
-  override def getBlockData(blockId: String): Option[ManagedBuffer] = {
+  override def getBlockData(blockId: String): ManagedBuffer = {
     val bid = BlockId(blockId)
     if (bid.isShuffle) {
-      Some(shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId]))
+      shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        Some(new NioByteBufferManagedBuffer(buffer))
+        new NioByteBufferManagedBuffer(buffer)
       } else {
-        None
+        throw new BlockNotFoundException(blockId)
       }
     }
   }

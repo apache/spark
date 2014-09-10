@@ -32,12 +32,14 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
+
 
 /**
  * :: DeveloperApi ::
@@ -231,7 +233,12 @@ object SparkEnv extends Logging {
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
-    val blockTransferService = new NioBlockTransferService(conf, securityManager)
+    // TODO(rxin): Config option based on class name, similar to shuffle mgr and compression codec.
+    val blockTransferService = if (conf.getBoolean("spark.shuffle.use.netty", false)) {
+      new NettyBlockTransferService(conf)
+    } else {
+      new NioBlockTransferService(conf, securityManager)
+    }
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
