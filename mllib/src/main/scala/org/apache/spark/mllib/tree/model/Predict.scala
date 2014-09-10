@@ -26,7 +26,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param prob probability of the label (classification only)
  */
 @DeveloperApi
-class Predict(
+private[tree] class Predict(
     val predict: Double,
     val prob: Double = 0.0) extends Serializable{
 

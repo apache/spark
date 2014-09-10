@@ -68,11 +68,3 @@ private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
 private[tree] class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
 
-private[tree] object Split {
-  /**
-   * A [[org.apache.spark.mllib.tree.model.Split]] object to denote that
-   * we can't find a valid split that satisfies minimum info gain
-   * or minimum number of instances per node.
-   */
-  val noSplit = new Split(-1, Double.MinValue, FeatureType.Continuous, List())
-}

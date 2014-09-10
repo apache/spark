@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{Split, DecisionTreeModel, Node}
+import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
@@ -689,11 +689,21 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val model = DecisionTree.train(input, strategy)
     assert(model.topNode.isLeaf)
     assert(model.topNode.predict == 0.0)
-    assert(model.topNode.split.get == Split.noSplit)
     val predicts = input.map(p => model.predict(p.features)).collect()
     predicts.foreach { predict =>
       assert(predict == 0.0)
     }
+
+    // test for findBestSplits when no valid split can be found
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val bestSplits = DecisionTree.findBestSplits(treeInput, new Array(8), metadata, 0,
+      new Array[Node](0), splits, bins, 10)
+
+    assert(bestSplits.length === 1)
+    val bestInfoStats = bestSplits(0)._2
+    assert(bestInfoStats == InformationGainStats.invalidInformationGainStats)
   }
 
   test("split must satisfy min info gain requirements") {
@@ -709,11 +719,21 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val model = DecisionTree.train(input, strategy)
     assert(model.topNode.isLeaf)
     assert(model.topNode.predict == 0.0)
-    assert(model.topNode.split.get == Split.noSplit)
     val predicts = input.map(p => model.predict(p.features)).collect()
     predicts.foreach { predict =>
       assert(predict == 0.0)
     }
+
+    // test for findBestSplits when no valid split can be found
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val bestSplits = DecisionTree.findBestSplits(treeInput, new Array(8), metadata, 0,
+      new Array[Node](0), splits, bins, 10)
+
+    assert(bestSplits.length === 1)
+    val bestInfoStats = bestSplits(0)._2
+    assert(bestInfoStats == InformationGainStats.invalidInformationGainStats)
   }
 }
 
