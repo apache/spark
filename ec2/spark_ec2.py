@@ -32,6 +32,7 @@ import sys
 import tempfile
 import time
 import urllib2
+import warnings
 from optparse import OptionParser
 from sys import stderr
 import boto
@@ -60,11 +61,9 @@ def parse_args():
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
-    # NOTE: For strict "API" compatibility, we should probably leave this in
-    #       and just mark it as deprecated / not used.
-    # parser.add_option(
-    #     "-w", "--wait", type="int", default=120,
-    #     help="Seconds to wait for nodes to start (default: %default)")
+    parser.add_option(
+        "-w", "--wait", type="int",
+        help="DEPRECATED - Seconds to wait for nodes to start")
     parser.add_option(
         "-k", "--key-pair",
         help="Key pair to use on instances")
@@ -192,18 +191,6 @@ def get_or_make_group(conn, name):
     else:
         print "Creating security group " + name
         return conn.create_security_group(name, "Spark EC2 group")
-
-
-# Wait for a set of launched instances to exit the "pending" state
-# (i.e. either to start running or to fail and be terminated)
-def wait_for_instances(conn, instances):
-    while True:
-        for i in instances:
-            i.update()
-        if len([i for i in instances if i.state == 'pending']) > 0:
-            time.sleep(5)
-        else:
-            return
 
 
 # Check whether a given EC2 instance object is in a state we consider active,
@@ -610,16 +597,6 @@ def setup_spark_cluster(master, opts):
         print "Ganglia started at http://%s:5080/ganglia" % master
 
 
-# Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
-def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
-    print "Waiting for instances to start up..."
-    time.sleep(5)
-    wait_for_instances(conn, master_nodes)
-    wait_for_instances(conn, slave_nodes)
-    print "Waiting %d more seconds..." % wait_secs
-    time.sleep(wait_secs)
-
-
 def is_ssh_available(host, opts):
     "Checks if SSH is available on the host."
     try:
@@ -633,10 +610,7 @@ def is_ssh_available(host, opts):
                 stdout=devnull,
                 stderr=devnull
             )
-        if ret == 0:
-            return True
-        else:
-            return False
+        return ret == 0
     except subprocess.CalledProcessError as e:
         return False
 
@@ -653,6 +627,7 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
         "Waiting for all instances in cluster to enter '{s}' state.".format(s=cluster_state)
     )
     sys.stdout.flush()
+
     while True:
         for i in cluster_instances:
             s = i.update()  # capture output to suppress print to screen in newer versions of boto
@@ -660,15 +635,15 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \
                all(is_ssh_available(host=i.ip_address, opts=opts) for i in cluster_instances):
-                print ""  # so that next line of output starts on new line
-                return
+                break
         else:
             if all(i.state == cluster_state for i in cluster_instances):
-                print ""  # so that next line of output starts on new line
-                return
+                break
         sys.stdout.write(".")
         sys.stdout.flush()
         time.sleep(3)
+
+    print ""  # so that next line of output starts on new line
 
 
 # Get number of local disks available for a given EC2 instance type.
@@ -903,6 +878,16 @@ def real_main():
     (opts, action, cluster_name) = parse_args()
 
     # Input parameter validation
+    if opts.wait is not None:
+        # NOTE: DeprecationWarnings are silent in 2.7+ by default.
+        #       To show them, run Python with the -Wdefault switch.
+        # See: https://docs.python.org/3.5/whatsnew/2.7.html
+        warnings.warn(
+            "This option is deprecated and has no effect. "
+            "spark-ec2 automatically waits as long as necessary for clusters to startup.",
+            DeprecationWarning
+        )
+
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
@@ -925,9 +910,8 @@ def real_main():
             (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
         else:
             (master_nodes, slave_nodes) = launch_cluster(conn, opts, cluster_name)
-            # wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
-        # NOTE: This next line means if we have a terminally broken cluster, (e.gl for a resume)
-        #       we'll keep waiting until the user exits.
+        # NOTE: This next line means if we have a terminally broken cluster,
+        #       (e.g during a --resume) we'll keep waiting until the user exits.
         wait_for_cluster_state(
             cluster_instances=(master_nodes + slave_nodes),
             cluster_state='ssh-ready',
@@ -1051,7 +1035,6 @@ def real_main():
         for inst in master_nodes:
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
-        # wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes)
         wait_for_cluster_state(
             cluster_instances=(master_nodes + slave_nodes),
             cluster_state='ssh-ready',
