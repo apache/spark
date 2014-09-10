@@ -161,12 +161,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
           TestSQLContext.isParquetBinaryAsString)
     }
     val schemaRDD = new SchemaRDD(TestSQLContext, parquetRelation)
-    val resultWithString = schemaRDD.collect
-    range.foreach {
-      i =>
-        assert(resultWithString(i).getInt(0) === i)
-        assert(resultWithString(i)(1) === s"val_$i")
-    }
 
     schemaRDD.registerTempTable("tmp")
     checkAnswer(
@@ -433,15 +427,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Insert (appending) to same table via Scala API") {
-    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
-    // executed twice otherwise?!
     sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)
-    for(i <- (0 to 14)) {
-      assert(double_rdd(i) === double_rdd(i+15), s"error: lines $i and ${i+15} to not match")
-    }
+
     // let's restore the original test data
     Utils.deleteRecursively(ParquetTestData.testDir)
     ParquetTestData.writeFile()
