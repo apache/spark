@@ -189,7 +189,7 @@ private[sql] case class InMemoryColumnarTableScan(
     readPartitions.setValue(0)
     readBatches.setValue(0)
 
-    relation.cachedColumnBuffers.mapPartitions { iterator =>
+    relation.cachedColumnBuffers.mapPartitions { cachedBatchIterator =>
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         relation.partitionStatistics.schema)
@@ -211,7 +211,7 @@ private[sql] case class InMemoryColumnarTableScan(
       }
 
       val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
-      val rows = iterator
+      val rows = cachedBatchIterator
         // Skip pruned batches
         .filter { cachedBatch =>
           if (inMemoryPartitionPruningEnabled && !partitionFilter(cachedBatch.stats)) {
@@ -242,7 +242,7 @@ private[sql] case class InMemoryColumnarTableScan(
               nextRow
             }
 
-            override def hasNext = columnAccessors.head.hasNext
+            override def hasNext = columnAccessors(0).hasNext
           }
         }
 
