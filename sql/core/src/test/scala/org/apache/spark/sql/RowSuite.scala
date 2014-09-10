@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
 
 class RowSuite extends FunSuite {
 
@@ -42,5 +42,11 @@ class RowSuite extends FunSuite {
     assert(expected.getString(1) === actual2.getString(1))
     assert(expected.getBoolean(2) === actual2.getBoolean(2))
     assert(expected(3) === actual2(3))
+  }
+
+  test("SpecificMutableRow.update with null") {
+    val row = new SpecificMutableRow(Seq(IntegerType))
+    row(0) = null
+    assert(row.isNullAt(0))
   }
 }

@@ -227,7 +227,9 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new SpecificMutableRow(newValues)
   }
 
-  override def update(ordinal: Int, value: Any): Unit = values(ordinal).update(value)
+  override def update(ordinal: Int, value: Any): Unit = {
+    if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
+  }
 
   override def iterator: Iterator[Any] = values.map(_.boxed).iterator
 
