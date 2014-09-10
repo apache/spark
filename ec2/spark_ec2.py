@@ -643,7 +643,7 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
         sys.stdout.flush()
         time.sleep(3)
 
-    print ""  # so that next line of output starts on new line
+    sys.stdout.write("\n")
 
 
 # Get number of local disks available for a given EC2 instance type.
