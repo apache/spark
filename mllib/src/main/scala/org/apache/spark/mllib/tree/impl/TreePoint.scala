@@ -48,54 +48,63 @@ private[tree] object TreePoint {
    * binning feature values in preparation for DecisionTree training.
    * @param input     Input dataset.
    * @param bins      Bins for features, of size (numFeatures, numBins).
-   * @param metadata Learning and dataset metadata
+   * @param metadata  Learning and dataset metadata
    * @return  TreePoint dataset representation
    */
   def convertToTreeRDD(
       input: RDD[LabeledPoint],
       bins: Array[Array[Bin]],
       metadata: DecisionTreeMetadata): RDD[TreePoint] = {
+    // Construct arrays for featureArity and isUnordered for efficiency in the inner loop.
+    val featureArity: Array[Int] = new Array[Int](metadata.numFeatures)
+    val isUnordered: Array[Boolean] = new Array[Boolean](metadata.numFeatures)
+    var featureIndex = 0
+    while (featureIndex < metadata.numFeatures) {
+      featureArity(featureIndex) = metadata.featureArity.getOrElse(featureIndex, 0)
+      isUnordered(featureIndex) = metadata.isUnordered(featureIndex)
+      featureIndex += 1
+    }
     input.map { x =>
-      TreePoint.labeledPointToTreePoint(x, bins, metadata)
+      TreePoint.labeledPointToTreePoint(x, bins, featureArity, isUnordered)
     }
   }
 
   /**
    * Convert one LabeledPoint into its TreePoint representation.
    * @param bins      Bins for features, of size (numFeatures, numBins).
+   * @param featureArity  Array indexed by feature, with value 0 for continuous and numCategories
+   *                      for categorical features.
+   * @param isUnordered  Array index by feature, with value true for unordered categorical features.
    */
   private def labeledPointToTreePoint(
       labeledPoint: LabeledPoint,
       bins: Array[Array[Bin]],
-      metadata: DecisionTreeMetadata): TreePoint = {
-
+      featureArity: Array[Int],
+      isUnordered: Array[Boolean]): TreePoint = {
     val numFeatures = labeledPoint.features.size
-    val numBins = bins(0).size
     val arr = new Array[Int](numFeatures)
     var featureIndex = 0
     while (featureIndex < numFeatures) {
-      arr(featureIndex) = findBin(featureIndex, labeledPoint, metadata.isContinuous(featureIndex),
-        metadata.isUnordered(featureIndex), bins, metadata.featureArity)
+      arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex),
+        isUnordered(featureIndex), bins)
       featureIndex += 1
     }
-
     new TreePoint(labeledPoint.label, arr)
   }
 
   /**
    * Find bin for one (labeledPoint, feature).
    *
+   * @param featureArity  0 for continuous features; number of categories for categorical features.
    * @param isUnorderedFeature  (only applies if feature is categorical)
    * @param bins   Bins for features, of size (numFeatures, numBins).
-   * @param categoricalFeaturesInfo  Map over categorical features: feature index --> feature arity
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
-      isFeatureContinuous: Boolean,
+      featureArity: Int,
       isUnorderedFeature: Boolean,
-      bins: Array[Array[Bin]],
-      categoricalFeaturesInfo: Map[Int, Int]): Int = {
+      bins: Array[Array[Bin]]): Int = {
 
     /**
      * Binary search helper method for continuous feature.
@@ -121,44 +130,7 @@ private[tree] object TreePoint {
       -1
     }
 
-    /**
-     * Sequential search helper method to find bin for categorical feature in multiclass
-     * classification. The category is returned since each category can belong to multiple
-     * splits. The actual left/right child allocation per split is performed in the
-     * sequential phase of the bin aggregate operation.
-     */
-    def sequentialBinSearchForUnorderedCategoricalFeatureInClassification(): Int = {
-      labeledPoint.features(featureIndex).toInt
-    }
-
-    /**
-     * Sequential search helper method to find bin for categorical feature
-     * (for classification and regression).
-     */
-    def sequentialBinSearchForOrderedCategoricalFeature(): Int = {
-      val featureCategories = categoricalFeaturesInfo(featureIndex)
-      val featureValue = labeledPoint.features(featureIndex)
-      var binIndex = 0
-      while (binIndex < featureCategories) {
-        val bin = bins(featureIndex)(binIndex)
-        val categories = bin.highSplit.categories
-        if (categories.contains(featureValue)) {
-          return binIndex
-        }
-        binIndex += 1
-      }
-      if (featureValue < 0 || featureValue >= featureCategories) {
-        throw new IllegalArgumentException(
-          s"DecisionTree given invalid data:" +
-            s" Feature $featureIndex is categorical with values in" +
-            s" {0,...,${featureCategories - 1}," +
-            s" but a data point gives it value $featureValue.\n" +
-            "  Bad data point: " + labeledPoint.toString)
-      }
-      -1
-    }
-
-    if (isFeatureContinuous) {
+    if (featureArity == 0) {
       // Perform binary search for finding bin for continuous features.
       val binIndex = binarySearchForBins()
       if (binIndex == -1) {
@@ -168,18 +140,17 @@ private[tree] object TreePoint {
       }
       binIndex
     } else {
-      // Perform sequential search to find bin for categorical features.
-      val binIndex = if (isUnorderedFeature) {
-          sequentialBinSearchForUnorderedCategoricalFeatureInClassification()
-        } else {
-          sequentialBinSearchForOrderedCategoricalFeature()
-        }
-      if (binIndex == -1) {
-        throw new RuntimeException("No bin was found for categorical feature." +
-          " This error can occur when given invalid data values (such as NaN)." +
-          s" Feature index: $featureIndex.  Feature value: ${labeledPoint.features(featureIndex)}")
+      // Categorical feature bins are indexed by feature values.
+      val featureValue = labeledPoint.features(featureIndex)
+      if (featureValue < 0 || featureValue >= featureArity) {
+        throw new IllegalArgumentException(
+          s"DecisionTree given invalid data:" +
+            s" Feature $featureIndex is categorical with values in" +
+            s" {0,...,${featureArity - 1}," +
+            s" but a data point gives it value $featureValue.\n" +
+            "  Bad data point: " + labeledPoint.toString)
       }
-      binIndex
+      featureValue.toInt
     }
   }
 }

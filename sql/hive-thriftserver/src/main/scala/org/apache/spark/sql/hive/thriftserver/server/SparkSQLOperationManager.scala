@@ -39,7 +39,9 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
-class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManager with Logging {
+private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
+  extends OperationManager with Logging {
+
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 

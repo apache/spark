@@ -41,6 +41,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
+  test("SPARK-3176 Added Parser of SQL ABS()") {
+    checkAnswer(
+      sql("SELECT ABS(-1.3)"),
+      1.3)
+    checkAnswer(
+      sql("SELECT ABS(0.0)"),
+      0.0)
+    checkAnswer(
+      sql("SELECT ABS(2.5)"),
+      2.5)
+  }
+
+  test("SPARK-3176 Added Parser of SQL LAST()") {
+    checkAnswer(
+      sql("SELECT LAST(n) FROM lowerCaseData"),
+      4)
+  }
+
+
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
@@ -53,14 +72,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SQRT with automatic string casts") {
     checkAnswer(
       sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),
@@ -359,6 +378,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (null, null, 6, "F") :: Nil)
   }
 
+  test("SPARK-3349 partitioning after limit") {
+    /*
+    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
+      .limit(2)
+      .registerTempTable("subset1")
+    sql("SELECT DISTINCT n FROM lowerCaseData")
+      .limit(2)
+      .registerTempTable("subset2")
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
+      (3, "c", 3) ::
+      (4, "d", 4) :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
+      (1, "a", 1) ::
+      (2, "b", 2) :: Nil)
+      */
+  }
+
   test("mixed-case keywords") {
     checkAnswer(
       sql(
@@ -579,5 +617,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (2, null) ::
       (3, null) ::
       (4, 2147483644) :: Nil)
+  }
+  
+  test("SPARK-3423 BETWEEN") {
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      Seq((5, "5"), (6, "6"), (7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      Seq((7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      Seq()
+    )
+    
   }
 }

@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-private[spark] abstract class Message(val typ: Long, val id: Int) {
+
+private[nio] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null
   var started = false
   var startTime = -1L
@@ -42,7 +43,7 @@ private[spark] abstract class Message(val typ: Long, val id: Int) {
 }
 
 
-private[spark] object Message {
+private[nio] object Message {
   val BUFFER_MESSAGE = 1111111111L
 
   var lastId = 1
