@@ -65,4 +65,8 @@ class TestManagedBuffer(len: Int) extends ManagedBuffer {
       }
     case _ => false
   }
+
+  override def retain(): this.type = this
+
+  override def release(): this.type = this
 }

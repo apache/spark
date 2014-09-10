@@ -66,9 +66,9 @@ private[netty] class BlockServerHandler(dataProvider: BlockDataManager)
     logTrace(s"Received request from $client to fetch block $blockId")
 
     // First make sure we can find the block. If not, send error back to the user.
-    var blockData: Option[ManagedBuffer] = null
+    var buf: ManagedBuffer = null
     try {
-      blockData = dataProvider.getBlockData(blockId)
+      buf = dataProvider.getBlockData(blockId)
     } catch {
       case e: Exception =>
         logError(s"Error opening block $blockId for request from $client", e)
@@ -76,23 +76,18 @@ private[netty] class BlockServerHandler(dataProvider: BlockDataManager)
         return
     }
 
-    blockData match {
-      case Some(buf) =>
-        ctx.writeAndFlush(new BlockFetchSuccess(blockId, buf)).addListener(
-          new ChannelFutureListener {
-            override def operationComplete(future: ChannelFuture): Unit = {
-              if (future.isSuccess) {
-                logTrace(s"Sent block $blockId (${buf.size} B) back to $client")
-              } else {
-                logError(
-                  s"Error sending block $blockId to $client; closing connection", future.cause)
-                ctx.close()
-              }
-            }
+    ctx.writeAndFlush(new BlockFetchSuccess(blockId, buf)).addListener(
+      new ChannelFutureListener {
+        override def operationComplete(future: ChannelFuture): Unit = {
+          if (future.isSuccess) {
+            logTrace(s"Sent block $blockId (${buf.size} B) back to $client")
+          } else {
+            logError(
+              s"Error sending block $blockId to $client; closing connection", future.cause)
+            ctx.close()
           }
-        )
-      case None =>
-        respondWithError("Block not found")
-    }
+        }
+      }
+    )
   }  // end of processBlockRequest
 }
