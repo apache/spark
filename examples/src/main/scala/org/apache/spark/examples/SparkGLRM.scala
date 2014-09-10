@@ -43,6 +43,7 @@ object SparkGLRM {
   // Regularization parameter
   var REG = 10000
 
+  
 
   /*
    * GLRM settings: Change the Loss function and prox here
