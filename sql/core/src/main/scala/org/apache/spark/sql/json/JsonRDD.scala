@@ -18,7 +18,8 @@
 package org.apache.spark.sql.json
 
 import scala.collection.Map
-import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
+import scala.collection.JavaConversions._
+import scala.collection.convert.Wrappers.JMapWrapper
 import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -253,7 +254,7 @@ private[sql] object JsonRDD extends Logging {
       // This issue is documented at https://issues.scala-lang.org/browse/SI-7005
       JMapWrapper(map).mapValues(scalafy).map(identity)
     case list: java.util.List[_] =>
-      JListWrapper(list).map(scalafy)
+      (list: Seq[_]).map(scalafy)
     case atom => atom
   }
 
