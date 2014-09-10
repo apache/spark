@@ -344,6 +344,21 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def newInstance() = new FirstFunction(child, this)
 }
 
+case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+  override def references = child.references
+  override def nullable = true
+  override def dataType = child.dataType
+  override def toString = s"LAST($child)"
+
+  override def asPartial: SplitEvaluation = {
+    val partialLast = Alias(Last(child), "PartialLast")()
+    SplitEvaluation(
+      Last(partialLast.toAttribute),
+      partialLast :: Nil)
+  }
+  override def newInstance() = new LastFunction(child, this)
+}
+
 case class AverageFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
 
@@ -488,4 +503,17 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
   }
 
   override def eval(input: Row): Any = result
+}
+
+case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var result: Any = null
+
+  override def update(input: Row): Unit = {
+    result = input
+  }
+
+  override def eval(input: Row): Any =  if (result != null) expr.eval(result.asInstanceOf[Row])
+                                        else null
 }

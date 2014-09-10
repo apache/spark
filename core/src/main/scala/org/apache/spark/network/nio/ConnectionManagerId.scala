@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
-private[spark] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
-  override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
+import java.net.InetSocketAddress
+
+import org.apache.spark.util.Utils
+
+private[nio] case class ConnectionManagerId(host: String, port: Int) {
+  // DEBUG code
+  Utils.checkHost(host)
+  assert (port > 0)
+
+  def toSocketAddress() = new InetSocketAddress(host, port)
 }
 
-private[spark] object ConnectionId {
 
-  def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
-    val res = connectionIdString.split("_").map(_.trim())
-    if (res.size != 3) {
-      throw new Exception("Error converting ConnectionId string: " + connectionIdString +
-        " to a ConnectionId Object")
-    }
-    new ConnectionId(new ConnectionManagerId(res(0), res(1).toInt), res(2).toInt)
+private[nio] object ConnectionManagerId {
+  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
+    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
   }
 }
