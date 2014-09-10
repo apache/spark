@@ -212,9 +212,8 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Interface to get local block data.
-   *
-   * @return Some(buffer) if the block exists locally, and None if it doesn't.
+   * Interface to get local block data. Throws an exception if the block cannot be found or
+   * cannot be read successfully.
    */
   override def getBlockData(blockId: String): ManagedBuffer = {
     val bid = BlockId(blockId)
