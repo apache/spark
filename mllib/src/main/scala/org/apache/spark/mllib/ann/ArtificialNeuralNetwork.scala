@@ -77,9 +77,11 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     val tmp = new Array[Int](L + 1)
     var curPos = 0
     tmp(0) = 0
-    for (l <- 1 to L) {
+    var l = 1
+    while(l <= L) {
       tmp(l) = curPos
       curPos = curPos + (topology(l - 1) + 1) * (topology(l))
+      l = l + 1
     }
     tmp
   }
@@ -88,20 +90,33 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
 
   def computeValues(arrData: Array[Double], arrWeights: Array[Double]): Array[Double] = {
     var arrPrev = new Array[Double](topology(0))
-    for (i <- 0 until topology(0))
+    var i: Int = 0
+    var j: Int = 0
+    var l: Int = 0
+    i = 0
+    while(i < topology(0)) {
       arrPrev(i) = arrData(i)
-    for (l <- 1 to L) {
+      i = i + 1
+    }
+    l = 1
+    while(l <= L) {
       val arrCur = new Array[Double](topology(l))
-      for (j <- 0 until topology(l)) {
+      j = 0
+      while(j < topology(l)) {
         var cum: Double = 0.0
-        for (i <- 0 until topology(l - 1))
+        i = 0
+        while( i < topology(l - 1) ) {
           cum = cum +
             arrPrev(i) * arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + i)
+          i = i + 1
+        }
         cum = cum +
           arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1)) // bias
         arrCur(j) = g(cum)
+        j = j + 1
       }
       arrPrev = arrCur
+      l = l + 1
     }
     arrPrev
   }
@@ -126,13 +141,14 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
   def predictV(testData: Vector): Vector = {
     predictPointV(testData, weights)
   }
+
 }
 
 class ArtificialNeuralNetwork private(
-                           private var topology: Array[Int],
-                           private var numIterations: Int,
-                           private var stepSize: Double,
-                           private var miniBatchFraction: Double)
+    private var topology: Array[Int],
+    private var numIterations: Int,
+    private var stepSize: Double,
+    private var miniBatchFraction: Double)
   extends Serializable {
 
   private val gradient = new ANNLeastSquaresGradient(topology)
@@ -158,60 +174,80 @@ class ArtificialNeuralNetwork private(
 object ArtificialNeuralNetwork {
 
   def train(
-             input: RDD[(Vector, Vector)],
-             topology: Array[Int],
-             initialWeights: Vector,
-             numIterations: Int,
-             stepSize: Double,
-             miniBatchFraction: Double): ArtificialNeuralNetworkModel = {
+      input: RDD[(Vector, Vector)],
+      topology: Array[Int],
+      initialWeights: Vector,
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork(topology, numIterations, stepSize, miniBatchFraction)
       .run(input, initialWeights)
   }
 
   def train(
-             input: RDD[(Vector, Vector)],
-             topology: Array[Int],
-             initialWeights: Vector,
-             numIterations: Int,
-             stepSize: Double): ArtificialNeuralNetworkModel = {
+      input: RDD[(Vector, Vector)],
+      topology: Array[Int],
+      initialWeights: Vector,
+      numIterations: Int,
+      stepSize: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork(topology, numIterations, stepSize, 1.0).run(input, initialWeights)
   }
 
   def train(
-             input: RDD[(Vector, Vector)],
-             topology: Array[Int],
-             numIterations: Int,
-             stepSize: Double,
-             miniBatchFraction: Double): ArtificialNeuralNetworkModel = {
+      input: RDD[(Vector,Vector)],
+      model: ArtificialNeuralNetworkModel,
+      numIterations: Int,
+      stepSize: Double): ArtificialNeuralNetworkModel = {
+    train(input, model.topology, model.weights, numIterations, stepSize)
+  }
+
+
+  def train(
+      input: RDD[(Vector, Vector)],
+      topology: Array[Int],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork(topology, numIterations, stepSize, miniBatchFraction)
       .run(input, randomWeights(topology))
   }
 
   def train(
-             input: RDD[(Vector, Vector)],
-             topology: Array[Int],
-             numIterations: Int,
-             stepSize: Double): ArtificialNeuralNetworkModel = {
+      input: RDD[(Vector, Vector)],
+      topology: Array[Int],
+      numIterations: Int,
+      stepSize: Double): ArtificialNeuralNetworkModel = {
     train(input, topology, numIterations, stepSize, 1.0)
   }
 
   def randomWeights(topology: Array[Int]): Vector = {
     val rand = new XORShiftRandom()
+    
+    var i: Int = 0
+    var l: Int = 0
+    
     val noWeights = {
       var tmp = 0
-      for (i <- 1 until topology.size) {
+      var i = 1
+      while(i < topology.size) {
         tmp = tmp + topology(i) * (topology(i - 1) + 1)
+        i = i + 1
       }
       tmp
     }
 
     val initialWeightsArr = new Array[Double](noWeights)
     var pos = 0;
-    for (l <- 1 until topology.length) {
-      for (i <- 0 until (topology(l) * (topology(l - 1) + 1))) {
+    
+    l = 1
+    while( l < topology.length) {
+      i = 0
+      while(i < (topology(l) * (topology(l - 1) + 1))) {
         initialWeightsArr(pos) = (rand.nextDouble * 4.8 - 2.4) / (topology(l - 1) + 1)
         pos += 1;
+        i += 1
       }
+      l += 1
     }
     Vectors.dense(initialWeightsArr)
   }
@@ -226,8 +262,10 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
 
   private val noWeights = {
     var tmp = 0
-    for (i <- 1 to L) {
-      tmp = tmp + topology(i) * (topology(i - 1) + 1)
+    var l = 1
+    while(l <= L) {
+      tmp = tmp + topology(l) * (topology(l - 1) + 1)
+      l += 1
     }
     tmp
   }
@@ -236,17 +274,21 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     val tmp = new Array[Int](L + 1)
     var curPos = 0;
     tmp(0) = 0;
-    for (l <- 1 to L) {
+    var l = 1
+    while(l <= L) {
       tmp(l) = curPos
       curPos = curPos + (topology(l - 1) + 1) * (topology(l))
+      l += 1
     }
     tmp
   }
 
   val noNodes: Int = {
     var tmp: Integer = 0
-    for (l <- 0 until topology.size) {
+    var l = 0
+    while(l < topology.size) {
       tmp = tmp + topology(l)
+      l += 1
     }
     tmp
   }
@@ -254,8 +296,10 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
   val ofsNode: Array[Int] = {
     val tmp = new Array[Int](L + 1)
     tmp(0) = 0
-    for (l <- 1 to L) {
+    var l = 1
+    while(l <= L) {
       tmp(l) = tmp(l - 1) + topology(l - 1)
+      l += 1
     }
     tmp
   }
@@ -264,71 +308,102 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     val arrData = data.toArray
     val arrWeights = weights.toArray
     val arrNodes = new Array[Double](noNodes)
+        
+    var i: Int = 0
+    var j: Int = 0
+    var l: Int = 0
+    
     // forward run
-    for (i <- 0 until topology(0)) {
+    i = 0;
+    while(i < topology(0)) {
       arrNodes(i) = arrData(i)
+      i += 1
     }
-    for (l <- 1 to L) {
-      for (j <- 0 until topology(l)) {
+    l = 1
+    while( l <= L ) {
+      j = 0
+      while(j < topology(l)) {
         var cum: Double = 0.0;
-        for (i <- 0 until topology(l - 1)) {
+        i = 0
+        while(i < topology(l - 1)) {
           cum = cum +
             arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + i) *
               arrNodes(ofsNode(l - 1) + i)
+          i += 1
         }
         cum = cum + arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1))
         arrNodes(ofsNode(l) + j) = g(cum)
+        j += 1
       }
+      l += 1
     }
     val arrDiff = new Array[Double](topology(L))
-    for (j <- 0 until topology(L)) {
+    j = 0
+    while( j < topology(L)) {
       arrDiff(j) = (arrNodes(ofsNode(L) + j) - arrData(topology(0) + j))
+      j += 1
     }
     var err: Double = 0;
-    for (j <- 0 until topology(L)) {
+    j = 0
+    while(j < topology(L)) {
       err = err + arrDiff(j) * arrDiff(j)
+      j += 1
     }
     err = err * .5
     // back propagation
     val arrDelta = new Array[Double](noNodes)
-    for (j <- 0 until topology(L)) {
+    j = 0
+    while(j < topology(L)) {
       arrDelta(ofsNode(L) + j) =
         arrDiff(j) *
           arrNodes(ofsNode(L) + j) * (1 - arrNodes(ofsNode(L) + j))
+      j += 1
     }
-    for (l <- L - 1 until 0 by -1) {
-      for (j <- 0 until topology(l)) {
+    l = L - 1
+    while(l > 0) {
+      j = 0
+      while(j < topology(l)) {
         var cum: Double = 0.0
-        for (i <- 0 until topology(l + 1)) {
+        i = 0
+        while( i < topology(l + 1)) {
           cum = cum +
             arrWeights(ofsWeight(l + 1) + (topology(l) + 1) * i + j) *
               arrDelta(ofsNode(l + 1) + i) *
               arrNodes(ofsNode(l) + j) * (1 - arrNodes(ofsNode(l) + j))
+          i += 1
         }
         arrDelta(ofsNode(l) + j) = cum
+        j += 1
       }
+      l -= 1
     }
     // gradient
     val arrGrad = new Array[Double](noWeights)
-    for (l <- 1 to L) {
-      for (j <- 0 until topology(l)) {
-        for (i <- 0 until topology(l - 1)) {
+    l = 1
+    while(l <= L) {
+      j = 0
+      while(j < topology(l)) {
+        i = 0
+        while(i < topology(l - 1)) {
           arrGrad(ofsWeight(l) + (topology(l - 1) + 1) * j + i) =
             arrNodes(ofsNode(l - 1) + i) *
               arrDelta(ofsNode(l) + j)
+          i += 1
         }
         arrGrad(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1)) =
           arrDelta(ofsNode(l) + j)
+        j += 1
       }
+      l += 1
     }
     (Vectors.dense(arrGrad), err)
   }
 
   override def compute(
-                        data: Vector,
-                        label: Double,
-                        weights: Vector,
-                        cumGradient: Vector): Double = {
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
     val (grad, err) = compute(data, label, weights)
     cumGradient.toBreeze += grad.toBreeze
     return err
@@ -338,14 +413,15 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
 private class ANNUpdater extends Updater {
 
   override def compute(
-                        weightsOld: Vector,
-                        gradient: Vector,
-                        stepSize: Double,
-                        iter: Int,
-                        regParam: Double): (Vector, Double) = {
+      weightsOld: Vector,
+      gradient: Vector,
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
     (Vectors.fromBreeze(brzWeights), 0)
   }
+
 }
