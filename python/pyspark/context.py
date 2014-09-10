@@ -37,6 +37,9 @@ from pyspark.rdd import RDD
 from py4j.java_collections import ListConverter
 
 
+__all__ = ['SparkContext']
+
+
 # These are special default configs for PySpark, they will overwrite
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
@@ -228,6 +231,20 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+    def __enter__(self):
+        """
+        Enable 'with SparkContext(...) as sc: app(sc)' syntax.
+        """
+        return self
+
+    def __exit__(self, type, value, trace):
+        """
+        Enable 'with SparkContext(...) as sc: app' syntax.
+
+        Specifically stop the context on exit of the with block.
+        """
+        self.stop()
 
     @classmethod
     def setSystemProperty(cls, key, value):
@@ -568,8 +585,6 @@ class SparkContext(object):
         L{Broadcast<pyspark.broadcast.Broadcast>}
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
-
-        :keep: Keep the `value` in driver or not.
         """
         ser = CompressedSerializer(PickleSerializer())
         # pass large object by py4j is very slow and need much memory
@@ -608,8 +623,8 @@ class SparkContext(object):
         FTP URI.
 
         To access the file in Spark jobs, use
-        L{SparkFiles.get(path)<pyspark.files.SparkFiles.get>} to find its
-        download location.
+        L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
+        filename to find its download location.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")

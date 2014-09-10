@@ -39,7 +39,9 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
-class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManager with Logging {
+private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
+  extends OperationManager with Logging {
+
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
@@ -66,9 +68,10 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
         if (!iter.hasNext) {
           new RowSet()
         } else {
-          val maxRows = maxRowsL.toInt // Do you really want a row batch larger than Int Max? No.
+          // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
+          val maxRows = maxRowsL.toInt
           var curRow = 0
-          var rowSet = new ArrayBuffer[Row](maxRows)
+          var rowSet = new ArrayBuffer[Row](maxRows.min(1024))
 
           while (curRow < maxRows && iter.hasNext) {
             val sparkRow = iter.next()
@@ -151,7 +154,7 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
       }
 
       def getResultSetSchema: TableSchema = {
-        logWarning(s"Result Schema: ${result.queryExecution.analyzed.output}")
+        logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
         if (result.queryExecution.analyzed.output.size == 0) {
           new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
         } else {

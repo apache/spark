@@ -44,7 +44,7 @@ object StatefulNetworkWordCount {
     StreamingExamples.setStreamingLogLevels()
 
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-      val currentCount = values.foldLeft(0)(_ + _)
+      val currentCount = values.sum
 
       val previousCount = state.getOrElse(0)
 

@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.model
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 /**
- * Used for "binning" the features bins for faster best split calculation.
+ * Used for "binning" the feature values for faster best split calculation.
  *
  * For a continuous feature, the bin is determined by a low and a high split,
  *  where an example with featureValue falls into the bin s.t.
@@ -30,13 +30,16 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  *  bins, splits, and feature values.  The bin is determined by category/feature value.
  *  However, the bins are not necessarily ordered by feature value;
  *  they are ordered using impurity.
+ *
  * For unordered categorical features, there is a 1-1 correspondence between bins, splits,
  *  where bins and splits correspond to subsets of feature values (in highSplit.categories).
+ *  An unordered feature with k categories uses (1 << k - 1) - 1 bins, corresponding to all
+ *  partitionings of categories into 2 disjoint, non-empty sets.
  *
  * @param lowSplit signifying the lower threshold for the continuous feature to be
  *                 accepted in the bin
  * @param highSplit signifying the upper threshold for the continuous feature to be
- *                 accepted in the bin
+ *                  accepted in the bin
  * @param featureType type of feature -- categorical or continuous
  * @param category categorical label value accepted in the bin for ordered features
  */

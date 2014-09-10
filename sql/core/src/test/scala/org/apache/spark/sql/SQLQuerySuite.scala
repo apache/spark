@@ -19,19 +19,65 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test._
+import org.scalatest.BeforeAndAfterAll
+import java.util.TimeZone
 
 /* Implicits */
 import TestSQLContext._
 import TestData._
 
-class SQLQuerySuite extends QueryTest {
+class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
   TestData
+
+  var origZone: TimeZone = _
+  override protected def beforeAll() {
+    origZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+  }
+
+  override protected def afterAll() {
+    TimeZone.setDefault(origZone)
+  }
+
+
+  test("SPARK-3176 Added Parser of SQL ABS()") {
+    checkAnswer(
+      sql("SELECT ABS(-1.3)"),
+      1.3)
+    checkAnswer(
+      sql("SELECT ABS(0.0)"),
+      0.0)
+    checkAnswer(
+      sql("SELECT ABS(2.5)"),
+      2.5)
+  }
+
+  test("SPARK-3176 Added Parser of SQL LAST()") {
+    checkAnswer(
+      sql("SELECT LAST(n) FROM lowerCaseData"),
+      4)
+  }
+
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
       "test")
+  }
+
+  test("SQRT") {
+    checkAnswer(
+      sql("SELECT SQRT(key) FROM testData"),
+      (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
+    )
+  }
+
+  test("SQRT with automatic string casts") {
+    checkAnswer(
+      sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
+      (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
+    )
   }
 
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
@@ -47,6 +93,34 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT substring(tableName, 3) FROM tableName"),
       "st")
+  }
+
+  test("SPARK-3173 Timestamp support in the parser") {
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='1970-01-01 00:00:00.001'"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE '1970-01-01 00:00:00.001'=time"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
+
+    checkAnswer(sql(
+      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
+          AND time>'1970-01-01 00:00:00.001'"""),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
+      Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")),
+        Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+
+    checkAnswer(sql(
+      "SELECT time FROM timestamps WHERE time='123'"),
+      Nil)
   }
 
   test("index into array") {
@@ -304,6 +378,25 @@ class SQLQuerySuite extends QueryTest {
       (null, null, 6, "F") :: Nil)
   }
 
+  test("SPARK-3349 partitioning after limit") {
+    /*
+    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
+      .limit(2)
+      .registerTempTable("subset1")
+    sql("SELECT DISTINCT n FROM lowerCaseData")
+      .limit(2)
+      .registerTempTable("subset2")
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
+      (3, "c", 3) ::
+      (4, "d", 4) :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
+      (1, "a", 1) ::
+      (2, "b", 2) :: Nil)
+      */
+  }
+
   test("mixed-case keywords") {
     checkAnswer(
       sql(
@@ -524,5 +617,23 @@ class SQLQuerySuite extends QueryTest {
       (2, null) ::
       (3, null) ::
       (4, 2147483644) :: Nil)
+  }
+  
+  test("SPARK-3423 BETWEEN") {
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      Seq((5, "5"), (6, "6"), (7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      Seq((7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      Seq()
+    )
+    
   }
 }

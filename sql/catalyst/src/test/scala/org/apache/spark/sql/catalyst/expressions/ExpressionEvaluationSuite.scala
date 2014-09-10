@@ -136,6 +136,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("MaxOf") {
+    checkEvaluation(MaxOf(1, 2), 2)
+    checkEvaluation(MaxOf(2, 1), 2)
+    checkEvaluation(MaxOf(1L, 2L), 2L)
+    checkEvaluation(MaxOf(2L, 1L), 2L)
+
+    checkEvaluation(MaxOf(Literal(null, IntegerType), 2), 2)
+    checkEvaluation(MaxOf(2, Literal(null, IntegerType)), 2)
+  }
+
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal(null, StringType).like("a"), null)
     checkEvaluation(Literal("a", StringType).like(Literal(null, StringType)), null)
@@ -566,5 +576,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substr(0), "example", row)
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
+  }
+
+  test("SQRT") {
+    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
+    val rowSequence = inputSequence.map(l => new GenericRow(Array[Any](l.toDouble)))
+    val d = 'a.double.at(0)
+    
+    for ((row, expected) <- rowSequence zip expectedResults) {
+      checkEvaluation(Sqrt(d), expected, row)
+    }
+
+    checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
   }
 }

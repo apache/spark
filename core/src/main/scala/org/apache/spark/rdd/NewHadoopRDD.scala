@@ -35,6 +35,7 @@ import org.apache.spark.SerializableWritable
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
+import org.apache.spark.util.Utils
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -153,7 +154,11 @@ class NewHadoopRDD[K, V](
         try {
           reader.close()
         } catch {
-          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+          case e: Exception => {
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }
