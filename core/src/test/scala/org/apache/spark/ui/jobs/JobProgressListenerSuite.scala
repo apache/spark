@@ -144,7 +144,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val taskType = Utils.getFormattedClassName(new ShuffleMapTask(0))
     val execId = "exe-1"
 
-    def updateTaskMetrics(taskMetrics: TaskMetrics, base: Int) = {
+    def makeTaskMetrics(base: Int) = {
+      val taskMetrics = new TaskMetrics()
       val shuffleReadMetrics = new ShuffleReadMetrics()
       val shuffleWriteMetrics = new ShuffleWriteMetrics()
       taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
@@ -173,16 +174,10 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1236L)))
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
-    val metrics4 = new TaskMetrics
-    val metrics5 = new TaskMetrics
-    val metrics6 = new TaskMetrics
-    val metrics7 = new TaskMetrics
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, 0, updateTaskMetrics(metrics4, 0)))))
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1235L, 0, 0, updateTaskMetrics(metrics5, 100)))))
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1236L, 1, 0, updateTaskMetrics(metrics6, 200)))))
+      (1234L, 0, 0, makeTaskMetrics(0)),
+      (1235L, 0, 0, makeTaskMetrics(100)),
+      (1236L, 1, 0, makeTaskMetrics(200)))))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get
@@ -207,10 +202,10 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
 
     // task that was included in a heartbeat
     listener.onTaskEnd(SparkListenerTaskEnd(0, 0, taskType, Success, makeTaskInfo(1234L, 1),
-      updateTaskMetrics(metrics4, 300)))
+      makeTaskMetrics(300)))
     // task that wasn't included in a heartbeat
     listener.onTaskEnd(SparkListenerTaskEnd(1, 0, taskType, Success, makeTaskInfo(1237L, 1),
-      updateTaskMetrics(metrics7, 400)))
+      makeTaskMetrics(400)))
 
     stage0Data = listener.stageIdToData.get((0, 0)).get
     stage1Data = listener.stageIdToData.get((1, 0)).get

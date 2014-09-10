@@ -360,7 +360,13 @@ private[spark] class Executor(
             if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 metrics.updateShuffleReadMetrics
-                tasksMetrics += ((taskRunner.taskId, metrics))
+                if (isLocal) {
+                  // make a deep copy of it
+                  val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
+                  tasksMetrics += ((taskRunner.taskId, copiedMetrics))
+                } else {
+                  tasksMetrics += ((taskRunner.taskId, metrics))
+                }
               }
             }
           }
