@@ -19,10 +19,14 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.storage.StorageStatus
+
 import scala.xml.Node
 
+import org.json4s.JValue
+
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /** Summary information about an executor to display in the UI. */
 private case class ExecutorSummaryInfo(
@@ -43,6 +47,18 @@ private case class ExecutorSummaryInfo(
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val storageStatusList = listener.storageStatusList
+
+    val execInfoJsonList = for (statusId <- 0 until storageStatusList.size) yield  {
+      val execInfo = getExecInfo(statusId)
+
+    }
+
+    ("Executor List" -> )
+
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
