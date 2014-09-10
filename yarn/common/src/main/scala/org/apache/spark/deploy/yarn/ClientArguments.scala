@@ -40,8 +40,11 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var priority = 0
 
   // Additional memory to allocate to containers
-  val memoryOverhead = sparkConf.getInt(
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val amMemoryOverhead = sparkConf.getInt(
     "spark.yarn.driver.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
+  val executorMemoryOverhead = sparkConf.getInt(
+    "spark.yarn.executor.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
 
   parseArgs(args.toList)
   loadDefaultArgs()
@@ -70,8 +73,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   private def validateArgs(): Unit = {
     Map[Boolean, String](
       (numExecutors <= 0) -> "You must specify at least 1 executor!",
-      (amMemory <= memoryOverhead) -> s"AM memory must be > $memoryOverhead MB",
-      (executorMemory <= memoryOverhead) -> s"Executor memory must be > $memoryOverhead MB"
+      (amMemory <= amMemoryOverhead) -> s"AM memory must be > $amMemoryOverhead MB",
+      (executorMemory <= executorMemoryOverhead) ->
+        s"Executor memory must be > $executorMemoryOverhead MB"
     ).foreach { case (errorCondition, errorMessage) =>
       if (errorCondition) {
         throw new IllegalArgumentException(errorMessage + "\n" + getUsageMessage())
@@ -80,7 +84,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
+    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {

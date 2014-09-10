@@ -65,8 +65,8 @@ private[spark] class Client(
     yarnClient.init(yarnConf)
     yarnClient.start()
 
-    logInfo("Received cluster metric info from ResourceManager, number of NodeManagers: "
-      + yarnClient.getYarnClusterMetrics.getNumNodeManagers)
+    logInfo("Requesting a new application from cluster with %d NodeManagers"
+      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
     // Get a new application from our RM.
     val newApp = yarnClient.createApplication()
@@ -99,7 +99,7 @@ private[spark] class Client(
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(args.amMemory + memoryOverhead)
+    capability.setMemory(args.amMemory + amMemoryOverhead)
     appContext.setResource(capability)
     appContext
   }

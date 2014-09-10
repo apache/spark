@@ -51,61 +51,59 @@ private[spark] trait ClientBase extends Logging {
   protected val sparkConf: SparkConf
   protected val yarnConf: YarnConfiguration
   protected val credentials = UserGroupInformation.getCurrentUser.getCredentials
-  protected val memoryOverhead = args.memoryOverhead // MB
+  protected val amMemoryOverhead = args.amMemoryOverhead // MB
+  protected val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   /**
-   * Verify that we have not requested more resources than is available in the cluster.
+   * Fail fast if we have requested more resources per container than is available in the cluster.
    */
-  protected def verifyClusterResources(newAppResponse: GetNewApplicationResponse) = {
+  protected def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
-    logInfo(s"Max memory capability of a single resource in this cluster: $maxMem MB")
-
-    // If we have requested more than the cluster maximum for a single resource, exit.
-    if (args.executorMemory > maxMem) {
-      val errorMessage =
-        "Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster."
-          .format(args.executorMemory, maxMem)
-      logError(errorMessage)
-      throw new IllegalArgumentException(errorMessage)
+    logInfo("Verifying our application request has not exceeded the maximum " +
+      s"memory capability of the cluster ($maxMem MB per container)")
+    val executorMem = args.executorMemory + executorMemoryOverhead
+    if (executorMem > maxMem) {
+      throw new IllegalArgumentException(s"Required executor memory ($executorMem MB) " +
+        s"is above the max threshold ($maxMem MB) of this cluster!")
     }
-    val amMem = getAMMemory(newAppResponse) + memoryOverhead
+    val amMem = getAMMemory(newAppResponse) + amMemoryOverhead
     if (amMem > maxMem) {
-      val errorMessage =
-        "Required AM memory (%d MB) is above the max threshold (%d MB) of this cluster."
-          .format(amMem, maxMem)
-      logError(errorMessage)
-      throw new IllegalArgumentException(errorMessage)
+      throw new IllegalArgumentException(s"Required AM memory ($amMem MB) " +
+        s"is above the max threshold ($maxMem MB) of this cluster!")
     }
-
     // We could add checks to make sure the entire cluster has enough resources but that involves
     // getting all the node reports and computing ourselves.
   }
 
   /**
-   * Copy the file to a remote file system if needed. Exposed for testing.
+   * Copy the given file to a remote file system if needed. This is used for preparing
+   * resources for launching the ApplicationMaster container. Exposed for testing.
    */
   def copyFileToRemote(
-      dstDir: Path,
-      originalPath: Path,
+      destDir: Path,
+      srcPath: Path,
       replication: Short,
       setPerms: Boolean = false): Path = {
-    val fs = FileSystem.get(hadoopConf)
-    val remoteFs = originalPath.getFileSystem(hadoopConf)
-    var newPath = originalPath
-    if (!compareFs(remoteFs, fs)) {
-      newPath = new Path(dstDir, originalPath.getName())
-      logInfo("Uploading " + originalPath + " to " + newPath)
-      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, hadoopConf)
-      fs.setReplication(newPath, replication)
-      if (setPerms) fs.setPermission(newPath, new FsPermission(APP_FILE_PERMISSION))
+    val destFs = destDir.getFileSystem(hadoopConf)
+    val srcFs = srcPath.getFileSystem(hadoopConf)
+    var destPath = srcPath
+    if (!compareFs(srcFs, destFs)) {
+      destPath = new Path(destDir, srcPath.getName())
+      logInfo(s"Uploading resource $srcPath -> $destPath")
+      FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      destFs.setReplication(destPath, replication)
+      if (setPerms) {
+        destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
+      }
+    } else {
+      logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
     }
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
     // version shows the specific version in the distributed cache configuration
-    val qualPath = fs.makeQualified(newPath)
-    val fc = FileContext.getFileContext(qualPath.toUri(), hadoopConf)
-    val destPath = fc.resolvePath(qualPath)
-    destPath
+    val qualifiedDestPath = destFs.makeQualified(destPath)
+    val fc = FileContext.getFileContext(qualifiedDestPath.toUri(), hadoopConf)
+    fc.resolvePath(qualifiedDestPath)
   }
 
   /**
@@ -131,8 +129,9 @@ private[spark] trait ClientBase extends Logging {
    * Exposed for testing.
    */
   def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
-    // Upload Spark and the application JAR to the remote file system if necessary. Add them as
-    // local resources to the application master.
+    logInfo("Preparing resources for our AM container")
+    // Upload Spark and the application JAR to the remote file system if necessary,
+    // and add them as local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
@@ -215,7 +214,6 @@ private[spark] trait ClientBase extends Logging {
         }
       }
     }
-    logInfo("Prepared Local resources " + localResources)
     if (cachedSecondaryJarLinks.nonEmpty) {
       sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
     }
@@ -228,7 +226,7 @@ private[spark] trait ClientBase extends Logging {
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
-    logInfo("Setting up the launch environment")
+    logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
     populateClasspath(args, yarnConf, sparkConf, env, extraCp)
@@ -298,7 +296,7 @@ private[spark] trait ClientBase extends Logging {
    */
   protected def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
       : ContainerLaunchContext = {
-    logInfo("Setting up container launch context")
+    logInfo("Setting up container launch context for our AM")
 
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
@@ -392,11 +390,13 @@ private[spark] trait ClientBase extends Logging {
 
     logDebug("===============================================================================")
     logDebug("Yarn AM launch context:")
-    logDebug(s"  user class: ${args.userClass}")
-    logDebug("  env:")
-    launchEnv.foreach { case (k, v) => logDebug(s"    $k -> $v") }
-    logDebug("  command:")
-    logDebug(s"    ${printableCommands.mkString(" ")}")
+    logDebug(s"    user class: ${args.userClass}")
+    logDebug("    env:")
+    launchEnv.foreach { case (k, v) => logDebug(s"        $k -> $v") }
+    logDebug("    resources:")
+    localResources.foreach { case (k, v) => logDebug(s"        $k -> $v")}
+    logDebug("    command:")
+    logDebug(s"        ${printableCommands.mkString(" ")}")
     logDebug("===============================================================================")
 
     // send the acl settings into YARN to control who has access via YARN interfaces
@@ -522,7 +522,7 @@ private[spark] object ClientBase extends Logging {
    * This method first looks in the SparkConf object for the CONF_SPARK_JAR key, and in the
    * user environment if that is not found (for backwards compatibility).
    */
-  private def sparkJar(conf: SparkConf) = {
+  private def sparkJar(conf: SparkConf): String = {
     if (conf.contains(CONF_SPARK_JAR)) {
       conf.get(CONF_SPARK_JAR)
     } else if (System.getenv(ENV_SPARK_JAR) != null) {

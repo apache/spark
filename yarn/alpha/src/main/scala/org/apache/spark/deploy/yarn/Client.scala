@@ -59,8 +59,8 @@ private[spark] class Client(
     init(yarnConf)
     start()
 
-    logInfo("Received cluster metric info from ResourceManager, number of NodeManagers: "
-      + getYarnClusterMetrics.getNumNodeManagers)
+    logInfo("Requesting a new application from cluster with %d NodeManagers"
+      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
     // Get a new application from our RM.
     val newAppResponse = getNewApplication()
@@ -88,7 +88,7 @@ private[spark] class Client(
       : ContainerLaunchContext = {
     val containerContext = super.createContainerLaunchContext(newAppResponse)
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(getAMMemory(newAppResponse) + memoryOverhead)
+    capability.setMemory(getAMMemory(newAppResponse) + amMemoryOverhead)
     containerContext.setResource(capability)
     containerContext
   }
@@ -123,7 +123,7 @@ private[spark] class Client(
   override def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = {
     val minResMemory = newAppResponse.getMinimumResourceCapability().getMemory()
     val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) - memoryOverhead)
+      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) - amMemoryOverhead)
     amMemory
   }
 
