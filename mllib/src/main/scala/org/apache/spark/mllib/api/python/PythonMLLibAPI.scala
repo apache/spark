@@ -36,6 +36,8 @@ import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -286,6 +288,37 @@ class PythonMLLibAPI extends Serializable {
       alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(SerDe.unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+  }
+
+  /**
+   * Java stub for Python mllib Word2Vec fit().
+   * @param dataBytesJRDD Input
+   */
+  def trainWord2Vec(
+    dataBytesJRDD: JavaRDD[Array[Byte]]
+    ): Word2VecModel = {
+    val data = dataBytesJRDD.rdd.map(SerDe.deserializeSeqString)
+    data.collect()
+    val word2vec = new Word2Vec()
+    val model = word2vec.fit(data)
+    model
+  }
+
+  /**
+   * Java stub for Python mllib Word2VecModel
+   */
+  def Word2VecSynonynms(
+    model: Word2VecModel,
+    word: String,
+    num: Int
+    ) = {
+    val result = model.findSynonyms(word, num)
+    val vec = Vectors.dense(result.map(_._2))
+    val words = result.map(_._1).toArray
+    val ret = new java.util.LinkedList[java.lang.Object]()
+    ret.add(SerDe.serializeSeqString(words))
+    ret.add(SerDe.serializeDoubleVector(vec))
+    ret
   }
 
   /**
@@ -657,6 +690,51 @@ private[spark] object SerDe extends Serializable {
       db.put(doubles(i))
     }
     bytes
+  }
+
+  private[python] def serializeSeqString(ss:Seq[String]): Array[Byte] = {
+    val seqLength = ss.length
+    val lengthArray = new Array[Int](seqLength)
+    var totalLength = 0
+    for(s <- ss) {
+      totalLength += s.length
+    }
+    val bytes = new Array[Byte](8 + 4 * seqLength + totalLength)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.putInt(seqLength)
+    bb.putInt(totalLength)
+    for( i <- 0 until seqLength) {
+      bb.putInt(ss(i).length)
+    }
+    for(s <- ss) {
+      bb.put(s.getBytes())
+    }
+    bytes
+  }
+
+  private[python] def deserializeSeqString(bytes:Array[Byte]):Seq[String] = {
+    require(bytes.length >=0, "Byte array too short")
+    val seqLengthBytes = ByteBuffer.wrap(bytes, 0, 8)
+    seqLengthBytes.order(ByteOrder.nativeOrder())
+    val ib = seqLengthBytes.asIntBuffer()
+    val seqLength = ib.get()
+    val totalLength = ib.get()
+    val lengthBytes = ByteBuffer.wrap(bytes, 8, 4 * seqLength)
+    lengthBytes.order(ByteOrder.nativeOrder())
+    val stringBytes = ByteBuffer.wrap(bytes, 8 + 4 * seqLength, totalLength)
+    stringBytes.order(ByteOrder.nativeOrder())
+    val ss = new Array[String](seqLength)
+    val lengthBuffer = lengthBytes.asIntBuffer()
+    var index = 0
+    while(lengthBuffer.hasRemaining()){
+      val curLen = lengthBuffer.get()
+      val content = new Array[Byte](curLen)
+      stringBytes.get(content, 0, curLen)
+      ss(index) = new String(content)
+      index += 1
+    }
+    ss.toSeq
   }
 
   private[python] def serializeLabeledPoint(p: LabeledPoint): Array[Byte] = {

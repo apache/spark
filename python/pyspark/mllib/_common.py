@@ -143,6 +143,29 @@ def _serialize_double_vector(v):
         raise TypeError("_serialize_double_vector called on a %s; "
                         "wanted ndarray or SparseVector" % type(v))
 
+def _serialize_string_seq(ss):
+    """Serialize a sequence of string"""
+    seqLength = len(ss)
+    totalLength = 0
+    lengthArray = ndarray(shape=[seqLength], dtype=int32)
+    i = 0
+    for s in ss:
+        length = len(s)
+        totalLength = totalLength + length
+        lengthArray[i] = length
+        i = i + 1
+    ba = bytearray(4 + 4 + 4 * seqLength + totalLength)
+    header_bytes = ndarray(shape=[2], buffer=ba, offset=0, dtype=int32)
+    header_bytes[0] = seqLength
+    header_bytes[1] = totalLength
+    _copyto(lengthArray, buffer=ba, offset=8, shape=[seqLength],dtype=int32)
+    i = 0
+    offset = 4 + 4 + 4 * seqLength
+    for s in ss:
+        ba[offset:offset + lengthArray[i]] = bytes(s)
+        offset = offset + lengthArray[i]
+        i = i + 1
+    return ba
 
 def _serialize_dense_vector(v):
     """Serialize a dense vector given as a NumPy array."""
@@ -202,6 +225,19 @@ def _deserialize_double(ba, offset=0):
         raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
     return _unpack("d", ba[offset:])[0]
 
+
+def _deserialize_string_seq(ba, offset=0):
+    nb = len(ba) - offset
+    headers = ndarray(shape=[2], buffer=ba, offset=offset, dtype=int32)
+    seqLength = headers[0]
+    totalLength = headers[1]
+    lengthArray = ndarray(shape=[seqLength], buffer=ba, offset=offset + 8, dtype=int32)
+    offset = offset + 8 + 4 * seqLength
+    ret = []
+    for i in range(0, seqLength):
+        ret.append(str(ba[offset: offset + lengthArray[i]]))
+        offset = offset + lengthArray[i]
+    return ret
 
 def _deserialize_double_vector(ba, offset=0):
     """Deserialize a double vector from a mutually understood format.
@@ -363,6 +399,8 @@ def _get_unmangled_rdd(data, serializer, cache=True):
         dataBytes.cache()
     return dataBytes
 
+def _get_unmangled_string_seq_rdd(data, cache=True):
+    return _get_unmangled_rdd(data, _serialize_string_seq, cache)
 
 def _get_unmangled_double_vector_rdd(data, cache=True):
     """
