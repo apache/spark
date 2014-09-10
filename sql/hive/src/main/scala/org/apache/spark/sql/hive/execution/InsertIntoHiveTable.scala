@@ -301,8 +301,8 @@ case class InsertIntoHiveTable(
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
       val outputData = new Array[Any](fieldOIs.length)
       val defaultPartName = jobConfSer.value.get(
-        "hive.exec.default.partition.name ", "__HIVE_DEFAULT_PARTITION__")
-
+        HiveConf.ConfVars.DEFAULTPARTITIONNAME.varname, HiveConf.ConfVars.DEFAULTPARTITIONNAME.defaultVal)
+      
       val partitionColumns = fileSinkConf.getTableInfo.
         getProperties.getProperty("partition_columns") // a String like "colname1/colname2"
       val partitionColumnNames = Option(partitionColumns).map(_.split("/")).orNull
