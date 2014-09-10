@@ -910,8 +910,6 @@ def real_main():
             (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
         else:
             (master_nodes, slave_nodes) = launch_cluster(conn, opts, cluster_name)
-        # NOTE: This next line means if we have a terminally broken cluster,
-        #       (e.g during a --resume) we'll keep waiting until the user exits.
         wait_for_cluster_state(
             cluster_instances=(master_nodes + slave_nodes),
             cluster_state='ssh-ready',
