@@ -43,7 +43,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedRules: List[Rule[LogicalPlan]] = Nil
+  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("MultiInstanceRelations", Once,
@@ -60,7 +60,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      typeCoercionRules :::
+      typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
       CheckResolution),
