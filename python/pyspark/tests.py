@@ -1106,6 +1106,17 @@ class TestWorker(PySparkTestCase):
         rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
+    def test_accumulator_when_reuse_worker(self):
+        from pyspark.accumulators import INT_ACCUMULATOR_PARAM
+        acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
+        self.assertEqual(sum(range(100)), acc1.value)
+
+        acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
+        self.assertEqual(sum(range(100)), acc2.value)
+        self.assertEqual(sum(range(100)), acc1.value)
+
 
 class TestSparkSubmit(unittest.TestCase):
 

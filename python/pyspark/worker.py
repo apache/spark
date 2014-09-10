@@ -76,6 +76,7 @@ def main(infile, outfile):
                 bid = - bid - 1
                 _broadcastRegistry.pop(bid, None)
 
+        _accumulatorRegistry.clear()
         command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
