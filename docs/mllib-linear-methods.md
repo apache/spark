@@ -396,7 +396,7 @@ val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
-}
+}.cache()
 
 // Building the model
 val numIterations = 100
@@ -455,6 +455,7 @@ public class LinearRegression {
         }
       }
     );
+    parsedData.cache();
 
     // Building the model
     int numIterations = 100;
@@ -553,7 +554,7 @@ but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
 
-val trainingData = ssc.textFileStream("/training/data/dir").map(LabeledPoint.parse)
+val trainingData = ssc.textFileStream("/training/data/dir").map(LabeledPoint.parse).cache()
 val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
 
 {% endhighlight %}

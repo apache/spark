@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
@@ -231,6 +232,10 @@ class RowMatrix(
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
       case SVDMode.DistARPACK =>
+        if (rows.getStorageLevel == StorageLevel.NONE) {
+          // Warn when running an iterative algorithm on uncached data. SPARK-1484
+          logWarning("RowMatrix.computeSVD DistARPACK called with uncached input rows.")
+        }
         require(k < n, s"k must be smaller than n in dist-eigs mode but got k=$k and n=$n.")
         EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, tol, maxIter)
     }
@@ -254,6 +259,10 @@ class RowMatrix(
 
     if (sk < k) {
       logWarning(s"Requested $k singular values but only found $sk nonzeros.")
+    }
+
+    if (computeMode == SVDMode.DistARPACK && rows.getStorageLevel == StorageLevel.NONE) {
+      logWarning("RowMatrix.computeSVD DistARPACK ran with uncached input rows.")      
     }
 
     val s = Vectors.dense(Arrays.copyOfRange(sigmas.data, 0, sk))

@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -149,6 +150,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      // Warn when running an iterative algorithm on uncached data. SPARK-1484
+      logWarning("GeneralizedLinearAlgorithm.run called with uncached input data.")
+    }
+
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
@@ -221,6 +227,10 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      */
     if (useFeatureScaling) {
       weights = scaler.transform(weights)
+    }
+
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("GeneralizedLinearAlgorithm.run ran with uncached input data.")
     }
 
     createModel(weights, intercept)
