@@ -132,7 +132,7 @@
                 </goals>
                 <configuration>
                   <sources>
-                    <source>v0.12/src/main/scala</source>
+                    <source>v${hive.version}/src/main/scala</source>
                   </sources>
                 </configuration>
               </execution>
@@ -168,11 +168,10 @@
       </build>
     </profile>
     <profile>
-      <id>hive-0.13</id>
+      <id>hive-versions</id>
       <activation>
         <property>
           <name>hive.version</name>
-          <value>0.13.1</value>
         </property>
       </activation>
       <dependencies>
@@ -222,7 +221,7 @@
                 </goals>
                 <configuration>
                   <sources>
-                    <source>v0.13/src/main/scala</source>
+                    <source>v${hive.version}/src/main/scala</source>
                   </sources>
                 </configuration>
               </execution>

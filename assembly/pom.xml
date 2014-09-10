@@ -189,11 +189,10 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hive-0.13</id>
+      <id>hive-versions</id>
       <activation>
         <property>
           <name>hive.version</name>
-          <value>0.13.1</value>
         </property>
       </activation>
       <dependencies>
