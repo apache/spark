@@ -82,6 +82,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val DISTINCT = Keyword("DISTINCT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
+  protected val LAST = Keyword("LAST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
@@ -125,6 +126,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SQRT = Keyword("SQRT")
+  protected val ABS = Keyword("ABS")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -315,6 +317,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
     } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
+    LAST ~> "(" ~> expression <~ ")" ^^ { case exp => Last(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
     MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
@@ -330,6 +333,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
     SQRT ~> "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) } |
+    ABS ~> "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)
     }
@@ -353,15 +357,24 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
     } |
+    (expression <~ ".") ~ ident ^^ {
+      case base ~ fieldName => GetField(base, fieldName)
+    } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
     cast |
     "(" ~> expression <~ ")" |
     function |
     "-" ~> literal ^^ UnaryMinus |
+    dotExpressionHeader |
     ident ^^ UnresolvedAttribute |
     "*" ^^^ Star(None) |
     literal
+
+  protected lazy val dotExpressionHeader: Parser[Expression] =
+    (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
+      case i1 ~ i2 ~ rest => UnresolvedAttribute(i1 + "." + i2 + rest.mkString(".", ".", ""))
+    }
 
   protected lazy val dataType: Parser[DataType] =
     STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
@@ -376,7 +389,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
       "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-      ",", ";", "%", "{", "}", ":", "[", "]"
+      ",", ";", "%", "{", "}", ":", "[", "]", "."
   )
 
   override lazy val token: Parser[Token] = (
@@ -397,7 +410,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
       | failure("illegal character")
     )
 
-  override def identChar = letter | elem('_') | elem('.')
+  override def identChar = letter | elem('_')
 
   override def whitespace: Parser[Any] = rep(
     whitespaceChar

@@ -888,7 +888,7 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>1.0-RC2</version>
+          <version>1.0</version>
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
@@ -899,6 +899,7 @@
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${session.executionRootDirectory}</spark.test.home>
               <spark.testing>1</spark.testing>
+              <spark.ui.port>0</spark.ui.port>
             </systemProperties>
           </configuration>
           <executions>
