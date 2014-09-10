@@ -55,6 +55,8 @@ class Node (
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
    */
+  @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
+    "1.2.0")
   def build(nodes: Array[Node]): Unit = {
     logDebug("building node " + id + " at level " + Node.indexToLevel(id))
     logDebug("id = " + id + ", split = " + split)
