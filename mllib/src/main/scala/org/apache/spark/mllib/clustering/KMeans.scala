@@ -121,7 +121,8 @@ class KMeans private (
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       // Warn when running an iterative algorithm on uncached data. SPARK-1484
-      logWarning("KMeans.run called with uncached input data.")
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
     }
 
     // Compute squared norms and cache them.
@@ -134,7 +135,8 @@ class KMeans private (
     norms.unpersist()
 
     if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("KMeans.run ran with uncached input data.")
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
     }
     model
   }

@@ -234,7 +234,8 @@ class RowMatrix(
       case SVDMode.DistARPACK =>
         if (rows.getStorageLevel == StorageLevel.NONE) {
           // Warn when running an iterative algorithm on uncached data. SPARK-1484
-          logWarning("RowMatrix.computeSVD DistARPACK called with uncached input rows.")
+          logWarning("The input data is not directly cached, which may hurt performance if its"
+            + " parent RDDs are also uncached.")
         }
         require(k < n, s"k must be smaller than n in dist-eigs mode but got k=$k and n=$n.")
         EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, tol, maxIter)
@@ -262,7 +263,8 @@ class RowMatrix(
     }
 
     if (computeMode == SVDMode.DistARPACK && rows.getStorageLevel == StorageLevel.NONE) {
-      logWarning("RowMatrix.computeSVD DistARPACK ran with uncached input rows.")      
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
     }
 
     val s = Vectors.dense(Arrays.copyOfRange(sigmas.data, 0, sk))
