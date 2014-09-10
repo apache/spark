@@ -359,6 +359,7 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
    * @param metadata Learning and dataset metadata
    * @param level Level of the tree
+   * @param topNode Root node of the tree (or invalid node when training first level).
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param maxLevelForSingleGroup the deepest level for single-group level-wise computation.

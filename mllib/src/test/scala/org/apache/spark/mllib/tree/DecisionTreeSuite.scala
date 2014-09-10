@@ -270,8 +270,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 0)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val (rootNode: Node, doneTraining: Boolean) = DecisionTree.findBestSplits(treeInput, metadata, 0,
-      null, splits, bins, 10)
+    val (rootNode: Node, doneTraining: Boolean) =
+      DecisionTree.findBestSplits(treeInput, metadata, 0, null, splits, bins, 10)
 
     val split = rootNode.split.get
     assert(split.categories === List(1.0))
