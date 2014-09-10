@@ -232,6 +232,20 @@ class SparkContext(object):
                 else:
                     SparkContext._active_spark_context = instance
 
+    def __enter__(self):
+        """
+        Enable 'with SparkContext(...) as sc: app(sc)' syntax.
+        """
+        return self
+
+    def __exit__(self, type, value, trace):
+        """
+        Enable 'with SparkContext(...) as sc: app' syntax.
+
+        Specifically stop the context on exit of the with block.
+        """
+        self.stop()
+
     @classmethod
     def setSystemProperty(cls, key, value):
         """
