@@ -25,7 +25,7 @@ import io.netty.channel.ChannelHandler.Sharable
 import io.netty.handler.codec._
 
 import org.apache.spark.Logging
-import org.apache.spark.network.{NettyByteBufManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.{NettyManagedBuffer, ManagedBuffer}
 
 
 /** Messages from the client to the server. */
@@ -141,7 +141,7 @@ final class ClientRequestDecoder extends MessageToMessageDecoder[ByteBuf] {
       case 1 =>  // BlockUploadRequest
         val blockId = ProtocolUtils.readBlockId(in)
         in.retain()  // retain the bytebuf so we don't recycle it immediately.
-        BlockUploadRequest(blockId, new NettyByteBufManagedBuffer(in))
+        BlockUploadRequest(blockId, new NettyManagedBuffer(in))
     }
 
     assert(decoded.id == msgTypeId)
@@ -218,7 +218,7 @@ final class ServerResponseDecoder extends MessageToMessageDecoder[ByteBuf] {
       case 0 =>  // BlockFetchSuccess
         val blockId = ProtocolUtils.readBlockId(in)
         in.retain()
-        new BlockFetchSuccess(blockId, new NettyByteBufManagedBuffer(in))
+        new BlockFetchSuccess(blockId, new NettyManagedBuffer(in))
 
       case 1 =>  // BlockFetchFailure
         val blockId = ProtocolUtils.readBlockId(in)

@@ -104,7 +104,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
           val blockId = blockMessage.getId
           val networkSize = blockMessage.getData.limit()
           listener.onBlockFetchSuccess(
-            blockId.toString, new NioByteBufferManagedBuffer(blockMessage.getData))
+            blockId.toString, new NioManagedBuffer(blockMessage.getData))
         }
       }
     }(cm.futureExecContext)
@@ -189,7 +189,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   private def putBlock(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
     val startTimeMs = System.currentTimeMillis()
     logDebug("PutBlock " + blockId + " started from " + startTimeMs + " with data: " + bytes)
-    blockDataManager.putBlockData(blockId, new NioByteBufferManagedBuffer(bytes), level)
+    blockDataManager.putBlockData(blockId, new NioManagedBuffer(bytes), level)
     logDebug("PutBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " with data size: " + bytes.limit)
   }
