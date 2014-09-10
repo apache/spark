@@ -357,15 +357,24 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
     } |
+    (expression <~ ".") ~ ident ^^ {
+      case base ~ fieldName => GetField(base, fieldName)
+    } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
     cast |
     "(" ~> expression <~ ")" |
     function |
     "-" ~> literal ^^ UnaryMinus |
+    dotExpressionHeader |
     ident ^^ UnresolvedAttribute |
     "*" ^^^ Star(None) |
     literal
+
+  protected lazy val dotExpressionHeader: Parser[Expression] =
+    (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
+      case i1 ~ i2 ~ rest => UnresolvedAttribute(i1 + "." + i2 + rest.mkString(".", ".", ""))
+    }
 
   protected lazy val dataType: Parser[DataType] =
     STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
@@ -380,7 +389,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
       "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-      ",", ";", "%", "{", "}", ":", "[", "]"
+      ",", ";", "%", "{", "}", ":", "[", "]", "."
   )
 
   override lazy val token: Parser[Token] = (
@@ -401,7 +410,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
       | failure("illegal character")
     )
 
-  override def identChar = letter | elem('_') | elem('.')
+  override def identChar = letter | elem('_')
 
   override def whitespace: Parser[Any] = rep(
     whitespaceChar

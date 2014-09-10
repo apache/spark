@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
-
-import parquet.hadoop.ParquetFileWriter
-import parquet.hadoop.util.ContextUtil
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-
-import org.apache.spark.SparkContext
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import parquet.hadoop.ParquetFileWriter
+import parquet.hadoop.util.ContextUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
@@ -87,11 +82,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   var testRDD: SchemaRDD = null
 
-  // TODO: remove this once SqlParser can parse nested select statements
-  var nestedParserSqlContext: NestedParserSQLContext = null
-
   override def beforeAll() {
-    nestedParserSqlContext = new NestedParserSQLContext(TestSQLContext.sparkContext)
     ParquetTestData.writeFile()
     ParquetTestData.writeFilterFile()
     ParquetTestData.writeNestedFile1()
@@ -718,11 +709,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection in addressbook") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir1.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir1.toString).toSchemaRDD
     data.registerTempTable("data")
-    val query = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM data")
+    val query = sql("SELECT owner, contacts[1].name FROM data")
     val tmp = query.collect()
     assert(tmp.size === 2)
     assert(tmp(0).size === 2)
@@ -733,21 +722,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Simple query on nested int data") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir2.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir2.toString).toSchemaRDD
     data.registerTempTable("data")
-    val result1 = nestedParserSqlContext.sql("SELECT entries[0].value FROM data").collect()
+    val result1 = sql("SELECT entries[0].value FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
     assert(result1(0)(0) === 2.5)
-    val result2 = nestedParserSqlContext.sql("SELECT entries[0] FROM data").collect()
+    val result2 = sql("SELECT entries[0] FROM data").collect()
     assert(result2.size === 1)
     val subresult1 = result2(0)(0).asInstanceOf[CatalystConverter.StructScalaType[_]]
     assert(subresult1.size === 2)
     assert(subresult1(0) === 2.5)
     assert(subresult1(1) === false)
-    val result3 = nestedParserSqlContext.sql("SELECT outerouter FROM data").collect()
+    val result3 = sql("SELECT outerouter FROM data").collect()
     val subresult2 = result3(0)(0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
@@ -760,19 +747,18 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("nested structs") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir3.toString)
+    val data = parquetFile(ParquetTestData.testNestedDir3.toString)
       .toSchemaRDD
     data.registerTempTable("data")
-    val result1 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
+    val result1 = sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
     assert(result1(0)(0) === false)
-    val result2 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
+    val result2 = sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
     assert(result2.size === 1)
     assert(result2(0).size === 1)
     assert(result2(0)(0) === true)
-    val result3 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
+    val result3 = sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
     assert(result3.size === 1)
     assert(result3(0).size === 1)
     assert(result3(0)(0) === false)
@@ -796,11 +782,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("map with struct values") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir4.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
     data.registerTempTable("mapTable")
-    val result1 = nestedParserSqlContext.sql("SELECT data2 FROM mapTable").collect()
+    val result1 = sql("SELECT data2 FROM mapTable").collect()
     assert(result1.size === 1)
     val entry1 = result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
@@ -814,7 +798,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
-    val result2 = nestedParserSqlContext.sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM mapTable""").collect()
+    val result2 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM mapTable""").collect()
     assert(result2.size === 1)
     assert(result2(0)(0) === 42.toLong)
     assert(result2(0)(1) === "the answer")
@@ -825,15 +809,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     // has no effect in this test case
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
-    val result = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir1.toString)
-      .toSchemaRDD
+    val result = parquetFile(ParquetTestData.testNestedDir1.toString).toSchemaRDD
     result.saveAsParquetFile(tmpdir.toString)
-    nestedParserSqlContext
-      .parquetFile(tmpdir.toString)
+    parquetFile(tmpdir.toString)
       .toSchemaRDD
       .registerTempTable("tmpcopy")
-    val tmpdata = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
+    val tmpdata = sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
     assert(tmpdata.size === 2)
     assert(tmpdata(0).size === 2)
     assert(tmpdata(0)(0) === "Julien Le Dem")
@@ -844,20 +825,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Writing out Map and reading it back in") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir4.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
     data.saveAsParquetFile(tmpdir.toString)
-    nestedParserSqlContext
-      .parquetFile(tmpdir.toString)
+    parquetFile(tmpdir.toString)
       .toSchemaRDD
       .registerTempTable("tmpmapcopy")
-    val result1 = nestedParserSqlContext.sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
+    val result1 = sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
     assert(result1.size === 1)
     assert(result1(0)(0) === 2)
-    val result2 = nestedParserSqlContext.sql("SELECT data2 FROM tmpmapcopy").collect()
+    val result2 = sql("SELECT data2 FROM tmpmapcopy").collect()
     assert(result2.size === 1)
     val entry1 = result2(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
@@ -871,42 +849,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
-    val result3 = nestedParserSqlContext.sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM tmpmapcopy""").collect()
+    val result3 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM tmpmapcopy""").collect()
     assert(result3.size === 1)
     assert(result3(0)(0) === 42.toLong)
     assert(result3(0)(1) === "the answer")
     Utils.deleteRecursively(tmpdir)
   }
-}
-
-// TODO: the code below is needed temporarily until the standard parser is able to parse
-// nested field expressions correctly
-class NestedParserSQLContext(@transient override val sparkContext: SparkContext) extends SQLContext(sparkContext) {
-  override protected[sql] val parser = new NestedSqlParser()
-}
-
-class NestedSqlLexical(override val keywords: Seq[String]) extends SqlLexical(keywords) {
-  override def identChar = letter | elem('_')
-  delimiters += (".")
-}
-
-class NestedSqlParser extends SqlParser {
-  override val lexical = new NestedSqlLexical(reservedWords)
-
-  override protected lazy val baseExpression: PackratParser[Expression] =
-    expression ~ "[" ~ expression <~ "]" ^^ {
-      case base ~ _ ~ ordinal => GetItem(base, ordinal)
-    } |
-    expression ~ "." ~ ident ^^ {
-      case base ~ _ ~ fieldName => GetField(base, fieldName)
-    } |
-    TRUE ^^^ Literal(true, BooleanType) |
-    FALSE ^^^ Literal(false, BooleanType) |
-    cast |
-    "(" ~> expression <~ ")" |
-    function |
-    "-" ~> literal ^^ UnaryMinus |
-    ident ^^ UnresolvedAttribute |
-    "*" ^^^ Star(None) |
-    literal
 }

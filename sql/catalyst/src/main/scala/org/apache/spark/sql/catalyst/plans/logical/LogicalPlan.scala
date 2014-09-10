@@ -104,11 +104,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       case Seq((a, Nil)) => Some(a) // One match, no nested fields, use it.
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        a.dataType match {
-          case StructType(fields) =>
-            Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
-          case _ => None // Don't know how to resolve these field references
-        }
+        Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
       case Seq() => None         // No matches.
       case ambiguousReferences =>
         throw new TreeNodeException(
