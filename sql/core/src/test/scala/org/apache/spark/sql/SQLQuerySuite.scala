@@ -665,6 +665,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Seq()
     )
+  }
     
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
