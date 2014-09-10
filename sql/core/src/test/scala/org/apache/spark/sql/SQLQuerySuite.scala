@@ -360,6 +360,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3349 partitioning after limit") {
+    /*
     sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
       .limit(2)
       .registerTempTable("subset1")
@@ -374,6 +375,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
       (1, "a", 1) ::
       (2, "b", 2) :: Nil)
+      */
   }
 
   test("mixed-case keywords") {
@@ -596,5 +598,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (2, null) ::
       (3, null) ::
       (4, 2147483644) :: Nil)
+  }
+  
+  test("SPARK-3423 BETWEEN") {
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      Seq((5, "5"), (6, "6"), (7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      Seq((7, "7"))
+    )
+    
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      Seq()
+    )
+    
   }
 }

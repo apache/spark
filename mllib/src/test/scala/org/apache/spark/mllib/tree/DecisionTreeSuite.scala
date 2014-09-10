@@ -31,7 +31,6 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 import org.apache.spark.mllib.util.LocalSparkContext
 
-
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   def validateClassifier(
@@ -353,8 +352,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins.length === 2)
     assert(bins(0).length === 100)
-    assert(splits(0).length === 99)
-    assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
     val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
@@ -383,8 +380,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
-    assert(bins(0).length === 100)
-    assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
@@ -416,8 +411,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins.length === 2)
     assert(bins(0).length === 100)
-    assert(splits(0).length === 99)
-    assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
     val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
@@ -448,8 +441,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins.length === 2)
     assert(bins(0).length === 100)
-    assert(splits(0).length === 99)
-    assert(bins(0).length === 100)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
     val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
@@ -475,8 +466,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
-    assert(bins(0).length === 100)
-    assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
     // Train a 1-node model
@@ -617,7 +606,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3)
+      numClassesForClassification = 3, maxBins = 100)
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
 
@@ -641,7 +630,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3))
+      numClassesForClassification = 3, maxBins = 100, categoricalFeaturesInfo = Map(0 -> 3))
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(metadata.isUnordered(featureIndex = 0))
@@ -665,7 +654,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
+      numClassesForClassification = 3, maxBins = 100,
+      categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
