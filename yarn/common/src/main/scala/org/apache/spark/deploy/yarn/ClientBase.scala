@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 
 import scala.collection.JavaConversions._
@@ -60,7 +59,7 @@ private[spark] trait ClientBase extends Logging {
    */
   protected def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
-    logInfo("Verifying our application request has not exceeded the maximum " +
+    logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem = args.executorMemory + executorMemoryOverhead
     if (executorMem > maxMem) {
@@ -243,14 +242,12 @@ private[spark] trait ClientBase extends Logging {
     sparkConf.getAll
       .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
-      .foreach { case (k, v) =>
-        YarnSparkHadoopUtil.addToEnvironment(env, k, v, File.pathSeparator)
-      }
+      .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       // Allow users to specify some environment variables.
-      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs, File.pathSeparator)
+      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
       env("SPARK_YARN_USER_ENV") = userEnvs
     }
@@ -542,16 +539,15 @@ private[spark] object ClientBase extends Logging {
     SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
   }
 
-  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) = {
+  /**
+   * Populate the classpath entry in the given environment map with any application
+   * classpath specified through the Hadoop and Yarn configurations.
+   */
+  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]): Unit = {
     val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
     for (c <- classPathElementsToAdd.flatten) {
-      YarnSparkHadoopUtil.addToEnvironment(
-        env,
-        Environment.CLASSPATH.name,
-        c.trim,
-        File.pathSeparator)
+      YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, c.trim)
     }
-    classPathElementsToAdd
   }
 
   private def getYarnAppClasspath(conf: Configuration): Option[Seq[String]] =
@@ -613,6 +609,10 @@ private[spark] object ClientBase extends Logging {
     triedDefault.toOption
   }
 
+  /**
+   * Populate the classpath entry in the given environment map.
+   * This includes the user jar, Spark jar, and any extra application jars.
+   */
   def populateClasspath(
       args: ClientArguments,
       conf: Configuration,
@@ -634,7 +634,7 @@ private[spark] object ClientBase extends Logging {
     }
 
     // Append all jar files under the working directory to the classpath.
-    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env);
+    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env)
   }
 
   /**
@@ -645,22 +645,21 @@ private[spark] object ClientBase extends Logging {
       args: ClientArguments,
       conf: SparkConf,
       env: HashMap[String, String]): Unit = {
-    if (args != null) {
-      addFileToClasspath(args.userJar, APP_JAR, env)
-      if (args.addJars != null) {
-        args.addJars.split(",").foreach { case file: String =>
-          addFileToClasspath(file, null, env)
-        }
-      }
-    } else {
-      val userJar = conf.get(CONF_SPARK_USER_JAR, null)
-      addFileToClasspath(userJar, APP_JAR, env)
 
-      // Add any secondary jars to the classpath
-      conf.get(CONF_SPARK_YARN_SECONDARY_JARS, "")
-        .split(",")
-        .filter(_.nonEmpty)
-        .foreach(jar => addFileToClasspath(jar, null, env))
+    // If `args` is not null, we are launching an AM container.
+    // Otherwise, we are launching executor containers.
+    val (mainJar, secondaryJars) =
+      if (args != null) {
+        (args.userJar, args.addJars)
+      } else {
+        (conf.get(CONF_SPARK_USER_JAR, null), conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
+      }
+
+    addFileToClasspath(mainJar, APP_JAR, env)
+    if (secondaryJars != null) {
+      secondaryJars.split(",").filter(_.nonEmpty).foreach { jar =>
+        addFileToClasspath(jar, null, env)
+      }
     }
   }
 
@@ -694,8 +693,12 @@ private[spark] object ClientBase extends Logging {
     }
   }
 
+  /**
+   * Add the given path to the classpath entry of the given environment map.
+   * If the classpath is already set, this appends the new path to the existing classpath.
+   */
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
-    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path, File.pathSeparator)
+    YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
 
   /**
    * Get the list of namenodes the user may access.
@@ -737,7 +740,9 @@ private[spark] object ClientBase extends Logging {
     }
   }
 
-  /** Return whether the two file systems are the same. */
+  /**
+   * Return whether the two file systems are the same.
+   */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
     val srcUri = srcFs.getUri()
     val dstUri = destFs.getUri()

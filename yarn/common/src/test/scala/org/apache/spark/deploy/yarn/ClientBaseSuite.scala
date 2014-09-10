@@ -89,7 +89,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    ClientBase.populateClasspath(args, conf, sparkConf, env, None)
+    ClientBase.populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(File.pathSeparator)
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
