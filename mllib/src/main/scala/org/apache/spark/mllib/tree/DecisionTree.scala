@@ -929,7 +929,7 @@ object DecisionTree extends Serializable with Logging {
       }
     }.maxBy(_._2.gain)
 
-    require(predict.isDefined, "must calculate predict for each node")
+    assert(predict.isDefined, "must calculate predict for each node")
 
     (bestSplit, bestSplitStats, predict.get)
   }
