@@ -64,7 +64,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
     buf.put(blockData.getBytes)
     buf.flip()
 
-    channel.writeInbound(BlockFetchSuccess(blockId, new NioByteBufferManagedBuffer(buf)))
+    channel.writeInbound(BlockFetchSuccess(blockId, new NioManagedBuffer(buf)))
 
     assert(parsedBlockId === blockId)
     assert(parsedBlockData === blockData)
@@ -119,7 +119,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
     assert(sizeOfOutstandingRequests(handler) === 3)
 
     val channel = new EmbeddedChannel(handler)
-    channel.writeInbound(BlockFetchSuccess("b1", new NettyByteBufManagedBuffer(Unpooled.buffer())))
+    channel.writeInbound(BlockFetchSuccess("b1", new NettyManagedBuffer(Unpooled.buffer())))
     // Need to figure out a way to generate an exception
     assert(successCount.get() === 1)
     assert(errorCount.get() === 2)

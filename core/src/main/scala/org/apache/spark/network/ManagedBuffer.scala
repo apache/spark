@@ -36,11 +36,11 @@ import org.apache.spark.util.{ByteBufferInputStream, Utils}
  * should specify how the data is provided:
  *
  * - [[FileSegmentManagedBuffer]]: data backed by part of a file
- * - [[NioByteBufferManagedBuffer]]: data backed by a NIO ByteBuffer
- * - [[NettyByteBufManagedBuffer]]: data backed by a Netty ByteBuf
+ * - [[NioManagedBuffer]]: data backed by a NIO ByteBuffer
+ * - [[NettyManagedBuffer]]: data backed by a Netty ByteBuf
  *
  * The concrete buffer implementation might be managed outside the JVM garbage collector.
- * For example, in the case of [[NettyByteBufManagedBuffer]], the buffers are reference counted.
+ * For example, in the case of [[NettyManagedBuffer]], the buffers are reference counted.
  * In that case, if the buffer is going to be passed around to a different thread, retain/release
  * should be called.
  */
@@ -149,7 +149,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
 /**
  * A [[ManagedBuffer]] backed by [[java.nio.ByteBuffer]].
  */
-final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
+final class NioManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 
   override def size: Long = buf.remaining()
 
@@ -168,7 +168,7 @@ final class NioByteBufferManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 /**
  * A [[ManagedBuffer]] backed by a Netty [[ByteBuf]].
  */
-final class NettyByteBufManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
+final class NettyManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
 
   override def size: Long = buf.readableBytes()
 

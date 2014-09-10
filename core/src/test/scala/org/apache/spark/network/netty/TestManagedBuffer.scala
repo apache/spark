@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import io.netty.buffer.Unpooled
 
-import org.apache.spark.network.{NettyByteBufManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.{NettyManagedBuffer, ManagedBuffer}
 
 
 /**
@@ -36,7 +36,7 @@ class TestManagedBuffer(len: Int) extends ManagedBuffer {
 
   private val byteArray: Array[Byte] = Array.tabulate[Byte](len)(_.toByte)
 
-  private val underlying = new NettyByteBufManagedBuffer(Unpooled.wrappedBuffer(byteArray))
+  private val underlying = new NettyManagedBuffer(Unpooled.wrappedBuffer(byteArray))
 
   override def size: Long = underlying.size
 

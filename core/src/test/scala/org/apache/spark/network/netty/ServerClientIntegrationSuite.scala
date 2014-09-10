@@ -65,7 +65,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     server = new BlockServer(new NettyConfig(new SparkConf), new BlockDataManager {
       override def getBlockData(blockId: String): ManagedBuffer = {
         if (blockId == bufferBlockId) {
-          new NioByteBufferManagedBuffer(buf)
+          new NioManagedBuffer(buf)
         } else if (blockId == fileBlockId) {
           new FileSegmentManagedBuffer(testFile, 10, testFile.length - 25)
         } else {

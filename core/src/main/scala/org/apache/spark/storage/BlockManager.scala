@@ -223,7 +223,7 @@ private[spark] class BlockManager(
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        new NioByteBufferManagedBuffer(buffer)
+        new NioManagedBuffer(buffer)
       } else {
         throw new BlockNotFoundException(blockId)
       }
@@ -868,7 +868,7 @@ private[spark] class BlockManager(
             data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
-              peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
+              peer.host, peer.port, blockId.toString, new NioManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
               .format((System.currentTimeMillis - onePeerStartTime)))
             peersReplicatedTo += peer
