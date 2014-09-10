@@ -38,8 +38,11 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
+DEFAULT_SPARK_VERSION = "1.0.0"
+
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
+
 
 class UsageError(Exception):
     pass
@@ -56,10 +59,10 @@ def parse_args():
         help="Show this help message and exit")
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
-        help="Number of slaves to launch (default: 1)")
+        help="Number of slaves to launch (default: %default)")
     parser.add_option(
         "-w", "--wait", type="int", default=120,
-        help="Seconds to wait for nodes to start (default: 120)")
+        help="Seconds to wait for nodes to start (default: %default)")
     parser.add_option(
         "-k", "--key-pair",
         help="Key pair to use on instances")
@@ -68,7 +71,7 @@ def parse_args():
         help="SSH private key file to use for logging into instances")
     parser.add_option(
         "-t", "--instance-type", default="m1.large",
-        help="Type of instance to launch (default: m1.large). " +
+        help="Type of instance to launch (default: %default). " +
              "WARNING: must be 64-bit; small instances won't work")
     parser.add_option(
         "-m", "--master-instance-type", default="",
@@ -83,15 +86,15 @@ def parse_args():
              "between zones applies)")
     parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
     parser.add_option(
-        "-v", "--spark-version", default="1.0.0",
-        help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
+        "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
+        help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
     parser.add_option(
         "--spark-git-repo",
         default="https://github.com/apache/spark",
         help="Github repo from which to checkout supplied commit hash")
     parser.add_option(
         "--hadoop-major-version", default="1",
-        help="Major version of Hadoop (default: 1)")
+        help="Major version of Hadoop (default: %default)")
     parser.add_option(
         "-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
         help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -115,21 +118,21 @@ def parse_args():
              "Only support up to 8 EBS volumes.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
-        help="Swap space to set up per node, in MB (default: 1024)")
+        help="Swap space to set up per node, in MB (default: %default)")
     parser.add_option(
         "--spot-price", metavar="PRICE", type="float",
         help="If specified, launch slaves as spot instances with the given " +
              "maximum price (in dollars)")
     parser.add_option(
         "--ganglia", action="store_true", default=True,
-        help="Setup Ganglia monitoring on cluster (default: on). NOTE: " +
+        help="Setup Ganglia monitoring on cluster (default: %default). NOTE: " +
              "the Ganglia page will be publicly accessible")
     parser.add_option(
         "--no-ganglia", action="store_false", dest="ganglia",
         help="Disable Ganglia monitoring for the cluster")
     parser.add_option(
         "-u", "--user", default="root",
-        help="The SSH user you want to connect as (default: root)")
+        help="The SSH user you want to connect as (default: %default)")
     parser.add_option(
         "--delete-groups", action="store_true", default=False,
         help="When destroying a cluster, delete the security groups that were created.")
@@ -138,7 +141,7 @@ def parse_args():
         help="Launch fresh slaves, but use an existing stopped master if possible")
     parser.add_option(
         "--worker-instances", type="int", default=1,
-        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: 1)")
+        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: %default)")
     parser.add_option(
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
@@ -151,7 +154,7 @@ def parse_args():
         help="Use this prefix for the security group rather than the cluster name.")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",
-        help="Address to authorize on created security groups (default: 0.0.0.0/0)")
+        help="Address to authorize on created security groups (default: %default)")
     parser.add_option(
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
@@ -342,7 +345,6 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
 
-
     additional_groups = []
     if opts.additional_security_group:
         additional_groups = [sg
@@ -363,7 +365,7 @@ def launch_cluster(conn, opts, cluster_name):
         for i in range(opts.ebs_vol_num):
             device = EBSBlockDeviceType()
             device.size = opts.ebs_vol_size
-            device.volume_type=opts.ebs_vol_type
+            device.volume_type = opts.ebs_vol_type
             device.delete_on_termination = True
             block_map["/dev/sd" + chr(ord('s') + i)] = device
 
@@ -495,6 +497,7 @@ def launch_cluster(conn, opts, cluster_name):
     # Return all the instances
     return (master_nodes, slave_nodes)
 
+
 def tag_instance(instance, name):
     for i in range(0, 5):
         try:
@@ -507,9 +510,12 @@ def tag_instance(instance, name):
 
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
+
+
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
-    # Search all the spot instance requests, and copy any tags from the spot instance request to the cluster.
+    # Search all the spot instance requests, and copy any tags from the spot
+    # instance request to the cluster.
     spot_instance_requests = conn.get_all_spot_instance_requests()
     for req in spot_instance_requests:
         if req.state != u'active':
@@ -520,7 +526,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             for res in reservations:
                 active = [i for i in res.instances if is_active(i)]
                 for instance in active:
-                    if (instance.tags.get(u'Name') == None):
+                    if (instance.tags.get(u'Name') is None):
                         tag_instance(instance, name)
     # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
@@ -540,13 +546,16 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in with name " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in with name " + \
+                cluster_name + "-master"
         else:
             print >> sys.stderr, "ERROR: Could not find any existing cluster"
         sys.exit(1)
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
+
+
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     master = master_nodes[0].public_dns_name
     if deploy_ssh_key:
@@ -890,7 +899,8 @@ def real_main():
                 if opts.security_group_prefix is None:
                     group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 else:
-                    group_names = [opts.security_group_prefix + "-master", opts.security_group_prefix + "-slaves"]
+                    group_names = [opts.security_group_prefix + "-master",
+                                   opts.security_group_prefix + "-slaves"]
 
                 attempt = 1
                 while attempt <= 3:

@@ -169,6 +169,17 @@ class SerializationTestCase(unittest.TestCase):
         self.assertEquals(p1, p2)
 
 
+# Regression test for SPARK-3415
+class CloudPickleTest(unittest.TestCase):
+    def test_pickling_file_handles(self):
+        from pyspark.cloudpickle import dumps
+        from StringIO import StringIO
+        from pickle import load
+        out1 = sys.stderr
+        out2 = load(StringIO(dumps(out1)))
+        self.assertEquals(out1, out2)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -280,6 +291,15 @@ class TestAddFile(PySparkTestCase):
 
 
 class TestRDDFunctions(PySparkTestCase):
+
+    def test_id(self):
+        rdd = self.sc.parallelize(range(10))
+        id = rdd.id()
+        self.assertEqual(id, rdd.id())
+        rdd2 = rdd.map(str).filter(bool)
+        id2 = rdd2.id()
+        self.assertEqual(id + 1, id2)
+        self.assertEqual(id2, rdd2.id())
 
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
