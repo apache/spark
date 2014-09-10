@@ -19,29 +19,24 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
+import scala.collection.mutable.{HashMap, LinkedHashMap, Map}
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsAction
-import org.apache.hadoop.yarn.api.records.LocalResource
-import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.apache.hadoop.yarn.api.records.LocalResourceType
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
 
-import org.apache.spark.Logging 
-
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.LinkedHashMap
-import scala.collection.mutable.Map
-
+import org.apache.spark.Logging
 
 /** Client side methods to setup the Hadoop distributed cache */
-class ClientDistributedCacheManager() extends Logging {
-  private val distCacheFiles: Map[String, Tuple3[String, String, String]] = 
-    LinkedHashMap[String, Tuple3[String, String, String]]()
-  private val distCacheArchives: Map[String, Tuple3[String, String, String]] = 
-    LinkedHashMap[String, Tuple3[String, String, String]]()
+private[spark] class ClientDistributedCacheManager() extends Logging {
+
+  // Mappings from remote URI to (file status, modification time, visibility)
+  private val distCacheFiles: Map[String, (String, String, String)] =
+    LinkedHashMap[String, (String, String, String)]()
+  private val distCacheArchives: Map[String, (String, String, String)] =
+    LinkedHashMap[String, (String, String, String)]()
 
 
   /**
@@ -68,9 +63,9 @@ class ClientDistributedCacheManager() extends Logging {
       resourceType: LocalResourceType,
       link: String,
       statCache: Map[URI, FileStatus],
-      appMasterOnly: Boolean = false) = {
+      appMasterOnly: Boolean = false): Unit = {
     val destStatus = fs.getFileStatus(destPath)
-    val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
+    val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)
     val visibility = getVisibility(conf, destPath.toUri(), statCache)
     amJarRsrc.setVisibility(visibility)
@@ -80,7 +75,7 @@ class ClientDistributedCacheManager() extends Logging {
     if (link == null || link.isEmpty()) throw new Exception("You must specify a valid link name")
     localResources(link) = amJarRsrc
     
-    if (appMasterOnly == false) {
+    if (!appMasterOnly) {
       val uri = destPath.toUri()
       val pathURI = new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, link)
       if (resourceType == LocalResourceType.FILE) {
@@ -95,12 +90,10 @@ class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Adds the necessary cache file env variables to the env passed in
-   * @param env
    */
-  def setDistFilesEnv(env: Map[String, String]) = {
+  def setDistFilesEnv(env: Map[String, String]): Unit = {
     val (keys, tupleValues) = distCacheFiles.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
-
     if (keys.size > 0) {
       env("SPARK_YARN_CACHE_FILES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
       env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") = 
@@ -114,12 +107,10 @@ class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Adds the necessary cache archive env variables to the env passed in
-   * @param env
    */
-  def setDistArchivesEnv(env: Map[String, String]) = {
+  def setDistArchivesEnv(env: Map[String, String]): Unit = {
     val (keys, tupleValues) = distCacheArchives.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
-
     if (keys.size > 0) {
       env("SPARK_YARN_CACHE_ARCHIVES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
       env("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS") = 
@@ -133,25 +124,21 @@ class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Returns the local resource visibility depending on the cache file permissions
-   * @param conf
-   * @param uri
-   * @param statCache
    * @return LocalResourceVisibility
    */
-  def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):
-      LocalResourceVisibility = {
+  def getVisibility(
+      conf: Configuration,
+      uri: URI,
+      statCache: Map[URI, FileStatus]): LocalResourceVisibility = {
     if (isPublic(conf, uri, statCache)) {
-      return LocalResourceVisibility.PUBLIC 
-    } 
-    LocalResourceVisibility.PRIVATE
+      LocalResourceVisibility.PUBLIC
+    } else {
+      LocalResourceVisibility.PRIVATE
+    }
   }
 
   /**
-   * Returns a boolean to denote whether a cache file is visible to all(public)
-   * or not
-   * @param conf
-   * @param uri
-   * @param statCache
+   * Returns a boolean to denote whether a cache file is visible to all (public)
    * @return true if the path in the uri is visible to all, false otherwise
    */
   def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
@@ -167,13 +154,12 @@ class ClientDistributedCacheManager() extends Logging {
   /**
    * Returns true if all ancestors of the specified path have the 'execute'
    * permission set for all users (i.e. that other users can traverse
-   * the directory heirarchy to the given path)
-   * @param fs
-   * @param path
-   * @param statCache
+   * the directory hierarchy to the given path)
    * @return true if all ancestors have the 'execute' permission set for all users
    */
-  def ancestorsHaveExecutePermissions(fs: FileSystem, path: Path, 
+  def ancestorsHaveExecutePermissions(
+      fs: FileSystem,
+      path: Path,
       statCache: Map[URI, FileStatus]): Boolean =  {
     var current = path
     while (current != null) {
@@ -187,32 +173,25 @@ class ClientDistributedCacheManager() extends Logging {
   }
 
   /**
-   * Checks for a given path whether the Other permissions on it 
+   * Checks for a given path whether the Other permissions on it
    * imply the permission in the passed FsAction
-   * @param fs
-   * @param path
-   * @param action
-   * @param statCache
    * @return true if the path in the uri is visible to all, false otherwise
    */
-  def checkPermissionOfOther(fs: FileSystem, path: Path,
-      action: FsAction, statCache: Map[URI, FileStatus]): Boolean = {
+  def checkPermissionOfOther(
+      fs: FileSystem,
+      path: Path,
+      action: FsAction,
+      statCache: Map[URI, FileStatus]): Boolean = {
     val status = getFileStatus(fs, path.toUri(), statCache)
     val perms = status.getPermission()
     val otherAction = perms.getOtherAction()
-    if (otherAction.implies(action)) {
-      return true
-    }
-    false
+    otherAction.implies(action)
   }
 
   /**
-   * Checks to see if the given uri exists in the cache, if it does it 
+   * Checks to see if the given uri exists in the cache, if it does it
    * returns the existing FileStatus, otherwise it stats the uri, stores
    * it in the cache, and returns the FileStatus.
-   * @param fs
-   * @param uri
-   * @param statCache
    * @return FileStatus
    */
   def getFileStatus(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]): FileStatus = {

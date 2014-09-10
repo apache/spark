@@ -46,9 +46,22 @@ private[spark] class Client(
   val yarnClient = YarnClient.createYarnClient
   val yarnConf = new YarnConfiguration(hadoopConf)
 
-  /** Submit an application running our ApplicationMaster to the ResourceManager. */
+  def stop(): Unit = yarnClient.stop()
+
+  /* ------------------------------------------------------------------------------------- *
+   | The following methods have much in common in the stable and alpha versions of Client, |
+   | but cannot be implemented in the parent trait due to subtle API differences across    |
+   | hadoop versions.                                                                      |
+   * ------------------------------------------------------------------------------------- */
+
+  /**
+   * Submit an application running our ApplicationMaster to the ResourceManager.
+   *
+   * The stable Yarn API provides a convenience method (YarnClient#createApplication) for
+   * creating applications and setting up the application submission context. This was not
+   * available in the alpha API.
+   */
   override def submitApplication(): ApplicationId = {
-    // Initialize and start the client service.
     yarnClient.init(yarnConf)
     yarnClient.start()
 
@@ -63,10 +76,8 @@ private[spark] class Client(
     // Verify whether the cluster has enough resources for our AM.
     verifyClusterResources(newAppResponse)
 
-    // Set up ContainerLaunchContext to launch our AM container.
+    // Set up the appropriate contexts to launch our AM.
     val containerContext = createContainerLaunchContext(newAppResponse)
-
-    // Set up ApplicationSubmissionContext to submit our AM.
     val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
     // Finally, submit and monitor the application.
@@ -75,11 +86,9 @@ private[spark] class Client(
     appId
   }
 
-  /** Stop this client. */
-  def stop(): Unit = yarnClient.stop()
-
   /**
-   *
+   * Set up the context for submitting our ApplicationMaster.
+   * This uses the YarnClientApplication not available in the Yarn alpha API.
    */
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
@@ -95,14 +104,14 @@ private[spark] class Client(
     appContext
   }
 
-  /** */
+  /** Set up security tokens for launching our ApplicationMaster container. */
   override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
     val dob = new DataOutputBuffer
     credentials.writeTokenStorageToStream(dob)
     amContainer.setTokens(ByteBuffer.wrap(dob.getData))
   }
 
-  /** */
+  /** Get the application report from the ResourceManager for an application we have submitted. */
   override def getApplicationReport(appId: ApplicationId): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 

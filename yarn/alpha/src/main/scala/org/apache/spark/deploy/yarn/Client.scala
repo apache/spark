@@ -48,9 +48,14 @@ private[spark] class Client(
 
   val yarnConf: YarnConfiguration = new YarnConfiguration(hadoopConf)
 
+  /* ------------------------------------------------------------------------------------- *
+   | The following methods have much in common in the stable and alpha versions of Client, |
+   | but cannot be implemented in the parent trait due to subtle API differences across    |
+   | hadoop versions.                                                                      |
+   * ------------------------------------------------------------------------------------- */
+
   /** Submit an application running our ApplicationMaster to the ResourceManager. */
   override def submitApplication(): ApplicationId = {
-    // Initialize and start the client service.
     init(yarnConf)
     start()
 
@@ -64,10 +69,8 @@ private[spark] class Client(
     // Verify whether the cluster has enough resources for our AM.
     verifyClusterResources(newAppResponse)
 
-    // Set up ContainerLaunchContext to launch our AM container.
+    // Set up the appropriate contexts to launch our AM.
     val containerContext = createContainerLaunchContext(newAppResponse)
-
-    // Set up ApplicationSubmissionContext to submit our AM.
     val appContext = createApplicationSubmissionContext(appId, containerContext)
 
     // Finally, submit and monitor the application.
@@ -77,7 +80,9 @@ private[spark] class Client(
   }
 
   /**
-   *
+   * Set up a context for launching our ApplicationMaster container.
+   * In the Yarn alpha API, the memory requirements of this container must be set in
+   * the ContainerLaunchContext instead of the ApplicationSubmissionContext.
    */
   override def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
       : ContainerLaunchContext = {
@@ -88,9 +93,7 @@ private[spark] class Client(
     containerContext
   }
 
-  /**
-   *
-   */
+  /** Set up the context for submitting our ApplicationMaster. */
   def createApplicationSubmissionContext(
       appId: ApplicationId,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
@@ -104,16 +107,9 @@ private[spark] class Client(
   }
 
   /**
-   *
+   * Set up security tokens for launching our ApplicationMaster container.
+   * ContainerLaunchContext#setContainerTokens is renamed `setTokens` in the stable API.
    */
-  override def getAMMemory(newApp: GetNewApplicationResponse): Int = {
-    val minResMemory = newApp.getMinimumResourceCapability().getMemory()
-    val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) - memoryOverhead)
-    amMemory
-  }
-
-  /** */
   override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
@@ -121,8 +117,20 @@ private[spark] class Client(
   }
 
   /**
+   * Return the amount of memory for launching the ApplicationMaster container (MB).
+   * GetNewApplicationResponse#getMinimumResourceCapability does not exist in the stable API.
+   */
+  override def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = {
+    val minResMemory = newAppResponse.getMinimumResourceCapability().getMemory()
+    val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
+      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) - memoryOverhead)
+    amMemory
+  }
+
+  /**
    * Return the security token used by this client to communicate with the ApplicationMaster.
    * If no security is enabled, the token returned by the report is null.
+   * ApplicationReport#getClientToken is renamed `getClientToAMToken` in the stable API.
    */
   override def getClientToken(report: ApplicationReport): String =
     Option(report.getClientToken).getOrElse("")

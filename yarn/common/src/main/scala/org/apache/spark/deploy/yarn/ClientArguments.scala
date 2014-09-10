@@ -24,7 +24,7 @@ import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-private[spark] class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
+private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
   var addJars: String = null
   var files: String = null
   var archives: String = null
@@ -47,6 +47,7 @@ private[spark] class ClientArguments(val args: Array[String], val sparkConf: Spa
   loadDefaultArgs()
   validateArgs()
 
+  /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadDefaultArgs(): Unit = {
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
@@ -62,6 +63,10 @@ private[spark] class ClientArguments(val args: Array[String], val sparkConf: Spa
       .orNull
   }
 
+  /**
+   * Fail fast if any arguments provided are invalid.
+   * This is intended to be called only after the provided arguments have been parsed.
+   */
   private def validateArgs(): Unit = {
     Map[Boolean, String](
       (numExecutors <= 0) -> "You must specify at least 1 executor!",

@@ -113,7 +113,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
     val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
-    doReturn(new Path("/")).when(client).copyRemoteFile(any(classOf[Path]),
+    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort(), anyBoolean())
 
     val tempDir = Files.createTempDir()

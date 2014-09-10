@@ -54,7 +54,9 @@ private[spark] trait ClientBase extends Logging {
   protected val memoryOverhead = args.memoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  /** Verify that we have not requested more resources than is available in the cluster. */
+  /**
+   * Verify that we have not requested more resources than is available in the cluster.
+   */
   protected def verifyClusterResources(newAppResponse: GetNewApplicationResponse) = {
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
     logInfo(s"Max memory capability of a single resource in this cluster: $maxMem MB")
@@ -80,43 +82,10 @@ private[spark] trait ClientBase extends Logging {
     // getting all the node reports and computing ourselves.
   }
 
-  /** See if two file systems are the same or not. */
-  private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
-    val srcUri = srcFs.getUri()
-    val dstUri = destFs.getUri()
-    if (srcUri.getScheme() == null) {
-      return false
-    }
-    if (!srcUri.getScheme().equals(dstUri.getScheme())) {
-      return false
-    }
-    var srcHost = srcUri.getHost()
-    var dstHost = dstUri.getHost()
-    if ((srcHost != null) && (dstHost != null)) {
-      try {
-        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
-        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
-      } catch {
-        case e: UnknownHostException =>
-          return false
-      }
-      if (!srcHost.equals(dstHost)) {
-        return false
-      }
-    } else if (srcHost == null && dstHost != null) {
-      return false
-    } else if (srcHost != null && dstHost == null) {
-      return false
-    }
-    if (srcUri.getPort() != dstUri.getPort()) {
-      false
-    } else {
-      true
-    }
-  }
-
-  /** Copy the file into HDFS if needed. Exposed for testing. */
-  def copyRemoteFile(
+  /**
+   * Copy the file to a remote file system if needed. Exposed for testing.
+   */
+  def copyFileToRemote(
       dstDir: Path,
       originalPath: Path,
       replication: Short,
@@ -139,23 +108,35 @@ private[spark] trait ClientBase extends Logging {
     destPath
   }
 
-  private def qualifyForLocal(localURI: URI): Path = {
-    var qualifiedURI = localURI
-    // If not specified, assume these are in the local filesystem to keep behavior like Hadoop
-    if (qualifiedURI.getScheme() == null) {
-      qualifiedURI = new URI(FileSystem.getLocal(hadoopConf).makeQualified(new Path(qualifiedURI)).toString)
-    }
+  /**
+   * Given a local URI, resolve it and return a qualified local path that corresponds to the URI.
+   * This is used for preparing local resources to be included in the container launch context.
+   */
+  private def getQualifiedLocalPath(localURI: URI): Path = {
+    val qualifiedURI =
+      if (localURI.getScheme == null) {
+        // If not specified, assume this is in the local filesystem to keep the behavior
+        // consistent with that of Hadoop
+        new URI(FileSystem.getLocal(hadoopConf).makeQualified(new Path(localURI)).toString)
+      } else {
+        localURI
+      }
     new Path(qualifiedURI)
   }
 
+  /**
+   * Upload any resources to the distributed cache if needed. If a resource is intended to be
+   * consumed locally, set up the appropriate config for downstream code to handle it properly.
+   * This is used for setting up a container launch context for our ApplicationMaster.
+   * Exposed for testing.
+   */
   def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
-    logInfo("Preparing Local resources")
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
     // local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
-    val nns = ClientBase.getNameNodesToAccess(sparkConf) + dst
-    ClientBase.obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    val nns = getNameNodesToAccess(sparkConf) + dst
+    obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
     val localResources = HashMap[String, LocalResource]()
@@ -171,72 +152,86 @@ private[spark] trait ClientBase extends Logging {
         "for alternatives.")
     }
 
+    /**
+     * Copy the given main resource to the distributed cache if the scheme is not "local".
+     * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
+     * Each resource is represented by a 4-tuple of:
+     *   (1) destination resource name,
+     *   (2) local path to the resource,
+     *   (3) Spark property key to set if the scheme is not local, and
+     *   (4) whether to set permissions for this resource
+     */
     List(
-      (ClientBase.SPARK_JAR, ClientBase.sparkJar(sparkConf), ClientBase.CONF_SPARK_JAR),
-      (ClientBase.APP_JAR, args.userJar, ClientBase.CONF_SPARK_USER_JAR),
-      ("log4j.properties", oldLog4jConf.getOrElse(null), null)
-    ).foreach { case (destName, _localPath, confKey) =>
+      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR, false),
+      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR, true),
+      ("log4j.properties", oldLog4jConf.orNull, null, false)
+    ).foreach { case (destName, _localPath, confKey, setPermissions) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
-      if (! localPath.isEmpty()) {
+      if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
-        if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
-          val setPermissions = destName.equals(ClientBase.APP_JAR)
-          val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
+        if (localURI.getScheme != LOCAL_SCHEME) {
+          val src = getQualifiedLocalPath(localURI)
+          val destPath = copyFileToRemote(dst, src, replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
-          distCacheMgr.addResource(destFs, hadoopConf, destPath, localResources, LocalResourceType.FILE,
-            destName, statCache)
+          distCacheMgr.addResource(destFs, hadoopConf, destPath,
+            localResources, LocalResourceType.FILE, destName, statCache)
         } else if (confKey != null) {
+          // If the resource is intended for local use only, handle this downstream
+          // by setting the appropriate property
           sparkConf.set(confKey, localPath)
         }
       }
     }
 
+    /**
+     * Do the same for any additional resources passed in through ClientArguments.
+     * Each resource category is represented by a 3-tuple of:
+     *   (1) comma separated list of resources in this category,
+     *   (2) resource type, and
+     *   (3) whether to add these resources to the classpath
+     */
     val cachedSecondaryJarLinks = ListBuffer.empty[String]
-    val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
+    List(
+      (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
-      (args.archives, LocalResourceType.ARCHIVE, false) )
-    fileLists.foreach { case (flist, resType, addToClasspath) =>
+      (args.archives, LocalResourceType.ARCHIVE, false)
+    ).foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
-        flist.split(',').foreach { case file: String =>
+        flist.split(',').foreach { file =>
           val localURI = new URI(file.trim())
-          if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
+          if (localURI.getScheme != LOCAL_SCHEME) {
             val localPath = new Path(localURI)
             val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
-            val destPath = copyRemoteFile(dst, localPath, replication)
-            distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, resType,
-              linkname, statCache)
+            val destPath = copyFileToRemote(dst, localPath, replication)
+            distCacheMgr.addResource(
+              fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
             if (addToClasspath) {
               cachedSecondaryJarLinks += linkname
             }
           } else if (addToClasspath) {
+            // Resource is intended for local use only and should be added to the class path
             cachedSecondaryJarLinks += file.trim()
           }
         }
       }
     }
     logInfo("Prepared Local resources " + localResources)
-    sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
+    if (cachedSecondaryJarLinks.nonEmpty) {
+      sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
+    }
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
   }
 
-  /** Get all application master environment variables set on this SparkConf. */
-  def getAppMasterEnv: Seq[(String, String)] = {
-    val prefix = "spark.yarn.appMasterEnv."
-    sparkConf.getAll
-      .filter { case (k, v) => k.startsWith(prefix) }
-      .map { case (k, v) => (k.substring(prefix.length), v) }
-  }
-
   /**
-   *
+   * Set up the environment for launching our ApplicationMaster container.
    */
-  def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
+  private def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
-    ClientBase.populateClasspath(args, yarnConf, sparkConf, env, extraCp)
+    populateClasspath(args, yarnConf, sparkConf, env, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -245,9 +240,14 @@ private[spark] trait ClientBase extends Logging {
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
-    getAppMasterEnv.foreach { case (key, value) =>
-      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
-    }
+    // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
+    val amEnvPrefix = "spark.yarn.appMasterEnv."
+    sparkConf.getAll
+      .filter { case (k, v) => k.startsWith(amEnvPrefix) }
+      .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
+      .foreach { case (k, v) =>
+        YarnSparkHadoopUtil.addToEnvironment(env, k, v, File.pathSeparator)
+      }
 
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
@@ -293,10 +293,10 @@ private[spark] trait ClientBase extends Logging {
   }
 
   /**
-   * Prepare a ContainerLaunchContext to launch our AM container.
+   * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
+  protected def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
       : ContainerLaunchContext = {
     logInfo("Setting up container launch context")
 
@@ -468,17 +468,20 @@ private[spark] trait ClientBase extends Logging {
   /** Submit an application running our ApplicationMaster to the ResourceManager. */
   def submitApplication(): ApplicationId
 
-  /** */
-  def setupSecurityToken(containerContext: ContainerLaunchContext): Unit
+  /** Set up security tokens for launching our ApplicationMaster container. */
+  protected def setupSecurityToken(containerContext: ContainerLaunchContext): Unit
 
-  /** */
-  def getApplicationReport(appId: ApplicationId): ApplicationReport
+  /** Get the application report from the ResourceManager for an application we have submitted. */
+  protected def getApplicationReport(appId: ApplicationId): ApplicationReport
 
-  /** */
-  def getClientToken(report: ApplicationReport): String
+  /**
+   * Return the security token used by this client to communicate with the ApplicationMaster.
+   * If no security is enabled, the token returned by the report is null.
+   */
+  protected def getClientToken(report: ApplicationReport): String
 
   /** Return the amount of memory for launching the ApplicationMaster container (MB). */
-  def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = args.amMemory
+  protected def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = args.amMemory
 }
 
 private[spark] object ClientBase extends Logging {
@@ -519,7 +522,7 @@ private[spark] object ClientBase extends Logging {
    * This method first looks in the SparkConf object for the CONF_SPARK_JAR key, and in the
    * user environment if that is not found (for backwards compatibility).
    */
-  def sparkJar(conf: SparkConf) = {
+  private def sparkJar(conf: SparkConf) = {
     if (conf.contains(CONF_SPARK_JAR)) {
       conf.get(CONF_SPARK_JAR)
     } else if (System.getenv(ENV_SPARK_JAR) != null) {
@@ -532,7 +535,10 @@ private[spark] object ClientBase extends Logging {
     }
   }
 
-  def getAppStagingDir(appId: ApplicationId): String = {
+  /**
+   * Return the path to the given application's staging directory.
+   */
+  private def getAppStagingDir(appId: ApplicationId): String = {
     SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
   }
 
@@ -581,7 +587,7 @@ private[spark] object ClientBase extends Logging {
 
   /**
    * In Hadoop 0.23, the MR application classpath comes with the YARN application
-   * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
+   * classpath. In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
    * So we need to use reflection to retrieve it.
    */
   def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
@@ -620,10 +626,10 @@ private[spark] object ClientBase extends Logging {
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addUserClasspath(args, sparkConf, env)
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
-      ClientBase.populateHadoopClasspath(conf, env)
+      populateHadoopClasspath(conf, env)
     } else {
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
-      ClientBase.populateHadoopClasspath(conf, env)
+      populateHadoopClasspath(conf, env)
       addUserClasspath(args, sparkConf, env)
     }
 
@@ -650,8 +656,11 @@ private[spark] object ClientBase extends Logging {
       val userJar = conf.get(CONF_SPARK_USER_JAR, null)
       addFileToClasspath(userJar, APP_JAR, env)
 
-      val cachedSecondaryJarLinks = conf.get(CONF_SPARK_YARN_SECONDARY_JARS, "").split(",")
-      cachedSecondaryJarLinks.foreach(jar => addFileToClasspath(jar, null, env))
+      // Add any secondary jars to the classpath
+      conf.get(CONF_SPARK_YARN_SECONDARY_JARS, "")
+        .split(",")
+        .filter(_.nonEmpty)
+        .foreach(jar => addFileToClasspath(jar, null, env))
     }
   }
 
@@ -673,27 +682,16 @@ private[spark] object ClientBase extends Logging {
       env: HashMap[String, String]): Unit = {
     if (path != null) {
       scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
-        val localPath = getLocalPath(path)
-        if (localPath != null) {
-          addClasspathEntry(localPath, env)
+        val uri = new URI(path)
+        if (uri.getScheme == LOCAL_SCHEME) {
+          addClasspathEntry(uri.getPath, env)
           return
         }
       }
     }
     if (fileName != null) {
-      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + fileName, env);
+      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + fileName, env)
     }
-  }
-
-  /**
-   * Returns the local path if the URI is a "local:" URI, or null otherwise.
-   */
-  private def getLocalPath(resource: String): String = {
-    val uri = new URI(resource)
-    if (LOCAL_SCHEME.equals(uri.getScheme())) {
-      return uri.getPath()
-    }
-    null
   }
 
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
@@ -736,6 +734,41 @@ private[spark] object ClientBase extends Logging {
         logDebug("getting token for namenode: " + dst)
         dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
+    }
+  }
+
+  /** Return whether the two file systems are the same. */
+  private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
+    val srcUri = srcFs.getUri()
+    val dstUri = destFs.getUri()
+    if (srcUri.getScheme() == null) {
+      return false
+    }
+    if (!srcUri.getScheme().equals(dstUri.getScheme())) {
+      return false
+    }
+    var srcHost = srcUri.getHost()
+    var dstHost = dstUri.getHost()
+    if ((srcHost != null) && (dstHost != null)) {
+      try {
+        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
+        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
+      } catch {
+        case e: UnknownHostException =>
+          return false
+      }
+      if (!srcHost.equals(dstHost)) {
+        return false
+      }
+    } else if (srcHost == null && dstHost != null) {
+      return false
+    } else if (srcHost != null && dstHost == null) {
+      return false
+    }
+    if (srcUri.getPort() != dstUri.getPort()) {
+      false
+    } else {
+      true
     }
   }
 
