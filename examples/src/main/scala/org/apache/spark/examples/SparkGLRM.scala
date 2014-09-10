@@ -31,9 +31,9 @@ import scala.collection.BitSet
  */
 object SparkGLRM {
   // Number of movies
-  var M = 100000
+  var M = 1000000
   // Number of users
-  var U = 100000
+  var U = 1000000
   // Number of nonzeros per row
   var NNZ = 1000
   // Number of features
