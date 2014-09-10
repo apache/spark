@@ -38,7 +38,7 @@ class StorageLevel(object):
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
             self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
 
-    def __repr__(self):
+    def __str__(self):
         result = ""
         result += "Disk " if self.useDisk else ""
         result += "Memory " if self.useMemory else ""
