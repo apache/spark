@@ -6,6 +6,7 @@ import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.rdd.DoubleRDDFunctions
 import org.scalatest.FunSuite
+import org.apache.spark.util.Utils
 
 /**
  * Created by olgaoskina on 05/09/14.
@@ -41,5 +42,14 @@ class StochasticGradientBoostingSuite extends FunSuite with LocalSparkContext {
 
     assert(error < REQUIRED_ERROR,
       s"Calculated mean squared error $error but required $REQUIRED_ERROR.")
+  }
+
+  test("serialize") {
+    val dataX = RandomRDDs.normalVectorRDD(sc, NUM_ROWS, NUM_COLS, NUM_PARTITIONS).cache()
+    val dataY = RandomRDDs.uniformRDD(sc, NUM_ROWS, NUM_PARTITIONS)
+    val parsedData = dataY.zip(dataX).map{case (d, v) => new LabeledPoint(d, v)}
+    val boostingModel = StochasticGradientBoosting.train(parsedData, Algo.Regression, Variance, 3)
+    val deserializeModel: StochasticGradientBoostingModel = Utils.deserialize[StochasticGradientBoostingModel](Utils.serialize(boostingModel))
+    assert(deserializeModel.equals(boostingModel))
   }
 }
