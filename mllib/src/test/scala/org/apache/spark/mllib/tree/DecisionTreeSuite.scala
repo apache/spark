@@ -706,7 +706,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestInfoStats == InformationGainStats.invalidInformationGainStats)
   }
 
-  test("don't chose split that doesn't satify min instance per node requirements") {
+  test("don't chose split that doesn't satisfy min instance per node requirements") {
     // if a split doesn't satisfy min instances per node requirements,
     // this split is invalid, even though the information gain of split is large.
     val arr = new Array[LabeledPoint](4)
