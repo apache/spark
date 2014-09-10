@@ -23,19 +23,19 @@ import org.apache.spark.sql.catalyst.types._
 
 class HiveTypeCoercionSuite extends FunSuite {
 
-  val rules = new HiveTypeCoercion { }
-  import rules._
-
-  test("tightest common bound for numeric and boolean types") {
+  test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = WidenTypes.findTightestCommonType(t1, t2)
+      var found = HiveTypeCoercion.findTightestCommonType(t1, t2)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
       // Test both directions to make sure the widening is symmetric.
-      found = WidenTypes.findTightestCommonType(t2, t1)
+      found = HiveTypeCoercion.findTightestCommonType(t2, t1)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
+
+    // Null
+    widenTest(NullType, NullType, Some(NullType))
 
     // Boolean
     widenTest(NullType, BooleanType, Some(BooleanType))
@@ -60,12 +60,28 @@ class HiveTypeCoercionSuite extends FunSuite {
     widenTest(DoubleType, DoubleType, Some(DoubleType))
 
     // Integral mixed with floating point.
-    widenTest(NullType, FloatType, Some(FloatType))
-    widenTest(NullType, DoubleType, Some(DoubleType))
     widenTest(IntegerType, FloatType, Some(FloatType))
     widenTest(IntegerType, DoubleType, Some(DoubleType))
     widenTest(IntegerType, DoubleType, Some(DoubleType))
     widenTest(LongType, FloatType, Some(FloatType))
     widenTest(LongType, DoubleType, Some(DoubleType))
+
+    // StringType
+    widenTest(NullType, StringType, Some(StringType))
+    widenTest(StringType, StringType, Some(StringType))
+    widenTest(IntegerType, StringType, None)
+    widenTest(LongType, StringType, None)
+
+    // TimestampType
+    widenTest(NullType, TimestampType, Some(TimestampType))
+    widenTest(TimestampType, TimestampType, Some(TimestampType))
+    widenTest(IntegerType, TimestampType, None)
+    widenTest(StringType, TimestampType, None)
+
+    // ComplexType
+    widenTest(NullType, MapType(IntegerType, StringType, false), Some(MapType(IntegerType, StringType, false)))
+    widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
+    widenTest(StringType, MapType(IntegerType, StringType, true), None)
+    widenTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 }
