@@ -189,7 +189,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort, securityMgr)
+      registerAM(sc.ui.appUIAddress, securityMgr)
       try {
         userThread.join()
       } finally {
