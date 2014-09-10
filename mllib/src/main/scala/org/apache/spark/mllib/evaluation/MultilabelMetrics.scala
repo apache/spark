@@ -32,14 +32,14 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
     labels}.distinct.count
 
   /**
-   * Returns strict Accuracy
+   * Returns subset accuracy
    * (for equal sets of labels)
    */
-  lazy val strictAccuracy: Double = predictionAndLabels.filter { case (predictions, labels) =>
+  lazy val subsetAccuracy: Double = predictionAndLabels.filter { case (predictions, labels) =>
     predictions == labels}.count.toDouble / numDocs
 
   /**
-   * Returns Accuracy
+   * Returns accuracy
    */
   lazy val accuracy: Double = predictionAndLabels.map { case (predictions, labels) =>
     labels.intersect(predictions).size.toDouble / labels.union(predictions).size}.sum / numDocs
@@ -52,43 +52,26 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
     sum).toDouble / (numDocs * numLabels)
 
   /**
-   * Returns Document-based Precision averaged by the number of documents
+   * Returns document-based precision averaged by the number of documents
    */
-  lazy val macroPrecisionDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
+  lazy val precision: Double = (predictionAndLabels.map { case (predictions, labels) =>
     if (predictions.size > 0) {
       predictions.intersect(labels).size.toDouble / predictions.size
     } else 0
   }.sum) / numDocs
 
   /**
-   * Returns Document-based Recall averaged by the number of documents
+   * Returns document-based recall averaged by the number of documents
    */
-  lazy val macroRecallDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
+  lazy val recall: Double = (predictionAndLabels.map { case (predictions, labels) =>
     labels.intersect(predictions).size.toDouble / labels.size}.sum) / numDocs
 
   /**
-   * Returns Document-based F1-measure averaged by the number of documents
+   * Returns document-based f1-measure averaged by the number of documents
    */
-  lazy val macroF1MeasureDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
+  lazy val f1Measure: Double = (predictionAndLabels.map { case (predictions, labels) =>
     2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)}.sum) / numDocs
 
-  /**
-   * Returns micro-averaged document-based Precision
-   * (equals to label-based microPrecision)
-   */
-  lazy val microPrecisionDoc: Double = microPrecisionClass
-
-  /**
-   * Returns micro-averaged document-based Recall
-   * (equals to label-based microRecall)
-   */
-  lazy val microRecallDoc: Double = microRecallClass
-
-  /**
-   * Returns micro-averaged document-based F1-measure
-   * (equals to label-based microF1measure)
-   */
-  lazy val microF1MeasureDoc: Double = microF1MeasureClass
 
   private lazy val tpPerClass = predictionAndLabels.flatMap { case (predictions, labels) =>
     predictions.intersect(labels).map(category => (category, 1))}.reduceByKey(_ + _).collectAsMap()
@@ -100,33 +83,33 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
     labels.diff(predictions).map(category => (category, 1))}.reduceByKey(_ + _).collectAsMap()
 
   /**
-   * Returns Precision for a given label (category)
+   * Returns precision for a given label (category)
    * @param label the label.
    */
-  def precisionClass(label: Double) = {
+  def precision(label: Double) = {
     val tp = tpPerClass(label)
     val fp = fpPerClass.getOrElse(label, 0)
     if (tp + fp == 0) 0 else tp.toDouble / (tp + fp)
   }
 
   /**
-   * Returns Recall for a given label (category)
+   * Returns recall for a given label (category)
    * @param label the label.
    */
-  def recallClass(label: Double) = {
+  def recall(label: Double) = {
     val tp = tpPerClass(label)
     val fn = fnPerClass.getOrElse(label, 0)
     if (tp + fn == 0) 0 else tp.toDouble / (tp + fn)
   }
 
   /**
-   * Returns F1-measure for a given label (category)
+   * Returns f1-measure for a given label (category)
    * @param label the label.
    */
-  def f1MeasureClass(label: Double) = {
-    val precision = precisionClass(label)
-    val recall = recallClass(label)
-    if((precision + recall) == 0) 0 else 2 * precision * recall / (precision + recall)
+  def f1Measure(label: Double) = {
+    val p = precision(label)
+    val r = recall(label)
+    if((p + r) == 0) 0 else 2 * p * r / (p + r)
   }
 
   private lazy val sumTp = tpPerClass.foldLeft(0L){ case (sum, (_, tp)) => sum + tp}
@@ -134,23 +117,31 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
   private lazy val sumFnClass = fnPerClass.foldLeft(0L){ case (sum, (_, fn)) => sum + fn}
 
   /**
-   * Returns micro-averaged label-based Precision
+   * Returns micro-averaged label-based precision
+   * (equals to micro-averaged document-based precision)
    */
-  lazy val microPrecisionClass = {
+  lazy val microPrecision = {
     val sumFp = fpPerClass.foldLeft(0L){ case(sumFp, (_, fp)) => sumFp + fp}
     sumTp.toDouble / (sumTp + sumFp)
   }
 
   /**
-   * Returns micro-averaged label-based Recall
+   * Returns micro-averaged label-based recall
+   * (equals to micro-averaged document-based recall)
    */
-  lazy val microRecallClass = {
+  lazy val microRecall = {
     val sumFn = fnPerClass.foldLeft(0.0){ case(sumFn, (_, fn)) => sumFn + fn}
     sumTp.toDouble / (sumTp + sumFn)
   }
 
   /**
-   * Returns micro-averaged label-based F1-measure
+   * Returns micro-averaged label-based f1-measure
+   * (equals to micro-averaged document-based f1-measure)
    */
-  lazy val microF1MeasureClass = 2.0 * sumTp / (2 * sumTp + sumFnClass + sumFpClass)
+  lazy val microF1Measure = 2.0 * sumTp / (2 * sumTp + sumFnClass + sumFpClass)
+
+  /**
+   * Returns the sequence of labels in ascending order
+   */
+  lazy val labels: Array[Double] = tpPerClass.keys.toArray.sorted
 }
