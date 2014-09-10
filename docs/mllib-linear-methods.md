@@ -470,7 +470,7 @@ public class LinearRegression {
         }
       }
     );
-    JavaRDD<Object> MSE = new JavaDoubleRDD(valuesAndPreds.map(
+    double MSE = new JavaDoubleRDD(valuesAndPreds.map(
       new Function<Tuple2<Double, Double>, Object>() {
         public Object call(Tuple2<Double, Double> pair) {
           return Math.pow(pair._1() - pair._2(), 2.0);
@@ -553,8 +553,8 @@ but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
 
-val trainingData = ssc.textFileStream('/training/data/dir').map(LabeledPoint.parse)
-val testData = ssc.textFileStream('/testing/data/dir').map(LabeledPoint.parse)
+val trainingData = ssc.textFileStream("/training/data/dir").map(LabeledPoint.parse)
+val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
 
 {% endhighlight %}
 
