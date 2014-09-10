@@ -43,7 +43,7 @@ object SparkGLRM {
   // Regularization parameter
   var REG = 10000
 
-  
+
 
   /*
    * GLRM settings: Change the Loss function and prox here
@@ -92,7 +92,7 @@ object SparkGLRM {
 
 
   def main(args: Array[String]) {
-    printf("Running with M=%d, U=%d, nnz=10*%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
+    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkGLRM")
     val sc = new SparkContext(sparkConf)
