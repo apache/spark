@@ -62,18 +62,18 @@ private[spark] class Client(
     logInfo("Requesting a new application from cluster with %d NodeManagers"
       .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
-    // Get a new application from our RM.
+    // Get a new application from our RM
     val newAppResponse = getNewApplication()
     val appId = newAppResponse.getApplicationId()
 
-    // Verify whether the cluster has enough resources for our AM.
+    // Verify whether the cluster has enough resources for our AM
     verifyClusterResources(newAppResponse)
 
-    // Set up the appropriate contexts to launch our AM.
+    // Set up the appropriate contexts to launch our AM
     val containerContext = createContainerLaunchContext(newAppResponse)
     val appContext = createApplicationSubmissionContext(appId, containerContext)
 
-    // Finally, submit and monitor the application.
+    // Finally, submit and monitor the application
     logInfo(s"Submitting application ${appId.getId} to ResourceManager")
     submitApplication(appContext)
     appId
