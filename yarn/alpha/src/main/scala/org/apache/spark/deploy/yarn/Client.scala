@@ -60,7 +60,7 @@ private[spark] class Client(
     start()
 
     logInfo("Requesting a new application from cluster with %d NodeManagers"
-      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      .format(getYarnClusterMetrics.getNumNodeManagers))
 
     // Get a new application from our RM
     val newAppResponse = getNewApplication()
