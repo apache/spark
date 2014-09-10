@@ -272,42 +272,40 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       mutableRow: MutableRow): Iterator[Row] = {
 
     val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
-    val fieldRefsWithOrdinals = {
-      val allFieldRefs = soi.getAllStructFieldRefs
-      nonPartitionKeyAttrs.map { case (_, ordinal) => allFieldRefs(ordinal) -> ordinal }
-    }
+    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
+      soi.getStructFieldRef(attr.name) -> ordinal
+    }.unzip
 
     // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
     // matching and branching costs per row.
-    val unwrappers: Seq[(Any, MutableRow, Int) => Unit] =
-      soi.getAllStructFieldRefs.map {
-        _.getFieldObjectInspector match {
-          case oi: BooleanObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
-          case oi: ByteObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
-          case oi: ShortObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
-          case oi: IntObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
-          case oi: LongObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
-          case oi: FloatObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
-          case oi: DoubleObjectInspector =>
-            (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
-          case oi =>
-            (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapData(value, oi)
-        }
-      }.toSeq
+    val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map {
+      _.getFieldObjectInspector match {
+        case oi: BooleanObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
+        case oi: ByteObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
+        case oi: ShortObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
+        case oi: IntObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
+        case oi: LongObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
+        case oi: FloatObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
+        case oi: DoubleObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+        case oi =>
+          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapData(value, oi)
+      }
+    }
 
     // Map each tuple to a row object
     iterator.map { value =>
       val raw = deserializer.deserialize(value)
       var i = 0
-      while (i < fieldRefsWithOrdinals.length) {
-        val fieldRef = fieldRefsWithOrdinals(i)._1
-        val fieldOrdinal= fieldRefsWithOrdinals(i)._2
+      while (i < fieldRefs.length) {
+        val fieldRef = fieldRefs(i)
+        val fieldOrdinal= fieldOrdinals(i)
         val fieldValue = soi.getStructFieldData(raw, fieldRef)
         unwrappers(i)(fieldValue, mutableRow, fieldOrdinal)
         i += 1
