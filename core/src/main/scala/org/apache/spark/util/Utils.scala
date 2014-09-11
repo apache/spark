@@ -55,6 +55,9 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
 private[spark] object Utils extends Logging {
   val random = new Random()
 
+  private[spark] val CALL_SITE_SHORT: String = "callSite.short"
+  private[spark] val CALL_SITE_LONG: String = "callSite.long"
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -859,13 +862,19 @@ private[spark] object Utils extends Logging {
    * finding the call site of a method.
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+  val SCALA_CLASS_REGEX = """^scala""".r
+
+  private def defaultRegexFunc(className: String): Boolean = {
+    SPARK_CLASS_REGEX.findFirstIn(className).isDefined ||
+    SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSite: CallSite = {
+  def getCallSite(regexFunc: String => Boolean = defaultRegexFunc(_)): CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot { ste:StackTraceElement =>
         // When running under some profilers, the current stack trace might contain some bogus
@@ -886,8 +895,8 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (insideSpark) {
-        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
-          lastSparkMethod = if (el.getMethodName == "<init>") {
+        if (regexFunc(el.getClassName)) {
+            lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
           } else {

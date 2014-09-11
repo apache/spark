@@ -1044,7 +1044,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def getCallSite(): CallSite = {
     Option(getLocalProperty("externalCallSite")) match {
       case Some(callSite) => CallSite(callSite, longForm = "")
-      case None => Utils.getCallSite
+      case None => Utils.getCallSite()
     }
   }
 

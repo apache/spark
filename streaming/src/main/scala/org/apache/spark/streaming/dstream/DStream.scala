@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.util.{CallSite, Utils, MetadataCleaner}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -105,6 +105,21 @@ abstract class DStream[T: ClassTag] (
 
   /** Return the StreamingContext associated with this DStream */
   def context = ssc
+
+  /* Find the creation callSite */
+  val creationSite = Utils.getCallSite(org.apache.spark.streaming.util.Utils.streamingRegexFunc)
+
+  /* Store the RDD creation callSite in threadlocal */
+  private def setRDDCreationCallSite(callSite: CallSite = creationSite) = {
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_SHORT, callSite.shortForm)
+    ssc.sparkContext.setLocalProperty(Utils.CALL_SITE_LONG, callSite.longForm)
+  }
+
+  /* Return the current callSite */
+  private def getRDDCreationCallSite(): CallSite = {
+    CallSite(ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_SHORT),
+             ssc.sparkContext.getLocalProperty(Utils.CALL_SITE_LONG))
+  }
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(level: StorageLevel): DStream[T] = {
@@ -288,7 +303,9 @@ abstract class DStream[T: ClassTag] (
       // (based on sliding time of this DStream), then generate the RDD
       case None => {
         if (isTimeValid(time)) {
-          compute(time) match {
+          val prevCallSite = getRDDCreationCallSite
+          setRDDCreationCallSite()
+          val rddOption = compute(time) match {
             case Some(newRDD) =>
               if (storageLevel != StorageLevel.NONE) {
                 newRDD.persist(storageLevel)
@@ -304,10 +321,12 @@ abstract class DStream[T: ClassTag] (
               generatedRDDs.put(time, newRDD)
               Some(newRDD)
             case None =>
-              None
+              return None
           }
+          setRDDCreationCallSite(prevCallSite)
+          return rddOption
         } else {
-          None
+          return None
         }
       }
     }
