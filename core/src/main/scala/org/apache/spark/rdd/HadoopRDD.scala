@@ -84,44 +84,27 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * [[org.apache.spark.SparkContext.hadoopRDD()]]
  *
  * @param sc The SparkContext to associate the RDD with.
- * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
- *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
- *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
- * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
- *     creates.
+ * @param conf A general Hadoop Configuration, or a subclass of it. If the enclosed variable
+ *             references an instance of JobConf, then that JobConf will be used for the Hadoop job.
+ *             Otherwise, a new JobConf will be created using the enclosed Configuration.
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
+ * @param initLocalJobConfFuncOpt Optional closure used to initialize a JobConf.
  */
 @DeveloperApi
 class HadoopRDD[K, V](
     sc: SparkContext,
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
-    initLocalJobConfFuncOpt: Option[JobConf => Unit],
+    @transient conf: Configuration,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    initLocalJobConfFuncOpt: Option[JobConf => Unit] = None)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
-  def this(
-      sc: SparkContext,
-      conf: JobConf,
-      inputFormatClass: Class[_ <: InputFormat[K, V]],
-      keyClass: Class[K],
-      valueClass: Class[V],
-      minPartitions: Int) = {
-    this(
-      sc,
-      sc.broadcast(new SerializableWritable(conf))
-        .asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
-      None /* initLocalJobConfFuncOpt */,
-      inputFormatClass,
-      keyClass,
-      valueClass,
-      minPartitions)
-  }
+  private val serializableConf = new SerializableWritable(conf)
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
 
@@ -131,26 +114,15 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
-  protected def getJobConf(): JobConf = {
-    val conf: Configuration = broadcastedConf.value.value
-    if (conf.isInstanceOf[JobConf]) {
-      // A user-broadcasted JobConf was provided to the HadoopRDD, so always use it.
-      conf.asInstanceOf[JobConf]
-    } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
-      // getJobConf() has been called previously, so there is already a local cache of the JobConf
-      // needed by this RDD.
-      HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
-    } else {
-      // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
-      // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
-      // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-      // Synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456).
-      HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
-        val newJobConf = new JobConf(conf)
-        initLocalJobConfFuncOpt.map(f => f(newJobConf))
-        HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-        newJobConf
-      }
+  protected def createJobConf(): JobConf = {
+    val conf: Configuration = serializableConf.value
+    conf match {
+      case jobConf: JobConf =>
+        jobConf
+      case _: Configuration =>
+        val jobConf = new JobConf(conf)
+        initLocalJobConfFuncOpt.foreach(f => f(jobConf))
+        jobConf
     }
   }
 
@@ -170,7 +142,7 @@ class HadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val jobConf = getJobConf()
+    val jobConf = createJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
     val inputFormat = getInputFormat(jobConf)
@@ -191,7 +163,7 @@ class HadoopRDD[K, V](
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
-      val jobConf = getJobConf()
+      val jobConf = createJobConf()
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
         context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
@@ -257,13 +229,9 @@ class HadoopRDD[K, V](
   override def checkpoint() {
     // Do nothing. Hadoop RDD should not be checkpointed.
   }
-
-  def getConf: Configuration = getJobConf()
 }
 
 private[spark] object HadoopRDD {
-  /** Constructing Configuration objects is not threadsafe, use this lock to serialize. */
-  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
