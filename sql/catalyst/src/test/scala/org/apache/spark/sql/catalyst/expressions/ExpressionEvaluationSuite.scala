@@ -342,14 +342,14 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date casting") {
-    val millis = 15 * 1000 + 1
-    val d = new Date(millis)
+    val d = Date.valueOf("1970-01-01")
     checkEvaluation(Cast(d, ShortType), null)
     checkEvaluation(Cast(d, IntegerType), null)
     checkEvaluation(Cast(d, LongType), null)
     checkEvaluation(Cast(d, FloatType), null)
     checkEvaluation(Cast(d, DoubleType), null)
     checkEvaluation(Cast(d, StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
   }
 
   test("timestamp casting") {
