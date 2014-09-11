@@ -119,7 +119,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] def cleanup() {
     isZombie = true
     // Release the current buffer if necessary
-    if (currentResult != null && currentResult.buf != null) {
+    if (currentResult != null && !currentResult.failed) {
       currentResult.buf.release()
     }
 
@@ -127,7 +127,9 @@ final class ShuffleBlockFetcherIterator(
     val iter = results.iterator()
     while (iter.hasNext) {
       val result = iter.next()
-      result.buf.release()
+      if (!result.failed) {
+        result.buf.release()
+      }
     }
   }
 
@@ -313,7 +315,7 @@ object ShuffleBlockFetcherIterator {
    * @param blocks Sequence of tuple, where the first element is the block id,
    *               and the second element is the estimated size, used to calculate bytesInFlight.
    */
-  class FetchRequest(val address: BlockManagerId, val blocks: Seq[(BlockId, Long)]) {
+  case class FetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long)]) {
     val size = blocks.map(_._2).sum
   }
 
@@ -324,7 +326,8 @@ object ShuffleBlockFetcherIterator {
    *             Note that this is NOT the exact bytes. -1 if failure is present.
    * @param buf [[ManagedBuffer]] for the content. null is error.
    */
-  class FetchResult(val blockId: BlockId, val size: Long, val buf: ManagedBuffer) {
+  case class FetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer) {
     def failed: Boolean = size == -1
+    if (failed) assert(buf == null) else assert(buf != null)
   }
 }
