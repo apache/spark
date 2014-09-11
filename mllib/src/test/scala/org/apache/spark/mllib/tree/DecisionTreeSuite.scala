@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
+import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
@@ -280,8 +280,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
-    assert(stats.predict === 1)
-    assert(stats.prob === 0.6)
+    assert(rootNode.predict === 1)
     assert(stats.impurity > 0.2)
   }
 
@@ -313,7 +312,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
-    assert(stats.predict === 0.6)
+    assert(rootNode.predict === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -393,7 +392,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(stats.predict === 1)
+    assert(rootNode.predict === 1)
   }
 
   test("Binary classification stump with fixed label 0 for Entropy") {
@@ -423,7 +422,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(stats.predict === 0)
+    assert(rootNode.predict === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Entropy") {
@@ -453,7 +452,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(stats.predict === 1)
+    assert(rootNode.predict === 1)
   }
 
   test("Second level node building with vs. without groups") {
@@ -508,7 +507,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(stats1.impurity === stats2.impurity)
       assert(stats1.leftImpurity === stats2.leftImpurity)
       assert(stats1.rightImpurity === stats2.rightImpurity)
-      assert(stats1.predict === stats2.predict)
+      assert(children1(i).predict === children2(i).predict)
     }
   }
 
@@ -686,6 +685,88 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     validateClassifier(model, arr, 0.6)
   }
 
+  test("split must satisfy min instances per node requirements") {
+    val arr = new Array[LabeledPoint](3)
+    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
+    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini,
+      maxDepth = 2, numClassesForClassification = 2, minInstancesPerNode = 2)
+
+    val model = DecisionTree.train(input, strategy)
+    assert(model.topNode.isLeaf)
+    assert(model.topNode.predict == 0.0)
+    val predicts = input.map(p => model.predict(p.features)).collect()
+    predicts.foreach { predict =>
+      assert(predict == 0.0)
+    }
+
+    // test for findBestSplits when no valid split can be found
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val gain = rootNode.stats.get
+    assert(gain == InformationGainStats.invalidInformationGainStats)
+  }
+
+  test("don't choose split that doesn't satisfy min instance per node requirements") {
+    // if a split doesn't satisfy min instances per node requirements,
+    // this split is invalid, even though the information gain of split is large.
+    val arr = new Array[LabeledPoint](4)
+    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0, 1.0))
+    arr(1) = new LabeledPoint(1.0, Vectors.dense(1.0, 1.0))
+    arr(2) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
+    arr(3) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini,
+      maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
+      numClassesForClassification = 2, minInstancesPerNode = 2)
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val split = rootNode.split.get
+    val gain = rootNode.stats.get
+    assert(split.feature == 1)
+    assert(gain != InformationGainStats.invalidInformationGainStats)
+  }
+
+  test("split must satisfy min info gain requirements") {
+    val arr = new Array[LabeledPoint](3)
+    arr(0) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0))))
+    arr(1) = new LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0))))
+    arr(2) = new LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0))))
+
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClassesForClassification = 2, minInfoGain = 1.0)
+
+    val model = DecisionTree.train(input, strategy)
+    assert(model.topNode.isLeaf)
+    assert(model.topNode.predict == 0.0)
+    val predicts = input.map(p => model.predict(p.features)).collect()
+    predicts.foreach { predict =>
+      assert(predict == 0.0)
+    }
+
+    // test for findBestSplits when no valid split can be found
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
+    val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
+    val (rootNode, doneTraining) = DecisionTree.findBestSplits(treeInput, metadata, 0,
+      null, splits, bins, 10)
+
+    val gain = rootNode.stats.get
+    assert(gain == InformationGainStats.invalidInformationGainStats)
+  }
 }
 
 object DecisionTreeSuite {
