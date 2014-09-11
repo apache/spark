@@ -56,7 +56,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             } else JNothing
 
           if (jsonTaskInfo.isInstanceOf[JObject] && jsonTaskMetrics.isInstanceOf[JObject]) {
-            jsonTaskInfo = jsonTaskInfo.asInstanceOf[JObject] ~ jsonTaskMetrics.asInstanceOf[JObject]
+            jsonTaskInfo =
+              jsonTaskInfo.asInstanceOf[JObject] ~ jsonTaskMetrics.asInstanceOf[JObject]
           }
           jsonTaskInfo
       }
