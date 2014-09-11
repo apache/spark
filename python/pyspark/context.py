@@ -331,11 +331,15 @@ class SparkContext(object):
         return RDD(self._jsc.objectFile(name, minPartitions), self,
                    BatchedSerializer(PickleSerializer()))
 
-    def textFile(self, name, minPartitions=None):
+    def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
@@ -346,15 +350,19 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
-                   UTF8Deserializer())
+                   UTF8Deserializer(use_unicode))
 
-    def wholeTextFiles(self, path, minPartitions=None):
+    def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         For example, if you have the following files::
 
@@ -386,7 +394,7 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
-                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
+                   PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)))
 
     def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()
