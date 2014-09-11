@@ -38,6 +38,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
 
   override def renderJson(request: HttpServletRequest): JValue = {
     listener.synchronized {
+
       val activeStageList = listener.activeStages.values.map {
         case info: StageInfo =>
           JsonProtocol.stageInfoToJson(info)
@@ -56,11 +57,11 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
       }
       val failedStageJson = ("Failed Stages" -> failedStageList)
 
-      ("Stages" ->
+      ("Stages Info" ->
+        ("Scheduling Mode" -> listener.schedulingMode.map(_.toString).getOrElse("Unknown")) ~
         activeStageJson ~
         completedStageJson ~
         failedStageJson)
-
     }
   }
 
