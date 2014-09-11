@@ -19,9 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
 
-import org.apache.spark.sql.{SQLConf, QueryTest, Row}
-import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class Nested1(f1: Nested2)
