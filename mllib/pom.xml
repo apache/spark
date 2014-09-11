@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-mllib_2.10</artifactId>
+  <artifactId>spark-mllib</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
   </properties>  

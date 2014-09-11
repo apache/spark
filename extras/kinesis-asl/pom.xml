@@ -26,7 +26,7 @@
 
   <!-- Kinesis integration is not included by default due to ASL-licensed code. -->
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-kinesis-asl_2.10</artifactId>
+  <artifactId>spark-streaming-kinesis-asl</artifactId>
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 

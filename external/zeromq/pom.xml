@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-zeromq_2.10</artifactId>
+  <artifactId>spark-streaming-zeromq</artifactId>
   <properties>
     <sbt.project.name>streaming-zeromq</sbt.project.name>
   </properties>
