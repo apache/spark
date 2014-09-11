@@ -26,10 +26,22 @@ object HiveTypeCoercion {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
   val numericPrecedence =
-    Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-  // Boolean is only wider than Void
-  val booleanPrecedence = Seq(NullType, BooleanType)
-  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
+  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: Nil
+
+  def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
+    val valueTypes = Seq(t1, t2).filter(t => t != NullType)
+    if (valueTypes.distinct.size > 1) {
+      // Try and find a promotion rule that contains both types in question.
+      val applicableConversion =
+        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
+
+      // If found return the widest common type, otherwise None
+      applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
+    } else {
+      Some(if (valueTypes.size == 0) NullType else valueTypes.head)
+    }
+  }
 }
 
 /**
@@ -52,17 +64,6 @@ trait HiveTypeCoercion {
     CaseWhenCoercion ::
     Division ::
     Nil
-
-  trait TypeWidening {
-    def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-      // Try and find a promotion rule that contains both types in question.
-      val applicableConversion =
-        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
-
-      // If found return the widest common type, otherwise None
-      applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
-    }
-  }
 
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by other rules to
@@ -144,7 +145,8 @@ trait HiveTypeCoercion {
    * - LongType to FloatType
    * - LongType to DoubleType
    */
-  object WidenTypes extends Rule[LogicalPlan] with TypeWidening {
+  object WidenTypes extends Rule[LogicalPlan] {
+    import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
@@ -352,7 +354,9 @@ trait HiveTypeCoercion {
   /**
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
-  object CaseWhenCoercion extends Rule[LogicalPlan] with TypeWidening {
+  object CaseWhenCoercion extends Rule[LogicalPlan] {
+    import HiveTypeCoercion._
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case cw @ CaseWhen(branches) if !cw.resolved && !branches.exists(!_.resolved)  =>
         val valueTypes = branches.sliding(2, 2).map {
