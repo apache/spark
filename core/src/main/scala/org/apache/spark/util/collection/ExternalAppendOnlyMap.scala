@@ -110,6 +110,9 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
+  private val timesMax = sparkConf.getInt("spark.shuffle.spill.times.max", 0)
+  private val diskBytesMax = sparkConf.getInt("spark.shuffle.spill.diskbytes.max", 0)
+
   /**
    * Insert the given key and value into the map.
    */
@@ -145,9 +148,17 @@ class ExternalAppendOnlyMap[K, V, C](
         val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
         myMemoryThreshold += granted
         if (myMemoryThreshold <= currentMemory) {
-          // We were granted too little memory to grow further (either tryToAcquire returned 0,
-          // or we already had more memory than myMemoryThreshold); spill the current collection
-          spill(currentMemory)  // Will also release memory back to ShuffleMemoryManager
+          if (timesMax > 0 && spillCount >= timesMax) {
+            logWarning("spill times more than " + timesMax)
+            throw new IOException("spill times more than " + timesMax)
+          } else if (diskBytesMax > 0 && _diskBytesSpilled >= diskBytesMax) {
+            logWarning("spill disk bytes written more than " + diskBytesMax)
+            throw new IOException("spill disk bytes written more than " + diskBytesMax)
+          } else {
+            // We were granted too little memory to grow further (either tryToAcquire returned 0,
+            // or we already had more memory than myMemoryThreshold); spill the current collection
+            spill(currentMemory)  // Will also release memory back to ShuffleMemoryManager
+          }
         }
       }
       currentMap.changeValue(curEntry._1, update)
