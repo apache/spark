@@ -648,11 +648,11 @@ class CloudPickler(pickle.Pickler):
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
-        if obj.name == '<stdout>':
+        if obj is sys.stdout:
             return self.save_reduce(getattr, (sys,'stdout'), obj=obj)
-        if obj.name == '<stderr>':
+        if obj is sys.stderr:
             return self.save_reduce(getattr, (sys,'stderr'), obj=obj)
-        if obj.name == '<stdin>':
+        if obj is sys.stdin:
             raise pickle.PicklingError("Cannot pickle standard input")
         if  hasattr(obj, 'isatty') and obj.isatty():
             raise pickle.PicklingError("Cannot pickle files that map to tty objects")
