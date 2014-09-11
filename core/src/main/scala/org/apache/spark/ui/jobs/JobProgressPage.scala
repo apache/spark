@@ -19,9 +19,14 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.util.JsonProtocol
+import org.json4s.JValue
+import org.json4s.JsonAST.JNothing
+import org.json4s.JsonDSL._
+
 import scala.xml.{Node, NodeSeq}
 
-import org.apache.spark.scheduler.Schedulable
+import org.apache.spark.scheduler.{StageInfo, Schedulable}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
@@ -30,6 +35,34 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
   private val sc = parent.sc
   private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    listener.synchronized {
+      val activeStageList = listener.activeStages.values.map {
+        case info: StageInfo =>
+          JsonProtocol.stageInfoToJson(info)
+      }
+      val activeStageJson = ("Active Stages" -> activeStageList)
+
+      val completedStageList = listener.completedStages.reverse.map {
+        case info: StageInfo =>
+          JsonProtocol.stageInfoToJson(info)
+      }
+      val completedStageJson = ("Completed Stages" -> completedStageList)
+
+      val failedStageList = listener.failedStages.reverse.map {
+        case info: StageInfo =>
+          JsonProtocol.stageInfoToJson(info)
+      }
+      val failedStageJson = ("Failed Stages" -> failedStageList)
+
+      ("Stages" ->
+        activeStageJson ~
+        completedStageJson ~
+        failedStageJson)
+
+    }
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
