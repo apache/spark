@@ -30,7 +30,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 /**
  * Functions for registering scala lambda functions as UDFs in a SQLContext.
  */
-protected[sql] trait UDFRegistration {
+private[sql] trait UDFRegistration {
   self: SQLContext =>
 
   private[spark] def registerPython(

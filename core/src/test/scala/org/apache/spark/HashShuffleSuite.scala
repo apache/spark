@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark
 
-import java.net.InetSocketAddress
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.util.Utils
+class HashShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
-private[spark] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
+  // This test suite should run all tests in ShuffleSuite with hash-based shuffle.
 
-  def toSocketAddress() = new InetSocketAddress(host, port)
-}
+  override def beforeAll() {
+    System.setProperty("spark.shuffle.manager", "hash")
+  }
 
-
-private[spark] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
+  override def afterAll() {
+    System.clearProperty("spark.shuffle.manager")
   }
 }
