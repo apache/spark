@@ -31,7 +31,7 @@ private[spark] class StreamingTab(ssc: StreamingContext)
   extends SparkUITab(getSparkUI(ssc), "streaming") with Logging {
 
   val parent = getSparkUI(ssc)
-  val listener = new StreamingJobProgressListener(ssc)
+  val listener = ssc.progressListener
 
   ssc.addStreamingListener(listener)
   attachPage(new StreamingPage(this))
