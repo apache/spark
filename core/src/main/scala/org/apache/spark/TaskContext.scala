@@ -41,7 +41,7 @@ class TaskContext(
     val attemptId: Long,
     val runningLocally: Boolean = false,
     private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends Serializable {
+  extends Serializable with Logging {
 
   @deprecated("use partitionId", "0.8.1")
   def splitId = partitionId
