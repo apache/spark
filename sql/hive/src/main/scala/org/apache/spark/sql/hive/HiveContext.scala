@@ -262,7 +262,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false)
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedRules =
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUdfs ::
+        Nil
+    }
 
   /**
    * Runs the specified SQL query using Hive.
@@ -353,9 +359,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
-    // TODO: Create mixin for the analyzer instead of overriding things here.
-    override lazy val optimizedPlan =
-      optimizer(ExtractPythonUdfs(catalog.PreInsertionCasts(catalog.CreateTables(analyzed))))
 
     override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 

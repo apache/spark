@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.types._
 
 class HiveTypeCoercionSuite extends FunSuite {
@@ -83,5 +85,18 @@ class HiveTypeCoercionSuite extends FunSuite {
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+  }
+
+  test("boolean casts") {
+    val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
+    def ruleTest(initial: Expression, transformed: Expression) {
+      val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+      assert(booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)) ==
+        Project(Seq(Alias(transformed, "a")()), testRelation))      
+    }
+    // Remove superflous boolean -> boolean casts.
+    ruleTest(Cast(Literal(true), BooleanType), Literal(true))
+    // Stringify boolean when casting to string.
+    ruleTest(Cast(Literal(false), StringType), If(Literal(false), Literal("true"), Literal("false")))
   }
 }
