@@ -83,8 +83,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetLocationsMultipleBlockIds(blockIds) =>
       sender ! getLocationsMultipleBlockIds(blockIds)
 
-    case GetPeers(blockManagerId, size) =>
-      sender ! getPeers(blockManagerId, size)
+    case GetPeers(blockManagerId) =>
+      sender ! getPeers(blockManagerId)
 
     case GetMemoryStatus =>
       sender ! memoryStatus
@@ -403,16 +403,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockIds.map(blockId => getLocations(blockId))
   }
 
-  private def getPeers(blockManagerId: BlockManagerId, size: Int): Seq[BlockManagerId] = {
-    val peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
-
-    val selfIndex = peers.indexOf(blockManagerId)
+  /** Get the list of the peers of the given block manager */
+  private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
+    val blockManagerIds = blockManagerInfo.keySet.toArray
+    val selfIndex = blockManagerIds.indexOf(blockManagerId)
     if (selfIndex == -1) {
-      throw new SparkException("Self index for " + blockManagerId + " not found")
+      logError("Self index for " + blockManagerId + " not found")
+      Seq.empty
+    } else {
+      // If the blockManagerIds is [ id1 id2 id3 id4 id5 ] and the blockManagerId is id2
+      // Then this code will return the list [ id3 id4 id5 id1 ]
+      Array.tabulate[BlockManagerId](blockManagerIds.size - 1) { i =>
+        blockManagerIds((selfIndex + i + 1) % blockManagerIds.size)
+      }
     }
-
-    // Note that this logic will select the same node multiple times if there aren't enough peers
-    Array.tabulate[BlockManagerId](size) { i => peers((selfIndex + i + 1) % peers.length) }.toSeq
   }
 }
 

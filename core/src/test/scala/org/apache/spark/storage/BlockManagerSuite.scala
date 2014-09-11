@@ -49,10 +49,6 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
-import org.apache.spark.storage.BroadcastBlockId
-import org.apache.spark.storage.RDDBlockId
-import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.storage.TestBlockId
 
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
@@ -126,7 +122,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     System.clearProperty("spark.test.useCompressedOops")
   }
-  /*
+
   test("StorageLevel object caching") {
     val level1 = StorageLevel(false, false, false, false, 3)
     val level2 = StorageLevel(false, false, false, false, 3) // this should return the same object as level1
@@ -195,7 +191,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = makeBlockManager(2000, "exec1")
     store2 = makeBlockManager(2000, "exec2")
 
-    val peers = master.getPeers(store.blockManagerId, 1)
+    val peers = master.getPeers(store.blockManagerId)
     assert(peers.size === 1, "master did not return the other manager as a peer")
     assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
 
@@ -454,7 +450,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
-    System.out.println(list2DiskGet)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
     assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
@@ -1234,7 +1229,44 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
   }
-  */
+
+  test("get peers with store addition and removal") {
+    val numStores = 4
+    val stores = (1 to numStores - 1).map { i => makeBlockManager(1000, s"store$i") }
+    try {
+      val storeIds = stores.map { _.blockManagerId }.toSet
+      assert(master.getPeers(stores(0).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(0).blockManagerId })
+      assert(master.getPeers(stores(1).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(1).blockManagerId })
+      assert(master.getPeers(stores(2).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(2).blockManagerId })
+
+      // Add a new store and test whether get peers returns it
+      val newStore = makeBlockManager(1000, s"store$numStores")
+      assert(master.getPeers(stores(0).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(0).blockManagerId } + newStore.blockManagerId)
+      assert(master.getPeers(stores(1).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(1).blockManagerId } + newStore.blockManagerId)
+      assert(master.getPeers(stores(2).blockManagerId).toSet ===
+        storeIds.filterNot { _ == stores(2).blockManagerId } + newStore.blockManagerId)
+      assert(master.getPeers(newStore.blockManagerId).toSet === storeIds)
+
+      // Remove a store and test whether get peers returns it
+      val storeIdToRemove = stores(0).blockManagerId
+      master.removeExecutor(storeIdToRemove.executorId)
+      assert(!master.getPeers(stores(1).blockManagerId).contains(storeIdToRemove))
+      assert(!master.getPeers(stores(2).blockManagerId).contains(storeIdToRemove))
+      assert(!master.getPeers(newStore.blockManagerId).contains(storeIdToRemove))
+
+      // Test whether asking for peers of a unregistered block manager id returns empty list
+      assert(master.getPeers(stores(0).blockManagerId).isEmpty)
+      assert(master.getPeers(BlockManagerId("", "", 1)).isEmpty)
+    } finally {
+      stores.foreach { _.stop() }
+    }
+  }
+
   test("block replication - 2x") {
     testReplication(2,
       Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_AND_DISK_SER_2)
@@ -1242,6 +1274,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("block replication - 3x") {
+    // Generate storage levels with 3x replication
     val storageLevels = {
       Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK, MEMORY_AND_DISK_SER).map {
         level => StorageLevel(
@@ -1252,18 +1285,77 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("block replication - mixed between 1x to 5x") {
+    // Generate storage levels with varying replication
     val storageLevels = Seq(
       MEMORY_ONLY,
       MEMORY_ONLY_SER_2,
-      StorageLevel(true, true, false, true, 3),
-      StorageLevel(true, false, false, false, 4),
-      StorageLevel(false, false, false, false, 5),
-      StorageLevel(true, false, false, false, 4),
-      StorageLevel(true, true, false, true, 3),
+      StorageLevel(true, false, false, false, 3),
+      StorageLevel(true, true, false, true, 4),
+      StorageLevel(true, true, false, false, 5),
+      StorageLevel(true, true, false, true, 4),
+      StorageLevel(true, false, false, false, 3),
       MEMORY_ONLY_SER_2,
       MEMORY_ONLY
     )
-    testReplication(3, storageLevels)
+    testReplication(5, storageLevels)
+  }
+
+  test("block replication with addition and removal of executors") {
+    val blockSize = 1000
+    val storeSize = 10000
+    val allStores = new ArrayBuffer[BlockManager]()
+
+    try {
+      val initialStores = (1 to 2).map { i => makeBlockManager(storeSize, s"store$i") }
+      allStores ++= initialStores
+
+      // 2x replication works
+      initialStores(0).putSingle("a1", new Array[Byte](blockSize), StorageLevel.MEMORY_AND_DISK_2)
+      assert(master.getLocations("a1").size === 2)
+
+      // 3x replication should only replicate 2x
+      initialStores(0).putSingle(
+        "a2", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
+      assert(master.getLocations("a2").size === 2)
+
+      val newStore1 = makeBlockManager(storeSize, s"newstore1")
+      allStores += newStore1
+
+      // 3x replication should work now
+      initialStores(0).putSingle(
+        "a3", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
+      assert(master.getLocations("a3").size === 3)
+
+      // 4x replication should only replicate 3x
+      initialStores(0).putSingle(
+        "a4", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 4))
+      assert(master.getLocations("a4").size === 3)
+
+      val newStore2 = makeBlockManager(storeSize, s"newstore2")
+      allStores += newStore2
+
+      // 4x replication should work now
+      initialStores(0).putSingle(
+        "a5", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 4))
+      assert(master.getLocations("a5").size === 4)
+
+      // Remove all the stores and add new stores
+      (initialStores ++ Seq(newStore1, newStore2)).map { store =>
+        store.blockManagerId.executorId
+      }.foreach { execId =>
+        master.removeExecutor(execId)
+      }
+
+      // Add new stores and test if replication works
+      val newStores = (3 to 5).map { i => makeBlockManager(storeSize, s"newstore$i") }
+      allStores ++= newStores
+
+      newStores(0).putSingle(
+        "a6", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
+      assert(master.getLocations("a6").size === 3)
+    } finally {
+      allStores.foreach { _.stop() }
+    }
   }
 
   /**
@@ -1273,7 +1365,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
+  private def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
     import org.apache.spark.storage.StorageLevel._
 
     assert(maxReplication > 1,
@@ -1291,7 +1383,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     try {
       storageLevels.foreach {storageLevel =>
-
         // Put the block into one of the stores
         val blockId = new TestBlockId(
           "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase)
@@ -1364,4 +1455,3 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     }
   }
 }
-

@@ -37,6 +37,7 @@ import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
+import scala.collection.mutable
 
 
 private[spark] sealed trait BlockValues
@@ -111,7 +112,8 @@ private[spark] class BlockManager(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
-
+  private val cachedPeers = new ArrayBuffer[BlockManagerId]
+  private var lastPeerFetchTime = 0L
   initialize()
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
@@ -787,19 +789,41 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Get peer block managers in the system.
+   */
+  private def getPeers(numPeers: Int): Seq[BlockManagerId] = cachedPeers.synchronized {
+    val currentTime = System.currentTimeMillis
+    // If cache is empty or has insufficient number of peers, fetch from master
+    if (cachedPeers.isEmpty || numPeers > cachedPeers.size) {
+      cachedPeers.clear()
+      cachedPeers ++= master.getPeers(blockManagerId)
+      logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
+      lastPeerFetchTime = System.currentTimeMillis
+    }
+    if (numPeers > cachedPeers.size) {
+      // if enough peers cannot be provided, return all of them
+      logDebug(s"Not enough peers - cached peers = ${cachedPeers.size}, required peers = $numPeers")
+      cachedPeers
+    } else {
+      cachedPeers.take(numPeers)
+    }
+  }
+
+  /**
    * Replicate block to another node.
    */
-  @volatile var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
-    if (cachedPeers == null) {
-      cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
+    val selectedPeers = getPeers(level.replication - 1)
+    if (selectedPeers.size < level.replication - 1) {
+      logWarning(s"Failed to replicate block to ${level.replication - 1} peer(s) " +
+        s"as only ${selectedPeers.size} peer(s) were found")
     }
-    for (peer: BlockManagerId <- cachedPeers) {
+    selectedPeers.foreach { peer =>
       val start = System.nanoTime
       data.rewind()
-      logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} Bytes. " +
+      logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} bytes. " +
         s"To node: $peer")
 
       try {
@@ -808,6 +832,7 @@ private[spark] class BlockManager(
       } catch {
         case e: Exception =>
           logError(s"Failed to replicate block to $peer", e)
+          cachedPeers.synchronized { cachedPeers.clear() }
       }
 
       logDebug("Replicating BlockId %s once used %fs; The size of the data is %d bytes."
