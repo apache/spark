@@ -127,6 +127,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SQRT = Keyword("SQRT")
   protected val ABS = Keyword("ABS")
+  protected val ADD = Keyword("ADD")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -151,7 +152,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
-    | insert | cache
+    | insert | cache | addCache
   )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -181,6 +182,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
         InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
     }
+    
+  protected lazy val addCache: Parser[LogicalPlan] =
+    ADD ~ CACHE ~ TABLE ~> ident ~ AS ~ select <~ opt(";") ^^ {
+     case tableName ~ as ~ s =>
+       CacheTableAsSelectCommand(tableName,s)
+    }        
 
   protected lazy val cache: Parser[LogicalPlan] =
     (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {

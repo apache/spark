@@ -216,6 +216,17 @@ private[hive] object HiveQl {
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
+    if (sql.trim.toLowerCase.startsWith("add cache table")) {
+	  sql.trim.drop(16).split(" ").toSeq match {
+	    case Seq(tableName,as, xs@_*) => CacheTableAsSelectCommand(tableName,processSql(sql.trim.drop(16+tableName.length()+as.length()+1))) 
+	  } 
+	} else {
+      processSql(sql)
+    }
+  }
+  
+  /** Returns a LogicalPlan for a given HiveQL string. */
+  def processSql(sql : String) = {
     try {
       if (sql.trim.toLowerCase.startsWith("set")) {
         // Split in two parts since we treat the part before the first "="
@@ -233,7 +244,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8).trim)
+        NativeCommand(sql)
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
       } else if (sql.trim.toLowerCase.startsWith("dfs")) {
