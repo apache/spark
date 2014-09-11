@@ -24,17 +24,17 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkConf
+
 class UISuite extends FunSuite {
 
   // Ignored: See SPARK-1530
   ignore("streaming tab in spark UI") {
-
-    // For this test, we have to manually set the system property to enable the SparkUI
-    // here because there is no appropriate StreamingContext constructor. We just have
-    // to make sure we remember to restore the original value after the test.
-    val oldSparkUIEnabled = sys.props.get("spark.ui.enabled").getOrElse("false")
-    sys.props("spark.ui.enabled") = "true"
-    val ssc = new StreamingContext("local", "test", Seconds(1))
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.ui.enabled", "true")
+    val ssc = new StreamingContext(conf, Seconds(1))
     assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
     val ui = ssc.sc.ui.get
 
@@ -52,8 +52,5 @@ class UISuite extends FunSuite {
       assert(html.toLowerCase.contains("batch"))
       assert(html.toLowerCase.contains("network"))
     }
-
-    // Restore the original setting for enabling the SparkUI
-    sys.props("spark.ui.enabled") = oldSparkUIEnabled
   }
 }
