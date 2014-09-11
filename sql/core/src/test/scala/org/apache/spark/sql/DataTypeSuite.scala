@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 class DataTypeSuite extends FunSuite {
@@ -72,21 +74,27 @@ class DataTypeSuite extends FunSuite {
     }
   }
 
-  test("parsing StructField string") {
-    val expected = StructType(
-      StructField("a", StringType, true) ::
-      StructField("\"b\"", StringType, true) ::
-      StructField("\"c\\", StringType, true) ::
-      Nil)
+  test("parsing StructField strings") {
+    def randomFieldName = {
+      val mustHave = "\\\" ".toArray
+      Random.shuffle(Seq.fill(64)(Random.nextPrintableChar()) ++ mustHave).mkString
+    }
 
-    val structTypeString = Seq(
-      """StructType(List(""",
-      """StructField("a",StringType,true),""",
-      """StructField("\"b\"",StringType,true),""",
-      """StructField("\"c\\",StringType,true)""",
-      """))"""
-    ).mkString
+    def escape(str: String) = str.flatMap {
+      case '\"' => "\\\""
+      case '\\' => "\\\\"
+      case ch => s"$ch"
+    }
 
-    assert(catalyst.types.DataType(structTypeString) === expected)
+    (0 until 100).foreach { _ =>
+      val name = randomFieldName
+      val expected = StructType(Seq(StructField(name, StringType, true)))
+      val structFieldString = {
+        val quotedEscapedName = "\"" + escape(name) + "\""
+        s"StructField($quotedEscapedName,StringType,true)"
+      }
+      val structTypeString = s"StructType(List($structFieldString))"
+      assert(catalyst.types.DataType(structTypeString) === expected)
+    }
   }
 }
