@@ -238,9 +238,6 @@ class ClientBaseSuite extends FunSuite with Matchers {
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
 
-    override def calculateAMMemory(newApp: GetNewApplicationResponse): Int =
-      throw new UnsupportedOperationException()
-
     override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit =
       throw new UnsupportedOperationException()
 

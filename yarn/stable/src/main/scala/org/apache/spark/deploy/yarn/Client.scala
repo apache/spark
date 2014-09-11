@@ -103,15 +103,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
       clusterMetrics.getNumNodeManagers)
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
-    // TODO: Need a replacement for the following code to fix -Xmx?
-    // val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
-    // var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-    //  ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-    //    memoryOverhead )
-    args.amMemory
-  }
-
   def setupSecurityToken(amContainer: ContainerLaunchContext) = {
     // Setup security tokens.
     val dob = new DataOutputBuffer()
