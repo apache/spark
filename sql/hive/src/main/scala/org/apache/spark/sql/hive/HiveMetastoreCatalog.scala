@@ -54,8 +54,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+    val (databaseName, tblName) = processDatabaseAndTableName(
+                                    db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
@@ -112,17 +112,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case InsertIntoCreatedTable(db, tableName, child) =>
+      case CreateTableAsSelect(db, tableName, child) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
-
-        InsertIntoTable(
-          lookupRelation(Some(databaseName), tblName, None),
-          Map.empty,
-          child,
-          overwrite = false)
+        CreateTableAsSelect(Some(databaseName), tableName, child)
     }
   }
 

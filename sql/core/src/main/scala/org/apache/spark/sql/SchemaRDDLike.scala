@@ -54,7 +54,7 @@ private[sql] trait SchemaRDDLike {
   @transient protected[spark] val logicalPlan: LogicalPlan = baseLogicalPlan match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
+    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect |_: WriteToFile =>
       queryExecution.toRdd
       SparkLogicalPlan(queryExecution.executedPlan)(sqlContext)
     case _ =>
@@ -124,7 +124,7 @@ private[sql] trait SchemaRDDLike {
    */
   @Experimental
   def saveAsTable(tableName: String): Unit =
-    sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
+    sqlContext.executePlan(CreateTableAsSelect(None, tableName, logicalPlan)).toRdd
 
   /** Returns the schema as a string in the tree format.
    *
