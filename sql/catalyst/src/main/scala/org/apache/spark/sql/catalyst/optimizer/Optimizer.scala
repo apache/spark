@@ -66,7 +66,7 @@ object UnionPushdown extends Rule[LogicalPlan] {
     *  This method relies on the fact that the output attributes of a union are always equal
     *  to the left child's output.
     */
-  def pushToRight[A <: Expression](e: A, union: Union, rewrites: AttributeMap[Attribute]): A = {
+  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
     val result = e transform {
       case a: Attribute => rewrites(a)
     }
@@ -82,14 +82,14 @@ object UnionPushdown extends Rule[LogicalPlan] {
       val rewrites = buildRewrites(u)
       Union(
         Filter(condition, left),
-        Filter(pushToRight(condition, u, rewrites), right))
+        Filter(pushToRight(condition, rewrites), right))
 
     // Push down projection into union
     case Project(projectList, u @ Union(left, right)) =>
       val rewrites = buildRewrites(u)
       Union(
         Project(projectList, left),
-        Project(projectList.map(pushToRight(_, u, rewrites)), right))
+        Project(projectList.map(pushToRight(_, rewrites)), right))
   }
 }
 
