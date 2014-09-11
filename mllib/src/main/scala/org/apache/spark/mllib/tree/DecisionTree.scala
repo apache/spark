@@ -33,7 +33,6 @@ import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
 
 
@@ -56,99 +55,9 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
-
-    val timer = new TimeTracker()
-
-    timer.start("total")
-
-    timer.start("init")
-
-    val retaggedInput = input.retag(classOf[LabeledPoint])
-    val metadata = DecisionTreeMetadata.buildMetadata(retaggedInput, strategy)
-    logDebug("algo = " + strategy.algo)
-    logDebug("maxBins = " + metadata.maxBins)
-
-    // Find the splits and the corresponding bins (interval between the splits) using a sample
-    // of the input data.
-    timer.start("findSplitsBins")
-    val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata)
-    timer.stop("findSplitsBins")
-    logDebug("numBins: feature: number of bins")
-    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
-        s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
-      }.mkString("\n"))
-
-    // Bin feature values (TreePoint representation).
-    // Cache input RDD for speedup during multiple passes.
-    val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-      .persist(StorageLevel.MEMORY_AND_DISK)
-
-    // depth of the decision tree
-    val maxDepth = strategy.maxDepth
-    require(maxDepth <= 30,
-      s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
-
-    // Calculate level for single group construction
-
-    // Max memory usage for aggregates
-    val maxMemoryUsage = strategy.maxMemoryInMB * 1024 * 1024
-    logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
-    // TODO: Calculate memory usage more precisely.
-    val numElementsPerNode = DecisionTree.getElementsPerNode(metadata)
-
-    logDebug("numElementsPerNode = " + numElementsPerNode)
-    val arraySizePerNode = 8 * numElementsPerNode // approx. memory usage for bin aggregate array
-    val maxNumberOfNodesPerGroup = math.max(maxMemoryUsage / arraySizePerNode, 1)
-    logDebug("maxNumberOfNodesPerGroup = " + maxNumberOfNodesPerGroup)
-    // nodes at a level is 2^level. level is zero indexed.
-    val maxLevelForSingleGroup = math.max(
-      (math.log(maxNumberOfNodesPerGroup) / math.log(2)).floor.toInt, 0)
-    logDebug("max level for single group = " + maxLevelForSingleGroup)
-
-    timer.stop("init")
-
-    /*
-     * The main idea here is to perform level-wise training of the decision tree nodes thus
-     * reducing the passes over the data from l to log2(l) where l is the total number of nodes.
-     * Each data sample is handled by a particular node at that level (or it reaches a leaf
-     * beforehand and is not used in later levels.
-     */
-
-    var topNode: Node = null // set on first iteration
-    var level = 0
-    var break = false
-    while (level <= maxDepth && !break) {
-      logDebug("#####################################")
-      logDebug("level = " + level)
-      logDebug("#####################################")
-
-      // Find best split for all nodes at a level.
-      timer.start("findBestSplits")
-      val (tmpTopNode: Node, doneTraining: Boolean) = DecisionTree.findBestSplits(treeInput,
-        metadata, level, topNode, splits, bins, maxLevelForSingleGroup, timer)
-      timer.stop("findBestSplits")
-
-      if (level == 0) {
-        topNode = tmpTopNode
-      }
-      if (doneTraining) {
-        break = true
-        logDebug("done training")
-      }
-
-      level += 1
-    }
-
-    logDebug("#####################################")
-    logDebug("Extracting tree model")
-    logDebug("#####################################")
-
-    timer.stop("total")
-
-    logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
-
-    new DecisionTreeModel(topNode, strategy.algo)
+    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all")
+    val rfModel = rf.train(input)
+    rfModel.trees(0)
   }
 
 }
