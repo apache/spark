@@ -19,14 +19,13 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.storage.StorageStatus
-
 import scala.xml.Node
 
 import org.json4s.JValue
+import org.json4s.JsonDSL._
 
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 /** Summary information about an executor to display in the UI. */
 private case class ExecutorSummaryInfo(
@@ -53,10 +52,22 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
 
     val execInfoJsonList = for (statusId <- 0 until storageStatusList.size) yield  {
       val execInfo = getExecInfo(statusId)
-
+      ("Executor ID" -> execInfo.id) ~
+      ("Address" -> execInfo.hostPort) ~
+      ("RDD Blocks" -> execInfo.rddBlocks) ~
+      ("Memory Used" -> execInfo.memoryUsed) ~
+      ("Disk Used" -> execInfo.diskUsed) ~
+      ("Active Tasks" -> execInfo.activeTasks) ~
+      ("Failed Tasks" -> execInfo.failedTasks) ~
+      ("Complete Tasks" -> execInfo.completedTasks) ~
+      ("TotalTasks" -> execInfo.totalTasks) ~
+      ("Task Time" -> execInfo.totalDuration) ~
+      ("Input" -> execInfo.totalInputBytes) ~
+      ("Shuffle Read" -> execInfo.totalShuffleRead) ~
+      ("Shuffle Write" -> execInfo.totalShuffleWrite)
     }
 
-    ("Executor List" -> )
+    ("Executor List" -> execInfoJsonList)
 
   }
 
