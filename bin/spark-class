@@ -143,10 +143,6 @@ else
   CLASSPATH="$classpath_output"
 fi
 
-echo "===="
-echo After bin/compute-classpath.sh
-echo "===="
-
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
     echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SCALA_VERSION/" 1>&2
@@ -170,10 +166,6 @@ export CLASSPATH
 # to prepare the launch environment of this driver JVM.
 
 if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
-  echo "===="
-  echo Within SPARK_SUBMIT_BOOTSTRAP_DRIVER branch
-  echo "===="
-
   # This is used only if the properties file actually contains these special configs
   # Export the environment variables needed by SparkSubmitDriverBootstrapper
   export RUNNER
@@ -184,16 +176,12 @@ if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   shift # Ignore main class (org.apache.spark.deploy.SparkSubmit) and use our own
   exec "$RUNNER" org.apache.spark.deploy.SparkSubmitDriverBootstrapper "$@"
 else
-  echo "===="
-  echo Within normal launching branch
-  echo "===="
-
   # Note: The format of this command is closely echoed in SparkSubmitDriverBootstrapper.scala
-  #if [ -n "$SPARK_PRINT_LAUNCH_COMMAND" ]; then
+  if [ -n "$SPARK_PRINT_LAUNCH_COMMAND" ]; then
     echo -n "Spark Command: " 1>&2
     echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2
     echo -e "========================================\n" 1>&2
-  #fi
+  fi
   exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
 fi
 
