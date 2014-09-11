@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.StringBuilder
+import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
 import org.apache.spark._
-import org.apache.spark.network._
 
 /**
  * SecurityMessage is class that contains the connectionId and sasl token
@@ -54,7 +52,7 @@ import org.apache.spark.network._
  *   - Length of the token
  *   - Token
  */
-private[spark] class SecurityMessage() extends Logging {
+private[nio] class SecurityMessage extends Logging {
 
   private var connectionId: String = null
   private var token: Array[Byte] = null
@@ -134,7 +132,7 @@ private[spark] class SecurityMessage() extends Logging {
   }
 }
 
-private[spark] object SecurityMessage {
+private[nio] object SecurityMessage {
 
   /**
    * Convert the given BufferMessage to a SecurityMessage by parsing the contents

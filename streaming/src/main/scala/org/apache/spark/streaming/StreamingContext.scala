@@ -240,7 +240,7 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel RDD storage level (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    *
    * @note An important point to note:
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
