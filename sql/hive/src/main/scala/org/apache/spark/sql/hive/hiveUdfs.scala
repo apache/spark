@@ -114,7 +114,8 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
       classOf[java.sql.Timestamp]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
-      c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
+      c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head) &&
+        c.getParameterTypes.head.getClass.getName.equals(argClass.getClass.getName)
     }
 
     matchingConstructor match {
