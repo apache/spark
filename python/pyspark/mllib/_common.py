@@ -205,7 +205,7 @@ def _serialize_sparse_vector(v):
 def _deserialize_string_seq(ba, offset=0):
     """Deserialize a string sequence from a mutually understood format.
     >>> import sys
-    >>> _derserialize_string_seq(_serialize_string_seq(['abc'])) == ['abc']
+    >>> _deserialize_string_seq(_serialize_string_seq(['abc'])) == ['abc']
     True
     """
     if type(ba) != bytearray:
