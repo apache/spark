@@ -233,7 +233,6 @@ class RowMatrix(
         (sigmaSquaresFull, uFull)
       case SVDMode.DistARPACK =>
         if (rows.getStorageLevel == StorageLevel.NONE) {
-          // Warn when running an iterative algorithm on uncached data. SPARK-1484
           logWarning("The input data is not directly cached, which may hurt performance if its"
             + " parent RDDs are also uncached.")
         }
@@ -262,6 +261,7 @@ class RowMatrix(
       logWarning(s"Requested $k singular values but only found $sk nonzeros.")
     }
 
+    // Warn at the end of the run as well, for increased visibility.
     if (computeMode == SVDMode.DistARPACK && rows.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")

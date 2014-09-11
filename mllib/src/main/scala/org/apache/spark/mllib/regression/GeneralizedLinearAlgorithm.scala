@@ -151,7 +151,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
     if (input.getStorageLevel == StorageLevel.NONE) {
-      // Warn when running an iterative algorithm on uncached data. SPARK-1484
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
@@ -230,6 +229,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       weights = scaler.transform(weights)
     }
 
+    // Warn at the end of the run as well, for increased visibility.
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")

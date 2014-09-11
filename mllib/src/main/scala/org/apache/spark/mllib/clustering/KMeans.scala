@@ -120,7 +120,6 @@ class KMeans private (
   def run(data: RDD[Vector]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
-      // Warn when running an iterative algorithm on uncached data. SPARK-1484
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
@@ -134,6 +133,7 @@ class KMeans private (
     val model = runBreeze(breezeData)
     norms.unpersist()
 
+    // Warn at the end of the run as well, for increased visibility.
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
