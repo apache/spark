@@ -591,8 +591,35 @@ class JsonSuite extends QueryTest {
       (true, "str1") :: Nil
     )
     checkAnswer(
-      sql("select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1] from jsonTable"),
+      sql(
+        """
+          |select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1]
+          |from jsonTable
+        """.stripMargin),
       ("str2", 6) :: Nil
+    )
+  }
+
+  test("SPARK-3390 Complex arrays") {
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql(
+        """
+          |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
+          |from jsonTable
+        """.stripMargin),
+      (5, 7, 8) :: Nil
+    )
+    checkAnswer(
+      sql(
+        """
+          |select arrayOfArray2[0][0][0].inner1, arrayOfArray2[1][0],
+          |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
+          |from jsonTable
+        """.stripMargin),
+      ("str1", Nil, "str4", 2) :: Nil
     )
   }
 }
