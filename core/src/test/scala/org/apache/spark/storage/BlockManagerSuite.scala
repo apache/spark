@@ -47,6 +47,12 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.storage.StorageLevel._
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.storage.BroadcastBlockId
+import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.storage.TestBlockId
 
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
@@ -120,7 +126,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     System.clearProperty("spark.test.useCompressedOops")
   }
-
+  /*
   test("StorageLevel object caching") {
     val level1 = StorageLevel(false, false, false, false, 3)
     val level2 = StorageLevel(false, false, false, false, 3) // this should return the same object as level1
@@ -1228,17 +1234,36 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
   }
-
+  */
   test("block replication - 2x") {
-    testReplication(2)
+    testReplication(2,
+      Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_AND_DISK_SER_2)
+    )
   }
 
   test("block replication - 3x") {
-    testReplication(3)
+    val storageLevels = {
+      Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK, MEMORY_AND_DISK_SER).map {
+        level => StorageLevel(
+          level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 3)
+      }
+    }
+    testReplication(3, storageLevels)
   }
 
-  test("block replication - 4x") {
-    testReplication(4)
+  test("block replication - mixed between 1x to 5x") {
+    val storageLevels = Seq(
+      MEMORY_ONLY,
+      MEMORY_ONLY_SER_2,
+      StorageLevel(true, true, false, true, 3),
+      StorageLevel(true, false, false, false, 4),
+      StorageLevel(false, false, false, false, 5),
+      StorageLevel(true, false, false, false, 4),
+      StorageLevel(true, true, false, true, 3),
+      MEMORY_ONLY_SER_2,
+      MEMORY_ONLY
+    )
+    testReplication(3, storageLevels)
   }
 
   /**
@@ -1248,25 +1273,19 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  def testReplication(replicationFactor: Int) {
+  def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
     import org.apache.spark.storage.StorageLevel._
 
-    assert(replicationFactor > 1,
-      s"ReplicationTester cannot test replication factor $replicationFactor")
+    assert(maxReplication > 1,
+      s"Cannot test replication factor $maxReplication")
 
     // storage levels to test with the given replication factor
-    val storageLevels = {
-      Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK, MEMORY_AND_DISK_SER).map {
-        level => StorageLevel(
-          level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, replicationFactor)
-      }
-    }
 
     val storeSize = 10000
     val blockSize = 1000
 
     // As many stores as the replication factor
-    val stores = (1 to replicationFactor).map {
+    val stores = (1 to maxReplication).map {
       i => makeBlockManager(storeSize, s"store$i")
     }
 
@@ -1279,11 +1298,13 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
         stores(0).putSingle(blockId, new Array[Byte](blockSize), storageLevel)
 
         // Assert that master know two locations for the block
-        assert(master.getLocations(blockId).size === replicationFactor,
-          s"master did not have $replicationFactor locations for $blockId")
+        val blockLocations = master.getLocations(blockId).map(_.executorId).toSet
+        assert(blockLocations.size === storageLevel.replication,
+          s"master did not have ${storageLevel.replication} locations for $blockId")
 
-        // Test state of the store for the block
-        stores.foreach { testStore =>
+        // Test state of the stores that contain the block
+        stores.filter(testStore => blockLocations.contains(testStore.blockManagerId.executorId))
+          .foreach { testStore =>
           val testStoreName = testStore.blockManagerId.executorId
           assert(testStore.getLocal(blockId).isDefined, s"$blockId was not found in $testStoreName")
           assert(master.getLocations(blockId).map(_.executorId).toSet.contains(testStoreName),
