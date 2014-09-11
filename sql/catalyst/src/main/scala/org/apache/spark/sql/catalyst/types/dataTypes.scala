@@ -31,6 +31,8 @@ import org.apache.spark.util.Utils
  * Utility functions for working with DataTypes.
  */
 object DataType extends RegexParsers {
+  override def skipWhitespace: Boolean = false
+
   protected lazy val primitiveType: Parser[DataType] =
     "StringType" ^^^ StringType |
     "FloatType" ^^^ FloatType |
