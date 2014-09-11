@@ -47,32 +47,49 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       ColumnPruning) :: Nil
 }
 
+/**
+  *  Pushes operations to either side of a Union.
+  */
 object UnionPushdown extends Rule[LogicalPlan] {
-  def fixProject(project: Project, child: LogicalPlan): Project = {
-    val pl = project.projectList.map(p => child.output.find { c =>
-      c.name == p.name && c.qualifiers == p.qualifiers
-    }.getOrElse(p))
-    Project(pl, child)
+
+  /**
+    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
+    */
+  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+    assert(union.left.output.size == union.right.output.size)
+
+    AttributeMap(union.left.output.zip(union.right.output))
   }
 
-  def fixFilter(filter: Filter, child: LogicalPlan): Filter = {
-    val cond = filter.condition.transform {
-      case a: AttributeReference =>
-        child.output.find { c =>
-          c.name == a.name && c.qualifiers == a.qualifiers
-        }.getOrElse(a)
+  /**
+    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
+    *  This method relies on the fact that the output attributes of a union are always equal
+    *  to the left child's output.
+    */
+  def pushToRight[A <: Expression](e: A, union: Union, rewrites: AttributeMap[Attribute]): A = {
+    val result = e transform {
+      case a: Attribute => rewrites(a)
     }
-    Filter(cond, child)
+
+    // We must promise the compiler that we did not discard the names in the case of project
+    // expressions.  This is safe since the only transformation is from Attribute => Attribute.
+    result.asInstanceOf[A]
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down filter into union
-    case f @ Filter(_, Union(left, right)) =>
-      Union(fixFilter(f, left), fixFilter(f, right))
+    case Filter(condition, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Filter(condition, left),
+        Filter(pushToRight(condition, u, rewrites), right))
 
     // Push down projection into union
-    case p @ Project(_, Union(left, right)) =>
-      Union(fixProject(p, left), fixProject(p, right))
+    case Project(projectList, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, u, rewrites)), right))
   }
 }
 
