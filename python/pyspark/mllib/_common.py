@@ -143,6 +143,7 @@ def _serialize_double_vector(v):
         raise TypeError("_serialize_double_vector called on a %s; "
                         "wanted ndarray or SparseVector" % type(v))
 
+
 def _serialize_string_seq(ss):
     """Serialize a sequence of string."""
     seqLength = len(ss)
@@ -158,7 +159,7 @@ def _serialize_string_seq(ss):
     header_bytes = ndarray(shape=[2], buffer=ba, offset=0, dtype=int32)
     header_bytes[0] = seqLength
     header_bytes[1] = totalLength
-    _copyto(lengthArray, buffer=ba, offset=8, shape=[seqLength],dtype=int32)
+    _copyto(lengthArray, buffer=ba, offset=8, shape=[seqLength], dtype=int32)
     i = 0
     offset = 4 + 4 + 4 * seqLength
     for s in ss:
@@ -166,6 +167,7 @@ def _serialize_string_seq(ss):
         offset = offset + lengthArray[i]
         i = i + 1
     return ba
+
 
 def _serialize_dense_vector(v):
     """Serialize a dense vector given as a NumPy array."""
@@ -224,6 +226,7 @@ def _deserialize_string_seq(ba, offset=0):
         ret.append(str(ba[offset: offset + curLen]))
         offset = offset + curLen
     return ret
+
 
 def _deserialize_double(ba, offset=0):
     """Deserialize a double from a mutually understood format.
@@ -411,6 +414,7 @@ def _get_unmangled_rdd(data, serializer, cache=True):
         dataBytes.cache()
     return dataBytes
 
+
 def _get_unmangled_string_seq_rdd(data, cache=True):
     """
     Map a pickled Python RDD of Python string sequence to a Java RDD of
@@ -419,6 +423,7 @@ def _get_unmangled_string_seq_rdd(data, cache=True):
                    WARNING: Users should unpersist() this later!
     """
     return _get_unmangled_rdd(data, _serialize_string_seq, cache)
+
 
 def _get_unmangled_double_vector_rdd(data, cache=True):
     """

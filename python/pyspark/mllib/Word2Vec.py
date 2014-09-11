@@ -27,6 +27,7 @@ from pyspark.mllib._common import \
 
 __all__ = ['Word2Vec', 'Word2VecModel']
 
+
 class Word2VecModel(object):
     """
     class for Word2Vec model
@@ -57,6 +58,7 @@ class Word2VecModel(object):
         words = _deserialize_string_seq(result[0])
         similarity = _deserialize_double_vector(result[1])
         return zip(words, similarity)
+
 
 class Word2Vec(object):
     """
@@ -105,6 +107,7 @@ class Word2Vec(object):
         dataBytes = _get_unmangled_string_seq_rdd(data)
         model = sc._jvm.PythonMLLibAPI().trainWord2Vec(dataBytes._jrdd)
         return Word2VecModel(sc, model)
+
 
 def _test():
     import doctest
