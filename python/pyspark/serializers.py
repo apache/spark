@@ -362,7 +362,7 @@ class PickleSerializer(FramedSerializer):
 class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
-        return cloudpickle.dumps(obj)
+        return cloudpickle.dumps(obj, 2)
 
 
 class MarshalSerializer(FramedSerializer):
