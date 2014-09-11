@@ -40,11 +40,31 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
     val stageId = request.getParameter("id").toInt
     val stageAttemptId = request.getParameter("attempt").toInt
 
+    var stageSummary = ("Stage ID" -> stageId) ~ ("Stage Attempt ID" -> stageAttemptId)
+
+
     val stageDataOpt = listener.stageIdToData.get((stageId, stageAttemptId))
     var retVal: JValue = JNothing
 
     if (!stageDataOpt.isEmpty && !stageDataOpt.get.taskData.isEmpty) {
       val stageData = stageDataOpt.get
+
+      stageSummary ~= ("Executor Run Time" -> stageData.executorRunTime)
+      if (stageData.inputBytes > 0) stageSummary ~= ("Input Bytes" -> stageData.inputBytes)
+      if (stageData.shuffleReadBytes > 0) {
+        stageSummary ~= ("Shuffle Read Bytes" -> stageData.shuffleReadBytes)
+      }
+
+      if (stageData.shuffleWriteBytes > 0) {
+        stageSummary ~= ("Shuffle Write bytes" -> stageData.shuffleWriteBytes)
+      }
+
+      if (stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0) {
+        stageSummary ~=
+          ("Memory Bytes Spilled" -> stageData.memoryBytesSpilled) ~
+          ("Disk Bytes Spilled" -> stageData.diskBytesSpilled)
+      }
+
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val taskList = tasks.map {
@@ -61,7 +81,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           }
           jsonTaskInfo
       }
-      retVal = ("Task List" -> taskList)
+
+      retVal =
+        ("Stage Info" ->
+          ("StageSummary" -> stageSummary) ~
+          ("Tasks" -> taskList))
     }
     retVal
   }
