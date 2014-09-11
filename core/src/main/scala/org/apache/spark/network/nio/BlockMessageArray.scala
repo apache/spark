@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
+import org.apache.spark._
+import org.apache.spark.storage.{StorageLevel, TestBlockId}
+
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark._
-import org.apache.spark.network._
-
-private[spark]
+private[nio]
 class BlockMessageArray(var blockMessages: Seq[BlockMessage])
   extends Seq[BlockMessage] with Logging {
 
@@ -102,7 +102,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
   }
 }
 
-private[spark] object BlockMessageArray {
+private[nio] object BlockMessageArray {
 
   def fromBufferMessage(bufferMessage: BufferMessage): BlockMessageArray = {
     val newBlockMessageArray = new BlockMessageArray()

@@ -29,6 +29,7 @@ from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+from pyspark.storagelevel import StorageLevel
 
 from itertools import chain, ifilter, imap
 
@@ -898,9 +899,9 @@ def _create_cls(dataType):
     return Row
 
 
-class SQLContext:
+class SQLContext(object):
 
-    """Main entry point for SparkSQL functionality.
+    """Main entry point for Spark SQL functionality.
 
     A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -946,7 +947,7 @@ class SQLContext:
 
     @property
     def _ssql_ctx(self):
-        """Accessor for the JVM SparkSQL context.
+        """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
         JVM Contexts.
@@ -1507,7 +1508,7 @@ class SchemaRDD(RDD):
     """An RDD of L{Row} objects that has an associated schema.
 
     The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
-    utilize the relational query api exposed by SparkSQL.
+    utilize the relational query api exposed by Spark SQL.
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
@@ -1524,7 +1525,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
-
+        self._id = None
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
@@ -1542,9 +1543,10 @@ class SchemaRDD(RDD):
             self._lazy_jrdd = self._jschema_rdd.javaToPython()
         return self._lazy_jrdd
 
-    @property
-    def _id(self):
-        return self._jrdd.id()
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
@@ -1665,7 +1667,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.cache()
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
         self._jschema_rdd.persist(javaStorageLevel)

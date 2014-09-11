@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf} 
 import org.apache.spark.scheduler.SplitInfo
 
 import org.apache.hadoop.conf.Configuration
@@ -39,8 +39,9 @@ private[yarn] class YarnAllocationHandler(
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes) {
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]], 
+    securityMgr: SecurityManager)
+  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
 
   override protected def releaseContainer(container: Container) = {
     amClient.releaseAssignedContainer(container.getId())
@@ -87,9 +88,11 @@ private[yarn] class YarnAllocationHandler(
 
   private def addResourceRequests(numExecutors: Int) {
     val containerRequests: List[ContainerRequest] =
-      if (numExecutors <= 0 || preferredHostToCount.isEmpty) {
-        logDebug("numExecutors: " + numExecutors + ", host preferences: " +
-          preferredHostToCount.isEmpty)
+      if (numExecutors <= 0) {
+        logDebug("numExecutors: " + numExecutors)
+        List()
+      } else if (preferredHostToCount.isEmpty) {
+        logDebug("host preferences is empty")
         createResourceRequests(
           AllocationType.ANY,
           resource = null,

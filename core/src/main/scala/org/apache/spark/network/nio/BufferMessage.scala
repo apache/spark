@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
@@ -23,7 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.storage.BlockManager
 
-private[spark]
+
+private[nio]
 class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: Int)
   extends Message(Message.BUFFER_MESSAGE, id_) {
 
