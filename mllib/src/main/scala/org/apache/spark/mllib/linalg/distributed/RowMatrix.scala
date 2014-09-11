@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
+import scala.collection.mutable.ListBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
 import breeze.linalg.{svd => brzSvd, axpy => brzAxpy}
@@ -32,7 +33,6 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 
-import scala.collection.mutable.ListBuffer
 
 /**
  * :: Experimental ::
@@ -412,18 +412,8 @@ class RowMatrix(
    * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
    */
   def similarColumns(gamma: Double): CoordinateMatrix = {
-    similarColumnsDIMSUM(columnMagnitudes(), gamma)
-  }
-
-  /**
-   * Return 2-norm of the columns of this matrix.
-   * @return an array of column magnitudes
-   */
-  def columnMagnitudes(): Array[Double] = {
-    rows.map { x =>
-      val brzX = x.toBreeze
-      brzX.:*(brzX)
-    }.fold(BDV.zeros[Double](numCols().toInt))(_ + _).toArray.map(math.sqrt(_))
+    val colMags = computeColumnSummaryStatistics().magnitude.toArray
+    similarColumnsDIMSUM(colMags, gamma)
   }
 
   /**
