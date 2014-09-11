@@ -448,7 +448,7 @@ class SchemaRDD(
   }
 
   // =======================================================================
-  // Overriden RDD actions
+  // Overridden RDD actions
   // =======================================================================
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
