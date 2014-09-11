@@ -144,7 +144,7 @@ def _serialize_double_vector(v):
                         "wanted ndarray or SparseVector" % type(v))
 
 def _serialize_string_seq(ss):
-    """Serialize a sequence of string"""
+    """Serialize a sequence of string."""
     seqLength = len(ss)
     totalLength = 0
     lengthArray = ndarray(shape=[seqLength], dtype=int32)
@@ -200,6 +200,31 @@ def _serialize_sparse_vector(v):
     return ba
 
 
+def _deserialize_string_seq(ba, offset=0):
+    """Deserialize a string sequence from a mutually understood format.
+    >>> import sys
+    >>> _derserialize_string_seq(_serialize_string_seq(['abc'])) == ['abc']
+    True
+    """
+    if type(ba) != bytearray:
+        raise TypeError("__deserialize_string_seq called on a %s; "
+                        "wanted bytearray" % type(ba))
+    nb = len(ba) - offset
+    if nb < 8:
+        raise TypeError("__deserialize_string_seq called on a %d-byte array, "
+                        "which is too short" % nb)
+    headers = ndarray(shape=[2], buffer=ba, offset=offset, dtype=int32)
+    seqLength = headers[0]
+    totalLength = headers[1]
+    lengthArray = ndarray(shape=[seqLength], buffer=ba, offset=offset + 8, dtype=int32)
+    offset = offset + 8 + 4 * seqLength
+    ret = []
+    for i in range(0, seqLength):
+        curLen = lengthArray[i]
+        ret.append(str(ba[offset: offset + curLen]))
+        offset = offset + curLen
+    return ret
+
 def _deserialize_double(ba, offset=0):
     """Deserialize a double from a mutually understood format.
 
@@ -225,19 +250,6 @@ def _deserialize_double(ba, offset=0):
         raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
     return _unpack("d", ba[offset:])[0]
 
-
-def _deserialize_string_seq(ba, offset=0):
-    nb = len(ba) - offset
-    headers = ndarray(shape=[2], buffer=ba, offset=offset, dtype=int32)
-    seqLength = headers[0]
-    totalLength = headers[1]
-    lengthArray = ndarray(shape=[seqLength], buffer=ba, offset=offset + 8, dtype=int32)
-    offset = offset + 8 + 4 * seqLength
-    ret = []
-    for i in range(0, seqLength):
-        ret.append(str(ba[offset: offset + lengthArray[i]]))
-        offset = offset + lengthArray[i]
-    return ret
 
 def _deserialize_double_vector(ba, offset=0):
     """Deserialize a double vector from a mutually understood format.
@@ -400,6 +412,12 @@ def _get_unmangled_rdd(data, serializer, cache=True):
     return dataBytes
 
 def _get_unmangled_string_seq_rdd(data, cache=True):
+    """
+    Map a pickled Python RDD of Python string sequence to a Java RDD of
+    Array[Byte]
+    :param cache:  If True, the serialized RDD is cached.  (default = True)
+                   WARNING: Users should unpersist() this later!
+    """
     return _get_unmangled_rdd(data, _serialize_string_seq, cache)
 
 def _get_unmangled_double_vector_rdd(data, cache=True):

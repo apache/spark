@@ -79,4 +79,11 @@ class PythonMLLibAPISuite extends FunSuite {
     val empty2D = SerDe.to2dArray(emptyMatrix)
     assert(empty2D === Array[Array[Double]]())
   }
+
+  test("string seq serialization") {
+    val original = Array[String]("abc", "def", "ghi")
+    val bytes = SerDe.serializeSeqString(original)
+    val ss = SerDe.deserializeSeqString(bytes)
+    assert(ss === original)
+  }
 }

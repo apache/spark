@@ -291,8 +291,12 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib Word2Vec fit().
-   * @param dataBytesJRDD Input
+   * Java stub for Python mllib Word2Vec fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   * @param dataBytesJRDD Input JavaRDD
+   * @return A handle to java Word2VecModel instance at python side
    */
   def trainWord2Vec(
     dataBytesJRDD: JavaRDD[Array[Byte]]
@@ -304,19 +308,60 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib Word2VecModel
+   * Java stub for Python mllib Word2VecModel transform
+   * @param model Word2VecModel instance
+   * @param word a word
+   * @return serialized vector representation of word
    */
-  def Word2VecSynonynms(
+  def Word2VecModelTransform(
+    model: Word2VecModel,
+    word: String
+    ): Array[Byte] = {
+    SerDe.serializeDoubleVector(model.transform(word))
+  }
+
+  /**
+   * Java stub for Python mllib Word2VecModel findSynonyms
+   * @param model Word2VecModel instance
+   * @param word a word
+   * @param num number of synonyms to find
+   * @return a java LinkedList containing serialized version of
+   * synonyms and similarities
+   */
+  def Word2VecModelSynonyms(
     model: Word2VecModel,
     word: String,
     num: Int
-    ) = {
+    ): java.util.List[java.lang.Object] = {
     val result = model.findSynonyms(word, num)
-    val vec = Vectors.dense(result.map(_._2))
-    val words = result.map(_._1).toArray
+    val similarity = Vectors.dense(result.map(_._2))
+    val words = result.map(_._1)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(SerDe.serializeSeqString(words))
-    ret.add(SerDe.serializeDoubleVector(vec))
+    ret.add(SerDe.serializeDoubleVector(similarity))
+    ret
+  }
+
+  /**
+   * Java stub for Python mllib Word2VecModel findSynonyms
+   * @param model Word2VecModel instance
+   * @param vecBytes serialization of vector representation of words
+   * @param num number of synonyms to find
+   * @return a java LinkedList containing serialized version of
+   * synonyms and similarities
+   */
+  def Word2VecModelSynonyms(
+    model: Word2VecModel,
+    vecBytes: Array[Byte],
+    num: Int
+    ): java.util.List[java.lang.Object] = {
+    val vec = SerDe.deserializeDoubleVector(vecBytes)
+    val result = model.findSynonyms(vec, num)
+    val similarity = Vectors.dense(result.map(_._2))
+    val words = result.map(_._1)
+    val ret = new java.util.LinkedList[java.lang.Object]()
+    ret.add(SerDe.serializeSeqString(words))
+    ret.add(SerDe.serializeDoubleVector(similarity))
     ret
   }
 
@@ -713,7 +758,7 @@ private[spark] object SerDe extends Serializable {
   }
 
   private[python] def deserializeSeqString(bytes:Array[Byte]):Seq[String] = {
-    require(bytes.length >=0, "Byte array too short")
+    require(bytes.length >= 8, "Byte array too short")
     val seqLengthBytes = ByteBuffer.wrap(bytes, 0, 8)
     seqLengthBytes.order(ByteOrder.nativeOrder())
     val ib = seqLengthBytes.asIntBuffer()

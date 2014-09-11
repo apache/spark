@@ -20,15 +20,17 @@ Python package for Word2Vec in MLlib.
 """
 
 from pyspark.mllib._common import \
-    _get_unmangled_double_vector_rdd, _get_unmangled_rdd, \
-    _serialize_double, _deserialize_double_matrix, _deserialize_double_vector, \
+    _serialize_double_vector, \
+    _deserialize_double_vector, \
     _deserialize_string_seq, \
     _get_unmangled_string_seq_rdd
 
 __all__ = ['Word2Vec', 'Word2VecModel']
 
 class Word2VecModel(object):
-
+    """
+    class for Word2Vec model
+    """
     def __init__(self, sc, java_model):
         """
         :param sc:  Spark context
@@ -40,23 +42,38 @@ class Word2VecModel(object):
     def __del__(self):
         self._sc._gateway.detach(self._java_model)
 
-    #def transform(self, word):
-
-    #def findSynonyms(self, vector, num):
-         
-    def findSynonyms(self, word, num): 
+    def transform(self, word):
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
-        result = pythonAPI.Word2VecSynonynms(self._java_model, word, num)
-        similarity = _deserialize_double_vector(result[1])
+        result = pythonAPI.Word2VecModelTransform(self._java_model, word)
+        return _deserialize_double_vector(result)
+
+    def findSynonyms(self, x, num):
+        pythonAPI = self._sc._jvm.PythonMLLibAPI()
+        if type(x) == str:
+            result = pythonAPI.Word2VecModelSynonyms(self._java_model, x, num)
+        else:
+            xSer = _serialize_double_vector(x)
+            result = pythonAPI.Word2VecModelSynonyms(self._java_model, xSer, num)
         words = _deserialize_string_seq(result[0])
-        ret = []
-        for w,s in zip(words, similarity):
-            ret.append((w,s))
-        return ret
+        similarity = _deserialize_double_vector(result[1])
+        return zip(words, similarity)
 
 class Word2Vec(object):
     """
-    data:RDD[Array[String]]
+    Word2Vec creates vector representation of words in a text corpus.
+    The algorithm first constructs a vocabulary from the corpus
+    and then learns vector representation of words in the vocabulary.
+    The vector representation can be used as features in
+    natural language processing and machine learning algorithms.
+
+    We used skip-gram model in our implementation and hierarchical softmax
+    method to train the model. The variable names in the implementation
+    matches the original C implementation.
+    For original C implementation, see https://code.google.com/p/word2vec/
+    For research papers, see
+    Efficient Estimation of Word Representations in Vector Space
+    and
+    Distributed Representations of Words and Phrases and their Compositionality.
     """
     def __init__(self):
         self.vectorSize = 100
@@ -81,8 +98,23 @@ class Word2Vec(object):
         return self
 
     def fit(self, data):
+        """
+        :param data: Input RDD
+        """
         sc = data.context
         dataBytes = _get_unmangled_string_seq_rdd(data)
         model = sc._jvm.PythonMLLibAPI().trainWord2Vec(dataBytes._jrdd)
         return Word2VecModel(sc, model)
 
+def _test():
+    import doctest
+    from pyspark import SparkContext
+    globs = globals().copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    if failure_count:
+        exit(-1)
+
+if __name__ == "__main__":
+    _test()
