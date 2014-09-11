@@ -19,15 +19,76 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.JsonAST.JNothing
+
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
+import org.json4s.JValue
+import org.json4s.JsonDSL._
+
+import org.apache.spark.storage._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val rddId = request.getParameter("id").toInt
+    val storageStatusList = listener.storageStatusList
+    val rddInfoOpt = listener.rddInfoList.find(_.id == rddId)
+
+    var retVal: JValue = JNothing
+
+    if (rddInfoOpt.isDefined) {
+      val rddInfo = rddInfoOpt.get
+
+      val rddSummaryJson = ("RDD Summary" ->
+        ("RDD ID" -> rddId) ~
+        ("Storage Level" -> rddInfo.storageLevel.description) ~
+        ("Cached Partitions" -> rddInfo.numCachedPartitions) ~
+        ("Total Partitions" -> rddInfo.numPartitions) ~
+        ("Memory Size" -> rddInfo.memSize) ~
+        ("Disk Size" -> rddInfo.diskSize))
+
+      val dataDistributionList = storageStatusList.map {
+        case status: StorageStatus =>
+          ("Host" -> (status.blockManagerId.host + ":" + status.blockManagerId.port)) ~
+          ("Memory Usage" -> status.memUsedByRdd(rddId)) ~
+          ("Memory Remaining" -> status.memRemaining) ~
+          ("Disk Usage" -> status.diskUsedByRdd(rddId))
+      }
+
+      val dataDistributionJson = ("Data Distribution" -> dataDistributionList)
+
+      val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
+      val blocks = storageStatusList
+        .flatMap(_.rddBlocksById(rddId))
+        .sortWith(_._1.name < _._1.name)
+        .map { case (blockId, status) =>
+          (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+      }
+      val partitionList = blocks.map {
+        case (id: BlockId, block: BlockStatus, locations: Seq[String]) =>
+          ("Block Name" -> id.toString) ~
+          ("Storage Level" -> block.storageLevel.description) ~
+          ("Size in Memory" -> block.memSize) ~
+          ("Size on Disk" -> block.diskSize) ~
+          ("Executors" -> locations)
+      }
+      val partitionsJson = ("Partitions" -> partitionList)
+
+
+      retVal =
+        ("RDD Info" ->
+          rddSummaryJson ~
+          dataDistributionJson ~
+          partitionsJson
+        )
+    }
+    retVal
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
