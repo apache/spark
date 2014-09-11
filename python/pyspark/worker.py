@@ -23,6 +23,9 @@ import sys
 import time
 import socket
 import traceback
+import cProfile
+import pstats
+
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
 from pyspark.accumulators import _accumulatorRegistry
@@ -73,10 +76,21 @@ def main(infile, outfile):
             _broadcastRegistry[bid] = Broadcast(bid, value)
 
         command = pickleSer._read_with_length(infile)
-        (func, deserializer, serializer) = command
+        (func, stats, deserializer, serializer) = command
         init_time = time.time()
-        iterator = deserializer.load_stream(infile)
-        serializer.dump_stream(func(split_index, iterator), outfile)
+
+        def process():
+            iterator = deserializer.load_stream(infile)
+            serializer.dump_stream(func(split_index, iterator), outfile)
+
+        if stats:
+            p = cProfile.Profile()
+            p.runcall(process)
+            st = pstats.Stats(p)
+            st.stream = None  # make it picklable
+            stats.add(st.strip_dirs())
+        else:
+            process()
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)

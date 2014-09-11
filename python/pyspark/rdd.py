@@ -31,9 +31,11 @@ from threading import Thread
 import warnings
 import heapq
 import bisect
+import atexit
 from random import Random
 from math import sqrt, log, isinf, isnan
 
+from pyspark.accumulators import StatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, CompressedSerializer
@@ -2076,6 +2078,7 @@ class PipelinedRDD(RDD):
     >>> rdd.flatMap(lambda x: [x, x]).reduce(add)
     20
     """
+    _created_profiles = []
 
     def __init__(self, prev, func, preservesPartitioning=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
@@ -2110,7 +2113,9 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        command = (self.func, self._prev_jrdd_deserializer,
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, StatsParam) if enable_profile else None
+        command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
@@ -2128,7 +2133,38 @@ class PipelinedRDD(RDD):
                                              self.ctx.pythonExec,
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
+
+        if enable_profile:
+            self._id = self._jrdd_val.id()
+            if not self._created_profiles:
+                dump_path = self.ctx._conf.get("spark.python.profile.dump")
+                if dump_path:
+                    atexit.register(PipelinedRDD.dump_profile, dump_path)
+                else:
+                    atexit.register(PipelinedRDD.show_profile)
+            self._created_profiles.append((self._id, profileStats))
+
         return self._jrdd_val
+
+    @classmethod
+    def show_profile(cls):
+        for id, acc in cls._created_profiles:
+            stats = acc.value
+            if stats:
+                print "="*60
+                print "Profile of RDD<id=%d>" % id
+                print "="*60
+                stats.sort_stats("tottime", "cumtime").print_stats()
+
+    @classmethod
+    def dump_profile(cls, dump_path):
+        if not os.path.exists(dump_path):
+            os.makedirs(dump_path)
+        for id, acc in cls._created_profiles:
+            stats = acc.value
+            if stats:
+                path = os.path.join(dump_path, "rdd_%d.pstats" % id)
+                stats.dump_stats(path)
 
     def id(self):
         if self._id is None:
