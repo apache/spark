@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -313,7 +312,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
@@ -327,7 +326,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.exists(_ == "== Physical Plan ==")
+    explanation.contains("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -467,7 +466,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     // Describe a registered temporary table.
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)

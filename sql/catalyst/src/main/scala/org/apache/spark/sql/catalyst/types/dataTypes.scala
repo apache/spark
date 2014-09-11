@@ -72,7 +72,7 @@ object DataType extends RegexParsers {
     "false" ^^^ false
 
   protected lazy val structType: Parser[DataType] =
-    "StructType\\([A-Za-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
+    "StructType(List(" ~> repsep(structField, ",") <~ "))" ^^ {
       case fields => new StructType(fields)
     }
 
@@ -375,6 +375,8 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   }
 
   def simpleString: String = "struct"
+
+  override def toString = s"StructType(List(${fields.map(_.toString).mkString(",")}))"
 }
 
 object MapType {
