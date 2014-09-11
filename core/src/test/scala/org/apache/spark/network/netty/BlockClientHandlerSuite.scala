@@ -31,8 +31,9 @@ import org.apache.spark.network._
 class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
   private def sizeOfOutstandingRequests(handler: BlockClientHandler): Int = {
-    val outstandingRequests = PrivateMethod[java.util.Map[_, _]]('outstandingRequests)
-    handler.invokePrivate(outstandingRequests()).size
+    val f = handler.getClass.getDeclaredField("outstandingRequests")
+    f.setAccessible(true)
+    f.get(handler).asInstanceOf[java.util.Map[_, _]].size
   }
 
   test("handling block data (successful fetch)") {
@@ -56,8 +57,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
       }
     )
 
-    val outstandingRequests = PrivateMethod[java.util.Map[_, _]]('outstandingRequests)
-    assert(handler.invokePrivate(outstandingRequests()).size === 1)
+    assert(sizeOfOutstandingRequests(handler) === 1)
 
     val channel = new EmbeddedChannel(handler)
     val buf = ByteBuffer.allocate(blockData.size)  // 4 bytes for the length field itself
@@ -68,7 +68,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
     assert(parsedBlockId === blockId)
     assert(parsedBlockData === blockData)
-    assert(handler.invokePrivate(outstandingRequests()).size === 0)
+    assert(sizeOfOutstandingRequests(handler) === 0)
     assert(channel.finish() === false)
   }
 
