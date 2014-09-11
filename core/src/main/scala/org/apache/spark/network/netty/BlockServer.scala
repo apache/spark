@@ -113,7 +113,7 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
     _port = addr.getPort
-    //_hostName = addr.getHostName
+    // _hostName = addr.getHostName
     _hostName = Utils.localHostName()
   }
 
