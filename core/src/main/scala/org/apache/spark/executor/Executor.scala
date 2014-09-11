@@ -361,10 +361,13 @@ private[spark] class Executor(
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 metrics.updateShuffleReadMetrics
                 if (isLocal) {
-                  // make a deep copy of it
+                  // JobProgressListener will hold an reference of it during
+                  // onExecutorMetricsUpdate(), then JobProgressListener can not see
+                  // the changes of metrics any more, so make a deep copy of it
                   val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
                   tasksMetrics += ((taskRunner.taskId, copiedMetrics))
                 } else {
+                  // It will be copied by serialization
                   tasksMetrics += ((taskRunner.taskId, metrics))
                 }
               }
