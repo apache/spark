@@ -302,10 +302,12 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       val raw = deserializer.deserialize(value)
       var i = 0
       while (i < fieldRefs.length) {
-        val fieldRef = fieldRefs(i)
-        val fieldOrdinal= fieldOrdinals(i)
-        val fieldValue = soi.getStructFieldData(raw, fieldRef)
-        unwrappers(i)(fieldValue, mutableRow, fieldOrdinal)
+        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+        if (fieldValue == null) {
+          mutableRow.setNullAt(fieldOrdinals(i))
+        } else {
+          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        }
         i += 1
       }
 
