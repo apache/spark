@@ -283,11 +283,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
 
         val sparkContext = sparkContextRef.get()
-        assert(sparkContext != null || count >= numTries)
         if (sparkContext == null) {
-          logError(
-            "Unable to retrieve sparkContext inspite of waiting for %d, numTries = %d".format(
-              count * waitTime, numTries))
+          logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
+            + " log output for errors. Failing the application.").format(numTries * waitTime))
         }
         sparkContext
       }

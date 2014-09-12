@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -323,7 +323,9 @@ object SparkSubmit {
     }
 
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
-
+    if (!Modifier.isStatic(mainMethod.getModifiers)) {
+      throw new IllegalStateException("The main method in the given main class must be static")
+    }
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
