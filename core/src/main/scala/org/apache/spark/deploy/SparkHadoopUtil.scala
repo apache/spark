@@ -144,9 +144,10 @@ class SparkHadoopUtil extends Logging {
       val start = f()
       Some(() => f() - start)
     } catch {
-      case e: Exception =>
+      case e: Exception => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
+      }
     }
   }
 }
