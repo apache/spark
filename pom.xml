@@ -899,7 +899,7 @@
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${session.executionRootDirectory}</spark.test.home>
               <spark.testing>1</spark.testing>
-              <spark.ui.port>0</spark.ui.port>
+              <spark.ui.enabled>false</spark.ui.enabled>
             </systemProperties>
           </configuration>
           <executions>
