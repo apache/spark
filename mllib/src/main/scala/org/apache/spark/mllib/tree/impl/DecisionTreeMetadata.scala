@@ -45,7 +45,9 @@ private[tree] class DecisionTreeMetadata(
     val unorderedFeatures: Set[Int],
     val numBins: Array[Int],
     val impurity: Impurity,
-    val quantileStrategy: QuantileStrategy) extends Serializable {
+    val quantileStrategy: QuantileStrategy,
+    val minInstancesPerNode: Int,
+    val minInfoGain: Double) extends Serializable {
 
   def isUnordered(featureIndex: Int): Boolean = unorderedFeatures.contains(featureIndex)
 
@@ -127,7 +129,8 @@ private[tree] object DecisionTreeMetadata {
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet, numBins,
-      strategy.impurity, strategy.quantileCalculationStrategy)
+      strategy.impurity, strategy.quantileCalculationStrategy,
+      strategy.minInstancesPerNode, strategy.minInfoGain)
   }
 
   /**
