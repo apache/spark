@@ -79,7 +79,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     } catch {
       case e: Throwable => {
         outputStream.close()
-        if(file.exists()) file.delete()
+        if(file.exists()) {
+          file.delete()
+        }
         throw e
       }
     }
