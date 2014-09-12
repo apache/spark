@@ -793,7 +793,7 @@ private[spark] class BlockManager(
    */
   private def getPeers(forceFetch: Boolean): HashSet[BlockManagerId] = {
     val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 1000) // milliseconds
-    def timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
+    val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
 
     cachedPeers.synchronized {
       if (cachedPeers.isEmpty || forceFetch || timeout) {
