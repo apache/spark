@@ -75,7 +75,7 @@ import com.google.common.collect.Lists;
  *   onto the Kinesis stream. 
  * Usage instructions for KinesisWordCountProducerASL are provided in the class definition.
  */
-public final class JavaKinesisWordCountASL {
+public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
     private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
     private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
@@ -87,10 +87,10 @@ public final class JavaKinesisWordCountASL {
         /* Check that all required args were passed in. */
         if (args.length < 2) {
           System.err.println(
-              "|Usage: KinesisWordCount <stream-name> <endpoint-url>\n" +
-              "|    <stream-name> is the name of the Kinesis stream\n" +
-              "|    <endpoint-url> is the endpoint of the Kinesis service\n" +
-              "|                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n");
+              "Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>\n" +
+              "    <stream-name> is the name of the Kinesis stream\n" +
+              "    <endpoint-url> is the endpoint of the Kinesis service\n" +
+              "                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n");
           System.exit(1);
         }
 
@@ -130,10 +130,10 @@ public final class JavaKinesisWordCountASL {
         /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
-        	streamsList.add(
-                KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
-                InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
-            );
+          streamsList.add(
+            KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
+            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
+          );
         }
 
         /* Union all the streams if there is more than 1 stream */

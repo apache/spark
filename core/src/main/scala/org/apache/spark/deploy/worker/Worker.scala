@@ -234,7 +234,7 @@ private[spark] class Worker(
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.RUNNING)
+            self, workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.LOADING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -257,7 +257,7 @@ private[spark] class Worker(
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         executors.get(fullId) match {
-          case Some(executor) => 
+          case Some(executor) =>
             logInfo("Executor " + fullId + " finished with state " + state +
               message.map(" message " + _).getOrElse("") +
               exitStatus.map(" exitStatus " + _).getOrElse(""))
@@ -288,7 +288,7 @@ private[spark] class Worker(
 
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
+      val driver = new DriverRunner(conf, driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
       drivers(driverId) = driver
       driver.start()
 

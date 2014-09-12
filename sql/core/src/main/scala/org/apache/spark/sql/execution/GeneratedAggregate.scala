@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types._
@@ -103,13 +104,48 @@ case class GeneratedAggregate(
           updateCount :: updateSum :: Nil,
           result
         )
+
+      case m @ Max(expr) =>
+        val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
+        val initialValue = Literal(null, expr.dataType)
+        val updateMax = MaxOf(currentMax, expr)
+
+        AggregateEvaluation(
+          currentMax :: Nil,
+          initialValue :: Nil,
+          updateMax :: Nil,
+          currentMax)
+
+      case CollectHashSet(Seq(expr)) =>
+        val set = AttributeReference("hashSet", ArrayType(expr.dataType), nullable = false)()
+        val initialValue = NewSet(expr.dataType)
+        val addToSet = AddItemToSet(expr, set)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          addToSet :: Nil,
+          set)
+
+      case CombineSetsAndCount(inputSet) =>
+        val ArrayType(inputType, _) = inputSet.dataType
+        val set = AttributeReference("hashSet", inputSet.dataType, nullable = false)()
+        val initialValue = NewSet(inputType)
+        val collectSets = CombineSets(set, inputSet)
+
+        AggregateEvaluation(
+          set :: Nil,
+          initialValue :: Nil,
+          collectSets :: Nil,
+          CountSet(set))
     }
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[Long, Expression] = aggregatesToCompute.zip(computeFunctions).map {
-      case (agg, func) => agg.id -> func.result
-    }.toMap
+    val resultMap: Map[TreeNodeRef, Expression] = 
+      aggregatesToCompute.zip(computeFunctions).map {
+        case (agg, func) => new TreeNodeRef(agg) -> func.result
+      }.toMap
 
     val namedGroups = groupingExpressions.zipWithIndex.map {
       case (ne: NamedExpression, _) => (ne, ne)
@@ -122,7 +158,7 @@ case class GeneratedAggregate(
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
-      case e: Expression if resultMap.contains(e.id) => resultMap(e.id)
+      case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
       case e: Expression if groupMap.contains(e) => groupMap(e)
     })
 
@@ -151,7 +187,7 @@ case class GeneratedAggregate(
           (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
-      val joinedRow = new JoinedRow
+      val joinedRow = new JoinedRow3
 
       if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.

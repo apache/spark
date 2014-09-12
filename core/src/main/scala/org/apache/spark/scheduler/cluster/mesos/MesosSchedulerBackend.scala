@@ -86,10 +86,26 @@ private[spark] class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-      "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+    val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
+      .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
+      .getOrElse {
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraLibraryPath = sc.conf.getOption("spark.executor.extraLibraryPath").map { lp =>
+      s"-Djava.library.path=$lp"
+    }
+    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("SPARK_EXECUTOR_OPTS")
+        .setValue(extraOpts)
+        .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
@@ -100,7 +116,7 @@ private[spark] class MesosSchedulerBackend(
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
+      command.setValue(new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -333,4 +349,5 @@ private[spark] class MesosSchedulerBackend(
 
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
 }

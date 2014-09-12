@@ -26,6 +26,9 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
 
+__all__ = ['DecisionTreeModel', 'DecisionTree']
+
+
 class DecisionTreeModel(object):
 
     """
@@ -88,6 +91,7 @@ class DecisionTree(object):
                   It will probably be modified for Spark v1.2.
 
     Example usage:
+
     >>> from numpy import array
     >>> import sys
     >>> from pyspark.mllib.regression import LabeledPoint
@@ -134,7 +138,7 @@ class DecisionTree(object):
 
     @staticmethod
     def trainClassifier(data, numClasses, categoricalFeaturesInfo,
-                        impurity="gini", maxDepth=4, maxBins=100):
+                        impurity="gini", maxDepth=5, maxBins=32):
         """
         Train a DecisionTreeModel for classification.
 
@@ -166,7 +170,7 @@ class DecisionTree(object):
 
     @staticmethod
     def trainRegressor(data, categoricalFeaturesInfo,
-                       impurity="variance", maxDepth=4, maxBins=100):
+                       impurity="variance", maxDepth=5, maxBins=32):
         """
         Train a DecisionTreeModel for regression.
 

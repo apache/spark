@@ -28,7 +28,7 @@ from pyspark.mllib.util import MLUtils
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in [1,2]:
+    if len(sys.argv) not in [1, 2]:
         print >> sys.stderr, "Usage: correlations (<file>)"
         exit(-1)
     sc = SparkContext(appName="PythonCorrelations")
