@@ -376,15 +376,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      // It is important that we RESET first as broken hooks that might have been set could break
-      // other sql exec here.
-      runSqlHive("RESET")
-      // For some reason, RESET does not reset the following variables...
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
-      // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
@@ -410,6 +401,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // It is important that we RESET first as broken hooks that might have been set could break
+      // other sql exec here.
+      runSqlHive("RESET")
+      // For some reason, RESET does not reset the following variables...
+      runSqlHive("set datanucleus.cache.collections=true")
+      runSqlHive("set datanucleus.cache.collections.lazy=true")
+      // Lots of tests fail if we do not change the partition whitelist from the default.
+      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
       configure()
 
       runSqlHive("USE default")
