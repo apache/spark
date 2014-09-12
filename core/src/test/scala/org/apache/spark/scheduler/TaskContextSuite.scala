@@ -17,12 +17,16 @@
 
 package org.apache.spark.scheduler
 
+import org.mockito.Mockito._
+import org.mockito.Matchers.any
+
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
+
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -48,18 +52,21 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
 
   test("all TaskCompletionListeners should be called even if some fail") {
     val context = new TaskContext(0, 0, 0)
+    val listener = mock(classOf[TaskCompletionListener])
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
-    context.addTaskCompletionListener(_ => TaskContextSuite.callbackInvoked = true)
+    context.addTaskCompletionListener(listener)
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
-    context.markTaskCompleted()
-    assert(TaskContextSuite.callbackInvoked === true)
+
+    intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted()
+    }
+
+    verify(listener, times(1)).onTaskCompletion(any())
   }
 }
 
 private object TaskContextSuite {
   @volatile var completed = false
-
-  var callbackInvoked = false
 }
 
 private case class StubPartition(index: Int) extends Partition
