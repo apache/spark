@@ -270,8 +270,8 @@ case object FloatType extends FractionalType {
 }
 
 object ArrayType {
-  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is false. */
-  def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
+  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
+  def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
 }
 
 /**

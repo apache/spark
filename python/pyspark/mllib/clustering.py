@@ -25,8 +25,11 @@ from pyspark.mllib._common import \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper
 from pyspark.mllib.linalg import SparseVector
 
+__all__ = ['KMeansModel', 'KMeans']
+
 
 class KMeansModel(object):
+
     """A clustering model derived from the k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
@@ -55,6 +58,7 @@ class KMeansModel(object):
     >>> type(model.clusterCenters)
     <type 'list'>
     """
+
     def __init__(self, centers):
         self.centers = centers
 
@@ -76,6 +80,7 @@ class KMeansModel(object):
 
 
 class KMeans(object):
+
     @classmethod
     def train(cls, data, k, maxIterations=100, runs=1, initializationMode="k-means||"):
         """Train a k-means clustering model."""

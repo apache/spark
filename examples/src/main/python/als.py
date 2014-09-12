@@ -97,3 +97,5 @@ if __name__ == "__main__":
         error = rmse(R, ms, us)
         print "Iteration %d:" % i
         print "\nRMSE: %5.4f\n" % error
+
+    sc.stop()

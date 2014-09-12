@@ -9,9 +9,9 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 
 [Dimensionality reduction](http://en.wikipedia.org/wiki/Dimensionality_reduction) is the process 
 of reducing the number of variables under consideration.
-It is used to extract latent features from raw and noisy features,
+It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-In this release, we provide preliminary support for dimensionality reduction on tall-and-skinny matrices.
+MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -30,17 +30,35 @@ where
 * $V$ is an orthonormal matrix, whose columns are called right singular vectors.
  
 For large matrices, usually we don't need the complete factorization but only the top singular
-values and its associated singular vectors.  This can save storage, and more importantly, de-noise
+values and its associated singular vectors.  This can save storage, de-noise
 and recover the low-rank structure of the matrix.
 
-If we keep the top $k$ singular values, then the dimensions of the return will be:
+If we keep the top $k$ singular values, then the dimensions of the resulting low-rank matrix will be:
 
 * `$U$`: `$m \times k$`,
 * `$\Sigma$`: `$k \times k$`,
 * `$V$`: `$n \times k$`.
  
-In this release, we provide SVD computation to row-oriented matrices that have only a few columns,
-say, less than $1000$, but many rows, which we call *tall-and-skinny*.
+### Performance
+We assume $n$ is smaller than $m$. The singular values and the right singular vectors are derived
+from the eigenvalues and the eigenvectors of the Gramian matrix $A^T A$. The matrix
+storing the left singular vectors $U$, is computed via matrix multiplication as
+$U = A (V S^{-1})$, if requested by the user via the computeU parameter. 
+The actual method to use is determined automatically based on the computational cost:
+
+* If $n$ is small ($n < 100$) or $k$ is large compared with $n$ ($k > n / 2$), we compute the Gramian matrix
+first and then compute its top eigenvalues and eigenvectors locally on the driver.
+This requires a single pass with $O(n^2)$ storage on each executor and on the driver, and
+$O(n^2 k)$ time on the driver.
+* Otherwise, we compute $(A^T A) v$ in a distributive way and send it to
+<a href="http://www.caam.rice.edu/software/ARPACK/">ARPACK</a> to
+compute $(A^T A)$'s top eigenvalues and eigenvectors on the driver node. This requires $O(k)$
+passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
+
+### SVD Example
+ 
+MLlib provides SVD functionality to row-oriented matrices, provided in the
+<a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -58,15 +76,10 @@ val s: Vector = svd.s // The singular values are stored in a local dense vector.
 val V: Matrix = svd.V // The V factor is a local dense matrix.
 {% endhighlight %}
 
-Same code applies to `IndexedRowMatrix`.
-The only difference that the `U` matrix becomes an `IndexedRowMatrix`.
+The same code applies to `IndexedRowMatrix` if `U` is defined as an
+`IndexedRowMatrix`.
 </div>
 <div data-lang="java" markdown="1">
-In order to run the following standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
-
 {% highlight java %}
 import java.util.LinkedList;
 
@@ -104,8 +117,16 @@ public class SVD {
   }
 }
 {% endhighlight %}
-Same code applies to `IndexedRowMatrix`.
-The only difference that the `U` matrix becomes an `IndexedRowMatrix`.
+
+The same code applies to `IndexedRowMatrix` if `U` is defined as an
+`IndexedRowMatrix`.
+
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
+
 </div>
 </div>
 
@@ -116,14 +137,13 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-In this release, we implement PCA for tall-and-skinny matrices stored in row-oriented format.
+MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
-The number of columns should be small, e.g, less than 1000.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
@@ -141,7 +161,7 @@ val projected: RowMatrix = mat.multiply(pc)
 
 <div data-lang="java" markdown="1">
 
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
 
@@ -180,9 +200,10 @@ public class PCA {
 }
 {% endhighlight %}
 
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
+In order to run the above standalone application, follow the instructions
+provided in the [Standalone
+Applications](quick-start.html#standalone-applications) section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 </div>
 </div>

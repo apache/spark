@@ -29,12 +29,15 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer
+    PairDeserializer, CompressedSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
+
+
+__all__ = ['SparkContext']
 
 
 # These are special default configs for PySpark, they will overwrite
@@ -47,6 +50,7 @@ DEFAULT_CONFIGS = {
 
 
 class SparkContext(object):
+
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD}s and
@@ -213,7 +217,7 @@ class SparkContext(object):
 
             if instance:
                 if (SparkContext._active_spark_context and
-                   SparkContext._active_spark_context != instance):
+                        SparkContext._active_spark_context != instance):
                     currentMaster = SparkContext._active_spark_context.master
                     currentAppName = SparkContext._active_spark_context.appName
                     callsite = SparkContext._active_spark_context._callsite
@@ -227,6 +231,20 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+    def __enter__(self):
+        """
+        Enable 'with SparkContext(...) as sc: app(sc)' syntax.
+        """
+        return self
+
+    def __exit__(self, type, value, trace):
+        """
+        Enable 'with SparkContext(...) as sc: app' syntax.
+
+        Specifically stop the context on exit of the with block.
+        """
+        self.stop()
 
     @classmethod
     def setSystemProperty(cls, key, value):
@@ -313,11 +331,15 @@ class SparkContext(object):
         return RDD(self._jsc.objectFile(name, minPartitions), self,
                    BatchedSerializer(PickleSerializer()))
 
-    def textFile(self, name, minPartitions=None):
+    def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
@@ -328,15 +350,19 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
-                   UTF8Deserializer())
+                   UTF8Deserializer(use_unicode))
 
-    def wholeTextFiles(self, path, minPartitions=None):
+    def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         For example, if you have the following files::
 
@@ -368,7 +394,7 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
-                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
+                   PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)))
 
     def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()
@@ -406,7 +432,7 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, path, keyClass, valueClass,
-                    keyConverter, valueConverter, minSplits, batchSize)
+                                                keyConverter, valueConverter, minSplits, batchSize)
         return RDD(jrdd, self, ser)
 
     def newAPIHadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -437,7 +463,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                                    valueClass, keyConverter, valueConverter,
+                                                    jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def newAPIHadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -465,7 +492,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                                   valueClass, keyConverter, valueConverter,
+                                                   jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def hadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -496,7 +524,8 @@ class SparkContext(object):
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
         jrdd = self._jvm.PythonRDD.hadoopFile(self._jsc, path, inputFormatClass, keyClass,
-                    valueClass, keyConverter, valueConverter, jconf, batchSize)
+                                              valueClass, keyConverter, valueConverter,
+                                              jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def hadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
@@ -523,8 +552,9 @@ class SparkContext(object):
         jconf = self._dictToJavaMap(conf)
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
         ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
-        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass, valueClass,
-                    keyConverter, valueConverter, jconf, batchSize)
+        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass,
+                                             valueClass, keyConverter, valueConverter,
+                                             jconf, batchSize)
         return RDD(jrdd, self, ser)
 
     def _checkpointFile(self, name, input_deserializer):
@@ -555,21 +585,23 @@ class SparkContext(object):
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
         rest = ListConverter().convert(rest, self._gateway._gateway_client)
-        return RDD(self._jsc.union(first, rest), self,
-                   rdds[0]._jrdd_deserializer)
+        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """
         Broadcast a read-only variable to the cluster, returning a
         L{Broadcast<pyspark.broadcast.Broadcast>}
-        object for reading it in distributed functions. The variable will be
-        sent to each cluster only once.
+        object for reading it in distributed functions. The variable will
+        be sent to each cluster only once.
         """
-        pickleSer = PickleSerializer()
-        pickled = pickleSer.dumps(value)
-        jbroadcast = self._jsc.broadcast(bytearray(pickled))
-        return Broadcast(jbroadcast.id(), value, jbroadcast,
-                         self._pickled_broadcast_vars)
+        ser = CompressedSerializer(PickleSerializer())
+        # pass large object by py4j is very slow and need much memory
+        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
+        ser.dump_stream([value], tempFile)
+        tempFile.close()
+        jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
+        return Broadcast(jbroadcast.id(), None, jbroadcast,
+                         self._pickled_broadcast_vars, tempFile.name)
 
     def accumulator(self, value, accum_param=None):
         """
@@ -599,8 +631,8 @@ class SparkContext(object):
         FTP URI.
 
         To access the file in Spark jobs, use
-        L{SparkFiles.get(path)<pyspark.files.SparkFiles.get>} to find its
-        download location.
+        L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
+        filename to find its download location.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
@@ -610,7 +642,7 @@ class SparkContext(object):
         >>> def func(iterator):
         ...    with open(SparkFiles.get("test.txt")) as testFile:
         ...        fileVal = int(testFile.readline())
-        ...        return [x * 100 for x in iterator]
+        ...        return [x * fileVal for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """

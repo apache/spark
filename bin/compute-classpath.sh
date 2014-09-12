@@ -23,9 +23,9 @@
 SCALA_VERSION=2.10
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
-. $FWDIR/bin/load-spark-env.sh
+. "$FWDIR"/bin/load-spark-env.sh
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
@@ -63,7 +63,7 @@ else
   assembly_folder="$ASSEMBLY_DIR"
 fi
 
-num_jars=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)
+num_jars="$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)"
 if [ "$num_jars" -eq "0" ]; then
   echo "Failed to find Spark assembly in $assembly_folder"
   echo "You need to build Spark before running this program."
@@ -77,7 +77,7 @@ if [ "$num_jars" -gt "1" ]; then
   exit 1
 fi
 
-ASSEMBLY_JAR=$(ls "$assembly_folder"/spark-assembly*hadoop*.jar 2>/dev/null)
+ASSEMBLY_JAR="$(ls "$assembly_folder"/spark-assembly*hadoop*.jar 2>/dev/null)"
 
 # Verify that versions of java used to build the jars and run Spark are compatible
 jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
@@ -103,8 +103,8 @@ else
   datanucleus_dir="$FWDIR"/lib_managed/jars
 fi
 
-datanucleus_jars=$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")
-datanucleus_jars=$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)
+datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")"
+datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
 if [ -n "$datanucleus_jars" ]; then
   hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)

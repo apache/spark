@@ -75,7 +75,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
-  <td>
+  </td>
 </tr>
 <tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
@@ -123,6 +123,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
      these and to set multiple environment variables. In yarn-cluster mode this controls 
      the environment of the SPARK driver and in yarn-client mode it only controls 
      the environment of the executor launcher. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.containerLauncherMaxThreads</code></td>
+  <td>25</td>
+  <td>
+    The maximum number of threads to use in the application master for launching executor containers.
   </td>
 </tr>
 </table>

@@ -29,6 +29,7 @@ from operator import itemgetter
 
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+from pyspark.storagelevel import StorageLevel
 
 from itertools import chain, ifilter, imap
 
@@ -40,11 +41,11 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext",
-    "SchemaRDD", "Row"]
+    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
 
 
 class DataType(object):
+
     """Spark SQL DataType"""
 
     def __repr__(self):
@@ -62,6 +63,7 @@ class DataType(object):
 
 
 class PrimitiveTypeSingleton(type):
+
     """Metaclass for PrimitiveType"""
 
     _instances = {}
@@ -73,6 +75,7 @@ class PrimitiveTypeSingleton(type):
 
 
 class PrimitiveType(DataType):
+
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
@@ -83,6 +86,7 @@ class PrimitiveType(DataType):
 
 
 class StringType(PrimitiveType):
+
     """Spark SQL StringType
 
     The data type representing string values.
@@ -90,6 +94,7 @@ class StringType(PrimitiveType):
 
 
 class BinaryType(PrimitiveType):
+
     """Spark SQL BinaryType
 
     The data type representing bytearray values.
@@ -97,6 +102,7 @@ class BinaryType(PrimitiveType):
 
 
 class BooleanType(PrimitiveType):
+
     """Spark SQL BooleanType
 
     The data type representing bool values.
@@ -104,6 +110,7 @@ class BooleanType(PrimitiveType):
 
 
 class TimestampType(PrimitiveType):
+
     """Spark SQL TimestampType
 
     The data type representing datetime.datetime values.
@@ -111,6 +118,7 @@ class TimestampType(PrimitiveType):
 
 
 class DecimalType(PrimitiveType):
+
     """Spark SQL DecimalType
 
     The data type representing decimal.Decimal values.
@@ -118,6 +126,7 @@ class DecimalType(PrimitiveType):
 
 
 class DoubleType(PrimitiveType):
+
     """Spark SQL DoubleType
 
     The data type representing float values.
@@ -125,6 +134,7 @@ class DoubleType(PrimitiveType):
 
 
 class FloatType(PrimitiveType):
+
     """Spark SQL FloatType
 
     The data type representing single precision floating-point values.
@@ -132,6 +142,7 @@ class FloatType(PrimitiveType):
 
 
 class ByteType(PrimitiveType):
+
     """Spark SQL ByteType
 
     The data type representing int values with 1 singed byte.
@@ -139,6 +150,7 @@ class ByteType(PrimitiveType):
 
 
 class IntegerType(PrimitiveType):
+
     """Spark SQL IntegerType
 
     The data type representing int values.
@@ -146,6 +158,7 @@ class IntegerType(PrimitiveType):
 
 
 class LongType(PrimitiveType):
+
     """Spark SQL LongType
 
     The data type representing long values. If the any value is
@@ -155,6 +168,7 @@ class LongType(PrimitiveType):
 
 
 class ShortType(PrimitiveType):
+
     """Spark SQL ShortType
 
     The data type representing int values with 2 signed bytes.
@@ -162,6 +176,7 @@ class ShortType(PrimitiveType):
 
 
 class ArrayType(DataType):
+
     """Spark SQL ArrayType
 
     The data type representing list values. An ArrayType object
@@ -171,15 +186,15 @@ class ArrayType(DataType):
 
     """
 
-    def __init__(self, elementType, containsNull=False):
+    def __init__(self, elementType, containsNull=True):
         """Creates an ArrayType
 
         :param elementType: the data type of elements.
         :param containsNull: indicates whether the list contains None values.
 
-        >>> ArrayType(StringType) == ArrayType(StringType, False)
+        >>> ArrayType(StringType) == ArrayType(StringType, True)
         True
-        >>> ArrayType(StringType, True) == ArrayType(StringType)
+        >>> ArrayType(StringType, False) == ArrayType(StringType)
         False
         """
         self.elementType = elementType
@@ -187,10 +202,11 @@ class ArrayType(DataType):
 
     def __str__(self):
         return "ArrayType(%s,%s)" % (self.elementType,
-               str(self.containsNull).lower())
+                                     str(self.containsNull).lower())
 
 
 class MapType(DataType):
+
     """Spark SQL MapType
 
     The data type representing dict values. A MapType object comprises
@@ -226,10 +242,11 @@ class MapType(DataType):
 
     def __repr__(self):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
-               str(self.valueContainsNull).lower())
+                                      str(self.valueContainsNull).lower())
 
 
 class StructField(DataType):
+
     """Spark SQL StructField
 
     Represents a field in a StructType.
@@ -263,10 +280,11 @@ class StructField(DataType):
 
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
-               str(self.nullable).lower())
+                                          str(self.nullable).lower())
 
 
 class StructType(DataType):
+
     """Spark SQL StructType
 
     The data type representing rows.
@@ -291,7 +309,7 @@ class StructType(DataType):
 
     def __repr__(self):
         return ("StructType(List(%s))" %
-                    ",".join(str(field) for field in self.fields))
+                ",".join(str(field) for field in self.fields))
 
 
 def _parse_datatype_list(datatype_list_string):
@@ -319,7 +337,7 @@ def _parse_datatype_list(datatype_list_string):
 
 
 _all_primitive_types = dict((k, v) for k, v in globals().iteritems()
-    if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
+                            if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
 
 
 def _parse_datatype_string(datatype_string):
@@ -459,16 +477,16 @@ def _infer_schema(row):
         items = sorted(row.items())
 
     elif isinstance(row, tuple):
-        if hasattr(row, "_fields"): # namedtuple
+        if hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
-        elif hasattr(row, "__FIELDS__"): # Row
+        elif hasattr(row, "__FIELDS__"):  # Row
             items = zip(row.__FIELDS__, tuple(row))
         elif all(isinstance(x, tuple) and len(x) == 2 for x in row):
             items = row
         else:
             raise ValueError("Can't infer schema from tuple")
 
-    elif hasattr(row, "__dict__"): # object
+    elif hasattr(row, "__dict__"):  # object
         items = sorted(row.__dict__.items())
 
     else:
@@ -480,10 +498,7 @@ def _infer_schema(row):
 
 def _create_converter(obj, dataType):
     """Create an converter to drop the names of fields in obj """
-    if not _has_struct(dataType):
-        return lambda x: x
-
-    elif isinstance(dataType, ArrayType):
+    if isinstance(dataType, ArrayType):
         conv = _create_converter(obj[0], dataType.elementType)
         return lambda row: map(conv, row)
 
@@ -492,6 +507,9 @@ def _create_converter(obj, dataType):
         conv = _create_converter(value, dataType.valueType)
         return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
 
+    elif not isinstance(dataType, StructType):
+        return lambda x: x
+
     # dataType must be StructType
     names = [f.name for f in dataType.fields]
 
@@ -499,7 +517,7 @@ def _create_converter(obj, dataType):
         conv = lambda o: tuple(o.get(n) for n in names)
 
     elif isinstance(obj, tuple):
-        if hasattr(obj, "_fields"): # namedtuple
+        if hasattr(obj, "_fields"):  # namedtuple
             conv = tuple
         elif hasattr(obj, "__FIELDS__"):
             conv = tuple
@@ -508,11 +526,10 @@ def _create_converter(obj, dataType):
         else:
             raise ValueError("unexpected tuple")
 
-    elif hasattr(obj, "__dict__"): # object
+    elif hasattr(obj, "__dict__"):  # object
         conv = lambda o: [o.__dict__.get(n, None) for n in names]
 
-    nested = any(_has_struct(f.dataType) for f in dataType.fields)
-    if not nested:
+    if all(isinstance(f.dataType, PrimitiveType) for f in dataType.fields):
         return conv
 
     row = conv(obj)
@@ -660,7 +677,7 @@ def _infer_schema_type(obj, dataType):
         assert len(fs) == len(obj), \
             "Obj(%s) have different length with fields(%s)" % (obj, fs)
         fields = [StructField(f.name, _infer_schema_type(o, f.dataType), True)
-                    for o, f in zip(obj, fs)]
+                  for o, f in zip(obj, fs)]
         return StructType(fields)
 
     else:
@@ -682,6 +699,7 @@ _acceptable_types = {
     MapType: (dict,),
     StructType: (tuple, list),
 }
+
 
 def _verify_type(obj, dataType):
     """
@@ -728,7 +746,7 @@ def _verify_type(obj, dataType):
     elif isinstance(dataType, StructType):
         if len(obj) != len(dataType.fields):
             raise ValueError("Length of object (%d) does not match with"
-                "length of fields (%d)" % (len(obj), len(dataType.fields)))
+                             "length of fields (%d)" % (len(obj), len(dataType.fields)))
         for v, f in zip(obj, dataType.fields):
             _verify_type(v, f.dataType)
 
@@ -861,6 +879,7 @@ def _create_cls(dataType):
         raise Exception("unexpected data type: %s" % dataType)
 
     class Row(tuple):
+
         """ Row in SchemaRDD """
         __DATATYPE__ = dataType
         __FIELDS__ = tuple(f.name for f in dataType.fields)
@@ -872,7 +891,7 @@ def _create_cls(dataType):
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
-                    for n in self.__FIELDS__))
+                                          for n in self.__FIELDS__))
 
         def __reduce__(self):
             return (_restore_object, (self.__DATATYPE__, tuple(self)))
@@ -880,8 +899,9 @@ def _create_cls(dataType):
     return Row
 
 
-class SQLContext:
-    """Main entry point for SparkSQL functionality.
+class SQLContext(object):
+
+    """Main entry point for Spark SQL functionality.
 
     A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -891,6 +911,8 @@ class SQLContext:
         """Create a new SQLContext.
 
         @param sparkContext: The SparkContext to wrap.
+        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -921,18 +943,16 @@ class SQLContext:
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
-
-        if sqlContext:
-            self._scala_SQLContext = sqlContext
+        self._scala_SQLContext = sqlContext
 
     @property
     def _ssql_ctx(self):
-        """Accessor for the JVM SparkSQL context.
+        """Accessor for the JVM Spark SQL context.
 
         Subclasses can override this property to provide their own
         JVM Contexts.
         """
-        if not hasattr(self, '_scala_SQLContext'):
+        if self._scala_SQLContext is None:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
@@ -949,23 +969,26 @@ class SQLContext:
         >>> sqlCtx.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlCtx.sql("SELECT stringLengthInt('test')").collect()
         [Row(c0=4)]
-        >>> sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        >>> sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
-        [Row(c0=5)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
+        pickled_command = CloudPickleSerializer().dumps(command)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
+            self._sc._gateway._gateway_client)
+        self._sc._pickled_broadcast_vars.clear()
         env = MapConverter().convert(self._sc.environment,
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
-                                     self._sc._gateway._gateway_client)
+                                           self._sc._gateway._gateway_client)
         self._ssql_ctx.registerPython(name,
-                                      bytearray(CloudPickleSerializer().dumps(command)),
+                                      bytearray(pickled_command),
                                       env,
                                       includes,
                                       self._sc.pythonExec,
+                                      broadcast_vars,
                                       self._sc._javaAccumulator,
                                       str(returnType))
 
@@ -1012,9 +1035,10 @@ class SQLContext:
         first = rdd.first()
         if not first:
             raise ValueError("The first row in RDD is empty, "
-                    "can not infer schema")
+                             "can not infer schema")
         if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated")
+            warnings.warn("Using RDD of dict to inferSchema is deprecated,"
+                          "please use pyspark.sql.Row instead")
 
         schema = _infer_schema(first)
         rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
@@ -1070,8 +1094,8 @@ class SQLContext:
         >>> sqlCtx.sql(
         ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
         ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
-        ...     "float + 1.1 as float FROM table2").collect()
-        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.1)]
+        ...     "float + 1.5 as float FROM table2").collect()
+        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.5)]
 
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
@@ -1231,13 +1255,22 @@ class SQLContext:
         ...   "field3.field5[0] as f3 from table3")
         >>> srdd6.collect()
         [Row(f1=u'row1', f2=None,...Row(f1=u'row3', f2=[], f3=None)]
+
+        >>> sqlCtx.jsonRDD(sc.parallelize(['{}',
+        ...         '{"key0": {"key1": "value1"}}'])).collect()
+        [Row(key0=None), Row(key0=Row(key1=u'value1'))]
+        >>> sqlCtx.jsonRDD(sc.parallelize(['{"key0": null}',
+        ...         '{"key0": {"key1": "value1"}}'])).collect()
+        [Row(key0=None), Row(key0=Row(key1=u'value1'))]
         """
 
         def func(iterator):
             for x in iterator:
                 if not isinstance(x, basestring):
                     x = unicode(x)
-                yield x.encode("utf-8")
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
         keyed = rdd.mapPartitions(func)
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
@@ -1280,11 +1313,24 @@ class SQLContext:
 
 
 class HiveContext(SQLContext):
+
     """A variant of Spark SQL that integrates with data stored in Hive.
 
     Configuration for Hive is read from hive-site.xml on the classpath.
     It supports running both SQL and HiveQL commands.
     """
+
+    def __init__(self, sparkContext, hiveContext=None):
+        """Create a new HiveContext.
+
+        @param sparkContext: The SparkContext to wrap.
+        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        HiveContext in the JVM, instead we make all calls to this object.
+        """
+        SQLContext.__init__(self, sparkContext)
+
+        if hiveContext:
+            self._scala_HiveContext = hiveContext
 
     @property
     def _ssql_ctx(self):
@@ -1320,6 +1366,7 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
+
     """Starts up an instance of hive where metadata is stored locally.
 
     An in-process metadata data is created with data stored in ./metadata.
@@ -1350,7 +1397,7 @@ class LocalHiveContext(HiveContext):
     def __init__(self, sparkContext, sqlContext=None):
         HiveContext.__init__(self, sparkContext, sqlContext)
         warnings.warn("LocalHiveContext is deprecated. "
-                "Use HiveContext instead.", DeprecationWarning)
+                      "Use HiveContext instead.", DeprecationWarning)
 
     def _get_hive_ctx(self):
         return self._jvm.LocalHiveContext(self._jsc.sc())
@@ -1369,6 +1416,7 @@ def _create_row(fields, values):
 
 
 class Row(tuple):
+
     """
     A row in L{SchemaRDD}. The fields in it can be accessed like attributes.
 
@@ -1410,7 +1458,6 @@ class Row(tuple):
         else:
             raise ValueError("No args or kwargs")
 
-
     # let obect acs like class
     def __call__(self, *args):
         """create new Row object"""
@@ -1436,16 +1483,32 @@ class Row(tuple):
     def __repr__(self):
         if hasattr(self, "__FIELDS__"):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
-                for k, v in zip(self.__FIELDS__, self))
+                                         for k, v in zip(self.__FIELDS__, self))
         else:
             return "<Row(%s)>" % ", ".join(self)
 
 
+def inherit_doc(cls):
+    for name, func in vars(cls).items():
+        # only inherit docstring for public functions
+        if name.startswith("_"):
+            continue
+        if not func.__doc__:
+            for parent in cls.__bases__:
+                parent_func = getattr(parent, name, None)
+                if parent_func and getattr(parent_func, "__doc__", None):
+                    func.__doc__ = parent_func.__doc__
+                    break
+    return cls
+
+
+@inherit_doc
 class SchemaRDD(RDD):
+
     """An RDD of L{Row} objects that has an associated schema.
 
     The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
-    utilize the relational query api exposed by SparkSQL.
+    utilize the relational query api exposed by Spark SQL.
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
@@ -1462,7 +1525,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
-
+        self._id = None
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
@@ -1480,9 +1543,10 @@ class SchemaRDD(RDD):
             self._lazy_jrdd = self._jschema_rdd.javaToPython()
         return self._lazy_jrdd
 
-    @property
-    def _id(self):
-        return self._jrdd.id()
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
@@ -1516,6 +1580,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.registerTempTable(name)
 
     def registerAsTable(self, name):
+        """DEPRECATED: use registerTempTable() instead"""
         warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
         self.registerTempTable(name)
 
@@ -1602,7 +1667,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.cache()
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
         self._jschema_rdd.persist(javaStorageLevel)
@@ -1652,7 +1717,7 @@ class SchemaRDD(RDD):
                 rdd = self._jschema_rdd.subtract(other._jschema_rdd)
             else:
                 rdd = self._jschema_rdd.subtract(other._jschema_rdd,
-                        numPartitions)
+                                                 numPartitions)
             return SchemaRDD(rdd, self.sql_ctx)
         else:
             raise ValueError("Can only subtract another SchemaRDD")
@@ -1679,9 +1744,9 @@ def _test():
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
-            '"field6":[{"field7": "row2"}]}',
+        '"field6":[{"field7": "row2"}]}',
         '{"field1" : null, "field2": "row3", '
-            '"field3":{"field4":33, "field5": []}}'
+        '"field3":{"field4":33, "field5": []}}'
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)

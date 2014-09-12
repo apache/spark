@@ -214,6 +214,16 @@ Apart from these, the following properties are also available, and may be useful
     process. The user can specify multiple of these and to set multiple environment variables. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -279,6 +289,23 @@ Apart from these, the following properties are also available, and may be useful
     Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.manager</code></td>
+  <td>sort</td>
+  <td>
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
+    the default option starting in 1.2.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
+  <td>200</td>
+  <td>
+    (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
+    map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
 </table>
@@ -355,10 +382,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
+  <td>snappy</td>
   <td>
-    The codec used to compress internal data such as RDD partitions and shuffle outputs.
-    By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default,
+    Spark provides three codecs: <code>lz4</code>, <code>lzf</code>, and <code>snappy</code>. You
+    can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
@@ -542,7 +571,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-    <td>spark.hadoop.validateOutputSpecs</td>
+    <td><code>spark.hadoop.validateOutputSpecs</code></td>
     <td>true</td>
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
@@ -550,7 +579,7 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 <tr>
-    <td>spark.executor.heartbeatInterval</td>
+    <td><code>spark.executor.heartbeatInterval</code></td>
     <td>10000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
@@ -807,22 +836,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </tr>
-  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
   <td>0</td>
   <td>
-    The minimum ratio of registered executors (registered executors / total expected executors)
+    The minimum ratio of registered resources (registered resources / total expected resources)
+    (resources are executors in yarn mode, CPU cores in standalone mode)
     to wait for before scheduling begins. Specified as a double between 0 and 1.
-    Regardless of whether the minimum ratio of executors has been reached,
+    Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code> 
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
   <td>30000</td>
   <td>
-    Maximum amount of time to wait for executors to register before scheduling begins
+    Maximum amount of time to wait for resources to register before scheduling begins
     (in milliseconds).  
+  </td>
+</tr>
+<tr>
+  <td><code>spark.localExecution.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
+    tasks to the cluster. This can make certain jobs execute very quickly, but may require
+    shipping a whole partition of data to the driver.
   </td>
 </tr>
 </table>
@@ -852,6 +891,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of seconds for the connection to wait for authentication to occur before timing
     out and giving up.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.core.connection.ack.wait.timeout</code></td>
+  <td>60</td>
+  <td>
+    Number of seconds for the connection to wait for ack to occur before timing
+    out and giving up. To avoid unwilling timeout caused by long pause like GC,
+    you can set larger value.
   </td>
 </tr>
 <tr>

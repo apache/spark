@@ -32,7 +32,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     val rdd = new RDD[String](sc, List()) {
       override def getPartitions = Array[Partition](StubPartition(0))
       override def compute(split: Partition, context: TaskContext) = {
-        context.addOnCompleteCallback(() => TaskContextSuite.completed = true)
+        context.addTaskCompletionListener(context => TaskContextSuite.completed = true)
         sys.error("failed")
       }
     }

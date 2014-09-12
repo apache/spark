@@ -17,16 +17,17 @@
 
 package org.apache.spark.mllib.feature
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.Logging
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  *
@@ -34,38 +35,56 @@ import org.apache.spark.rdd.RDD
  *                 dense output, so this does not work on sparse input and will raise an exception.
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
-@DeveloperApi
-class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransformer {
+@Experimental
+class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
 
   def this() = this(false, true)
 
-  require(withMean || withStd, s"withMean and withStd both equal to false. Doing nothing.")
-
-  private var mean: BV[Double] = _
-  private var factor: BV[Double] = _
+  if (!(withMean || withStd)) {
+    logWarning("Both withMean and withStd are false. The model does nothing.")
+  }
 
   /**
    * Computes the mean and variance and stores as a model to be used for later scaling.
    *
    * @param data The data used to compute the mean and variance to build the transformation model.
-   * @return This StandardScalar object.
+   * @return a StandardScalarModel
    */
-  def fit(data: RDD[Vector]): this.type = {
+  def fit(data: RDD[Vector]): StandardScalerModel = {
+    // TODO: skip computation if both withMean and withStd are false
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    new StandardScalerModel(withMean, withStd, summary.mean, summary.variance)
+  }
+}
 
-    mean = summary.mean.toBreeze
-    factor = summary.variance.toBreeze
-    require(mean.length == factor.length)
+/**
+ * :: Experimental ::
+ * Represents a StandardScaler model that can transform vectors.
+ *
+ * @param withMean whether to center the data before scaling
+ * @param withStd whether to scale the data to have unit standard deviation
+ * @param mean column mean values
+ * @param variance column variance values
+ */
+@Experimental
+class StandardScalerModel private[mllib] (
+    val withMean: Boolean,
+    val withStd: Boolean,
+    val mean: Vector,
+    val variance: Vector) extends VectorTransformer {
 
+  require(mean.size == variance.size)
+
+  private lazy val factor: BDV[Double] = {
+    val f = BDV.zeros[Double](variance.size)
     var i = 0
-    while (i < factor.length) {
-      factor(i) = if (factor(i) != 0.0) 1.0 / math.sqrt(factor(i)) else 0.0
+    while (i < f.size) {
+      f(i) = if (variance(i) != 0.0) 1.0 / math.sqrt(variance(i)) else 0.0
       i += 1
     }
-
-    this
+    f
   }
 
   /**
@@ -76,13 +95,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransfor
    *         for the column with zero variance.
    */
   override def transform(vector: Vector): Vector = {
-    if (mean == null || factor == null) {
-      throw new IllegalStateException(
-        "Haven't learned column summary statistics yet. Call fit first.")
-    }
-
-    require(vector.size == mean.length)
-
+    require(mean.size == vector.size)
     if (withMean) {
       vector.toBreeze match {
         case dv: BDV[Double] =>
@@ -115,5 +128,4 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends VectorTransfor
       vector
     }
   }
-
 }

@@ -70,6 +70,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     setConf("hive.metastore.warehouse.dir", warehousePath)
   }
 
+  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
+  testTempDir.delete()
+  testTempDir.mkdir()
+
+  // For some hive test case which contain ${system:test.tmp.dir}
+  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+
   configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
@@ -108,6 +115,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   hiveFilesTemp.deleteOnExit()
+
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -261,7 +269,74 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |)
        """.stripMargin.cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
-    )
+    ),
+    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC PARITIONING
+    // IS NOT YET SUPPORTED
+    TestTable("episodes_part",
+      s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
+         |PARTITIONED BY (doctor_pt INT)
+         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
+         |STORED AS
+         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
+         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |TBLPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+       """.stripMargin.cmd,
+      // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
+      // TODO: Pass this automatically from the table to partitions.
+      s"""
+         |ALTER TABLE episodes_part SET SERDEPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+        """.stripMargin.cmd,
+      s"""
+        INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
+        SELECT title, air_date, doctor FROM episodes
+      """.cmd
+      )
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
