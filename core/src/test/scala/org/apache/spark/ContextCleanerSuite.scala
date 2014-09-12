@@ -21,7 +21,6 @@ import java.lang.ref.WeakReference
 
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
