@@ -215,9 +215,19 @@ private[hive] object HiveQl {
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sqlRaw: String): LogicalPlan = {
+    var sql = sqlRaw
     try {
-      if (sql.trim.toLowerCase.startsWith("set")) {
+      // FIXME workaround solution to remove the first comment from the sql string
+      if (sql.startsWith("--")) {
+        var pos = sql.indexOf(System.getProperty("line.separator"))
+        pos = if (pos < 0) sql.length() else pos + 1
+        sql = sql.substring(pos)
+      }
+      var procSql = sql.trim.toLowerCase
+      if (procSql.isEmpty()) {
+        NoRelation
+      } else if (procSql.startsWith("set")) {
         // Split in two parts since we treat the part before the first "="
         // as key, and the part after as value, which may contain other "=" signs.
         sql.trim.drop(3).split("=", 2).map(_.trim) match {
@@ -228,20 +238,31 @@ private[hive] object HiveQl {
           case Array(key, value) => // "set key=value"
             SetCommand(Some(key), Some(value))
         }
-      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
+      } else if (procSql.startsWith("cache table")) {
         CacheCommand(sql.trim.drop(12).trim, true)
-      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
+      } else if (procSql.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
-      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
+      } else if (procSql.startsWith("add jar")) {
         AddJar(sql.trim.drop(8).trim)
-      } else if (sql.trim.toLowerCase.startsWith("add file")) {
+      } else if (procSql.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
-      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
+      } else if (procSql.startsWith("dfs")) {
         NativeCommand(sql)
-      } else if (sql.trim.startsWith("source")) {
-        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
+      } else if (procSql.startsWith("source")) {
+        SourceCommand(sql.trim.drop(7).trim)
       } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
+      } else if (procSql.startsWith("explain")) {
+        val remaining = sql.trim.drop(8).trim
+        // process the "extended" and the "formatted"
+        if (remaining.toLowerCase.startsWith("extended")) {
+          ExplainCommand(parseSql(remaining.drop(9)), true)
+        } else if (remaining.toLowerCase.startsWith("formatted")) {
+          // TODO supports the "FORMATTED"?
+          ExplainCommand(parseSql(remaining.drop(10)))
+        } else {
+          ExplainCommand(parseSql(remaining))
+        }
       } else {
         val tree = getAst(sql)
         if (nativeCommands contains tree.getText) {
@@ -254,10 +275,10 @@ private[hive] object HiveQl {
         }
       }
     } catch {
-      case e: Exception => throw new ParseException(sql, e)
+      case e: Exception => throw new ParseException(sqlRaw, e)
       case e: NotImplementedError => sys.error(
         s"""
-          |Unsupported language features in query: $sql
+          |Unsupported language features in query: $sqlRaw
           |${dumpTree(getAst(sql))}
         """.stripMargin)
     }
@@ -407,16 +428,6 @@ private[hive] object HiveQl {
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
         AnalyzeTable(tableName)
       }
-    // Just fake explain for any of the native commands.
-    case Token("TOK_EXPLAIN", explainArgs)
-      if noExplainCommands.contains(explainArgs.head.getText) =>
-      ExplainCommand(NoRelation)
-    case Token("TOK_EXPLAIN", explainArgs) =>
-      // Ignore FORMATTED if present.
-      val Some(query) :: _ :: extended :: Nil =
-        getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
-      ExplainCommand(nodeToPlan(query), extended != None)
-
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
       val Some(tableType) :: formatted :: extended :: pretty :: Nil =
