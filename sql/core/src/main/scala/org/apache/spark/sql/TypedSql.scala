@@ -172,13 +172,41 @@ object SQLMacros {
       case t: PrimitiveType =>
         val methodName = newTermName("get" + primitiveForType(t))
         q"$row.$methodName($index)"
+      case ArrayType(elementType: PrimitiveType, _) =>
+       val tpe = typeOfPrimitive(elementType)
+       q"$row($index).asInstanceOf[Array[$tpe]]"
+      case ArrayType(elementType, _) =>
+        val tpe = typeOfDataType(elementType)
+        q"$row($index).asInstanceOf[Array[$tpe]]"        
       case StructType(structFields) =>
         val fields = structFields.map(f => (f.name, f.dataType))
         genRecord(q"$row($index).asInstanceOf[$rowTpe]", fields)
       case _ =>
         c.abort(NoPosition, s"Query returns currently unhandled field type: $t")
     }
-  }
+
+    private def typeOfDataType(dt: DataType): Type = dt match {
+      case ArrayType(elementType, _) =>
+        val elemTpe = typeOfDataType(elementType)
+        appliedType(definitions.ArrayClass.toType, List(elemTpe))
+      case TimestampType =>
+       typeOf[java.sql.Timestamp]
+      case _ if dt.isPrimitive =>
+        typeOfPrimitive(dt.asInstanceOf[PrimitiveType])
+    }
+
+    private def typeOfPrimitive(dt: PrimitiveType): Type = dt match {
+      case IntegerType => typeOf[Int]
+      case LongType => typeOf[Long]
+      case ShortType => typeOf[Short]
+      case ByteType => typeOf[Byte]
+      case DoubleType => typeOf[Double]
+      case FloatType => typeOf[Float]
+      case BooleanType => typeOf[Boolean]
+      case StringType => typeOf[String]
+      case DecimalType => typeOf[BigDecimal]
+    }
+  } // end of class Macros
 
   // TODO: Duplicated from codegen PR...
   protected def primitiveForType(dt: PrimitiveType) = dt match {
@@ -190,6 +218,7 @@ object SQLMacros {
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case StringType => "String"
+    case DecimalType => "BigDecimal"
   }
 }
 

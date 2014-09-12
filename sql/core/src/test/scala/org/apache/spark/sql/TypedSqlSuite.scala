@@ -25,6 +25,10 @@ case class Person(name: String, age: Int)
 
 case class Car(owner: Person, model: String)
 
+case class Garage(cars: Array[Car])
+
+case class Data(arr: Array[Int])
+
 class TypedSqlSuite extends FunSuite {
   import TestSQLContext._
 
@@ -35,9 +39,24 @@ class TypedSqlSuite extends FunSuite {
   val cars = sparkContext.parallelize(
     Car(Person("Michael", 30), "GrandAm") :: Nil)
 
+  val garage = sparkContext.parallelize(
+    Car(Person("Michael", 30), "GrandAm"), Car(Person("Mary", 52), "Buick"))
+
+  val data = sparkContext.parallelize(1 to 10).map(x => Data(Array(1, 2, 3)))
+
   test("typed query") {
     val results = sql"SELECT name FROM $people WHERE age = 30"
     assert(results.first().name == "Michael")
+  }
+
+  test("typed query with array") {
+    val results = sql"SELECT * FROM $garage"
+    assert(results.first().owner == "Michael")
+  }
+
+  test("typed query with primitive array") {
+    val results = sql"SELECT * FROM $data"
+    assert(results.first().arr(0) == 1)
   }
 
   test("int results") {
