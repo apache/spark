@@ -114,11 +114,12 @@ case class InsertIntoTable(
   }
 }
 
-case class InsertIntoCreatedTable(
+case class CreateTableAsSelect(
     databaseName: Option[String],
     tableName: String,
     child: LogicalPlan) extends UnaryNode {
   override def output = child.output
+  override lazy val resolved = (databaseName != None && childrenResolved)
 }
 
 case class WriteToFile(

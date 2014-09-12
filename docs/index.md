@@ -103,6 +103,8 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
+* Integration with other storage systems:
+  * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
 
