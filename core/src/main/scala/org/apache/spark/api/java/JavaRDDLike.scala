@@ -196,7 +196,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   @DeveloperApi
   def mapPartitionsWithContext[R](
       f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
-      preservesPartitioning: Boolean = false): JavaRDD[R] = {
+      preservesPartitioning: Boolean): JavaRDD[R] = {
 
     new JavaRDD(rdd.mapPartitionsWithContext(
       ((a, b) => f(a, asJavaIterator(b))), preservesPartitioning)(fakeClassTag))(fakeClassTag)
