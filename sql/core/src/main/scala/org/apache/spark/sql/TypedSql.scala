@@ -169,12 +169,15 @@ object SQLMacros {
      * Constructs a nested record if necessary
      */
     def genGetField(row: Tree, index: Int, t: DataType): Tree = t match {
+      case BinaryType =>
+        q"$row($index).asInstanceOf[Array[Byte]]"
+      case DecimalType =>
+        q"$row($index).asInstanceOf[scala.math.BigDecimal]"
       case t: PrimitiveType =>
+        // this case doesn't work for DecimalType or BinaryType,
+        // note that they both extend PrimitiveType
         val methodName = newTermName("get" + primitiveForType(t))
         q"$row.$methodName($index)"
-      case ArrayType(elementType: PrimitiveType, _) =>
-       val tpe = typeOfPrimitive(elementType)
-       q"$row($index).asInstanceOf[Array[$tpe]]"
       case ArrayType(elementType, _) =>
         val tpe = typeOfDataType(elementType)
         q"$row($index).asInstanceOf[Array[$tpe]]"        
@@ -190,7 +193,11 @@ object SQLMacros {
         val elemTpe = typeOfDataType(elementType)
         appliedType(definitions.ArrayClass.toType, List(elemTpe))
       case TimestampType =>
-       typeOf[java.sql.Timestamp]
+        typeOf[java.sql.Timestamp]
+      case DecimalType =>
+        typeOf[BigDecimal]
+      case BinaryType =>
+        typeOf[Array[Byte]]
       case _ if dt.isPrimitive =>
         typeOfPrimitive(dt.asInstanceOf[PrimitiveType])
     }
@@ -204,7 +211,6 @@ object SQLMacros {
       case FloatType => typeOf[Float]
       case BooleanType => typeOf[Boolean]
       case StringType => typeOf[String]
-      case DecimalType => typeOf[BigDecimal]
     }
   } // end of class Macros
 
@@ -218,7 +224,6 @@ object SQLMacros {
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case StringType => "String"
-    case DecimalType => "BigDecimal"
   }
 }
 

@@ -74,7 +74,7 @@ trait ScalaReflection {
         }), nullable = true)
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-    // case t if t <:< typeOf[Array[Byte]] => Schema(ArrayType(BinaryType, false), nullable = true)
+    // case t if t <:< typeOf[Array[Byte]] => Schema(ArrayType(ByteType, false), nullable = true)
     case t if t <:< typeOf[Array[Int]] => Schema(ArrayType(IntegerType, false), nullable = true)
     case t if t <:< typeOf[Array[Long]] => Schema(ArrayType(LongType, false), nullable = true)
     case t if t <:< typeOf[Array[Double]] => Schema(ArrayType(DoubleType, false), nullable = true)
