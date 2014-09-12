@@ -122,7 +122,19 @@ class NewHadoopRDD[K, V](
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
         SparkHadoopUtil.get.getInputBytesReadCallback(
-          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
+          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf).orElse {
+          // If we can't get the bytes read from the FS stats, fall back to the split size,
+          // which may be inaccurate.
+          try {
+            val splitSize = split.serializableHadoopSplit.value.getLength
+            Some(() => splitSize)
+          } catch {
+            case e: java.io.IOException => {
+              logWarning("Unable to get input size to set InputMetrics for task", e)
+              None
+            }
+          }
+        }
       } else {
         None
       }
