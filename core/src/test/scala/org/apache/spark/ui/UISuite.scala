@@ -21,7 +21,6 @@ import java.net.ServerSocket
 import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
-import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.server.Server
@@ -35,6 +34,7 @@ import org.apache.spark.LocalSparkContext._
 import scala.xml.Node
 
 class UISuite extends FunSuite {
+  import scala.language.postfixOps
 
   /**
    * Create a test SparkContext with the SparkUI enabled.
