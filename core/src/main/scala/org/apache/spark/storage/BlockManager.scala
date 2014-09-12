@@ -334,17 +334,6 @@ private[spark] class BlockManager(
   }
 
   /**
-   * A short-circuited method to get blocks directly from disk. This is used for getting
-   * shuffle blocks. It is safe to do so without a lock on block info since disk store
-   * never deletes (recent) items.
-   */
-  def getLocalShuffleFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    val buf = shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
-    val is = wrapForCompression(blockId, buf.inputStream())
-    Some(serializer.newInstance().deserializeStream(is).asIterator)
-  }
-
-  /**
    * Get block from local block manager.
    */
   def getLocal(blockId: BlockId): Option[BlockResult] = {
