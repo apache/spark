@@ -207,6 +207,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
             ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
           listener.onBlockFetchFailure(
             ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
+          listener.onBlockFetchFailure(
+            ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
           sem.release()
         }
       }
