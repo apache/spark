@@ -43,6 +43,8 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Loggin
 
   private[this] val serverAddr = cf.channel().remoteAddress().toString
 
+  def isActive: Boolean = cf.channel().isActive
+
   /**
    * Ask the remote server for a sequence of blocks, and execute the callback.
    *
@@ -55,7 +57,7 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Loggin
   def fetchBlocks(blockIds: Seq[String], listener: BlockFetchingListener): Unit = {
     var startTime: Long = 0
     logTrace {
-      startTime = System.nanoTime
+      startTime = System.nanoTime()
       s"Sending request $blockIds to $serverAddr"
     }
 
@@ -67,7 +69,7 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Loggin
       override def operationComplete(future: ChannelFuture): Unit = {
         if (future.isSuccess) {
           logTrace {
-            val timeTaken = (System.nanoTime - startTime).toDouble / 1000000
+            val timeTaken = (System.nanoTime() - startTime).toDouble / 1000000
             s"Sending request $blockIds to $serverAddr took $timeTaken ms"
           }
         } else {
@@ -84,9 +86,6 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Loggin
     })
   }
 
-  def waitForClose(): Unit = {
-    cf.channel().closeFuture().sync()
-  }
-
+  /** Close the connection. This does NOT block till the connection is closed. */
   def close(): Unit = cf.channel().close()
 }

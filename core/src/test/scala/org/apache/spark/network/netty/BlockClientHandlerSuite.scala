@@ -32,6 +32,7 @@ import org.apache.spark.network._
 
 class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
+  /** Helper method to get num. outstanding requests from a private field using reflection. */
   private def sizeOfOutstandingRequests(handler: BlockClientHandler): Int = {
     val f = handler.getClass.getDeclaredField(
       "org$apache$spark$network$netty$BlockClientHandler$$outstandingRequests")

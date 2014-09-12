@@ -27,6 +27,9 @@ import scala.collection.JavaConversions._
 import io.netty.buffer.Unpooled
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.Span
+import org.scalatest.time.Seconds
 
 import org.apache.spark.SparkConf
 import org.apache.spark.network._
@@ -155,5 +158,11 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds === Set(bufferBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))
     assert(failBlockIds === Set("random-block"))
+  }
+
+  test("shutting down server should also close client") {
+    val client = clientFactory.createClient(server.hostName, server.port)
+    server.stop()
+    eventually(timeout(Span(5, Seconds))) { assert(!client.isActive) }
   }
 }
