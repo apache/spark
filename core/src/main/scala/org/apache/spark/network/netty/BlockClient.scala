@@ -77,8 +77,8 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Loggin
           logError(errorMsg, future.cause)
           blockIds.foreach { blockId =>
             handler.removeRequest(blockId)
+            listener.onBlockFetchFailure(blockId, new RuntimeException(errorMsg))
           }
-          listener.onBlockFetchFailure(new RuntimeException(errorMsg))
         }
       }
     })

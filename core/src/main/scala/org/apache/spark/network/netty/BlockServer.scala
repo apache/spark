@@ -54,25 +54,22 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
   /** Initialize the server. */
   private def init(): Unit = {
     bootstrap = new ServerBootstrap
-    val bossThreadFactory = Utils.namedThreadFactory("spark-netty-server-boss")
-    val workerThreadFactory = Utils.namedThreadFactory("spark-netty-server-worker")
+    val threadFactory = Utils.namedThreadFactory("spark-netty-server")
 
     // Use only one thread to accept connections, and 2 * num_cores for worker.
     def initNio(): Unit = {
-      val bossGroup = new NioEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new NioEventLoopGroup(0, workerThreadFactory)
-      workerGroup.setIoRatio(conf.ioRatio)
+      val bossGroup = new NioEventLoopGroup(0, threadFactory)
+      val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[NioServerSocketChannel])
     }
     def initOio(): Unit = {
-      val bossGroup = new OioEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new OioEventLoopGroup(0, workerThreadFactory)
+      val bossGroup = new OioEventLoopGroup(0, threadFactory)
+      val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[OioServerSocketChannel])
     }
     def initEpoll(): Unit = {
-      val bossGroup = new EpollEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new EpollEventLoopGroup(0, workerThreadFactory)
-      workerGroup.setIoRatio(conf.ioRatio)
+      val bossGroup = new EpollEventLoopGroup(0, threadFactory)
+      val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[EpollServerSocketChannel])
     }
 
@@ -92,10 +89,10 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
       bootstrap.option[java.lang.Integer](ChannelOption.SO_BACKLOG, backLog)
     }
     conf.receiveBuf.foreach { receiveBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf)
+      bootstrap.childOption[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf)
     }
     conf.sendBuf.foreach { sendBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf)
+      bootstrap.childOption[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf)
     }
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel] {

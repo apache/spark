@@ -50,7 +50,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
           if (data.contains(BlockId(blockId))) {
             listener.onBlockFetchSuccess(blockId, data(BlockId(blockId)))
           } else {
-            listener.onBlockFetchFailure(new BlockNotFoundException(blockId))
+            listener.onBlockFetchFailure(blockId, new BlockNotFoundException(blockId))
           }
         }
       }
@@ -205,7 +205,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
           // Return the first block, and then fail.
           listener.onBlockFetchSuccess(
             ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
-          listener.onBlockFetchFailure(new BlockNotFoundException("blah"))
+          listener.onBlockFetchFailure(
+            ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
           sem.release()
         }
       }

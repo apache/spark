@@ -103,7 +103,8 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     client.fetchBlocks(
       blockIds,
       new BlockFetchingListener {
-        override def onBlockFetchFailure(exception: Throwable): Unit = {
+        override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+          errorBlockIds.add(blockId)
           sem.release()
         }
 
@@ -135,7 +136,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(failBlockIds.isEmpty)
   }
 
-  ignore("fetch a non-existent block") {
+  test("fetch a non-existent block") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq("random-block"))
     assert(blockIds.isEmpty)
     assert(buffers.isEmpty)
@@ -149,7 +150,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(failBlockIds.isEmpty)
   }
 
-  ignore("fetch both ByteBuffer block and a non-existent block") {
+  test("fetch both ByteBuffer block and a non-existent block") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId, "random-block"))
     assert(blockIds === Set(bufferBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))

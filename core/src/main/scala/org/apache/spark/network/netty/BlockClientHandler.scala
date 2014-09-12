@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty
 
+import java.util.concurrent.ConcurrentHashMap
+
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
 import org.apache.spark.Logging
@@ -33,9 +35,8 @@ private[netty]
 class BlockClientHandler extends SimpleChannelInboundHandler[ServerResponse] with Logging {
 
   /** Tracks the list of outstanding requests and their listeners on success/failure. */
-  private[this] val outstandingRequests = java.util.Collections.synchronizedMap {
-    new java.util.HashMap[String, BlockFetchingListener]
-  }
+  private[this] val outstandingRequests: java.util.Map[String, BlockFetchingListener] =
+    new ConcurrentHashMap[String, BlockFetchingListener]
 
   def addRequest(blockId: String, listener: BlockFetchingListener): Unit = {
     outstandingRequests.put(blockId, listener)
@@ -45,20 +46,36 @@ class BlockClientHandler extends SimpleChannelInboundHandler[ServerResponse] wit
     outstandingRequests.remove(blockId)
   }
 
-  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-    val errorMsg = s"Exception in connection from ${ctx.channel.remoteAddress}: ${cause.getMessage}"
-    logError(errorMsg, cause)
-
-    // Fire the failure callback for all outstanding blocks
-    outstandingRequests.synchronized {
-      val iter = outstandingRequests.entrySet().iterator()
-      while (iter.hasNext) {
-        val entry = iter.next()
-        entry.getValue.onBlockFetchFailure(cause)
-      }
-      outstandingRequests.clear()
+  /**
+   * Fire the failure callback for all outstanding requests. This is called when we have an
+   * uncaught exception or pre-mature connection termination.
+   */
+  private def failOutstandingRequests(cause: Throwable): Unit = {
+    val iter = outstandingRequests.entrySet().iterator()
+    while (iter.hasNext) {
+      val entry = iter.next()
+      entry.getValue.onBlockFetchFailure(entry.getKey, cause)
     }
+    // TODO(rxin): Maybe we need to synchronize the access? Otherwise we could clear new requests
+    // as well. But I guess that is ok given the caller will fail as soon as any requests fail.
+    outstandingRequests.clear()
+  }
 
+  override def channelUnregistered(ctx: ChannelHandlerContext): Unit = {
+    if (outstandingRequests.size() > 0) {
+      logError("Still have " + outstandingRequests.size() + " requests outstanding " +
+        s"when connection from ${ctx.channel.remoteAddress} is closed")
+      failOutstandingRequests(new RuntimeException(
+        s"Connection from ${ctx.channel.remoteAddress} closed"))
+    }
+  }
+
+  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+    if (outstandingRequests.size() > 0) {
+      logError(
+        s"Exception in connection from ${ctx.channel.remoteAddress}: ${cause.getMessage}", cause)
+      failOutstandingRequests(cause)
+    }
     ctx.close()
   }
 
@@ -80,7 +97,7 @@ class BlockClientHandler extends SimpleChannelInboundHandler[ServerResponse] wit
             s"Got a response for block $blockId from $server ($errorMsg) but it is not outstanding")
         } else {
           outstandingRequests.remove(blockId)
-          listener.onBlockFetchFailure(new RuntimeException(errorMsg))
+          listener.onBlockFetchFailure(blockId, new RuntimeException(errorMsg))
         }
     }
   }
