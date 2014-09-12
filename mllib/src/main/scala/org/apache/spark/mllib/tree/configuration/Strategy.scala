@@ -75,6 +75,9 @@ class Strategy (
   if (algo == Classification) {
     require(numClassesForClassification >= 2)
   }
+  require(minInstancesPerNode >= 1,
+    s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
+
   val isMulticlassClassification =
     algo == Classification && numClassesForClassification > 2
   val isMulticlassWithCategoricalFeatures
