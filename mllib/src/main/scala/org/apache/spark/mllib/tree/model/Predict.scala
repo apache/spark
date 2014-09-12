@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.mllib.tree.model
 
-private[spark] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
-  override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId
-}
+import org.apache.spark.annotation.DeveloperApi
 
-private[spark] object ConnectionId {
+/**
+ * :: DeveloperApi ::
+ * Predicted value for a node
+ * @param predict predicted value
+ * @param prob probability of the label (classification only)
+ */
+@DeveloperApi
+private[tree] class Predict(
+    val predict: Double,
+    val prob: Double = 0.0) extends Serializable{
 
-  def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
-    val res = connectionIdString.split("_").map(_.trim())
-    if (res.size != 3) {
-      throw new Exception("Error converting ConnectionId string: " + connectionIdString +
-        " to a ConnectionId Object")
-    }
-    new ConnectionId(new ConnectionManagerId(res(0), res(1).toInt), res(2).toInt)
+  override def toString = {
+    "predict = %f, prob = %f".format(predict, prob)
   }
 }

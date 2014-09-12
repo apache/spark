@@ -759,6 +759,32 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   }
 
   /**
+   * Repartition the RDD according to the given partitioner and, within each resulting partition,
+   * sort records by their keys.
+   *
+   * This is more efficient than calling `repartition` and then sorting within each partition
+   * because it can push the sorting down into the shuffle machinery.
+   */
+  def repartitionAndSortWithinPartitions(partitioner: Partitioner): JavaPairRDD[K, V] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    repartitionAndSortWithinPartitions(partitioner, comp)
+  }
+
+  /**
+   * Repartition the RDD according to the given partitioner and, within each resulting partition,
+   * sort records by their keys.
+   *
+   * This is more efficient than calling `repartition` and then sorting within each partition
+   * because it can push the sorting down into the shuffle machinery.
+   */
+  def repartitionAndSortWithinPartitions(partitioner: Partitioner, comp: Comparator[K])
+    : JavaPairRDD[K, V] = {
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).repartitionAndSortWithinPartitions(partitioner))
+  }
+
+  /**
    * Sort the RDD by key, so that each partition contains a sorted range of the elements in
    * ascending order. Calling `collect` or `save` on the resulting RDD will return or output an
    * ordered list of records (in the `save` case, they will be written to multiple `part-X` files

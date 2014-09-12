@@ -246,7 +246,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    catalog.registerTable(None, tableName, rdd.queryExecution.analyzed)
   }
 
   /**
@@ -411,7 +411,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = 
+    def simpleString: String =
       s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
       """
@@ -460,7 +460,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
     import scala.collection.JavaConversions._
-    import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
@@ -482,8 +481,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case (null, _) => null
 
       case (c: java.util.List[_], ArrayType(elementType, _)) =>
-        val converted = c.map { e => convert(e, elementType)}
-        JListWrapper(converted)
+        c.map { e => convert(e, elementType)}: Seq[Any]
 
       case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
         c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]

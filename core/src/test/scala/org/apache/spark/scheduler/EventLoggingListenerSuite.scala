@@ -28,6 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 import java.io.File
@@ -196,7 +197,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     def assertInfoCorrect(info: EventLoggingInfo, loggerStopped: Boolean) {
       assert(info.logPaths.size > 0)
-      assert(info.sparkVersion === SparkContext.SPARK_VERSION)
+      assert(info.sparkVersion === SPARK_VERSION)
       assert(info.compressionCodec.isDefined === compressionCodec.isDefined)
       info.compressionCodec.foreach { codec =>
         assert(compressionCodec.isDefined)
@@ -381,7 +382,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   private def assertSparkVersionIsValid(logFiles: Array[FileStatus]) {
     val file = logFiles.map(_.getPath.getName).find(EventLoggingListener.isSparkVersionFile)
     assert(file.isDefined)
-    assert(EventLoggingListener.parseSparkVersion(file.get) === SparkContext.SPARK_VERSION)
+    assert(EventLoggingListener.parseSparkVersion(file.get) === SPARK_VERSION)
   }
 
   private def assertCompressionCodecIsValid(logFiles: Array[FileStatus], compressionCodec: String) {

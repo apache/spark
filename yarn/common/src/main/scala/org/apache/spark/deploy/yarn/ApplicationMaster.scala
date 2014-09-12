@@ -112,7 +112,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val securityMgr = new SecurityManager(sparkConf)
 
     if (isDriver) {
-      runDriver()
+      runDriver(securityMgr)
     } else {
       runExecutorLauncher(securityMgr)
     }
@@ -153,7 +153,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkContextRef.compareAndSet(sc, null)
   }
 
-  private def registerAM(uiAddress: String) = {
+  private def registerAM(uiAddress: String, securityMgr: SecurityManager) = {
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
@@ -166,13 +166,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       if (sc != null) sc.getConf else sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
-      historyAddress)
+      historyAddress,
+      securityMgr)
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
 
-  private def runDriver(): Unit = {
+  private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
     val userThread = startUserClass()
 
@@ -184,7 +185,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort)
+      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       try {
         userThread.join()
       } finally {
@@ -199,7 +200,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       conf = sparkConf, securityManager = securityMgr)._1
     actor = waitForSparkDriver()
     addAmIpFilter()
-    registerAM(sparkConf.get("spark.driver.appUIAddress", ""))
+    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
