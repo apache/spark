@@ -98,7 +98,7 @@ object PageRank extends Logging {
       Iterator((edge.dstId, edge.srcAttr * edge.attr))
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
-    val initialMessage = 0.0
+    val initialMessage = 1.0
 
     // Execute pregel for a fixed number of iterations.
     Pregel(pagerankGraph, initialMessage, numIter, activeDirection = EdgeDirection.Out)(
