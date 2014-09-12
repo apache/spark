@@ -25,7 +25,7 @@ from pyspark.rdd import RDD
 from pyspark.serializers import NoOpSerializer
 
 
-class MLUtils:
+class MLUtils(object):
 
     """
     Helper methods to load, save and pre-process data used in MLlib.

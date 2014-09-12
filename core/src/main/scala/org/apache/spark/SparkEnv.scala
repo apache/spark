@@ -31,7 +31,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.ConnectionManager
+import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
@@ -59,8 +60,8 @@ class SparkEnv (
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
+    val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
-    val connectionManager: ConnectionManager,
     val securityManager: SecurityManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
@@ -88,6 +89,8 @@ class SparkEnv (
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
     // actorSystem.awaitTermination()
+
+    // Note that blockTransferService is stopped by BlockManager since it is started by it.
   }
 
   private[spark]
@@ -218,20 +221,20 @@ object SparkEnv extends Logging {
     val shortShuffleMgrNames = Map(
       "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
       "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "hash")
+    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+
+    val blockTransferService = new NioBlockTransferService(conf, securityManager)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager, mapOutputTracker, shuffleManager)
-
-    val connectionManager = blockManager.connectionManager
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
@@ -279,8 +282,8 @@ object SparkEnv extends Logging {
       mapOutputTracker,
       shuffleManager,
       broadcastManager,
+      blockTransferService,
       blockManager,
-      connectionManager,
       securityManager,
       httpFileServer,
       sparkFilesDir,

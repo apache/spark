@@ -80,7 +80,7 @@ The ordered splits create "bins" and the maximum number of such
 bins can be specified using the `maxBins` parameter.
 
 Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario
-since the default `maxBins` value is 100). The tree algorithm automatically reduces the number of
+since the default `maxBins` value is 32). The tree algorithm automatically reduces the number of
 bins if the condition is not satisfied.
 
 **Categorical features**
@@ -117,7 +117,7 @@ all nodes at each level of the tree. This could lead to high memory requirements
 of the tree, potentially leading to memory overflow errors. To alleviate this problem, a `maxMemoryInMB`
 training parameter specifies the maximum amount of memory at the workers (twice as much at the
 master) to be allocated to the histogram computation. The default value is conservatively chosen to
-be 128 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements
+be 256 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements
 for a level-wise computation cross the `maxMemoryInMB` threshold, the node training tasks at each
 subsequent level are split into smaller tasks.
 
@@ -167,7 +167,7 @@ val numClasses = 2
 val categoricalFeaturesInfo = Map[Int, Int]()
 val impurity = "gini"
 val maxDepth = 5
-val maxBins = 100
+val maxBins = 32
 
 val model = DecisionTree.trainClassifier(data, numClasses, categoricalFeaturesInfo, impurity,
   maxDepth, maxBins)
@@ -213,7 +213,7 @@ Integer numClasses = 2;
 HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "gini";
 Integer maxDepth = 5;
-Integer maxBins = 100;
+Integer maxBins = 32;
 
 // Train a DecisionTree model for classification.
 final DecisionTreeModel model = DecisionTree.trainClassifier(data, numClasses,
@@ -250,7 +250,7 @@ data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt').cache()
 # Train a DecisionTree model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
 model = DecisionTree.trainClassifier(data, numClasses=2, categoricalFeaturesInfo={},
-                                     impurity='gini', maxDepth=5, maxBins=100)
+                                     impurity='gini', maxDepth=5, maxBins=32)
 
 # Evaluate model on training instances and compute training error
 predictions = model.predict(data.map(lambda x: x.features))
@@ -293,7 +293,7 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").cache
 val categoricalFeaturesInfo = Map[Int, Int]()
 val impurity = "variance"
 val maxDepth = 5
-val maxBins = 100
+val maxBins = 32
 
 val model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo, impurity,
   maxDepth, maxBins)
@@ -338,7 +338,7 @@ JavaSparkContext sc = new JavaSparkContext(sparkConf);
 HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "variance";
 Integer maxDepth = 5;
-Integer maxBins = 100;
+Integer maxBins = 32;
 
 // Train a DecisionTree model.
 final DecisionTreeModel model = DecisionTree.trainRegressor(data,
@@ -380,7 +380,7 @@ data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt').cache()
 # Train a DecisionTree model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
 model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo={},
-                                    impurity='variance', maxDepth=5, maxBins=100)
+                                    impurity='variance', maxDepth=5, maxBins=32)
 
 # Evaluate model on training instances and compute training error
 predictions = model.predict(data.map(lambda x: x.features))
