@@ -91,8 +91,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
+
+    // for block replication test, to make a replication attempt to inactive store fail fast
     conf.set("spark.core.connection.ack.wait.timeout", "1")
+    // for block replication test, to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
+
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
       conf, true)
