@@ -15,28 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.mllib.tree.model
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * A set of tests that validates support for Hive SerDe.
+ * :: DeveloperApi ::
+ * Predicted value for a node
+ * @param predict predicted value
+ * @param prob probability of the label (classification only)
  */
-class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
+@DeveloperApi
+private[tree] class Predict(
+    val predict: Double,
+    val prob: Double = 0.0) extends Serializable{
 
-  override def beforeAll() = {
-    TestHive.cacheTables = false
+  override def toString = {
+    "predict = %f, prob = %f".format(predict, prob)
   }
-
-  createQueryTest(
-    "Read and write with LazySimpleSerDe (tab separated)",
-    "SELECT * from serdeins")
-
-  createQueryTest("Read with RegexSerDe", "SELECT * FROM sales")
-
-  createQueryTest("Read with AvroSerDe", "SELECT * FROM episodes")
-
-  createQueryTest("Read Partitioned with AvroSerDe", "SELECT * FROM episodes_part")
 }

@@ -49,6 +49,13 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
+ * @param minInstancesPerNode Minimum number of instances each child must have after split.
+ *                            Default value is 1. If a split cause left or right child
+ *                            to have less than minInstancesPerNode,
+ *                            this split will not be considered as a valid split.
+ * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+ *                    If a split has less information gain than minInfoGain,
+ *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.
  */
@@ -61,6 +68,8 @@ class Strategy (
     val maxBins: Int = 32,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    val minInstancesPerNode: Int = 1,
+    val minInfoGain: Double = 0.0,
     val maxMemoryInMB: Int = 256) extends Serializable {
 
   if (algo == Classification) {
