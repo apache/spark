@@ -20,11 +20,9 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import org.json4s.JsonAST.JNothing
-
 import scala.xml.{Node, Unparsed}
 
-import org.json4s.{JObject, JValue}
+import org.json4s.{JNothing, JObject, JValue}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}

@@ -49,18 +49,17 @@ private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
 
       val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq[Schedulable]()
 
-      val poolList = pools.map {
-        case schedulable: Schedulable =>
+      val poolListJson =
+        pools.map { schedulable =>
           ("Pool Name" -> schedulable.name) ~
           ("Minimum Share" -> schedulable.minShare) ~
           ("Pool Weight" -> schedulable.weight) ~
           ("Active Stages" -> activeStages) ~
           ("Running Tasks" -> schedulable.runningTasks) ~
           ("Scheduling Mode" -> schedulable.schedulingMode.toString)
-      }
+        }
 
-      ("Pools" -> poolList)
-
+      poolListJson
     }
   }
 

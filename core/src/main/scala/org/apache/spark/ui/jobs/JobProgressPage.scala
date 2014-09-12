@@ -20,13 +20,13 @@ package org.apache.spark.ui.jobs
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.util.JsonProtocol
+
 import org.json4s.JValue
-import org.json4s.JsonAST.JNothing
 import org.json4s.JsonDSL._
 
 import scala.xml.{Node, NodeSeq}
 
-import org.apache.spark.scheduler.{StageInfo, Schedulable}
+import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
