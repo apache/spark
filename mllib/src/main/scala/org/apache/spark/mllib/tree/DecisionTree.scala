@@ -91,7 +91,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
-    val maxMemoryUsage = strategy.maxMemoryInMB * 1024 * 1024
+    val maxMemoryUsage = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     // TODO: Calculate memory usage more precisely.
     val numElementsPerNode = DecisionTree.getElementsPerNode(metadata)
@@ -906,8 +906,8 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Get the number of values to be stored per node in the bin aggregates.
    */
-  private def getElementsPerNode(metadata: DecisionTreeMetadata): Int = {
-    val totalBins = metadata.numBins.sum
+  private def getElementsPerNode(metadata: DecisionTreeMetadata): Long = {
+    val totalBins = metadata.numBins.map(_.toLong).sum
     if (metadata.isClassification) {
       metadata.numClasses * totalBins
     } else {
