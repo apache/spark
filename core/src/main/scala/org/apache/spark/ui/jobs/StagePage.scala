@@ -79,7 +79,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       stageInfoJson = ("Stage Summary" -> stageSummary) ~ ("Tasks" -> taskList)
     }
-    retVal
+    stageInfoJson
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
