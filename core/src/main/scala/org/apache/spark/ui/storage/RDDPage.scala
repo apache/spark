@@ -19,11 +19,9 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
-import org.json4s.JsonAST.JNothing
-
 import scala.xml.Node
 
-import org.json4s.JValue
+import org.json4s.{JNothing, JValue}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.storage._
@@ -39,7 +37,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val storageStatusList = listener.storageStatusList
     val rddInfoOpt = listener.rddInfoList.find(_.id == rddId)
 
-    var retVal: JValue = JNothing
+    var rddInfoJson: JValue = JNothing
 
     if (rddInfoOpt.isDefined) {
       val rddInfo = rddInfoOpt.get
@@ -52,13 +50,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         ("Memory Size" -> rddInfo.memSize) ~
         ("Disk Size" -> rddInfo.diskSize))
 
-      val dataDistributionList = storageStatusList.map {
-        case status: StorageStatus =>
+      val dataDistributionList =
+        storageStatusList.map { status =>
           ("Host" -> (status.blockManagerId.host + ":" + status.blockManagerId.port)) ~
           ("Memory Usage" -> status.memUsedByRdd(rddId)) ~
           ("Memory Remaining" -> status.memRemaining) ~
           ("Disk Usage" -> status.diskUsedByRdd(rddId))
-      }
+        }
 
       val dataDistributionJson = ("Data Distribution" -> dataDistributionList)
 
@@ -68,26 +66,25 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         .sortWith(_._1.name < _._1.name)
         .map { case (blockId, status) =>
           (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-      }
-      val partitionList = blocks.map {
-        case (id: BlockId, block: BlockStatus, locations: Seq[String]) =>
+        }
+
+      val partitionList =
+        blocks.map { case (id, block, locations) =>
           ("Block Name" -> id.toString) ~
           ("Storage Level" -> block.storageLevel.description) ~
           ("Size in Memory" -> block.memSize) ~
           ("Size on Disk" -> block.diskSize) ~
           ("Executors" -> locations)
-      }
+        }
+
       val partitionsJson = ("Partitions" -> partitionList)
 
-
-      retVal =
-        ("RDD Info" ->
-          rddSummaryJson ~
-          dataDistributionJson ~
-          partitionsJson
-        )
+      rddInfoJson =
+        rddSummaryJson ~
+        dataDistributionJson ~
+        partitionsJson
     }
-    retVal
+    rddInfoJson
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
