@@ -55,7 +55,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
-    conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
+    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIHostPort) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
