@@ -37,12 +37,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   override def renderJson(request: HttpServletRequest): JValue = {
     val stageId = request.getParameter("id").toInt
     val stageAttemptId = request.getParameter("attempt").toInt
-
     var stageSummary = ("Stage ID" -> stageId) ~ ("Stage Attempt ID" -> stageAttemptId)
-
-
     val stageDataOpt = listener.stageIdToData.get((stageId, stageAttemptId))
-    var retVal: JValue = JNothing
+    var stageInfoJson: JValue = JNothing
 
     if (!stageDataOpt.isEmpty && !stageDataOpt.get.taskData.isEmpty) {
       val stageData = stageDataOpt.get
@@ -80,10 +77,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           jsonTaskInfo
       }
 
-      retVal =
-        ("Stage Info" ->
-          ("StageSummary" -> stageSummary) ~
-          ("Tasks" -> taskList))
+      stageInfoJson = ("Stage Summary" -> stageSummary) ~ ("Tasks" -> taskList)
     }
     retVal
   }
