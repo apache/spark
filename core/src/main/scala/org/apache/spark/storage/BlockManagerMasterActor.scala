@@ -173,11 +173,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    * from the executors, but not from the driver.
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
-    // TODO: Consolidate usages of <driver>
     import context.dispatcher
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
     val requiredBlockManagers = blockManagerInfo.values.filter { info =>
-      removeFromDriver || info.blockManagerId.executorId != "<driver>"
+      removeFromDriver || !info.blockManagerId.isDriver
     }
     Future.sequence(
       requiredBlockManagers.map { bm =>
@@ -212,7 +211,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val minSeenTime = now - slaveTimeout
     val toRemove = new mutable.HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime && info.blockManagerId.executorId != "<driver>") {
+      if (info.lastSeenMs < minSeenTime && !info.blockManagerId.isDriver) {
         logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
           + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
         toRemove += info.blockManagerId
@@ -232,7 +231,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    */
   private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
     if (!blockManagerInfo.contains(blockManagerId)) {
-      blockManagerId.executorId == "<driver>" && !isLocal
+      blockManagerId.isDriver && !isLocal
     } else {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       true
@@ -355,7 +354,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       tachyonSize: Long) {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.executorId == "<driver>" && !isLocal) {
+      if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
         sender ! true
@@ -405,7 +404,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   /** Get the list of the peers of the given block manager */
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = blockManagerInfo.keySet.toArray
+    val blockManagerIds = blockManagerInfo.keySet.filterNot { _.isDriver }.toArray
     val selfIndex = blockManagerIds.indexOf(blockManagerId)
     if (selfIndex == -1) {
       logError("Self index for " + blockManagerId + " not found")
