@@ -50,7 +50,13 @@ object MimaExcludes {
               "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
             // MapStatus should be private[spark]
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
-              "org.apache.spark.scheduler.MapStatus")
+              "org.apache.spark.scheduler.MapStatus"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener")
           )
 
         case v if v.startsWith("1.1") =>

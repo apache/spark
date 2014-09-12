@@ -44,6 +44,7 @@ import org.apache.spark.util.{ByteBufferInputStream, Utils}
  * In that case, if the buffer is going to be passed around to a different thread, retain/release
  * should be called.
  */
+private[spark]
 abstract class ManagedBuffer {
   // Note that all the methods are defined with parenthesis because their implementations can
   // have side effects (io operations).
@@ -85,6 +86,7 @@ abstract class ManagedBuffer {
 /**
  * A [[ManagedBuffer]] backed by a segment in a file
  */
+private[spark]
 final class FileSegmentManagedBuffer(val file: File, val offset: Long, val length: Long)
   extends ManagedBuffer {
 
@@ -149,6 +151,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
 /**
  * A [[ManagedBuffer]] backed by [[java.nio.ByteBuffer]].
  */
+private[spark]
 final class NioManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 
   override def size: Long = buf.remaining()
@@ -168,6 +171,7 @@ final class NioManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
 /**
  * A [[ManagedBuffer]] backed by a Netty [[ByteBuf]].
  */
+private[spark]
 final class NettyManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
 
   override def size: Long = buf.readableBytes()

@@ -29,6 +29,7 @@ import org.apache.spark.network.{NettyManagedBuffer, ManagedBuffer}
 
 
 /** Messages from the client to the server. */
+private[netty]
 sealed trait ClientRequest {
   def id: Byte
 }
@@ -37,6 +38,7 @@ sealed trait ClientRequest {
  * Request to fetch a sequence of blocks from the server. A single [[BlockFetchRequest]] can
  * correspond to multiple [[ServerResponse]]s.
  */
+private[netty]
 final case class BlockFetchRequest(blocks: Seq[String]) extends ClientRequest {
   override def id = 0
 }
@@ -44,6 +46,7 @@ final case class BlockFetchRequest(blocks: Seq[String]) extends ClientRequest {
 /**
  * Request to upload a block to the server. Currently the server does not ack the upload request.
  */
+private[netty]
 final case class BlockUploadRequest(blockId: String, data: ManagedBuffer) extends ClientRequest {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
@@ -51,17 +54,20 @@ final case class BlockUploadRequest(blockId: String, data: ManagedBuffer) extend
 
 
 /** Messages from server to client (usually in response to some [[ClientRequest]]. */
+private[netty]
 sealed trait ServerResponse {
   def id: Byte
 }
 
 /** Response to [[BlockFetchRequest]] when a block exists and has been successfully fetched. */
+private[netty]
 final case class BlockFetchSuccess(blockId: String, data: ManagedBuffer) extends ServerResponse {
   require(blockId.length <= Byte.MaxValue)
   override def id = 0
 }
 
 /** Response to [[BlockFetchRequest]] when there is an error fetching the block. */
+private[netty]
 final case class BlockFetchFailure(blockId: String, error: String) extends ServerResponse {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
@@ -74,6 +80,7 @@ final case class BlockFetchFailure(blockId: String, error: String) extends Serve
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @Sharable
+private[netty]
 final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] {
   override def encode(ctx: ChannelHandlerContext, in: ClientRequest, out: JList[Object]): Unit = {
     in match {
@@ -128,6 +135,7 @@ final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] 
  * [[ProtocolUtils.createFrameDecoder()]].
  */
 @Sharable
+private[netty]
 final class ClientRequestDecoder extends MessageToMessageDecoder[ByteBuf] {
   override protected def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: JList[AnyRef]): Unit =
   {
@@ -155,6 +163,7 @@ final class ClientRequestDecoder extends MessageToMessageDecoder[ByteBuf] {
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @Sharable
+private[netty]
 final class ServerResponseEncoder extends MessageToMessageEncoder[ServerResponse] with Logging {
   override def encode(ctx: ChannelHandlerContext, in: ServerResponse, out: JList[Object]): Unit = {
     in match {
@@ -211,6 +220,7 @@ final class ServerResponseEncoder extends MessageToMessageEncoder[ServerResponse
  * [[ProtocolUtils.createFrameDecoder()]].
  */
 @Sharable
+private[netty]
 final class ServerResponseDecoder extends MessageToMessageDecoder[ByteBuf] {
   override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: JList[AnyRef]): Unit = {
     val msgId = in.readByte()
