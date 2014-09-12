@@ -116,7 +116,6 @@ object SparkEnv extends Logging {
 
   private[spark] val driverActorSystemName = "sparkDriver"
   private[spark] val executorActorSystemName = "sparkExecutor"
-  private[spark] val yarnClientActorSystemName = "yarnClient"
 
   def set(e: SparkEnv) {
     lastSetSparkEnv = e

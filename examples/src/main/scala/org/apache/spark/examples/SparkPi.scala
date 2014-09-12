@@ -26,8 +26,6 @@ object SparkPi {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Spark Pi")
     val spark = new SparkContext(conf)
-    try {
-    throw new Exception
     val slices = if (args.length > 0) args(0).toInt else 2
     val n = 100000 * slices
     val count = spark.parallelize(1 to n, slices).map { i =>
@@ -36,8 +34,6 @@ object SparkPi {
       if (x*x + y*y < 1) 1 else 0
     }.reduce(_ + _)
     println("Pi is roughly " + 4.0 * count / n)
-    } finally {
     spark.stop()
-    }
   }
 }
