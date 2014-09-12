@@ -603,7 +603,15 @@ abstract class DStream[T: ClassTag] (
    * Print the first ten elements of each RDD generated in this DStream. This is an output
    * operator, so this DStream will be registered as an output stream and there materialized.
    */
-  def print(num: Int = 10) {
+  def print() {
+    print(10)
+  }
+  
+  /**
+   * Print the first num elements of each RDD generated in this DStream. This is an output
+   * operator, so this DStream will be registered as an output stream and there materialized.
+   */
+  def print(num: Int) {
     def foreachFunc = (rdd: RDD[T], time: Time) => {
       val firstNum = rdd.take(num + 1)
       println ("-------------------------------------------")
