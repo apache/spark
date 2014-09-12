@@ -142,7 +142,6 @@ class HiveQuerySuite extends HiveComparisonTest {
     setConf("spark.sql.dialect", "sql")
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
     setConf("spark.sql.dialect", "hiveql")
-
   }
 
   test("Query expressed in HiveQL") {
@@ -151,6 +150,12 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
     "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
+
+  createQueryTest("Cast Timestamp to Timestamp in UDF",
+    """
+       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp)) 
+       | FROM src LIMIT 1
+    """.stripMargin)
 
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
