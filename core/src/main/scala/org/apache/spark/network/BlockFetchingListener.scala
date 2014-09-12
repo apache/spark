@@ -31,7 +31,7 @@ trait BlockFetchingListener extends EventListener {
   def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit
 
   /**
-   * Called upon failures. For each failure, this is called only once (i.e. not once per block).
+   * Called at least once per block upon failures.
    */
-  def onBlockFetchFailure(exception: Throwable): Unit
+  def onBlockFetchFailure(blockId: String, exception: Throwable): Unit
 }

@@ -28,6 +28,7 @@ import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
+import io.netty.util.internal.PlatformDependent
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -92,12 +93,13 @@ class BlockClientFactory(val conf: NettyConfig) {
     val bootstrap = new Bootstrap
     bootstrap.group(workerGroup)
       .channel(socketChannelClass)
-      // Use pooled buffers to reduce temporary buffer allocation
-      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, java.lang.Boolean.TRUE)
       .option(ChannelOption.SO_KEEPALIVE, java.lang.Boolean.TRUE)
       .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectTimeoutMs)
+
+    // Use pooled buffers to reduce temporary buffer allocation
+    bootstrap.option(ChannelOption.ALLOCATOR, createPooledByteBufAllocator())
 
     bootstrap.handler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
@@ -123,5 +125,29 @@ class BlockClientFactory(val conf: NettyConfig) {
     if (workerGroup != null) {
       workerGroup.shutdownGracefully()
     }
+  }
+
+  /**
+   * Create a pooled ByteBuf allocator but disables the thread-local cache. Thread-local caches
+   * are disabled because the ByteBufs are allocated by the event loop thread, but released by the
+   * executor thread rather than the event loop thread. Those thread-local caches actually delay
+   * the recycling of buffers, leading to larger memory usage.
+   */
+  private def createPooledByteBufAllocator(): PooledByteBufAllocator = {
+    def getPrivateStaticField(name: String): Int = {
+      val f = PooledByteBufAllocator.DEFAULT.getClass.getDeclaredField(name)
+      f.setAccessible(true)
+      f.getInt(null)
+    }
+    new PooledByteBufAllocator(
+      PlatformDependent.directBufferPreferred(),
+      getPrivateStaticField("DEFAULT_NUM_HEAP_ARENA"),
+      getPrivateStaticField("DEFAULT_NUM_DIRECT_ARENA"),
+      getPrivateStaticField("DEFAULT_PAGE_SIZE"),
+      getPrivateStaticField("DEFAULT_MAX_ORDER"),
+      0,  // tinyCacheSize
+      0,  // smallCacheSize
+      0   // normalCacheSize
+    )
   }
 }

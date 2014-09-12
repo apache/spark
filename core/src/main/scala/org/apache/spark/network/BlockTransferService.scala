@@ -83,7 +83,7 @@ abstract class BlockTransferService {
     val lock = new Object
     @volatile var result: Either[ManagedBuffer, Throwable] = null
     fetchBlocks(hostName, port, Seq(blockId), new BlockFetchingListener {
-      override def onBlockFetchFailure(exception: Throwable): Unit = {
+      override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
         lock.synchronized {
           result = Right(exception)
           lock.notify()

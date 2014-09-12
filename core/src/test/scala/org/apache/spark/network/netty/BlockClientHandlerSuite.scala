@@ -18,10 +18,12 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicInteger
 
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
+
+import org.mockito.Mockito._
+import org.mockito.Matchers.{any, eq => meq}
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
@@ -31,7 +33,8 @@ import org.apache.spark.network._
 class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
   private def sizeOfOutstandingRequests(handler: BlockClientHandler): Int = {
-    val f = handler.getClass.getDeclaredField("outstandingRequests")
+    val f = handler.getClass.getDeclaredField(
+      "org$apache$spark$network$netty$BlockClientHandler$$outstandingRequests")
     f.setAccessible(true)
     f.get(handler).asInstanceOf[java.util.Map[_, _]].size
   }
@@ -39,24 +42,9 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
   test("handling block data (successful fetch)") {
     val blockId = "test_block"
     val blockData = "blahblahblahblahblah"
-
-    var parsedBlockId: String = ""
-    var parsedBlockData: String = ""
     val handler = new BlockClientHandler
-    handler.addRequest(blockId,
-      new BlockFetchingListener {
-        override def onBlockFetchFailure(exception: Throwable): Unit = {
-          throw new UnsupportedOperationException
-        }
-        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          parsedBlockId = blockId
-          val bytes = new Array[Byte](data.size.toInt)
-          data.nioByteBuffer().get(bytes)
-          parsedBlockData = new String(bytes)
-        }
-      }
-    )
-
+    val listener = mock(classOf[BlockFetchingListener])
+    handler.addRequest(blockId, listener)
     assert(sizeOfOutstandingRequests(handler) === 1)
 
     val channel = new EmbeddedChannel(handler)
@@ -65,54 +53,29 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
     buf.flip()
 
     channel.writeInbound(BlockFetchSuccess(blockId, new NioManagedBuffer(buf)))
-
-    assert(parsedBlockId === blockId)
-    assert(parsedBlockData === blockData)
+    verify(listener, times(1)).onBlockFetchSuccess(meq(blockId), any())
     assert(sizeOfOutstandingRequests(handler) === 0)
     assert(channel.finish() === false)
   }
 
   test("handling error message (failed fetch)") {
     val blockId = "test_block"
-    val errorMsg = "error erro5r error err4or error3 error6 error erro1r"
-
-    var parsedErrorMsg: String = ""
     val handler = new BlockClientHandler
-    handler.addRequest(blockId,
-      new BlockFetchingListener {
-        override def onBlockFetchFailure(exception: Throwable): Unit = {
-          parsedErrorMsg = exception.getMessage
-        }
-
-        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          throw new UnsupportedOperationException
-        }
-      }
-    )
-
+    val listener = mock(classOf[BlockFetchingListener])
+    handler.addRequest(blockId, listener)
     assert(sizeOfOutstandingRequests(handler) === 1)
 
     val channel = new EmbeddedChannel(handler)
-    channel.writeInbound(BlockFetchFailure(blockId, errorMsg))
-    assert(parsedErrorMsg === errorMsg)
+    channel.writeInbound(BlockFetchFailure(blockId, "some error msg"))
+    verify(listener, times(0)).onBlockFetchSuccess(any(), any())
+    verify(listener, times(1)).onBlockFetchFailure(meq(blockId), any())
     assert(sizeOfOutstandingRequests(handler) === 0)
     assert(channel.finish() === false)
   }
 
-  ignore("clear all outstanding request upon connection close") {
-    val errorCount = new AtomicInteger(0)
-    val successCount = new AtomicInteger(0)
+  test("clear all outstanding request upon uncaught exception") {
     val handler = new BlockClientHandler
-
-    val listener = new BlockFetchingListener {
-      override def onBlockFetchFailure(exception: Throwable): Unit = {
-        errorCount.incrementAndGet()
-      }
-      override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-        successCount.incrementAndGet()
-      }
-    }
-
+    val listener = mock(classOf[BlockFetchingListener])
     handler.addRequest("b1", listener)
     handler.addRequest("b2", listener)
     handler.addRequest("b3", listener)
@@ -120,9 +83,30 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
 
     val channel = new EmbeddedChannel(handler)
     channel.writeInbound(BlockFetchSuccess("b1", new NettyManagedBuffer(Unpooled.buffer())))
-    // Need to figure out a way to generate an exception
-    assert(successCount.get() === 1)
-    assert(errorCount.get() === 2)
+    channel.pipeline().fireExceptionCaught(new Exception("duh duh duh"))
+
+    // should fail both b2 and b3
+    verify(listener, times(1)).onBlockFetchSuccess(any(), any())
+    verify(listener, times(2)).onBlockFetchFailure(any(), any())
+    assert(sizeOfOutstandingRequests(handler) === 0)
+    assert(channel.finish() === false)
+  }
+
+  test("clear all outstanding request upon connection close") {
+    val handler = new BlockClientHandler
+    val listener = mock(classOf[BlockFetchingListener])
+    handler.addRequest("c1", listener)
+    handler.addRequest("c2", listener)
+    handler.addRequest("c3", listener)
+    assert(sizeOfOutstandingRequests(handler) === 3)
+
+    val channel = new EmbeddedChannel(handler)
+    channel.writeInbound(BlockFetchSuccess("c1", new NettyManagedBuffer(Unpooled.buffer())))
+    channel.finish()
+
+    // should fail both b2 and b3
+    verify(listener, times(1)).onBlockFetchSuccess(any(), any())
+    verify(listener, times(2)).onBlockFetchFailure(any(), any())
     assert(sizeOfOutstandingRequests(handler) === 0)
     assert(channel.finish() === false)
   }

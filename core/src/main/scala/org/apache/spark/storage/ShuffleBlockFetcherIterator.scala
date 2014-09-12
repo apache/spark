@@ -158,14 +158,9 @@ final class ShuffleBlockFetcherIterator(
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
 
-        override def onBlockFetchFailure(e: Throwable): Unit = {
+        override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
           logError("Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-          // Note that there is a chance that some blocks have been fetched successfully, but we
-          // still add them to the failed queue. This is fine because when the caller see a
-          // FetchFailedException, it is going to fail the entire task anyway.
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
-          }
+          results.put(new FetchResult(BlockId(blockId), -1, null))
         }
       }
     )
