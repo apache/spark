@@ -91,7 +91,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
-
+    conf.set("spark.core.connection.ack.wait.timeout", "1")
+    conf.set("spark.storage.cachedPeersTtl", "10")
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
       conf, true)
@@ -1300,59 +1301,55 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     testReplication(5, storageLevels)
   }
 
-  test("block replication with addition and removal of executors") {
+  test("block replication with addition and deletion of executors") {
     val blockSize = 1000
     val storeSize = 10000
     val allStores = new ArrayBuffer[BlockManager]()
+
 
     try {
       val initialStores = (1 to 2).map { i => makeBlockManager(storeSize, s"store$i") }
       allStores ++= initialStores
 
-      // 2x replication works
-      initialStores(0).putSingle("a1", new Array[Byte](blockSize), StorageLevel.MEMORY_AND_DISK_2)
-      assert(master.getLocations("a1").size === 2)
-
-      // 3x replication should only replicate 2x
-      initialStores(0).putSingle(
-        "a2", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
-      assert(master.getLocations("a2").size === 2)
-
-      val newStore1 = makeBlockManager(storeSize, s"newstore1")
-      allStores += newStore1
-
-      // 3x replication should work now
-      initialStores(0).putSingle(
-        "a3", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
-      assert(master.getLocations("a3").size === 3)
-
-      // 4x replication should only replicate 3x
-      initialStores(0).putSingle(
-        "a4", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 4))
-      assert(master.getLocations("a4").size === 3)
-
-      val newStore2 = makeBlockManager(storeSize, s"newstore2")
-      allStores += newStore2
-
-      // 4x replication should work now
-      initialStores(0).putSingle(
-        "a5", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 4))
-      assert(master.getLocations("a5").size === 4)
-
-      // Remove all the stores and add new stores
-      (initialStores ++ Seq(newStore1, newStore2)).map { store =>
-        store.blockManagerId.executorId
-      }.foreach { execId =>
-        master.removeExecutor(execId)
+      def testPut(blockId: String, storageLevel: StorageLevel, expectedNumLocations: Int) {
+        initialStores(0).putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+        assert(master.getLocations(blockId).size === expectedNumLocations)
+        master.removeBlock(blockId)
       }
 
-      // Add new stores and test if replication works
+      // 2x replication should work, 3x replication should only replicate 2x
+      testPut("a1", StorageLevel.MEMORY_AND_DISK_2, 2)
+      testPut("a2", StorageLevel(true, true, false, true, 3), 2)
+
+      // Add another store, 3x replication should work now, 4x replication should only replicate 3x
+      val newStore1 = makeBlockManager(storeSize, s"newstore1")
+      allStores += newStore1
+      eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+        testPut("a3", StorageLevel(true, true, false, true, 3), 3)
+      }
+      testPut("a4",StorageLevel(true, true, false, true, 4), 3)
+
+      // Add another store, 4x replication should work now
+      val newStore2 = makeBlockManager(storeSize, s"newstore2")
+      allStores += newStore2
+      eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+        testPut("a5", StorageLevel(true, true, false, true, 4), 4)
+      }
+
+      // Remove all but the 1st store, 2x replication should fail
+      (initialStores.slice(1, initialStores.size) ++ Seq(newStore1, newStore2)).foreach {
+        store =>
+          master.removeExecutor(store.blockManagerId.executorId)
+          store.stop()
+      }
+      testPut("a6", StorageLevel.MEMORY_AND_DISK_2, 1)
+
+      // Add new stores, 3x replication should work
       val newStores = (3 to 5).map { i => makeBlockManager(storeSize, s"newstore$i") }
       allStores ++= newStores
-
-      newStores(0).putSingle(
-        "a6", new Array[Byte](blockSize), StorageLevel(true, true, false, true, 3))
-      assert(master.getLocations("a6").size === 3)
+      eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+        testPut("a7", StorageLevel(true, true, false, true, 3), 3)
+      }
     } finally {
       allStores.foreach { _.stop() }
     }

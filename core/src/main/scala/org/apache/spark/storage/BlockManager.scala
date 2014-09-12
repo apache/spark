@@ -112,8 +112,9 @@ private[spark] class BlockManager(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
-  private val cachedPeers = new ArrayBuffer[BlockManagerId]
+  private val cachedPeers = new mutable.HashSet[BlockManagerId]
   private var lastPeerFetchTime = 0L
+
   initialize()
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
@@ -791,52 +792,85 @@ private[spark] class BlockManager(
   /**
    * Get peer block managers in the system.
    */
-  private def getPeers(numPeers: Int): Seq[BlockManagerId] = cachedPeers.synchronized {
-    val currentTime = System.currentTimeMillis
-    // If cache is empty or has insufficient number of peers, fetch from master
-    if (cachedPeers.isEmpty || numPeers > cachedPeers.size) {
-      cachedPeers.clear()
-      cachedPeers ++= master.getPeers(blockManagerId)
-      logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
-      lastPeerFetchTime = System.currentTimeMillis
+  private def getPeers(forceFetch: Boolean): mutable.Set[BlockManagerId] = {
+    val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 1000) // milliseconds
+    def timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
+
+    cachedPeers.synchronized {
+      if (cachedPeers.isEmpty || forceFetch || timeout) {
+        cachedPeers.clear()
+        cachedPeers ++= master.getPeers(blockManagerId)
+        lastPeerFetchTime = System.currentTimeMillis
+        logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
+      }
     }
-    if (numPeers > cachedPeers.size) {
-      // if enough peers cannot be provided, return all of them
-      logDebug(s"Not enough peers - cached peers = ${cachedPeers.size}, required peers = $numPeers")
-      cachedPeers
-    } else {
-      cachedPeers.take(numPeers)
-    }
+    cachedPeers
   }
 
   /**
    * Replicate block to another node.
    */
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
+    val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
+    val numPeersToReplicateTo = level.replication - 1
+    val peersReplicatedTo = new mutable.HashSet[BlockManagerId]
+    val peersFailedToReplicateTo = new mutable.HashSet[BlockManagerId]
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
-    val selectedPeers = getPeers(level.replication - 1)
-    if (selectedPeers.size < level.replication - 1) {
-      logWarning(s"Failed to replicate block to ${level.replication - 1} peer(s) " +
-        s"as only ${selectedPeers.size} peer(s) were found")
+    val startTime = System.nanoTime
+
+    var forceFetchPeers = false
+    var failures = 0
+    var done = false
+
+    // Get a random peer
+    def getRandomPeer(): Option[BlockManagerId] = {
+      val peers = getPeers(forceFetchPeers) -- peersReplicatedTo -- peersFailedToReplicateTo
+      if (!peers.isEmpty) Some(peers.toSeq(Random.nextInt(peers.size))) else None
     }
-    selectedPeers.foreach { peer =>
-      val start = System.nanoTime
-      data.rewind()
-      logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} bytes. " +
-        s"To node: $peer")
 
-      try {
-        blockTransferService.uploadBlockSync(
-          peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
-      } catch {
-        case e: Exception =>
-          logError(s"Failed to replicate block to $peer", e)
-          cachedPeers.synchronized { cachedPeers.clear() }
+    // One by one choose a random peer and try uploading the block to it
+    // If replication fails (e.g., target peer is down), force the list of cached peers
+    // to be re-fetched from driver and then pick another random peer for replication. Also
+    // temporarily black list the peer for which replication failed.
+    while (!done) {
+      getRandomPeer() match {
+        case Some(peer) =>
+          try {
+            val onePeerStartTime = System.nanoTime
+            data.rewind()
+            logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
+            blockTransferService.uploadBlockSync(
+              peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
+            logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
+              .format((System.nanoTime - onePeerStartTime) / 1e6))
+            peersReplicatedTo += peer
+            forceFetchPeers = false
+            if (peersReplicatedTo.size == numPeersToReplicateTo) {
+              done = true
+            }
+          } catch {
+            case e: Exception =>
+              logWarning(s"Failed to replicate $blockId to $peer, failure #$failures", e)
+              failures += 1
+              forceFetchPeers = true
+              peersFailedToReplicateTo += peer
+              if (failures > maxReplicationFailures) {
+                done = true
+              }
+          }
+        case None =>
+          // no peer left to replicate to
+          done = true
       }
-
-      logDebug("Replicating BlockId %s once used %fs; The size of the data is %d bytes."
-        .format(blockId, (System.nanoTime - start) / 1e6, data.limit()))
+    }
+    if (peersReplicatedTo.size < numPeersToReplicateTo) {
+      logError(s"Replicated $blockId of ${data.limit()} bytes to only " +
+        s"${peersReplicatedTo.size} peer(s) instead of ${numPeersToReplicateTo} " +
+        s"in ${(System.nanoTime - startTime) / 1e6} ms")
+    } else {
+      logDebug(s"Successfully replicated $blockId of ${data.limit()} bytes to " +
+        s"${peersReplicatedTo.size} peer(s) in ${(System.nanoTime - startTime) / 1e6} ms")
     }
   }
 
