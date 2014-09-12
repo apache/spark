@@ -23,6 +23,7 @@ import scala.concurrent.duration.Duration
 import org.apache.spark.storage.StorageLevel
 
 
+private[spark]
 abstract class BlockTransferService {
 
   /**

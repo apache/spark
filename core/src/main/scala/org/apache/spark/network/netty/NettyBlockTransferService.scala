@@ -29,6 +29,7 @@ import org.apache.spark.storage.StorageLevel
  *
  * See protocol.scala for the communication protocol between server and client
  */
+private[spark]
 final class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
 
   private[this] val nettyConf: NettyConfig = new NettyConfig(conf)

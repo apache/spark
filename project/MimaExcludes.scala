@@ -43,7 +43,11 @@ object MimaExcludes {
           Seq(
             // This is @Experimental, but Mima still gives false-positives:
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaRDDLike.foreachAsync")
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener")
           )
         case v if v.startsWith("1.1") =>
           Seq(

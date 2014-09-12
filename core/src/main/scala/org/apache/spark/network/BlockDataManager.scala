@@ -20,6 +20,7 @@ package org.apache.spark.network
 import org.apache.spark.storage.StorageLevel
 
 
+private[spark]
 trait BlockDataManager {
 
   /**

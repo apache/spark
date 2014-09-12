@@ -23,6 +23,7 @@ import java.util.EventListener
 /**
  * Listener callback interface for [[BlockTransferService.fetchBlocks]].
  */
+private[spark]
 trait BlockFetchingListener extends EventListener {
 
   /**
