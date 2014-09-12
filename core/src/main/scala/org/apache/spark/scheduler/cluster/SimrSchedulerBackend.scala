@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
