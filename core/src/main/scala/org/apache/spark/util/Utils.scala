@@ -333,8 +333,8 @@ private[spark] object Utils extends Logging {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     if (useCache) {
-      val cachedFileName = url.hashCode + timestamp + "_cache"
-      val lockFileName = url.hashCode + timestamp + "_lock"
+      val cachedFileName = s"${url.hashCode}${timestamp}_cache"
+      val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
       val raf = new RandomAccessFile(lockFile, "rw")
@@ -345,15 +345,24 @@ private[spark] object Utils extends Logging {
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          doFetchFile(url, localDir, conf, securityMgr, hadoopConf)
-          Files.move(new File(localDir, fileName), cachedFile)
+          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
         }
       } finally {
         lock.release()
       }
+      if (targetFile.exists && !Files.equal(cachedFile, targetFile)) {
+        if (conf.getBoolean("spark.files.overwrite", false)) {
+          targetFile.delete()
+          logInfo(("File %s exists and does not match contents of %s, " +
+            "replacing it with %s").format(targetFile, url, url))
+        } else {
+          throw new SparkException(
+            "File " + targetFile + " exists and does not match contents of" + " " + url)
+        }
+      }
       Files.copy(cachedFile, targetFile)
     } else {
-      doFetchFile(url, targetDir, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
     
     // Decompress the file if it's a .tar or .tar.gz
@@ -378,10 +387,10 @@ private[spark] object Utils extends Logging {
   private def doFetchFile(
       url: String,
       targetDir: File,
+      filename: String,
       conf: SparkConf,
       securityMgr: SecurityManager,
       hadoopConf: Configuration) {
-    val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
