@@ -207,6 +207,23 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.profile</code></td>
+  <td>false</td>
+  <td>
+    Enable profiling in Python worker, the profile result will show up by `rdd.show_profile()`,
+    or it will show up before the driver exit. It also can be dumped into disk by
+    `rdd.dump_profile(path)`.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.python.profile.dump</code></td>
+  <td>(none)</td>
+  <td>
+    The directory which is used to dump the profile result. The results will be dumped
+    as sepereted file for each RDD. They can be loaded by ptats.Stats().
+  </td>
+</tr>
+<tr>
   <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
