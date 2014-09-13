@@ -79,8 +79,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   val taskScheduler = new TaskScheduler() {
     override def rootPool: Pool = null
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
-    override def start() = {}
-    override def stop() = {}
+    override protected def doStart() = { }
+    override protected def doStop() = { }
+    override def conf: SparkConf = null
     override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
@@ -359,10 +360,11 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // make sure that the DAGScheduler doesn't crash when the TaskScheduler
     // doesn't implement killTask()
     val noKillTaskScheduler = new TaskScheduler() {
+      def conf: SparkConf = null
       override def rootPool: Pool = null
       override def schedulingMode: SchedulingMode = SchedulingMode.NONE
-      override def start() = {}
-      override def stop() = {}
+      override def doStart() = {}
+      override def doStop() = {}
       override def submitTasks(taskSet: TaskSet) = {
         taskSets += taskSet
       }

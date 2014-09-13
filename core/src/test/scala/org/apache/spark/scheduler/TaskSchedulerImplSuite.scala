@@ -23,9 +23,10 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 
-class FakeSchedulerBackend extends SchedulerBackend {
-  def start() {}
-  def stop() {}
+class FakeSchedulerBackend extends SchedulerBackend with Lifecycle {
+  def conf: SparkConf = null
+  def doStart() {}
+  def doStop() {}
   def reviveOffers() {}
   def defaultParallelism() = 1
 }

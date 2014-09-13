@@ -44,6 +44,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def start() {
     super.start()
+    stopping = false
 
     // The endpoint for executors to talk to us
     val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(

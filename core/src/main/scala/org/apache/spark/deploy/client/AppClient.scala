@@ -26,7 +26,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Lifecycle, Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -44,8 +44,8 @@ private[spark] class AppClient(
     masterUrls: Array[String],
     appDescription: ApplicationDescription,
     listener: AppClientListener,
-    conf: SparkConf)
-  extends Logging {
+    val conf: SparkConf)
+  extends Logging with Lifecycle {
 
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
@@ -186,12 +186,12 @@ private[spark] class AppClient(
 
   }
 
-  def start() {
+  override protected def doStart() {
     // Just launch an actor; it will call back into the listener.
     actor = actorSystem.actorOf(Props(new ClientActor))
   }
 
-  def stop() {
+  override protected def doStop() {
     if (actor != null) {
       try {
         val timeout = AkkaUtils.askTimeout(conf)

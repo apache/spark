@@ -52,7 +52,7 @@ private class CleanupTaskWeakReference(
  * to be processed when the associated object goes out of scope of the application. Actual
  * cleanup is performed in a separate daemon thread.
  */
-private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
+private[spark] class ContextCleaner(sc: SparkContext) extends Logging with Lifecycle {
 
   private val referenceBuffer = new ArrayBuffer[CleanupTaskWeakReference]
     with SynchronizedBuffer[CleanupTaskWeakReference]
@@ -90,24 +90,22 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking.shuffle", false)
 
-  @volatile private var stopped = false
-
   /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener) {
     listeners += listener
   }
 
+  def conf = sc.conf
+
   /** Start the cleaner. */
-  def start() {
+  override protected def doStart() {
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
   }
 
   /** Stop the cleaner. */
-  def stop() {
-    stopped = true
-  }
+  override protected def doStop() { }
 
   /** Register a RDD for cleanup when it is garbage collected. */
   def registerRDDForCleanup(rdd: RDD[_]) {
