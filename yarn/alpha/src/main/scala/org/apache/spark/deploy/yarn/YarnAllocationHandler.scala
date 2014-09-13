@@ -48,16 +48,17 @@ private[yarn] class YarnAllocationHandler(
   private val lastResponseId = new AtomicInteger()
   private val releaseList: CopyOnWriteArrayList[ContainerId] = new CopyOnWriteArrayList()
 
-  override protected def allocateContainers(count: Int): YarnAllocateResponse = {
+  override protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse = {
     var resourceRequests: List[ResourceRequest] = null
 
-    logDebug("numExecutors: " + count)
+    logDebug("asking for additional executors: " + count + " with already pending: " + pending)
+    val totalNumAsk = count + pending
     if (count <= 0) {
       resourceRequests = List()
     } else if (preferredHostToCount.isEmpty) {
         logDebug("host preferences is empty")
         resourceRequests = List(createResourceRequest(
-          AllocationType.ANY, null, count, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
+          AllocationType.ANY, null, totalNumAsk, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY))
     } else {
       // request for all hosts in preferred nodes and for numExecutors -
       // candidates.size, request by default allocation policy.
@@ -80,7 +81,7 @@ private[yarn] class YarnAllocationHandler(
       val anyContainerRequests: ResourceRequest = createResourceRequest(
         AllocationType.ANY,
         resource = null,
-        count,
+        totalNumAsk,
         YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
 
       val containerRequests: ArrayBuffer[ResourceRequest] = new ArrayBuffer[ResourceRequest](
@@ -103,7 +104,7 @@ private[yarn] class YarnAllocationHandler(
     req.addAllReleases(releasedContainerList)
 
     if (count > 0) {
-      logInfo("Allocating %d executor containers with %d of memory each.".format(count,
+      logInfo("Allocating %d executor containers with %d of memory each.".format(totalNumAsk,
         executorMemory + memoryOverhead))
     } else {
       logDebug("Empty allocation req ..  release : " + releasedContainerList)

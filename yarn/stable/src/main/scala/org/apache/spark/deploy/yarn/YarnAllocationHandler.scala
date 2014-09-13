@@ -47,7 +47,8 @@ private[yarn] class YarnAllocationHandler(
     amClient.releaseAssignedContainer(container.getId())
   }
 
-  override protected def allocateContainers(count: Int): YarnAllocateResponse = {
+  // pending isn't used on stable as the AMRMClient handles incremental asks
+  override protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse = {
     addResourceRequests(count)
 
     // We have already set the container request. Poll the ResourceManager for a response.
