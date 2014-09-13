@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.catalyst
 
 import java.io.{File, FileWriter}
@@ -52,11 +69,40 @@ package object viz {
           case (name, s: Seq[_]) if s.length > 3 => (name, s.mkString("\n")) :: Nil
           case (name, s: Seq[_]) => (name, s.mkString(", ")) :: Nil
           case (name, value) => (name, value) :: Nil
-        }.map { case (k, v) => (k, v.toString.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("#\\d+", "").replaceAll("\\n", """<br align="left"/>"""))}
+        }.map {
+          case (k, v) =>
+            val escapedValue =
+              v.toString
+               .replaceAll("&", "&amp;")
+               .replaceAll("<", "&lt;")
+               .replaceAll(">", "&gt;")
+               .replaceAll("#\\d+", "")
+               .replaceAll("\\n", """<br align="left"/>""")
+            (k, escapedValue)
+        }
 
-        val formattedArgs = if (arguments.size == 1) arguments.map(v => s"""<td COLSPAN="2">${d(v._2)}<br align="left"/></td>""") else arguments.map { case (k, v) => s"""<td ALIGN="right" BORDER="1">${d(k)}</td><td ALIGN="left" BORDER="1">${d(v)}<br align="left"/></td>"""}
+        val formattedArgs =
+          if (arguments.size == 1) {
+            arguments.map(v => s"""<td COLSPAN="2">${d(v._2)}<br align="left"/></td>""")
+          } else {
+            arguments.map {
+              case (k, v) =>
+                s"""
+                   |<td ALIGN="right" BORDER="1">${d(k)}</td>
+                   |<td ALIGN="left" BORDER="1">${d(v)}<br align="left"/></td>
+                """.stripMargin
+            }
+          }
 
-        val nodeTitle = s"""<table border="0" cellborder="0"><tr><td COLSPAN="2" ALIGN="center"><font face="helvetica-bold" POINT-SIZE="12">${plan.nodeName}</font></td></tr>"""
+        val nodeTitle =
+          s"""
+             |<table border="0" cellborder="0">
+             |  <tr>
+             |    <td COLSPAN="2" ALIGN="center">
+             |      <font face="helvetica-bold" POINT-SIZE="12">${plan.nodeName}</font>
+             |    </td>
+             |  </tr>""".stripMargin
+
         val nodeArgs = s"""${formattedArgs.map(r => s"<tr>$r</tr>").mkString("")}</table>"""
         outputNode(nodeTitle + nodeArgs, children = plan.children.map(generatePlan))
     }
@@ -92,15 +138,30 @@ package object viz {
 
     case class DotNode(id: String)
 
-    protected def outputNode(label: String, shape: String = "plaintext", fillcolor: String = "azure3", children: Seq[DotNode] = Nil): DotNode = {
+    protected def outputNode(
+        label: String,
+        shape: String = "plaintext",
+        fillcolor: String = "azure3",
+        children: Seq[DotNode] = Nil): DotNode = {
       val node = DotNode("node" + nextId)
       output(node.id, "[label=", quote(label), ", shape=", shape, ", fillcolor=", fillcolor, "];")
       children.foreach(outputEdge(_, node))
       node
     }
 
-    protected def outputEdge(src: DotNode, dest: DotNode, label: String = "", color: String = "black", arrowsize: Double = 0.5): DotNode = {
-      output(src.id, " -> ", dest.id, "[label=", quote(label), ", color=", quote(color), ", arrowsize=", arrowsize.toString, "];")
+    protected def outputEdge(
+        src: DotNode,
+        dest: DotNode,
+        label: String = "",
+        color: String = "black",
+        arrowsize: Double = 0.5): DotNode = {
+      output(
+        src.id,
+        " -> ",
+        dest.id,
+        "[label=", quote(label), ", ",
+         "color=", quote(color), ", ",
+         "arrowsize=", arrowsize.toString, "];")
       dest
     }
 
