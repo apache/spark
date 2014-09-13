@@ -2147,16 +2147,20 @@ class PipelinedRDD(RDD):
 
     @classmethod
     def show_profile(cls):
+        """ Print the profile stats to stdout """
         for id, acc in cls._created_profiles:
             stats = acc.value
             if stats:
-                print "="*60
+                print "=" * 60
                 print "Profile of RDD<id=%d>" % id
-                print "="*60
+                print "=" * 60
                 stats.sort_stats("tottime", "cumtime").print_stats()
+        cls._created_profiles = []
 
     @classmethod
     def dump_profile(cls, dump_path):
+        """ Dump the profile stats into directory `dump_path`
+        """
         if not os.path.exists(dump_path):
             os.makedirs(dump_path)
         for id, acc in cls._created_profiles:
@@ -2164,6 +2168,7 @@ class PipelinedRDD(RDD):
             if stats:
                 path = os.path.join(dump_path, "rdd_%d.pstats" % id)
                 stats.dump_stats(path)
+        cls._created_profiles = []
 
     def id(self):
         if self._id is None:
