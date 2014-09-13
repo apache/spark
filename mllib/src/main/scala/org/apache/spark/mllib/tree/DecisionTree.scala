@@ -815,8 +815,8 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Get the number of values to be stored per node in the bin aggregates.
    */
-  private def getElementsPerNode(metadata: DecisionTreeMetadata): Int = {
-    val totalBins = metadata.numBins.sum
+  private def getElementsPerNode(metadata: DecisionTreeMetadata): Long = {
+    val totalBins = metadata.numBins.map(_.toLong).sum
     if (metadata.isClassification) {
       metadata.numClasses * totalBins
     } else {

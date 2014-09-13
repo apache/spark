@@ -165,6 +165,16 @@ private[hive] trait HiveStrategies {
              InMemoryRelation(_, _, _,
                HiveTableScan(_, table, _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.CreateTableAsSelect(database, tableName, child) =>
+        val query = planLater(child)
+        CreateTableAsSelect(
+          database.get,
+          tableName,
+          query,
+          InsertIntoHiveTable(_: MetastoreRelation, 
+            Map(), 
+            query, 
+            true)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
