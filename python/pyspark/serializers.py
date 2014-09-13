@@ -144,6 +144,8 @@ class FramedSerializer(Serializer):
 
     def _read_with_length(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
         obj = stream.read(length)
         if obj == "":
             raise EOFError
@@ -438,6 +440,8 @@ class UTF8Deserializer(Serializer):
 
     def loads(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
         s = stream.read(length)
         return s.decode("utf-8") if self.use_unicode else s
 
