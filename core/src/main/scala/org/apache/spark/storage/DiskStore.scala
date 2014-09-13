@@ -74,11 +74,13 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
     try {
-      blockManager.dataSerializeStream(blockId, outputStream, values)
-      outputStream.close()
+      try {
+        blockManager.dataSerializeStream(blockId, outputStream, values)
+      } finally {
+        outputStream.close()
+      }
     } catch {
       case e: Throwable => {
-        outputStream.close()
         if(file.exists()) {
           file.delete()
         }
