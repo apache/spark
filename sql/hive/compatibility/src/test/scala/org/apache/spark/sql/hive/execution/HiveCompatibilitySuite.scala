@@ -35,26 +35,29 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalUseCompression = TestHive.useCompression
+  private val originalColumnBatchSize = TestHive.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
-    // Enable in-memory columnar caching
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-    // Enable in-memory columnar compression
-    TestHive.setConf(SQLConf.COMPRESS_CACHED, "true")
+    // Set a relatively small column batch size for testing purposes
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, "5")
+    // Enable in-memory partition pruning for testing purposes
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COMPRESS_CACHED, originalUseCompression.toString)
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

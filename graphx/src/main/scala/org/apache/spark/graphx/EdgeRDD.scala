@@ -19,7 +19,7 @@ package org.apache.spark.graphx
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark._
+import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -55,7 +55,7 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
    * partitioner that allows co-partitioning with `partitionsRDD`.
    */
   override val partitioner =
-    partitionsRDD.partitioner.orElse(Some(new HashPartitioner(partitionsRDD.partitions.size)))
+    partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
     val p = firstParent[(PartitionID, EdgePartition[ED, VD])].iterator(part, context)

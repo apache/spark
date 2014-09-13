@@ -25,7 +25,10 @@ from pyspark.mllib._common import _deserialize_double, _deserialize_double_vecto
 from pyspark.serializers import NoOpSerializer
 
 
-class RandomRDDs:
+__all__ = ['RandomRDDs', ]
+
+
+class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.

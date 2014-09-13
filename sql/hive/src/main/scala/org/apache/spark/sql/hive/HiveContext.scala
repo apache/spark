@@ -262,7 +262,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false)
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedRules =
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUdfs ::
+        Nil
+    }
 
   /**
    * Runs the specified SQL query using Hive.
@@ -353,9 +359,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
-    // TODO: Create mixin for the analyzer instead of overriding things here.
-    override lazy val optimizedPlan =
-      optimizer(ExtractPythonUdfs(catalog.PreInsertionCasts(catalog.CreateTables(analyzed))))
 
     override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
@@ -389,7 +392,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType, _)) =>
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -409,7 +412,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // be similar with Hive.
         describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
-        command.sideEffectResult.map(_.toString)
+        command.sideEffectResult.map(_.head.toString)
 
       case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq

@@ -15,23 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
-import org.apache.spark.{SecurityManager, SparkConf}
 
-private[spark] object ReceiverTest {
-  def main(args: Array[String]) {
-    val conf = new SparkConf
-    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
-    println("Started connection manager with id = " + manager.id)
+import scala.collection.mutable.ArrayBuffer
 
-    manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
-      /* println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis) */
-      val buffer = ByteBuffer.wrap("response".getBytes("utf-8"))
-      Some(Message.createBufferMessage(buffer, msg.id))
-    })
-    Thread.currentThread.join()
+private[nio]
+class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
+
+  val size = if (buffer == null) 0 else buffer.remaining
+
+  lazy val buffers = {
+    val ab = new ArrayBuffer[ByteBuffer]()
+    ab += header.buffer
+    if (buffer != null) {
+      ab += buffer
+    }
+    ab
+  }
+
+  override def toString = {
+    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
   }
 }
-

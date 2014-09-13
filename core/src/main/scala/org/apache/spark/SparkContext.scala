@@ -220,8 +220,14 @@ class SparkContext(config: SparkConf) extends Logging {
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
   // Initialize the Spark UI, registering all associated listeners
-  private[spark] val ui = new SparkUI(this)
-  ui.bind()
+  private[spark] val ui: Option[SparkUI] =
+    if (conf.getBoolean("spark.ui.enabled", true)) {
+      Some(new SparkUI(this))
+    } else {
+      // For tests, do not enable the UI
+      None
+    }
+  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -825,7 +831,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** The version of Spark on which this application is running. */
-  def version = SparkContext.SPARK_VERSION
+  def version = SPARK_VERSION
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
@@ -990,7 +996,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Shut down the SparkContext. */
   def stop() {
     postApplicationEnd()
-    ui.stop()
+    ui.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -1261,7 +1267,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the application start event */
   private def postApplicationStart() {
-    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+    // Note: this code assumes that the task scheduler has been initialized and has contacted
+    // the cluster manager to get an application ID (in case the cluster manager provides one).
+    listenerBus.post(SparkListenerApplicationStart(appName, taskScheduler.applicationId(),
+      startTime, sparkUser))
   }
 
   /** Post the application end event */
@@ -1293,8 +1302,6 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-
-  private[spark] val SPARK_VERSION = "1.0.0"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 

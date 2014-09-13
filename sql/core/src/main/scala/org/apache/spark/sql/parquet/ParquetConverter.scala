@@ -382,7 +382,7 @@ private[parquet] class CatalystPrimitiveConverter(
     parent.updateLong(fieldIndex, value)
 }
 
-object CatalystArrayConverter {
+private[parquet] object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
 }
 
