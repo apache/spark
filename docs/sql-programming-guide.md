@@ -1232,7 +1232,7 @@ import  org.apache.spark.sql._
   <td> scala.collection.Seq </td>
   <td>
   ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>false</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>true</i>.
   </td>
 </tr>
 <tr>
@@ -1358,7 +1358,7 @@ please use factory methods provided in
   <td> java.util.List </td>
   <td>
   DataType.createArrayType(<i>elementType</i>)<br />
-  <b>Note:</b> The value of <i>containsNull</i> will be <i>false</i><br />
+  <b>Note:</b> The value of <i>containsNull</i> will be <i>true</i><br />
   DataType.createArrayType(<i>elementType</i>, <i>containsNull</i>).
   </td>
 </tr>
@@ -1505,7 +1505,7 @@ from pyspark.sql import *
   <td> list, tuple, or array </td>
   <td>
   ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>False</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
   </td>
 </tr>
 <tr>
