@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -75,19 +76,23 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
    * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
-  def resolveChildren(name: String): Option[NamedExpression] =
-    resolve(name, children.flatMap(_.output))
+  def resolveChildren(name: String, resolver: Resolver): Option[NamedExpression] =
+    resolve(name, children.flatMap(_.output), resolver)
 
   /**
    * Optionally resolves the given string to a [[NamedExpression]] based on the output of this
    * LogicalPlan. The attribute is expressed as string in the following form:
    * `[scope].AttributeName.[nested].[fields]...`.
    */
-  def resolve(name: String): Option[NamedExpression] =
-    resolve(name, output)
+  def resolve(name: String, resolver: Resolver): Option[NamedExpression] =
+    resolve(name, output, resolver)
 
   /** Performs attribute resolution given a name and a sequence of possible attributes. */
-  protected def resolve(name: String, input: Seq[Attribute]): Option[NamedExpression] = {
+  protected def resolve(
+      name: String,
+      input: Seq[Attribute],
+      resolver: Resolver): Option[NamedExpression] = {
+
     val parts = name.split("\\.")
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
@@ -96,8 +101,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
-        if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
-      if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
+        if (option.qualifiers.filter(resolver(_, parts.head)).nonEmpty && parts.size > 1) parts.drop(1) else parts
+      if (resolver(option.name, remainingParts.head)) (option, remainingParts.tail.toList) :: Nil else Nil
     }
 
     options.distinct match {
@@ -105,7 +110,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
-      case Seq() => None         // No matches.
+      case Seq() =>
+        println(s"Could not find $name in ${input.mkString(", ")}")
+        None         // No matches.
       case ambiguousReferences =>
         throw new TreeNodeException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
