@@ -55,6 +55,8 @@ class Node (
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
    */
+  @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
+    "1.2.0")
   def build(nodes: Array[Node]): Unit = {
     logDebug("building node " + id + " at level " + Node.indexToLevel(id))
     logDebug("id = " + id + ", split = " + split)
@@ -91,6 +93,23 @@ class Node (
         }
       }
     }
+  }
+
+  /**
+   * Returns a deep copy of the subtree rooted at this node.
+   */
+  private[tree] def deepCopy(): Node = {
+    val leftNodeCopy = if (leftNode.isEmpty) {
+      None
+    } else {
+      Some(leftNode.get.deepCopy())
+    }
+    val rightNodeCopy = if (rightNode.isEmpty) {
+      None
+    } else {
+      Some(rightNode.get.deepCopy())
+    }
+    new Node(id, predict, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
   }
 
   /**
@@ -189,5 +208,23 @@ private[tree] object Node {
    * @param level  Level of tree (0 = root).
    */
   def startIndexInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Traces down from a root node to get the node with the given node index.
+   * This assumes the node exists.
+   */
+  def getNode(nodeIndex: Int, rootNode: Node): Node = {
+    var tmpNode: Node = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    while (levelsToGo > 0) {
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftNode.get
+      } else {
+        tmpNode = tmpNode.rightNode.get
+      }
+      levelsToGo -= 1
+    }
+    tmpNode
+  }
 
 }
