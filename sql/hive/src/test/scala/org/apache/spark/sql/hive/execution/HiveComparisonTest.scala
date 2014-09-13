@@ -250,9 +250,9 @@ abstract class HiveComparisonTest
       }
 
       try {
-        // MINOR HACK: You must run a query before calling reset the first time.
-        TestHive.sql("SHOW TABLES")
-        if (reset) { TestHive.reset() }
+        if (reset) {
+          TestHive.reset()
+        }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
