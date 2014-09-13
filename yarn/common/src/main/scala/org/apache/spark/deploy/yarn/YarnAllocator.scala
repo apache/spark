@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
@@ -28,9 +28,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 object AllocationType extends Enumeration {
   type AllocationType = Value
@@ -55,7 +57,8 @@ private[yarn] abstract class YarnAllocator(
     conf: Configuration,
     sparkConf: SparkConf,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]])
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
+    securityMgr: SecurityManager)
   extends Logging {
 
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
@@ -94,12 +97,23 @@ private[yarn] abstract class YarnAllocator(
   protected val (preferredHostToCount, preferredRackToCount) =
     generateNodeToWeight(conf, preferredNodes)
 
+  private val launcherPool = new ThreadPoolExecutor(
+    // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
+    sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25), Integer.MAX_VALUE,
+    1, TimeUnit.MINUTES,
+    new LinkedBlockingQueue[Runnable](),
+    new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
+  launcherPool.allowCoreThreadTimeOut(true)
+
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def allocateResources() = {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
+
+    // this is needed by alpha, do it here since we add numPending right after this
+    val executorsPending = numPendingAllocate.get()
 
     if (missing > 0) {
       numPendingAllocate.addAndGet(missing)
@@ -110,7 +124,7 @@ private[yarn] abstract class YarnAllocator(
       logDebug("Empty allocation request ...")
     }
 
-    val allocateResponse = allocateContainers(missing)
+    val allocateResponse = allocateContainers(missing, executorsPending)
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
     if (allocatedContainers.size > 0) {
@@ -280,8 +294,9 @@ private[yarn] abstract class YarnAllocator(
             executorId,
             executorHostname,
             executorMemory,
-            executorCores)
-          new Thread(executorRunnable).start()
+            executorCores,
+            securityMgr)
+          launcherPool.execute(executorRunnable)
         }
       }
       logDebug("""
@@ -423,9 +438,10 @@ private[yarn] abstract class YarnAllocator(
    *
    * @param count Number of containers to allocate.
    *              If zero, should still contact RM (as a heartbeat).
+   * @param pending Number of containers pending allocate. Only used on alpha.
    * @return Response to the allocation request.
    */
-  protected def allocateContainers(count: Int): YarnAllocateResponse
+  protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse
 
   /** Called to release a previously allocated container. */
   protected def releaseContainer(container: Container): Unit

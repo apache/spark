@@ -20,7 +20,7 @@
 # Usage: start-slave.sh <worker#> <master-spark-URL>
 #   where <master-spark-URL> is like "spark://localhost:7077"
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"

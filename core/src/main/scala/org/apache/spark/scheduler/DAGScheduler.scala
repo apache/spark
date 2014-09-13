@@ -241,9 +241,9 @@ class DAGScheduler(
       callSite: CallSite)
     : Stage =
   {
+    val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage =
-      new Stage(id, rdd, numTasks, shuffleDep, getParentStages(rdd, jobId), jobId, callSite)
+    val stage = new Stage(id, rdd, numTasks, shuffleDep, parentStages, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage

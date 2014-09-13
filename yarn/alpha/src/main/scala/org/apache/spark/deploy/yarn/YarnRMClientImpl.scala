@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.{Map, Set}
+import java.net.URI;
 
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.yarn.api._
@@ -27,7 +28,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.Utils
 
@@ -45,7 +46,8 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
       sparkConf: SparkConf,
       preferredNodeLocations: Map[String, Set[SplitInfo]],
       uiAddress: String,
-      uiHistoryAddress: String) = {
+      uiHistoryAddress: String,
+      securityMgr: SecurityManager) = {
     this.rpc = YarnRPC.create(conf)
     this.uiHistoryAddress = uiHistoryAddress
 
@@ -53,7 +55,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     registerApplicationMaster(uiAddress)
 
     new YarnAllocationHandler(conf, sparkConf, resourceManager, getAttemptId(), args,
-      preferredNodeLocations)
+      preferredNodeLocations, securityMgr)
   }
 
   override def getAttemptId() = {
@@ -96,7 +98,8 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     // Users can then monitor stderr/stdout on that node if required.
     appMasterRequest.setHost(Utils.localHostName())
     appMasterRequest.setRpcPort(0)
-    appMasterRequest.setTrackingUrl(uiAddress)
+    // remove the scheme from the url if it exists since Hadoop does not expect scheme
+    appMasterRequest.setTrackingUrl(new URI(uiAddress).getAuthority())
     resourceManager.registerApplicationMaster(appMasterRequest)
   }
 

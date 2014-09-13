@@ -31,6 +31,7 @@ import tempfile
 import time
 import zipfile
 import random
+from platform import python_implementation
 
 if sys.version_info[:2] <= (2, 6):
     import unittest2 as unittest
@@ -41,7 +42,8 @@ else:
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
+from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
+    CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType
 
@@ -168,6 +170,48 @@ class SerializationTestCase(unittest.TestCase):
         p2 = loads(dumps(p1, 2))
         self.assertEquals(p1, p2)
 
+    def test_itemgetter(self):
+        from operator import itemgetter
+        ser = CloudPickleSerializer()
+        d = range(10)
+        getter = itemgetter(1)
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+        getter = itemgetter(0, 3)
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+    def test_attrgetter(self):
+        from operator import attrgetter
+        ser = CloudPickleSerializer()
+
+        class C(object):
+            def __getattr__(self, item):
+                return item
+        d = C()
+        getter = attrgetter("a")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+        getter = attrgetter("a", "b")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+        d.e = C()
+        getter = attrgetter("e.a")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+        getter = attrgetter("e.a", "e.b")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+    # Regression test for SPARK-3415
+    def test_pickling_file_handles(self):
+        ser = CloudPickleSerializer()
+        out1 = sys.stderr
+        out2 = ser.loads(ser.dumps(out1))
+        self.assertEquals(out1, out2)
+
 
 class PySparkTestCase(unittest.TestCase):
 
@@ -280,6 +324,15 @@ class TestAddFile(PySparkTestCase):
 
 
 class TestRDDFunctions(PySparkTestCase):
+
+    def test_id(self):
+        rdd = self.sc.parallelize(range(10))
+        id = rdd.id()
+        self.assertEqual(id, rdd.id())
+        rdd2 = rdd.map(str).filter(bool)
+        id2 = rdd2.id()
+        self.assertEqual(id + 1, id2)
+        self.assertEqual(id2, rdd2.id())
 
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
@@ -525,6 +578,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
+    def test_repartitionAndSortWithinPartitions(self):
+        rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
+
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2)
+        partitions = repartitioned.glom().collect()
+        self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
+        self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
 
 class TestSQL(PySparkTestCase):
 
@@ -545,6 +606,34 @@ class TestSQL(PySparkTestCase):
         self.assertEqual("abc", res[0])
         [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
+
+    def test_basic_functions(self):
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        srdd.count()
+        srdd.collect()
+        srdd.schemaString()
+        srdd.schema()
+
+        # cache and checkpoint
+        self.assertFalse(srdd.is_cached)
+        srdd.persist()
+        srdd.unpersist()
+        srdd.cache()
+        self.assertTrue(srdd.is_cached)
+        self.assertFalse(srdd.isCheckpointed())
+        self.assertEqual(None, srdd.getCheckpointFile())
+
+        srdd = srdd.coalesce(2, True)
+        srdd = srdd.repartition(3)
+        srdd = srdd.distinct()
+        srdd.intersection(srdd)
+        self.assertEqual(2, srdd.count())
+
+        srdd.registerTempTable("temp")
+        srdd = self.sqlCtx.sql("select foo from temp")
+        srdd.count()
+        srdd.collect()
 
 
 class TestIO(PySparkTestCase):
@@ -833,8 +922,42 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
 
-    @unittest.skipIf(sys.version_info[:2] <= (2, 6), "Skipped on 2.6 until SPARK-2951 is fixed")
     def test_newhadoop(self):
+        basepath = self.tempdir.name
+        data = [(1, ""),
+                (1, "a"),
+                (2, "bcdf")]
+        self.sc.parallelize(data).saveAsNewAPIHadoopFile(
+            basepath + "/newhadoop/",
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text")
+        result = sorted(self.sc.newAPIHadoopFile(
+            basepath + "/newhadoop/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text").collect())
+        self.assertEqual(result, data)
+
+        conf = {
+            "mapreduce.outputformat.class":
+                "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapred.output.value.class": "org.apache.hadoop.io.Text",
+            "mapred.output.dir": basepath + "/newdataset/"
+        }
+        self.sc.parallelize(data).saveAsNewAPIHadoopDataset(conf)
+        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        new_dataset = sorted(self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            conf=input_conf).collect())
+        self.assertEqual(new_dataset, data)
+
+    @unittest.skipIf(sys.version_info[:2] <= (2, 6) or python_implementation() == "PyPy",
+                     "Skipped on 2.6 and PyPy until SPARK-2951 is fixed")
+    def test_newhadoop_with_array(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
         array_data = [(1, array('d')),
@@ -1224,6 +1347,35 @@ class TestSparkSubmit(unittest.TestCase):
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out)
+
+
+class ContextStopTests(unittest.TestCase):
+
+    def test_stop(self):
+        sc = SparkContext()
+        self.assertNotEqual(SparkContext._active_spark_context, None)
+        sc.stop()
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with(self):
+        with SparkContext() as sc:
+            self.assertNotEqual(SparkContext._active_spark_context, None)
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with_exception(self):
+        try:
+            with SparkContext() as sc:
+                self.assertNotEqual(SparkContext._active_spark_context, None)
+                raise Exception()
+        except:
+            pass
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with_stop(self):
+        with SparkContext() as sc:
+            self.assertNotEqual(SparkContext._active_spark_context, None)
+            sc.stop()
+        self.assertEqual(SparkContext._active_spark_context, None)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

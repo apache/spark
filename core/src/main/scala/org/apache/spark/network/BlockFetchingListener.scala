@@ -17,25 +17,21 @@
 
 package org.apache.spark.network
 
-import java.nio.ByteBuffer
+import java.util.EventListener
 
-import scala.collection.mutable.ArrayBuffer
 
-private[network]
-class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
+/**
+ * Listener callback interface for [[BlockTransferService.fetchBlocks]].
+ */
+trait BlockFetchingListener extends EventListener {
 
-  val size = if (buffer == null) 0 else buffer.remaining
+  /**
+   * Called once per successfully fetched block.
+   */
+  def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit
 
-  lazy val buffers = {
-    val ab = new ArrayBuffer[ByteBuffer]()
-    ab += header.buffer
-    if (buffer != null) {
-      ab += buffer
-    }
-    ab
-  }
-
-  override def toString = {
-    "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
-  }
+  /**
+   * Called upon failures. For each failure, this is called only once (i.e. not once per block).
+   */
+  def onBlockFetchFailure(exception: Throwable): Unit
 }
