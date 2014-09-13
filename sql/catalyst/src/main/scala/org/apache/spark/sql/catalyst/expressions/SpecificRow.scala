@@ -171,7 +171,7 @@ final class MutableByte extends MutableValue {
 }
 
 final class MutableAny extends MutableValue {
-  var value: Any = 0
+  var value: Any = _
   def boxed = if (isNull) null else value
   def update(v: Any) = value = {
     isNull = false

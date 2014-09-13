@@ -25,16 +25,14 @@ import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => 
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
-
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
-
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row, GenericMutableRow, Literal, Cast}
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * A trait for subclasses that handle table scans.
@@ -108,12 +106,12 @@ class HadoopTableReader(
     val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
 
     val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new GenericMutableRow(attrsWithIndex.length)
+    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHiveConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
-
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)
     }
 
@@ -164,33 +162,32 @@ class HadoopTableReader(
       val tableDesc = relation.tableDesc
       val broadcastedHiveConf = _broadcastedHiveConf
       val localDeserializer = partDeserializer
-      val mutableRow = new GenericMutableRow(attributes.length)
+      val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
 
-      // split the attributes (output schema) into 2 categories:
-      // (partition keys, ordinal), (normal attributes, ordinal), the ordinal mean the 
-      // index of the attribute in the output Row.
-      val (partitionKeys, attrs) = attributes.zipWithIndex.partition(attr => {
-        relation.partitionKeys.indexOf(attr._1) >= 0
-      })
+      // Splits all attributes into two groups, partition key attributes and those that are not.
+      // Attached indices indicate the position of each attribute in the output schema.
+      val (partitionKeyAttrs, nonPartitionKeyAttrs) =
+        attributes.zipWithIndex.partition { case (attr, _) =>
+          relation.partitionKeys.contains(attr)
+        }
 
-      def fillPartitionKeys(parts: Array[String], row: GenericMutableRow) = {
-        partitionKeys.foreach { case (attr, ordinal) =>
-          // get partition key ordinal for a given attribute
-          val partOridinal = relation.partitionKeys.indexOf(attr)
-          row(ordinal) = Cast(Literal(parts(partOridinal)), attr.dataType).eval(null)
+      def fillPartitionKeys(rawPartValues: Array[String], row: MutableRow) = {
+        partitionKeyAttrs.foreach { case (attr, ordinal) =>
+          val partOrdinal = relation.partitionKeys.indexOf(attr)
+          row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
         }
       }
-      // fill the partition key for the given MutableRow Object
+
+      // Fill all partition keys to the given MutableRow object
       fillPartitionKeys(partValues, mutableRow)
 
-      val hivePartitionRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
-      hivePartitionRDD.mapPartitions { iter =>
+      createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
         deserializer.initialize(hconf, partProps)
 
-        // fill the non partition key attributes 
-        HadoopTableReader.fillObject(iter, deserializer, attrs, mutableRow)
+        // fill the non partition key attributes
+        HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs, mutableRow)
       }
     }.toSeq
 
@@ -257,38 +254,64 @@ private[hive] object HadoopTableReader extends HiveInspectors {
   }
 
   /**
-   * Transform the raw data(Writable object) into the Row object for an iterable input
-   * @param iter Iterable input which represented as Writable object
-   * @param deserializer Deserializer associated with the input writable object
-   * @param attrs Represents the row attribute names and its zero-based position in the MutableRow
-   * @param row reusable MutableRow object
-   * 
-   * @return Iterable Row object that transformed from the given iterable input.
+   * Transform all given raw `Writable`s into `Row`s.
+   *
+   * @param iterator Iterator of all `Writable`s to be transformed
+   * @param deserializer The `Deserializer` associated with the input `Writable`
+   * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
+   *                             positions in the output schema
+   * @param mutableRow A reusable `MutableRow` that should be filled
+   * @return An `Iterator[Row]` transformed from `iterator`
    */
   def fillObject(
-      iter: Iterator[Writable],
+      iterator: Iterator[Writable],
       deserializer: Deserializer,
-      attrs: Seq[(Attribute, Int)],
-      row: GenericMutableRow): Iterator[Row] = {
+      nonPartitionKeyAttrs: Seq[(Attribute, Int)],
+      mutableRow: MutableRow): Iterator[Row] = {
+
     val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
-    // get the field references according to the attributes(output of the reader) required
-    val fieldRefs = attrs.map { case (attr, idx) => (soi.getStructFieldRef(attr.name), idx) }
+    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
+      soi.getStructFieldRef(attr.name) -> ordinal
+    }.unzip
+
+    // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
+    // matching and branching costs per row.
+    val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map {
+      _.getFieldObjectInspector match {
+        case oi: BooleanObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
+        case oi: ByteObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setByte(ordinal, oi.get(value))
+        case oi: ShortObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setShort(ordinal, oi.get(value))
+        case oi: IntObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setInt(ordinal, oi.get(value))
+        case oi: LongObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setLong(ordinal, oi.get(value))
+        case oi: FloatObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
+        case oi: DoubleObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+        case oi =>
+          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapData(value, oi)
+      }
+    }
 
     // Map each tuple to a row object
-    iter.map { value =>
+    iterator.map { value =>
       val raw = deserializer.deserialize(value)
-      var idx = 0;
-      while (idx < fieldRefs.length) {
-        val fieldRef = fieldRefs(idx)._1
-        val fieldIdx = fieldRefs(idx)._2
-        val fieldValue = soi.getStructFieldData(raw, fieldRef)
-
-        row(fieldIdx) = unwrapData(fieldValue, fieldRef.getFieldObjectInspector())
-
-        idx += 1
+      var i = 0
+      while (i < fieldRefs.length) {
+        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+        if (fieldValue == null) {
+          mutableRow.setNullAt(fieldOrdinals(i))
+        } else {
+          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        }
+        i += 1
       }
 
-      row: Row
+      mutableRow: Row
     }
   }
 }

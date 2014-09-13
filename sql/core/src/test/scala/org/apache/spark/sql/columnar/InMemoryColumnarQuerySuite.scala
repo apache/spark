@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{SQLConf, QueryTest, TestData}
+import org.apache.spark.sql.{QueryTest, TestData}
 
 class InMemoryColumnarQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._

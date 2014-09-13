@@ -35,7 +35,7 @@ class ColumnStatsSuite extends FunSuite {
   def testColumnStats[T <: NativeType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
-      initialStatistics: Row) {
+      initialStatistics: Row): Unit = {
 
     val columnStatsName = columnStatsClass.getSimpleName
 

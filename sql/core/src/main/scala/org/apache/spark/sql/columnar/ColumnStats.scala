@@ -69,7 +69,7 @@ private[sql] class ByteColumnStats extends ColumnStats {
   var lower = Byte.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getByte(ordinal)
       if (value > upper) upper = value
@@ -87,7 +87,7 @@ private[sql] class ShortColumnStats extends ColumnStats {
   var lower = Short.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getShort(ordinal)
       if (value > upper) upper = value
@@ -105,7 +105,7 @@ private[sql] class LongColumnStats extends ColumnStats {
   var lower = Long.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getLong(ordinal)
       if (value > upper) upper = value
@@ -123,7 +123,7 @@ private[sql] class DoubleColumnStats extends ColumnStats {
   var lower = Double.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getDouble(ordinal)
       if (value > upper) upper = value
@@ -141,7 +141,7 @@ private[sql] class FloatColumnStats extends ColumnStats {
   var lower = Float.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getFloat(ordinal)
       if (value > upper) upper = value
@@ -159,7 +159,7 @@ private[sql] class IntColumnStats extends ColumnStats {
   var lower = Int.MaxValue
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getInt(ordinal)
       if (value > upper) upper = value
@@ -177,7 +177,7 @@ private[sql] class StringColumnStats extends ColumnStats {
   var lower: String = null
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getString(ordinal)
       if (upper == null || value.compareTo(upper) > 0) upper = value
@@ -195,7 +195,7 @@ private[sql] class TimestampColumnStats extends ColumnStats {
   var lower: Timestamp = null
   var nullCount = 0
 
-  override def gatherStats(row: Row, ordinal: Int) {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row(ordinal).asInstanceOf[Timestamp]
       if (upper == null || value.compareTo(upper) > 0) upper = value
