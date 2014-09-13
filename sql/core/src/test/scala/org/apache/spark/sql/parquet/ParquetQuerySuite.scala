@@ -127,7 +127,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .collect().toSeq == Seq("test")
   }
 
-  test("Treat binary as string") {
+  ignore("Treat binary as string") {
     val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
 
     // Create the test file.
@@ -142,31 +142,16 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       StructField("c2", BinaryType, false) :: Nil)
     val schemaRDD1 = applySchema(rowRDD, schema)
     schemaRDD1.saveAsParquetFile(path)
-    val resultWithBinary = parquetFile(path).collect
-    range.foreach {
-      i =>
-        assert(resultWithBinary(i).getInt(0) === i)
-        assert(resultWithBinary(i)(1) === s"val_$i".getBytes)
-    }
-
-    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
-    // This ParquetRelation always use Parquet types to derive output.
-    val parquetRelation = new ParquetRelation(
-      path.toString,
-      Some(TestSQLContext.sparkContext.hadoopConfiguration),
-      TestSQLContext) {
-      override val output =
-        ParquetTypesConverter.convertToAttributes(
-          ParquetTypesConverter.readMetaData(new Path(path), conf).getFileMetaData.getSchema,
-          TestSQLContext.isParquetBinaryAsString)
-    }
-    val schemaRDD = new SchemaRDD(TestSQLContext, parquetRelation)
-
-    schemaRDD.registerTempTable("tmp")
     checkAnswer(
-      sql("SELECT c1, c2 FROM tmp WHERE c2 = 'val_5' OR c2 = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      parquetFile(path).select('c1, 'c2.cast(StringType)),
+      schemaRDD1.select('c1, 'c2.cast(StringType)).collect().toSeq)
+
+    setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
+    parquetFile(path).printSchema()
+    checkAnswer(
+      parquetFile(path),
+      schemaRDD1.select('c1, 'c2.cast(StringType)).collect().toSeq)
+
 
     // Set it back.
     TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
