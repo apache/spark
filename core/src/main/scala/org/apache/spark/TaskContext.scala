@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
 
 
 /**
@@ -41,7 +41,7 @@ class TaskContext(
     val attemptId: Long,
     val runningLocally: Boolean = false,
     private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends Serializable {
+  extends Serializable with Logging {
 
   @deprecated("use partitionId", "0.8.1")
   def splitId = partitionId
@@ -103,8 +103,20 @@ class TaskContext(
   /** Marks the task as completed and triggers the listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
+    val errorMsgs = new ArrayBuffer[String](2)
     // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach { _.onTaskCompletion(this) }
+    onCompleteCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskCompletion(this)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskCompletionListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskCompletionListenerException(errorMsgs)
+    }
   }
 
   /** Marks the task for interruption, i.e. cancellation. */

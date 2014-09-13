@@ -46,6 +46,7 @@ private[tree] class DecisionTreeMetadata(
     val numBins: Array[Int],
     val impurity: Impurity,
     val quantileStrategy: QuantileStrategy,
+    val maxDepth: Int,
     val minInstancesPerNode: Int,
     val minInfoGain: Double) extends Serializable {
 
@@ -129,7 +130,7 @@ private[tree] object DecisionTreeMetadata {
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet, numBins,
-      strategy.impurity, strategy.quantileCalculationStrategy,
+      strategy.impurity, strategy.quantileCalculationStrategy, strategy.maxDepth,
       strategy.minInstancesPerNode, strategy.minInfoGain)
   }
 
