@@ -20,14 +20,10 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.scalatest.BeforeAndAfterAll
 
-import scala.reflect.ClassTag
-
-import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class ParquetData(intField: Int, stringField: String)
@@ -36,27 +32,19 @@ case class ParquetData(intField: Int, stringField: String)
  * Tests for our SerDe -> Native parquet scan conversion.
  */
 class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
-
   override def beforeAll(): Unit = {
-    setConf("spark.sql.hive.convertMetastoreParquet", "true")
-  }
+    val partitionedTableDir = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDir.delete()
+    partitionedTableDir.mkdir()
 
-  override def afterAll(): Unit = {
-    setConf("spark.sql.hive.convertMetastoreParquet", "false")
-  }
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDir, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetData(i, s"part-$p"))
+        .saveAsParquetFile(partDir.getCanonicalPath)
+    }
 
-  val partitionedTableDir = File.createTempFile("parquettests", "sparksql")
-  partitionedTableDir.delete()
-  partitionedTableDir.mkdir()
-
-  (1 to 10).foreach { p =>
-    val partDir = new File(partitionedTableDir, s"p=$p")
-    sparkContext.makeRDD(1 to 10)
-      .map(i => ParquetData(i, s"part-$p"))
-      .saveAsParquetFile(partDir.getCanonicalPath)
-  }
-
-  sql(s"""
+    sql(s"""
     create external table partitioned_parquet
     (
       intField INT,
@@ -70,7 +58,7 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
     location '${partitionedTableDir.getCanonicalPath}'
     """)
 
-  sql(s"""
+    sql(s"""
     create external table normal_parquet
     (
       intField INT,
@@ -83,8 +71,15 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
     location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
     """)
 
-  (1 to 10).foreach { p =>
-    sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (p=$p)")
+    (1 to 10).foreach { p =>
+      sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (p=$p)")
+    }
+
+    setConf("spark.sql.hive.convertMetastoreParquet", "true")
+  }
+
+  override def afterAll(): Unit = {
+    setConf("spark.sql.hive.convertMetastoreParquet", "false")
   }
 
   test("project the partitioning column") {

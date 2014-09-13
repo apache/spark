@@ -85,6 +85,27 @@ run_test "pyspark/mllib/tests.py"
 run_test "pyspark/mllib/tree.py"
 run_test "pyspark/mllib/util.py"
 
+# Try to test with PyPy
+if [ $(which pypy) ]; then
+    export PYSPARK_PYTHON="pypy"
+    echo "Testing with PyPy version:"
+    $PYSPARK_PYTHON --version
+
+    run_test "pyspark/rdd.py"
+    run_test "pyspark/context.py"
+    run_test "pyspark/conf.py"
+    run_test "pyspark/sql.py"
+    # These tests are included in the module-level docs, and so must
+    # be handled on a higher level rather than within the python file.
+    export PYSPARK_DOC_TEST=1
+    run_test "pyspark/broadcast.py"
+    run_test "pyspark/accumulators.py"
+    run_test "pyspark/serializers.py"
+    unset PYSPARK_DOC_TEST
+    run_test "pyspark/shuffle.py"
+    run_test "pyspark/tests.py"
+fi
+
 if [[ $FAILED == 0 ]]; then
     echo -en "\033[32m"  # Green
     echo "Tests passed."

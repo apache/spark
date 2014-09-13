@@ -189,7 +189,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort, securityMgr)
+      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       try {
         userThread.join()
       } finally {
@@ -283,11 +283,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
 
         val sparkContext = sparkContextRef.get()
-        assert(sparkContext != null || count >= numTries)
         if (sparkContext == null) {
-          logError(
-            "Unable to retrieve sparkContext inspite of waiting for %d, numTries = %d".format(
-              count * waitTime, numTries))
+          logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
+            + " log output for errors. Failing the application.").format(numTries * waitTime))
         }
         sparkContext
       }
