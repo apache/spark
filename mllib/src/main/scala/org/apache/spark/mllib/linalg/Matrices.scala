@@ -64,6 +64,12 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   override def toArray: Array[Double] = values
 
   private[mllib] override def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
+
+  override def equals(o: Any) = o match {
+    case that: DenseMatrix =>
+      that.numRows == numRows && that.numCols == numCols
+    case _ => false
+  }
 }
 
 /**

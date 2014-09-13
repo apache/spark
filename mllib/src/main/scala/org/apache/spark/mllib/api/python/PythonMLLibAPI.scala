@@ -17,16 +17,19 @@
 
 package org.apache.spark.mllib.api.python
 
+import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 
 import scala.collection.JavaConverters._
+
+import net.razorvine.pickle.{Pickler, Unpickler, IObjectConstructor, IObjectPickler, PickleException, Opcodes}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.linalg.{Matrix, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
@@ -262,12 +265,12 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratingsBytesJRDD: JavaRDD[Array[Byte]],
+      ratingsJRDD: JavaRDD[Object],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int): MatrixFactorizationModel = {
-    val ratings = ratingsBytesJRDD.rdd.map(SerDe.unpackRating)
+    val ratings = ratingsJRDD.rdd.map(_.asInstanceOf[Rating])
     ALS.train(ratings, rank, iterations, lambda, blocks)
   }
 
@@ -278,13 +281,13 @@ class PythonMLLibAPI extends Serializable {
    * exit; see the Py4J documentation.
    */
   def trainImplicitALSModel(
-      ratingsBytesJRDD: JavaRDD[Array[Byte]],
+      ratingsJRDD: JavaRDD[Object],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
-    val ratings = ratingsBytesJRDD.rdd.map(SerDe.unpackRating)
+    val ratings = ratingsJRDD.rdd.map(_.asInstanceOf[Rating])
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 
@@ -510,6 +513,129 @@ private[spark] object SerDe extends Serializable {
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
 
+  private[python] def reduce_object(out: OutputStream, pickler: Pickler,
+                                    module: String, name: String, objects: Object*) = {
+    out.write(Opcodes.GLOBAL)
+    out.write((module + "\n" + name + "\n").getBytes)
+    out.write(Opcodes.MARK)
+    objects.foreach(pickler.save(_))
+    out.write(Opcodes.TUPLE)
+    out.write(Opcodes.REDUCE)
+  }
+
+  private[python] class DenseVectorPickler extends IObjectPickler {
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler) = {
+      val vector: DenseVector = obj.asInstanceOf[DenseVector]
+      reduce_object(out, pickler, "pyspark.mllib.linalg", "DenseVector", vector.toArray)
+    }
+  }
+
+  private[python] class DenseVectorConstructor extends IObjectConstructor {
+    def construct(args: Array[Object]) :Object = {
+      require(args.length == 1)
+      new DenseVector(args(0).asInstanceOf[Array[Double]])
+    }
+  }
+
+  private[python] class DenseMatrixPickler extends IObjectPickler {
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler) = {
+      val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
+      reduce_object(out, pickler, "pyspark.mllib.linalg", "DenseMatrix",
+        m.numRows.asInstanceOf[Object], m.numCols.asInstanceOf[Object], m.values)
+    }
+  }
+
+  private[python] class DenseMatrixConstructor extends IObjectConstructor {
+    def construct(args: Array[Object]) :Object = {
+      require(args.length == 3)
+      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
+        args(2).asInstanceOf[Array[Double]])
+    }
+  }
+
+  private[python] class SparseVectorPickler extends IObjectPickler {
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler) = {
+      val v: SparseVector = obj.asInstanceOf[SparseVector]
+      reduce_object(out, pickler, "pyspark.mllib.linalg", "SparseVector",
+        v.size.asInstanceOf[Object], v.indices, v.values)
+    }
+  }
+
+  private[python] class SparseVectorConstructor extends IObjectConstructor {
+    def construct(args: Array[Object]) :Object = {
+      require(args.length == 3)
+      new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
+        args(2).asInstanceOf[Array[Double]])
+    }
+  }
+
+  private[python] class LabeledPointPickler extends IObjectPickler {
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler) = {
+      val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
+      reduce_object(out, pickler, "pyspark.mllib.regression", "LabeledPoint",
+        point.label.asInstanceOf[Object], point.features)
+    }
+  }
+
+  private[python] class LabeledPointConstructor extends IObjectConstructor {
+    def construct(args: Array[Object]) :Object = {
+      if (args.length != 2) {
+        throw new PickleException("should be 2")
+      }
+      new LabeledPoint(args(0).asInstanceOf[Double], args(1).asInstanceOf[Vector])
+    }
+  }
+
+  /**
+   * Pickle Rating
+   */
+  private[python] class RatingPickler extends IObjectPickler {
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler) = {
+      val rating: Rating = obj.asInstanceOf[Rating]
+      reduce_object(out, pickler, "pyspark.mllib.recommendation", "Rating",
+        rating.user.asInstanceOf[Object], rating.product.asInstanceOf[Object],
+        rating.rating.asInstanceOf[Object])
+    }
+  }
+
+  /**
+   * Unpickle Rating
+   */
+  private[python] class RatingConstructor extends IObjectConstructor {
+    def construct(args: Array[Object]) :Object = {
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
+      }
+      new Rating(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
+        args(2).asInstanceOf[Double])
+    }
+  }
+
+  def initialize() = {
+    Pickler.registerCustomPickler(classOf[DenseVector], new DenseVectorPickler)
+    Pickler.registerCustomPickler(classOf[DenseMatrix], new DenseMatrixPickler)
+    Pickler.registerCustomPickler(classOf[SparseVector], new SparseVectorPickler)
+    Pickler.registerCustomPickler(classOf[LabeledPoint], new LabeledPointPickler)
+    Pickler.registerCustomPickler(classOf[Rating], new RatingPickler)
+    Unpickler.registerConstructor("pyspark.mllib.linalg", "DenseVector",
+      new DenseVectorConstructor)
+    Unpickler.registerConstructor("pyspark.mllib.linalg", "DenseMatrix",
+      new DenseMatrixConstructor)
+    Unpickler.registerConstructor("pyspark.mllib.linalg", "SparseVector",
+      new SparseVectorConstructor)
+    Unpickler.registerConstructor("pyspark.mllib.regression", "LabeledPoint",
+      new LabeledPointConstructor)
+    Unpickler.registerConstructor("pyspark.mllib.recommendation", "Rating", new RatingConstructor)
+  }
+
+  private[python] def dumps(obj: AnyRef): Array[Byte] = {
+    new Pickler().dumps(obj)
+  }
+
+  private[python] def loads(bytes: Array[Byte]): AnyRef = {
+    new Unpickler().loads(bytes)
+  }
+
   private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
     val magic = bytes(offset)
@@ -688,43 +814,8 @@ private[spark] object SerDe extends Serializable {
     Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
   }
 
-
-  /** Unpack a Rating object from an array of bytes */
-  private[python] def unpackRating(ratingBytes: Array[Byte]): Rating = {
-    val bb = ByteBuffer.wrap(ratingBytes)
-    bb.order(ByteOrder.nativeOrder())
-    val user = bb.getInt()
-    val product = bb.getInt()
-    val rating = bb.getDouble()
-    new Rating(user, product, rating)
-  }
-
-  /** Unpack a tuple of Ints from an array of bytes */
-  def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
-    val bb = ByteBuffer.wrap(tupleBytes)
-    bb.order(ByteOrder.nativeOrder())
-    val v1 = bb.getInt()
-    val v2 = bb.getInt()
-    (v1, v2)
-  }
-
-  /**
-   * Serialize a Rating object into an array of bytes.
-   * It can be deserialized using RatingDeserializer().
-   *
-   * @param rate the Rating object to serialize
-   * @return
-   */
-  def serializeRating(rate: Rating): Array[Byte] = {
-    val len = 3
-    val bytes = new Array[Byte](4 + 8 * len)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.putInt(len)
-    val db = bb.asDoubleBuffer()
-    db.put(rate.user.toDouble)
-    db.put(rate.product.toDouble)
-    db.put(rate.rating)
-    bytes
+  /* convert object into Tuple */
+  def asTupleRDD(rdd: RDD[Array[Object]]): RDD[(Int, Int)] = {
+    rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
   }
 }

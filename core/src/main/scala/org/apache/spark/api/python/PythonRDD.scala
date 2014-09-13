@@ -744,8 +744,8 @@ private[spark] object PythonRDD extends Logging {
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter =>
       val pickle = new Pickler
-      iter.map { row =>
-        pickle.dumps(row)
+      iter.grouped(1024).map { rows =>
+        pickle.dumps(rows.toArray)
       }
     }
   }

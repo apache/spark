@@ -441,41 +441,6 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
     return klass(_deserialize_double_vector(ans[0]), ans[1])
 
 
-# Functions for serializing ALS Rating objects and tuples
-
-def _serialize_rating(r):
-    ba = bytearray(16)
-    intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
-    doublepart = ndarray(shape=[1], buffer=ba, dtype=float64, offset=8)
-    intpart[0], intpart[1], doublepart[0] = r
-    return ba
-
-
-class RatingDeserializer(Serializer):
-
-    def loads(self, stream):
-        length = struct.unpack("!i", stream.read(4))[0]
-        ba = stream.read(length)
-        res = ndarray(shape=(3, ), buffer=ba, dtype=float64, offset=4)
-        return int(res[0]), int(res[1]), res[2]
-
-    def load_stream(self, stream):
-        while True:
-            try:
-                yield self.loads(stream)
-            except struct.error:
-                return
-            except EOFError:
-                return
-
-
-def _serialize_tuple(t):
-    ba = bytearray(8)
-    intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
-    intpart[0], intpart[1] = t
-    return ba
-
-
 # Vector math functions that support all of our vector types
 
 def _convert_vector(vec):
