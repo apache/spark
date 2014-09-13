@@ -21,6 +21,7 @@ package org.apache.spark.util
  * Exception thrown when there is an exception in
  * executing the callback in TaskCompletionListener.
  */
+private[spark]
 class TaskCompletionListenerException(errorMessages: Seq[String]) extends Exception {
 
   override def getMessage: String = {
