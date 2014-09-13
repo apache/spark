@@ -65,14 +65,7 @@ private[tree] class DTStatsAggregator(
    * Offset for each feature for calculating indices into the [[allStats]] array.
    */
   private val featureOffsets: Array[Int] = {
-    def featureOffsetsCalc(total: Int, featureIndex: Int): Int = {
-      if (isUnordered(featureIndex)) {
-        total + 2 * numBins(featureIndex)
-      } else {
-        total + numBins(featureIndex)
-      }
-    }
-    Range(0, numFeatures).scanLeft(0)(featureOffsetsCalc).map(statsSize * _).toArray
+    numBins.scanLeft(0)((total, nBins) => total + statsSize * nBins)
   }
 
   /**
@@ -149,7 +142,7 @@ private[tree] class DTStatsAggregator(
       s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
       s" but was called for ordered feature $featureIndex.")
     val baseOffset = nodeIndex * nodeStride + featureOffsets(featureIndex)
-    (baseOffset, baseOffset + numBins(featureIndex) * statsSize)
+    (baseOffset, baseOffset + (numBins(featureIndex) >> 1) * statsSize)
   }
 
   /**
