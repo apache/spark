@@ -42,10 +42,6 @@ def worker(sock):
     """
     Called by a worker process after the fork().
     """
-    # Redirect stdout to stderr
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr  # The sys.stdout object is different from file descriptor 1
-
     signal.signal(SIGHUP, SIG_DFL)
     signal.signal(SIGCHLD, SIG_DFL)
     signal.signal(SIGTERM, SIG_DFL)
@@ -102,6 +98,7 @@ def manager():
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
     write_int(listen_port, sys.stdout)
+    sys.stdout.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -115,7 +112,6 @@ def manager():
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
 
     # Initialization complete
-    sys.stdout.close()
     try:
         while True:
             try:
