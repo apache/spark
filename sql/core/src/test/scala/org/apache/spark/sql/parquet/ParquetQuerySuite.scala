@@ -395,19 +395,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
     val rdd_copy1 = sql("SELECT * FROM dest").collect()
     assert(rdd_copy1.size === 100)
-    assert(rdd_copy1(0).apply(0) === 1)
-    assert(rdd_copy1(0).apply(1) === "val_1")
-    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
-    // executed twice otherwise?!
+
     sql("INSERT INTO dest SELECT * FROM source")
     val rdd_copy2 = sql("SELECT * FROM dest").collect().sortBy(_.getInt(0))
     assert(rdd_copy2.size === 200)
-    assert(rdd_copy2(0).apply(0) === 1)
-    assert(rdd_copy2(0).apply(1) === "val_1")
-    assert(rdd_copy2(99).apply(0) === 50)
-    assert(rdd_copy2(99).apply(1) === "val_50")
-    assert(rdd_copy2(199).apply(0) === 100)
-    assert(rdd_copy2(199).apply(1) === "val_100")
     Utils.deleteRecursively(dirname)
   }
 
