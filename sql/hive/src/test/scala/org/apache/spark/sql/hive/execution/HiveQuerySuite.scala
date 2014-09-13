@@ -298,12 +298,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
       .collect()
-      .toSeq
+      .toSet
 
     val expected = sql("SELECT key FROM src")
       .map { case Row(i: Int) => i }
       .collect()
-      .toSeq
+      .toSet
 
     assert(actual === expected)
   }

@@ -50,11 +50,11 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
 
   def hasNext = buffer.hasRemaining
 
-  def extractTo(row: MutableRow, ordinal: Int) {
+  def extractTo(row: MutableRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 
-  def extractSingle(row: MutableRow, ordinal: Int) {
+  def extractSingle(row: MutableRow, ordinal: Int): Unit = {
     columnType.extract(buffer, row, ordinal)
   }
 

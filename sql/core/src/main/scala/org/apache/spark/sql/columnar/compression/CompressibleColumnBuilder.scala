@@ -48,7 +48,11 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   var compressionEncoders: Seq[Encoder[T]] = _
 
-  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
+  abstract override def initialize(
+      initialSize: Int,
+      columnName: String,
+      useCompression: Boolean): Unit = {
+
     compressionEncoders =
       if (useCompression) {
         schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
@@ -62,7 +66,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     encoder.compressionRatio < 0.8
   }
 
-  private def gatherCompressibilityStats(row: Row, ordinal: Int) {
+  private def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
     var i = 0
     while (i < compressionEncoders.length) {
       compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
@@ -70,7 +74,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     }
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int) {
+  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
     super.appendFrom(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       gatherCompressibilityStats(row, ordinal)

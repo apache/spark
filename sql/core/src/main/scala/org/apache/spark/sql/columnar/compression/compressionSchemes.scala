@@ -57,7 +57,7 @@ private[sql] case object PassThrough extends CompressionScheme {
   class Decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       columnType.extract(buffer, row, ordinal)
     }
 
@@ -93,7 +93,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
 
     override def compressedSize = _compressedSize
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
       val actualSize = columnType.actualSize(row, ordinal)
       _uncompressedSize += actualSize
@@ -156,7 +156,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     private var valueCount = 0
     private var currentValue: T#JvmType = _
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       if (valueCount == run) {
         currentValue = columnType.extract(buffer)
         run = buffer.getInt()
@@ -213,7 +213,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     // to store dictionary element count.
     private var dictionarySize = 4
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
 
       if (!overflow) {
@@ -279,7 +279,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
       }
     }
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       columnType.setField(row, ordinal, dictionary(buffer.getShort()))
     }
 
@@ -305,7 +305,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   class Encoder extends compression.Encoder[BooleanType.type] {
     private var _uncompressedSize = 0
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
       _uncompressedSize += BOOLEAN.defaultSize
     }
 
@@ -361,7 +361,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
 
     private var visited: Int = 0
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       val bit = visited % BITS_PER_LONG
 
       visited += 1
@@ -398,7 +398,7 @@ private[sql] case object IntDelta extends CompressionScheme {
 
     private var prevValue: Int = _
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
       val value = row.getInt(ordinal)
       val delta = value - prevValue
 
@@ -447,7 +447,7 @@ private[sql] case object IntDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else buffer.getInt()
       row.setInt(ordinal, prev)
@@ -477,7 +477,7 @@ private[sql] case object LongDelta extends CompressionScheme {
 
     private var prevValue: Long = _
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int) {
+    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
       val value = row.getLong(ordinal)
       val delta = value - prevValue
 
@@ -526,7 +526,7 @@ private[sql] case object LongDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next(row: MutableRow, ordinal: Int) {
+    override def next(row: MutableRow, ordinal: Int): Unit = {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else buffer.getLong()
       row.setLong(ordinal, prev)

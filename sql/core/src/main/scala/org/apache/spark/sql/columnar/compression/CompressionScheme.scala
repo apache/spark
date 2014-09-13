@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
 
 private[sql] trait Encoder[T <: NativeType] {
-  def gatherCompressibilityStats(row: Row, ordinal: Int) {}
+  def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {}
 
   def compressedSize: Int
 
