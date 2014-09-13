@@ -101,8 +101,17 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
-        if (option.qualifiers.filter(resolver(_, parts.head)).nonEmpty && parts.size > 1) parts.drop(1) else parts
-      if (resolver(option.name, remainingParts.head)) (option, remainingParts.tail.toList) :: Nil else Nil
+        if (option.qualifiers.filter(resolver(_, parts.head)).nonEmpty && parts.size > 1) {
+          parts.drop(1)
+        } else {
+          parts
+        }
+
+      if (resolver(option.name, remainingParts.head)) {
+        (option, remainingParts.tail.toList) :: Nil
+      } else {
+        Nil
+      }
     }
 
     options.distinct match {

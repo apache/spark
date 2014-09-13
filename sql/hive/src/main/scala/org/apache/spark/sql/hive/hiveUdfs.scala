@@ -42,8 +42,9 @@ private[hive] abstract class HiveFunctionRegistry
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
     // not always serializable.
-    val functionInfo: FunctionInfo = Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
-      sys.error(s"Couldn't find function $name"))
+    val functionInfo: FunctionInfo =
+      Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+        sys.error(s"Couldn't find function $name"))
 
     val functionClassName = functionInfo.getFunctionClass.getName
 
