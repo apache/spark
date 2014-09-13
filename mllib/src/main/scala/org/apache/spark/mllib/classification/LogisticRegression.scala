@@ -82,7 +82,7 @@ class LogisticRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   private val gradient = new LogisticGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
