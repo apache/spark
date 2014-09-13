@@ -22,7 +22,6 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.language.postfixOps
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.scalatest.concurrent.Timeouts

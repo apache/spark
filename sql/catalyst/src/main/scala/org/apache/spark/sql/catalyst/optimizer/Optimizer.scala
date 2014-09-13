@@ -40,11 +40,59 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
     Batch("Filter Pushdown", FixedPoint(100),
+      UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
       ColumnPruning) :: Nil
 }
+
+/**
+  *  Pushes operations to either side of a Union.
+  */
+object UnionPushdown extends Rule[LogicalPlan] {
+
+  /**
+    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
+    */
+  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+    assert(union.left.output.size == union.right.output.size)
+
+    AttributeMap(union.left.output.zip(union.right.output))
+  }
+
+  /**
+    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
+    *  This method relies on the fact that the output attributes of a union are always equal
+    *  to the left child's output.
+    */
+  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+    val result = e transform {
+      case a: Attribute => rewrites(a)
+    }
+
+    // We must promise the compiler that we did not discard the names in the case of project
+    // expressions.  This is safe since the only transformation is from Attribute => Attribute.
+    result.asInstanceOf[A]
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into union
+    case Filter(condition, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Filter(condition, left),
+        Filter(pushToRight(condition, rewrites), right))
+
+    // Push down projection into union
+    case Project(projectList, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, rewrites)), right))
+  }
+}
+
 
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
