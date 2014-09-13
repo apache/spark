@@ -214,19 +214,9 @@ private[hive] object HiveQl {
    */
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
+ 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
-    if (sql.trim.toLowerCase.startsWith("add cache table")) {
-	  sql.trim.drop(16).split(" ").toSeq match {
-	    case Seq(tableName,as, xs@_*) => CacheTableAsSelectCommand(tableName,processSql(sql.trim.drop(16+tableName.length()+as.length()+1))) 
-	  } 
-	} else {
-      processSql(sql)
-    }
-  }
-  
-  /** Returns a LogicalPlan for a given HiveQL string. */
-  def processSql(sql : String) = {
+  def parseSql(sql : String) = {
     try {
       if (sql.trim.toLowerCase.startsWith("set")) {
         // Split in two parts since we treat the part before the first "="
@@ -254,14 +244,12 @@ private[hive] object HiveQl {
       } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
-        val tree = getAst(sql)
-        if (nativeCommands contains tree.getText) {
-          NativeCommand(sql)
+        if (sql.trim.toLowerCase.startsWith("add cache table")) {
+          sql.trim.drop(16).split(" ").toSeq match {
+        	case Seq(tableName,as, xs@_*) => CacheTableAsSelectCommand(tableName,createPlan(sql.trim.drop(16+tableName.length()+as.length()+1))) 
+          } 
         } else {
-          nodeToPlan(tree) match {
-            case NativePlaceholder => NativeCommand(sql)
-            case other => other
-          }
+          createPlan(sql)
         }
       }
     } catch {
@@ -271,6 +259,18 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
+    }
+  }
+
+  def createPlan(sql: String) ={
+    val tree = getAst(sql)
+    if (nativeCommands contains tree.getText) {
+      NativeCommand(sql)
+    } else {
+      nodeToPlan(tree) match {
+        case NativePlaceholder => NativeCommand(sql)
+        case other => other
+      }
     }
   }
 
