@@ -77,8 +77,6 @@ class TaskContext(
   /**
    * Add a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
-   * Exceptions in callbacks are however not thrown back upstream, i.e. tasks won't marked as
-   * failed even if completion callbacks fail to execute.
    *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
