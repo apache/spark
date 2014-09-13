@@ -33,12 +33,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val rddList = listener.rddInfoList.map {
-      case info: RDDInfo =>
-        JsonProtocol.rddInfoToJson(info)
-    }
+    val rddJsonList =
+      listener.rddInfoList.map { info => JsonProtocol.rddInfoToJson(info) }
 
-    ("RDDs" -> rddList)
+    rddJsonList
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

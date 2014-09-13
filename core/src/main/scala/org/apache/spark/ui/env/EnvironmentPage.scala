@@ -31,7 +31,7 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val jvmInfoJson =
-      ("RUntime Informationf" -> listener.jvmInformation.foldLeft(JObject())(_ ~ _))
+      ("Runtime Information" -> listener.jvmInformation.foldLeft(JObject())(_ ~ _))
     val sparkPropertiesJson =
       ("Spark Properties" -> listener.sparkProperties.foldLeft(JObject())(_ ~ _))
     val systemPropertiesJson =
@@ -39,11 +39,13 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
     val classPathEntriesJson =
       ("Classpath Entries" -> listener.classpathEntries.foldLeft(JObject())(_ ~ _))
 
-    val environment = ("Environment" -> jvmInfoJson ~
-                                        sparkPropertiesJson ~
-                                        systemPropertiesJson ~
-                                        classPathEntriesJson)
-    environment
+    val environmentJson =
+      jvmInfoJson ~
+      sparkPropertiesJson ~
+      systemPropertiesJson ~
+      classPathEntriesJson
+
+    environmentJson
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

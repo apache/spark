@@ -49,26 +49,24 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val storageStatusList = listener.storageStatusList
-
     val execInfoJsonList = for (statusId <- 0 until storageStatusList.size) yield  {
       val execInfo = getExecInfo(statusId)
-      ("Executor ID" -> execInfo.id) ~
-      ("Address" -> execInfo.hostPort) ~
-      ("RDD Blocks" -> execInfo.rddBlocks) ~
-      ("Memory Used" -> execInfo.memoryUsed) ~
-      ("Disk Used" -> execInfo.diskUsed) ~
-      ("Active Tasks" -> execInfo.activeTasks) ~
-      ("Failed Tasks" -> execInfo.failedTasks) ~
-      ("Complete Tasks" -> execInfo.completedTasks) ~
-      ("TotalTasks" -> execInfo.totalTasks) ~
-      ("Task Time" -> execInfo.totalDuration) ~
-      ("Input" -> execInfo.totalInputBytes) ~
-      ("Shuffle Read" -> execInfo.totalShuffleRead) ~
-      ("Shuffle Write" -> execInfo.totalShuffleWrite)
+        ("Executor ID" -> execInfo.id) ~
+        ("Address" -> execInfo.hostPort) ~
+        ("RDD Blocks" -> execInfo.rddBlocks) ~
+        ("Memory Used" -> execInfo.memoryUsed) ~
+        ("Disk Used" -> execInfo.diskUsed) ~
+        ("Active Tasks" -> execInfo.activeTasks) ~
+        ("Failed Tasks" -> execInfo.failedTasks) ~
+        ("Complete Tasks" -> execInfo.completedTasks) ~
+        ("TotalTasks" -> execInfo.totalTasks) ~
+        ("Task Time" -> execInfo.totalDuration) ~
+        ("Input" -> execInfo.totalInputBytes) ~
+        ("Shuffle Read" -> execInfo.totalShuffleRead) ~
+        ("Shuffle Write" -> execInfo.totalShuffleWrite)
     }
 
-    ("Executor List" -> execInfoJsonList)
-
+    execInfoJsonList
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
