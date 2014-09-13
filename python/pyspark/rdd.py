@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
 from collections import namedtuple
@@ -35,7 +34,7 @@ import atexit
 from random import Random
 from math import sqrt, log, isinf, isnan
 
-from pyspark.accumulators import StatsParam
+from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, CompressedSerializer
@@ -2114,7 +2113,7 @@ class PipelinedRDD(RDD):
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
         enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, StatsParam) if enable_profile else None
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
         command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         ser = CloudPickleSerializer()

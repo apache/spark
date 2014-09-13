@@ -554,6 +554,31 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
 
+class TestProfiler(PySparkTestCase):
+
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.python.profile", "true")
+        self.sc = SparkContext('local[4]', class_name, batchSize=2, conf=conf)
+
+    def test_profiler(self):
+
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
+        rdd = self.sc.parallelize(range(100)).foreach(heavy_foo)
+        from pyspark.rdd import PipelinedRDD
+        profiles = PipelinedRDD._created_profiles
+        self.assertEqual(1, len(profiles))
+        id, acc = profiles.pop()
+        stats = acc.value
+        self.assertTrue(stats is not None)
+        width, stat_list = stats.get_print_list([])
+        func_names = [func_name for fname, n, func_name in stat_list]
+        self.assertTrue("heavy_foo" in func_names)
+
+
 class TestSQL(PySparkTestCase):
 
     def setUp(self):

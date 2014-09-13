@@ -215,8 +215,8 @@ FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
-class StatsParam(AccumulatorParam):
-    """StatsParam is used to merge pstats.Stats"""
+class PStatsParam(AccumulatorParam):
+    """PStatsParam is used to merge pstats.Stats"""
 
     @staticmethod
     def zero(value):
