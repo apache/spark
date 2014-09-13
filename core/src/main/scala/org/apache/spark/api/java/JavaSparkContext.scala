@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
@@ -40,7 +41,9 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  */
-class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
+class JavaSparkContext(val sc: SparkContext)
+    extends JavaSparkContextVarargsWorkaround with Closeable {
+
   /**
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
@@ -533,6 +536,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def stop() {
     sc.stop()
   }
+
+  override def close(): Unit = stop()
 
   /**
    * Get Spark's home location from either a value set through the constructor,
