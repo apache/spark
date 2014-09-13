@@ -1,14 +1,6 @@
 import re
 
-
 RULES = (
-#    (r"@param (\w+):", r":para "),
-#    (r"@type (\w+):", ""),
-#    (r"@return:", ""),
-#    (r"@rtype:", ""),
-#    (r"@keyword (\w+):", ""),
-#    (r"@raise (\w+):", ""),
-#    (r"@deprecated:", ""),
     (r"<[\w.]+>", r""),
     (r"L{([\w.()]+)}", r":class:`\1`"),
     (r"[LC]{(\w+\.\w+)\(\)}", r":func:`\1`"),
@@ -30,7 +22,6 @@ def _convert_epytext(line):
 def _process_docstring(app, what, name, obj, options, lines):
     for i in range(len(lines)):
         lines[i] = _convert_epytext(lines[i])
-
 
 def setup(app):
     app.connect("autodoc-process-docstring", _process_docstring)

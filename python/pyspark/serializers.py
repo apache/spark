@@ -377,6 +377,7 @@ class MarshalSerializer(FramedSerializer):
 
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
+
     def dumps(self, obj):
         return marshal.dumps(obj)
 
