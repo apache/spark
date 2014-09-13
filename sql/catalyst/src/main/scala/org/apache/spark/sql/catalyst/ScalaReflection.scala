@@ -74,7 +74,6 @@ trait ScalaReflection {
         }), nullable = true)
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-    // case t if t <:< typeOf[Array[Byte]] => Schema(ArrayType(ByteType, false), nullable = true)
     case t if t <:< typeOf[Array[Int]] => Schema(ArrayType(IntegerType, false), nullable = true)
     case t if t <:< typeOf[Array[Long]] => Schema(ArrayType(LongType, false), nullable = true)
     case t if t <:< typeOf[Array[Double]] => Schema(ArrayType(DoubleType, false), nullable = true)
@@ -86,7 +85,6 @@ trait ScalaReflection {
       val TypeRef(_, _, Seq(elementType)) = t
       val Schema(dataType, nullable) = schemaFor(elementType)
       Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      // sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
       val Schema(dataType, nullable) = schemaFor(elementType)
