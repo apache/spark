@@ -216,7 +216,7 @@ private[hive] object HiveQl {
 
  
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql : String): LogicalPlan = {
+  def parseSql(sql: String): LogicalPlan = {
     try {
       if (sql.trim.toLowerCase.startsWith("set")) {
         // Split in two parts since we treat the part before the first "="
