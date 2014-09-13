@@ -356,9 +356,8 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for mllib Statistics.colStats(X: RDD[Vector]).
    * TODO figure out return type.
    */
-  def colStats(X: JavaRDD[Array[Byte]]): MultivariateStatisticalSummarySerialized = {
-    val cStats = Statistics.colStats(X.rdd.map(SerDe.deserializeDoubleVector(_)))
-    new MultivariateStatisticalSummarySerialized(cStats)
+  def colStats(rdd: JavaRDD[Any]): MultivariateStatisticalSummary = {
+    Statistics.colStats(rdd.rdd.map(_.asInstanceOf[Vector]))
   }
 
   /**
@@ -366,18 +365,17 @@ class PythonMLLibAPI extends Serializable {
    * Returns the correlation matrix serialized into a byte array understood by deserializers in
    * pyspark.
    */
-  def corr(X: JavaRDD[Array[Byte]], method: String): Array[Byte] = {
-    val inputMatrix = X.rdd.map(SerDe.deserializeDoubleVector(_))
-    val result = Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
-    SerDe.serializeDoubleMatrix(SerDe.to2dArray(result))
+  def corr(X: JavaRDD[Any], method: String): Matrix = {
+    val inputMatrix = X.rdd.map(_.asInstanceOf[Vector])
+    Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
   }
 
   /**
    * Java stub for mllib Statistics.corr(x: RDD[Double], y: RDD[Double], method: String).
    */
-  def corr(x: JavaRDD[Array[Byte]], y: JavaRDD[Array[Byte]], method: String): Double = {
-    val xDeser = x.rdd.map(SerDe.deserializeDouble(_))
-    val yDeser = y.rdd.map(SerDe.deserializeDouble(_))
+  def corr(x: JavaRDD[Any], y: JavaRDD[Any], method: String): Double = {
+    val xDeser = x.rdd.map(_.asInstanceOf[Double])
+    val yDeser = y.rdd.map(_.asInstanceOf[Double])
     Statistics.corr(xDeser, yDeser, getCorrNameOrDefault(method))
   }
 
@@ -481,27 +479,6 @@ class PythonMLLibAPI extends Serializable {
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s).map(SerDe.serializeDoubleVector)
   }
 
-}
-
-/**
- * :: DeveloperApi ::
- * MultivariateStatisticalSummary with Vector fields serialized.
- */
-@DeveloperApi
-class MultivariateStatisticalSummarySerialized(val summary: MultivariateStatisticalSummary)
-  extends Serializable {
-
-  def mean: Array[Byte] = SerDe.serializeDoubleVector(summary.mean)
-
-  def variance: Array[Byte] = SerDe.serializeDoubleVector(summary.variance)
-
-  def count: Long = summary.count
-
-  def numNonzeros: Array[Byte] = SerDe.serializeDoubleVector(summary.numNonzeros)
-
-  def max: Array[Byte] = SerDe.serializeDoubleVector(summary.max)
-
-  def min: Array[Byte] = SerDe.serializeDoubleVector(summary.min)
 }
 
 /**
@@ -628,11 +605,11 @@ private[spark] object SerDe extends Serializable {
     Unpickler.registerConstructor("pyspark.mllib.recommendation", "Rating", new RatingConstructor)
   }
 
-  private[python] def dumps(obj: AnyRef): Array[Byte] = {
+  def dumps(obj: AnyRef): Array[Byte] = {
     new Pickler().dumps(obj)
   }
 
-  private[python] def loads(bytes: Array[Byte]): AnyRef = {
+  def loads(bytes: Array[Byte]): AnyRef = {
     new Unpickler().loads(bytes)
   }
 
