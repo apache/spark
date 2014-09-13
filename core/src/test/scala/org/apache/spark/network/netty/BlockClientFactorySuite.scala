@@ -39,10 +39,10 @@ class BlockClientFactorySuite extends FunSuite with BeforeAndAfterAll {
 
   override def afterAll() {
     if (server1 != null) {
-      server1.stop()
+      server1.close()
     }
     if (server2 != null) {
-      server2.stop()
+      server2.close()
     }
   }
 
@@ -55,7 +55,7 @@ class BlockClientFactorySuite extends FunSuite with BeforeAndAfterAll {
     assert(c3.isActive)
     assert(c1 === c2)
     assert(c1 !== c3)
-    factory.stop()
+    factory.close()
   }
 
   test("never return inactive clients") {
@@ -75,7 +75,7 @@ class BlockClientFactorySuite extends FunSuite with BeforeAndAfterAll {
     // Create c2, which should be different from c1
     val c2 = factory.createClient(server1.hostName, server1.port)
     assert(c1 !== c2)
-    factory.stop()
+    factory.close()
   }
 
   test("BlockClients are close when BlockClientFactory is stopped") {
@@ -84,7 +84,7 @@ class BlockClientFactorySuite extends FunSuite with BeforeAndAfterAll {
     val c2 = factory.createClient(server2.hostName, server2.port)
     assert(c1.isActive)
     assert(c2.isActive)
-    factory.stop()
+    factory.close()
     assert(!c1.isActive)
     assert(!c2.isActive)
   }

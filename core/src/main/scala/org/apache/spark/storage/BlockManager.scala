@@ -1113,7 +1113,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    blockTransferService.stop()
+    blockTransferService.close()
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

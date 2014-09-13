@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.Closeable
 import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
@@ -29,7 +30,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.channel.{ChannelInitializer, ChannelFuture, ChannelOption}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.util.Utils
 
@@ -38,7 +39,8 @@ import org.apache.spark.util.Utils
  * Server for the [[NettyBlockTransferService]].
  */
 private[netty]
-class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Logging {
+class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager)
+  extends Closeable with Logging {
 
   def port: Int = _port
 
@@ -115,7 +117,7 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager) extends Log
   }
 
   /** Shutdown the server. */
-  def stop(): Unit = {
+  def close(): Unit = {
     if (channelFuture != null) {
       channelFuture.channel().close().awaitUninterruptibly()
       channelFuture = null
