@@ -71,7 +71,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   /**
    * Tear down the transfer service.
    */
-  override def stop(): Unit = {
+  override def close(): Unit = {
     if (cm != null) {
       cm.stop()
     }

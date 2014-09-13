@@ -86,8 +86,8 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   override def afterAll() = {
-    server.stop()
-    clientFactory.stop()
+    server.close()
+    clientFactory.close()
   }
 
   /** A ByteBuf for buffer_block */
@@ -162,7 +162,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
 
   test("shutting down server should also close client") {
     val client = clientFactory.createClient(server.hostName, server.port)
-    server.stop()
+    server.close()
     eventually(timeout(Span(5, Seconds))) { assert(!client.isActive) }
   }
 }

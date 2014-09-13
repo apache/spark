@@ -42,12 +42,12 @@ final class NettyBlockTransferService(conf: SparkConf) extends BlockTransferServ
     clientFactory = new BlockClientFactory(nettyConf)
   }
 
-  override def stop(): Unit = {
+  override def close(): Unit = {
     if (server != null) {
-      server.stop()
+      server.close()
     }
     if (clientFactory != null) {
-      clientFactory.stop()
+      clientFactory.close()
     }
   }
 

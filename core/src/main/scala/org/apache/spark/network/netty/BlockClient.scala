@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.Closeable
 import java.util.concurrent.TimeoutException
 
 import io.netty.channel.{ChannelFuture, ChannelFutureListener}
@@ -39,7 +40,7 @@ import org.apache.spark.network.BlockFetchingListener
  */
 @throws[TimeoutException]
 private[netty]
-class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Logging {
+class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Closeable with Logging {
 
   private[this] val serverAddr = cf.channel().remoteAddress().toString
 

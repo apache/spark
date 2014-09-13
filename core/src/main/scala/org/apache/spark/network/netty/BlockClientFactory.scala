@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.Closeable
 import java.util.concurrent.{ConcurrentHashMap, TimeoutException}
 
 import io.netty.bootstrap.Bootstrap
@@ -41,7 +42,7 @@ import org.apache.spark.util.Utils
  * for the same remote host. It also shares a single worker thread pool for all [[BlockClient]]s.
  */
 private[netty]
-class BlockClientFactory(val conf: NettyConfig) {
+class BlockClientFactory(val conf: NettyConfig) extends Closeable {
 
   def this(sparkConf: SparkConf) = this(new NettyConfig(sparkConf))
 
@@ -140,7 +141,7 @@ class BlockClientFactory(val conf: NettyConfig) {
   }
 
   /** Close all connections in the connection pool, and shutdown the worker thread pool. */
-  def stop(): Unit = {
+  override def close(): Unit = {
     val iter = connectionPool.entrySet().iterator()
     while (iter.hasNext) {
       val entry = iter.next()

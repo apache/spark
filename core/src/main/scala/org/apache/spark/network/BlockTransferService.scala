@@ -17,6 +17,8 @@
 
 package org.apache.spark.network
 
+import java.io.Closeable
+
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
 
@@ -24,7 +26,7 @@ import org.apache.spark.storage.StorageLevel
 
 
 private[spark]
-abstract class BlockTransferService {
+abstract class BlockTransferService extends Closeable {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
@@ -35,7 +37,7 @@ abstract class BlockTransferService {
   /**
    * Tear down the transfer service.
    */
-  def stop(): Unit
+  def close(): Unit
 
   /**
    * Port number the service is listening on, available only after [[init]] is invoked.
