@@ -262,6 +262,7 @@ private[hive] object HiveQl {
     }
   }
 
+  /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String) ={
     val tree = getAst(sql)
     if (nativeCommands contains tree.getText) {
