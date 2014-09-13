@@ -918,7 +918,6 @@ options.
 ## Migration Guide for Shark User
 
 ### Scheduling 
-s
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
 users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 
@@ -1110,7 +1109,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
     The range of numbers is from `-9223372036854775808` to `9223372036854775807`.
     - `FloatType`: Represents 4-byte single-precision floating point numbers.
     - `DoubleType`: Represents 8-byte double-precision floating point numbers.
-    - `DecimalType`: 
+    - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
 * String type
     - `StringType`: Represents character string values.
 * Binary type
