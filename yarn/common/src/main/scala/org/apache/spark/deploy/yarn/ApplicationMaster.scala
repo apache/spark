@@ -105,9 +105,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
 
     // Use higher priority than FileSystem.
-    val priority = 20
-    assert(priority > FileSystem.SHUTDOWN_HOOK_PRIORITY)
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, 20)
+    assert(ApplicationMaster.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager.get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
@@ -407,6 +406,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 }
 
 object ApplicationMaster extends Logging {
+
+  private val SHUTDOWN_HOOK_PRIORITY: Int = 30
 
   private var master: ApplicationMaster = _
 
