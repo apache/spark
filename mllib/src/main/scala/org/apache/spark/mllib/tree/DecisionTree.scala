@@ -389,7 +389,7 @@ object DecisionTree extends Serializable with Logging {
       var groupIndex = 0
       var doneTraining = true
       while (groupIndex < numGroups) {
-        val (tmpRoot, doneTrainingGroup) = findBestSplitsPerGroup(input, metadata, level,
+        val (_, doneTrainingGroup) = findBestSplitsPerGroup(input, metadata, level,
           topNode, splits, bins, timer, numGroups, groupIndex)
         doneTraining = doneTraining && doneTrainingGroup
         groupIndex += 1
