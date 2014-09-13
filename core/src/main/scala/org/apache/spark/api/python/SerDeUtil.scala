@@ -52,7 +52,7 @@ private[python] object SerDeUtil extends Logging {
     //  };
     // TODO: support Py_UNICODE with 2 bytes
     // FIXME: unpickle array of float is wrong in Pyrolite, so we reverse the
-    // machine code for float/double here to work arround it.
+    // machine code for float/double here to workaround it.
     // we should fix this after Pyrolite fix them
     val machineCodes: Map[Char, Int] = if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
       Map('c' -> 1, 'B' -> 0, 'b' -> 1, 'H' -> 3, 'h' -> 5, 'I' -> 7, 'i' -> 9,
@@ -69,7 +69,6 @@ private[python] object SerDeUtil extends Logging {
       } else if (args.length == 2 && args(1).isInstanceOf[String]) {
         val typecode = args(0).asInstanceOf[String].charAt(0)
         val data: String = args(1).asInstanceOf[String]
-        println(typecode, machineCodes(typecode), data.length, data.toList)
         construct(typecode, machineCodes(typecode), data.getBytes("ISO-8859-1"))
       } else {
         super.construct(args)
