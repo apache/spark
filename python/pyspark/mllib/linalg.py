@@ -34,7 +34,7 @@ def _convert_to_vector(l):
 
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, list):
+    elif type(l) in (array.array, np.array, np.ndarray, list):
         return DenseVector(l)
     elif _have_scipy and _scipy_issparse(l):
         assert l.shape[1] == 1, "Expected column vector"

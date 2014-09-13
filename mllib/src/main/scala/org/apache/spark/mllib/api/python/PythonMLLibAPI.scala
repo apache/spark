@@ -246,16 +246,13 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib KMeans.train()
    */
   def trainKMeansModel(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String): java.util.List[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(bytes => SerDe.deserializeDoubleVector(bytes))
-    val model = KMeans.train(data, k, maxIterations, runs, initializationMode)
-    val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(SerDe.serializeDoubleMatrix(model.clusterCenters.map(_.toArray)))
-    ret
+      initializationMode: String): KMeansModel = {
+    val data = dataJRDD.rdd.map(_.asInstanceOf[Vector])
+    KMeans.train(data, k, maxIterations, runs, initializationMode)
   }
 
   /**
