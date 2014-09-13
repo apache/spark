@@ -42,7 +42,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  */
 class JavaSparkContext(val sc: SparkContext)
-    extends JavaSparkContextVarargsWorkaround with Closeable {
+  extends JavaSparkContextVarargsWorkaround with Closeable {
 
   /**
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
