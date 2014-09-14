@@ -124,7 +124,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         if (nnz(i) + other.nnz(i) != 0.0) {
           currM2(i) += other.currM2(i)
         }
-        // merge l2 together
+        // merge l1 together
         if (nnz(i) + other.nnz(i) != 0.0) {
           currL1(i) += other.currL1(i)
         }
