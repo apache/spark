@@ -182,6 +182,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
         InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
     }
+    
+  protected lazy val addCache: Parser[LogicalPlan] =
+    ADD ~ CACHE ~ TABLE ~> ident ~ AS ~ select <~ opt(";") ^^ {
+     case tableName ~ as ~ s =>
+       CacheTableAsSelectCommand(tableName,s)
+    }        
 
   protected lazy val cache: Parser[LogicalPlan] =
     CACHE ~ TABLE ~> ident ~ opt(AS) ~ opt(select) <~ opt(";") ^^ {
