@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
-import java.nio.{ByteBuffer, ByteOrder}
 
 import scala.collection.JavaConverters._
 
@@ -467,10 +466,6 @@ class PythonMLLibAPI extends Serializable {
  * SerDe utility functions for PythonMLLibAPI.
  */
 private[spark] object SerDe extends Serializable {
-  private val DENSE_VECTOR_MAGIC: Byte = 1
-  private val SPARSE_VECTOR_MAGIC: Byte = 2
-  private val DENSE_MATRIX_MAGIC: Byte = 3
-  private val LABELED_POINT_MAGIC: Byte = 4
 
   private[python] def reduce_object(out: OutputStream, pickler: Pickler,
                                     module: String, name: String, objects: Object*) = {
@@ -593,178 +588,6 @@ private[spark] object SerDe extends Serializable {
 
   def loads(bytes: Array[Byte]): AnyRef = {
     new Unpickler().loads(bytes)
-  }
-
-  private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
-    require(bytes.length - offset >= 5, "Byte array too short")
-    val magic = bytes(offset)
-    if (magic == DENSE_VECTOR_MAGIC) {
-      deserializeDenseVector(bytes, offset)
-    } else if (magic == SPARSE_VECTOR_MAGIC) {
-      deserializeSparseVector(bytes, offset)
-    } else {
-      throw new IllegalArgumentException("Magic " + magic + " is wrong.")
-    }
-  }
-
-  private[python] def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
-    require(bytes.length - offset == 8, "Wrong size byte array for Double")
-    val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
-    bb.order(ByteOrder.nativeOrder())
-    bb.getDouble
-  }
-
-  private[python] def deserializeDenseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
-    val packetLength = bytes.length - offset
-    require(packetLength >= 5, "Byte array too short")
-    val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
-    bb.order(ByteOrder.nativeOrder())
-    val magic = bb.get()
-    require(magic == DENSE_VECTOR_MAGIC, "Invalid magic: " + magic)
-    val length = bb.getInt()
-    require (packetLength == 5 + 8 * length, "Invalid packet length: " + packetLength)
-    val db = bb.asDoubleBuffer()
-    val ans = new Array[Double](length.toInt)
-    db.get(ans)
-    Vectors.dense(ans)
-  }
-
-  private[python] def deserializeSparseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
-    val packetLength = bytes.length - offset
-    require(packetLength >= 9, "Byte array too short")
-    val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
-    bb.order(ByteOrder.nativeOrder())
-    val magic = bb.get()
-    require(magic == SPARSE_VECTOR_MAGIC, "Invalid magic: " + magic)
-    val size = bb.getInt()
-    val nonZeros = bb.getInt()
-    require (packetLength == 9 + 12 * nonZeros, "Invalid packet length: " + packetLength)
-    val ib = bb.asIntBuffer()
-    val indices = new Array[Int](nonZeros)
-    ib.get(indices)
-    bb.position(bb.position() + 4 * nonZeros)
-    val db = bb.asDoubleBuffer()
-    val values = new Array[Double](nonZeros)
-    db.get(values)
-    Vectors.sparse(size, indices, values)
-  }
-
-  /**
-   * Returns an 8-byte array for the input Double.
-   *
-   * Note: we currently do not use a magic byte for double for storage efficiency.
-   * This should be reconsidered when we add Ser/De for other 8-byte types (e.g. Long), for safety.
-   * The corresponding deserializer, deserializeDouble, needs to be modified as well if the
-   * serialization scheme changes.
-   */
-  private[python] def serializeDouble(double: Double): Array[Byte] = {
-    val bytes = new Array[Byte](8)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.putDouble(double)
-    bytes
-  }
-
-  private[python] def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
-    val len = doubles.length
-    val bytes = new Array[Byte](5 + 8 * len)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.put(DENSE_VECTOR_MAGIC)
-    bb.putInt(len)
-    val db = bb.asDoubleBuffer()
-    db.put(doubles)
-    bytes
-  }
-
-  private[python] def serializeSparseVector(vector: SparseVector): Array[Byte] = {
-    val nonZeros = vector.indices.length
-    val bytes = new Array[Byte](9 + 12 * nonZeros)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.put(SPARSE_VECTOR_MAGIC)
-    bb.putInt(vector.size)
-    bb.putInt(nonZeros)
-    val ib = bb.asIntBuffer()
-    ib.put(vector.indices)
-    bb.position(bb.position() + 4 * nonZeros)
-    val db = bb.asDoubleBuffer()
-    db.put(vector.values)
-    bytes
-  }
-
-  private[python] def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
-    case s: SparseVector =>
-      serializeSparseVector(s)
-    case _ =>
-      serializeDenseVector(vector.toArray)
-  }
-
-  private[python] def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
-    val packetLength = bytes.length
-    if (packetLength < 9) {
-      throw new IllegalArgumentException("Byte array too short.")
-    }
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    val magic = bb.get()
-    if (magic != DENSE_MATRIX_MAGIC) {
-      throw new IllegalArgumentException("Magic " + magic + " is wrong.")
-    }
-    val rows = bb.getInt()
-    val cols = bb.getInt()
-    if (packetLength != 9 + 8 * rows * cols) {
-      throw new IllegalArgumentException("Size " + rows + "x" + cols + " is wrong.")
-    }
-    val db = bb.asDoubleBuffer()
-    val ans = new Array[Array[Double]](rows.toInt)
-    for (i <- 0 until rows.toInt) {
-      ans(i) = new Array[Double](cols.toInt)
-      db.get(ans(i))
-    }
-    ans
-  }
-
-  private[python] def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
-    val rows = doubles.length
-    var cols = 0
-    if (rows > 0) {
-      cols = doubles(0).length
-    }
-    val bytes = new Array[Byte](9 + 8 * rows * cols)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.put(DENSE_MATRIX_MAGIC)
-    bb.putInt(rows)
-    bb.putInt(cols)
-    val db = bb.asDoubleBuffer()
-    for (i <- 0 until rows) {
-      db.put(doubles(i))
-    }
-    bytes
-  }
-
-  private[python] def serializeLabeledPoint(p: LabeledPoint): Array[Byte] = {
-    val fb = serializeDoubleVector(p.features)
-    val bytes = new Array[Byte](1 + 8 + fb.length)
-    val bb = ByteBuffer.wrap(bytes)
-    bb.order(ByteOrder.nativeOrder())
-    bb.put(LABELED_POINT_MAGIC)
-    bb.putDouble(p.label)
-    bb.put(fb)
-    bytes
-  }
-
-  private[python] def deserializeLabeledPoint(bytes: Array[Byte]): LabeledPoint = {
-    require(bytes.length >= 9, "Byte array too short")
-    val magic = bytes(0)
-    if (magic != LABELED_POINT_MAGIC) {
-      throw new IllegalArgumentException("Magic " + magic + " is wrong.")
-    }
-    val labelBytes = ByteBuffer.wrap(bytes, 1, 8)
-    labelBytes.order(ByteOrder.nativeOrder())
-    val label = labelBytes.asDoubleBuffer().get(0)
-    LabeledPoint(label, deserializeDoubleVector(bytes, 9))
   }
 
   // Reformat a Matrix into Array[Array[Double]] for serialization

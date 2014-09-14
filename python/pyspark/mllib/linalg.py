@@ -29,9 +29,19 @@ import numpy as np
 __all__ = ['SparseVector', 'Vectors']
 
 
-def _convert_to_vector(l):
-    from pyspark.mllib._common import _have_scipy, _scipy_issparse
+# Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
+# such as _dot and _serialize_double_vector, start to support scipy.sparse matrices.
 
+try:
+    import scipy.sparse
+    _have_scipy = True
+    _scipy_issparse = scipy.sparse.issparse
+except:
+    # No SciPy in environment, but that's okay
+    _have_scipy = False
+
+
+def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
     elif type(l) in (array.array, np.array, np.ndarray, list):
