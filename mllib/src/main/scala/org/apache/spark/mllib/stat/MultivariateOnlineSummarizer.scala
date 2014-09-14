@@ -216,7 +216,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.fromBreeze(currMin)
   }
 
-  override def magnitude: Vector = {
+  override def normL2: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     val realMagnitude = BDV.zeros[Double](n)

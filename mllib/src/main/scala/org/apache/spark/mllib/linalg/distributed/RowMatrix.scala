@@ -445,7 +445,7 @@ class RowMatrix(
 
     val gamma = if (math.abs(threshold) < 1e-6) Double.PositiveInfinity else 100 * math.log(numCols()) / threshold
 
-    similarColumnsDIMSUM(computeColumnSummaryStatistics().magnitude.toArray, gamma)
+    similarColumnsDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
   }
 
   /**
