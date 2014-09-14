@@ -397,7 +397,8 @@ class RowMatrix(
    * Compute all cosine similarities between columns of this matrix using the brute-force
    * approach of computing normalized dot products.
    *
-   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between
+   *         columns of this matrix.
    */
   def columnSimilarities(): CoordinateMatrix = {
     similarColumns(0.0)
@@ -438,12 +439,17 @@ class RowMatrix(
    *
    * @param threshold Similarities above this threshold are probably computed correctly.
    *                  Set to 0 for deterministic guaranteed correctness.
-   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities
+   *         between columns of this matrix.
    */
   def similarColumns(threshold: Double): CoordinateMatrix = {
     require(threshold >= 0 && threshold <= 1, s"Threshold not in [0,1]: $threshold")
 
-    val gamma = if (math.abs(threshold) < 1e-6) Double.PositiveInfinity else 100 * math.log(numCols()) / threshold
+    val gamma = if (math.abs(threshold) < 1e-6) {
+      Double.PositiveInfinity
+    } else {
+      100 * math.log(numCols()) / threshold
+    }
 
     similarColumnsDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
   }
@@ -458,9 +464,11 @@ class RowMatrix(
    * @param gamma The oversampling parameter. For provable results, set to 100 * log(n) / s,
    *              where s is the smallest similarity score to be estimated,
    *              and n is the number of columns
-   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities
+   *         between columns of this matrix.
    */
-  private[mllib] def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double): CoordinateMatrix = {
+  private[mllib] def similarColumnsDIMSUM(colMags: Array[Double],
+                                          gamma: Double): CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
     require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
 
