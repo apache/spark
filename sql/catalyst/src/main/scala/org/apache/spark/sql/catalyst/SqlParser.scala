@@ -152,7 +152,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
-    | insert | cache | addCache
+    | insert | cache | unCache
   )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -182,17 +182,19 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
         InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
     }
-    
-  protected lazy val addCache: Parser[LogicalPlan] =
-    ADD ~ CACHE ~ TABLE ~> ident ~ AS ~ select <~ opt(";") ^^ {
-     case tableName ~ as ~ s =>
-       CacheTableAsSelectCommand(tableName,s)
-    }        
 
   protected lazy val cache: Parser[LogicalPlan] =
-    (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {
-      case doCache ~ _ ~ tableName => CacheCommand(tableName, doCache)
+    CACHE ~ TABLE ~> ident ~ opt(AS) ~ opt(select) <~ opt(";") ^^ {
+      case tableName ~ None ~ None => 
+        CacheCommand(tableName, true)
+      case tableName ~ as ~ Some(plan) => 
+        CacheTableAsSelectCommand(tableName,plan)
     }
+    
+  protected lazy val unCache: Parser[LogicalPlan] =
+    UNCACHE ~ TABLE ~> ident <~ opt(";") ^^ {
+      case tableName => CacheCommand(tableName, false)
+    }    
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 

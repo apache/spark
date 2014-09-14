@@ -120,18 +120,14 @@ class CachedTableSuite extends QueryTest {
     assert(!TestSQLContext.isCached("testData"), "Table 'testData' should not be cached")
   }
   
-  test("ADD CACHE TABLE tableName AS SELECT Star Table") {
-    TestSQLContext.sql("ADD CACHE TABLE testCacheTable AS SELECT * FROM testData")
+  test("CACHE TABLE tableName AS SELECT Star Table") {
+    TestSQLContext.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
     TestSQLContext.sql("SELECT * FROM testCacheTable WHERE key = 1").collect()
     TestSQLContext.uncacheTable("testCacheTable")
   }
   
-  test("'ADD CACHE TABLE tableName AS SELECT ..'") {
-    TestSQLContext.sql("ADD CACHE TABLE testCacheTable AS SELECT * FROM testData")
-    TestSQLContext.table("testCacheTable").queryExecution.executedPlan match {
-      case _: InMemoryColumnarTableScan => // Found evidence of caching
-      case _ => fail(s"Table 'testCacheTable' should be cached")
-    }
+  test("'CACHE TABLE tableName AS SELECT ..'") {
+    TestSQLContext.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
     assert(TestSQLContext.isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
     TestSQLContext.uncacheTable("testCacheTable")
   }
