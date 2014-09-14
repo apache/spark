@@ -83,7 +83,7 @@ class DenseVector(Vector):
         return len(self.array)
 
     def __str__(self):
-        return str(self.array)
+        return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
         return "DenseVector(%r)" % self.array
@@ -336,7 +336,7 @@ class Vectors(object):
         >>> Vectors.stringify(Vectors.sparse(2, [1], [1.0]))
         '(2,[1],[1.0])'
         >>> Vectors.stringify(Vectors.dense([0.0, 1.0]))
-        "array('d', [0.0, 1.0])"
+        '[0.0,1.0]'
         """
         return str(vector)
 
