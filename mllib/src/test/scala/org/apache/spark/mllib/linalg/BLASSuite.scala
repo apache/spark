@@ -143,12 +143,21 @@ class BLASSuite extends FunSuite {
     val C2 = C1.copy
     val C3 = C1.copy
     val C4 = C1.copy
+    val C5 = C1.copy
+    val C6 = C1.copy
+    val C7 = C1.copy
+    val C8 = C1.copy
     val expected2 = new DenseMatrix(4, 2, Array(2.0, 1.0, 4.0, 2.0, 4.0, 0.0, 4.0, 3.0))
+    val expected3 = new DenseMatrix(4, 2, Array(2.0, 2.0, 4.0, 2.0, 8.0, 0.0, 6.0, 6.0))
 
     gemm(1.0, dA, B, 2.0, C1)
     gemm(1.0, sA, B, 2.0, C2)
+    gemm(2.0, dA, B, 2.0, C3)
+    gemm(2.0, sA, B, 2.0, C4)
     assert(C1 ~== expected2 absTol 1e-15)
     assert(C2 ~== expected2 absTol 1e-15)
+    assert(C3 ~== expected3 absTol 1e-15)
+    assert(C4 ~== expected3 absTol 1e-15)
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
@@ -164,10 +173,14 @@ class BLASSuite extends FunSuite {
     assert(dAT transposeTimes B ~== expected absTol 1e-15)
     assert(sAT transposeTimes B ~== expected absTol 1e-15)
 
-    gemm(true, false, 1.0, dAT, B, 2.0, C3)
-    gemm(true, false, 1.0, sAT, B, 2.0, C4)
-    assert(C3 ~== expected2 absTol 1e-15)
-    assert(C4 ~== expected2 absTol 1e-15)
+    gemm(true, false, 1.0, dAT, B, 2.0, C5)
+    gemm(true, false, 1.0, sAT, B, 2.0, C6)
+    gemm(true, false, 2.0, dAT, B, 2.0, C7)
+    gemm(true, false, 2.0, sAT, B, 2.0, C8)
+    assert(C5 ~== expected2 absTol 1e-15)
+    assert(C6 ~== expected2 absTol 1e-15)
+    assert(C7 ~== expected3 absTol 1e-15)
+    assert(C8 ~== expected3 absTol 1e-15)
 
   }
 
@@ -187,13 +200,21 @@ class BLASSuite extends FunSuite {
     val y2 = y1.copy
     val y3 = y1.copy
     val y4 = y1.copy
+    val y5 = y1.copy
+    val y6 = y1.copy
+    val y7 = y1.copy
+    val y8 = y1.copy
     val expected2 = new DenseVector(Array(6.0, 7.0, 4.0, 9.0))
+    val expected3 = new DenseVector(Array(10.0, 8.0, 6.0, 18.0))
 
     gemv(1.0, dA, x, 2.0, y1)
     gemv(1.0, sA, x, 2.0, y2)
+    gemv(2.0, dA, x, 2.0, y3)
+    gemv(2.0, sA, x, 2.0, y4)
     assert(y1 ~== expected2 absTol 1e-15)
     assert(y2 ~== expected2 absTol 1e-15)
-
+    assert(y3 ~== expected3 absTol 1e-15)
+    assert(y4 ~== expected3 absTol 1e-15)
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
         gemv(true, 1.0, dA, x, 2.0, y1)
@@ -208,9 +229,13 @@ class BLASSuite extends FunSuite {
     assert(dAT transposeTimes x ~== expected absTol 1e-15)
     assert(sAT transposeTimes x ~== expected absTol 1e-15)
 
-    gemv(true, 1.0, dAT, x, 2.0, y3)
-    gemv(true, 1.0, sAT, x, 2.0, y4)
-    assert(y3 ~== expected2 absTol 1e-15)
-    assert(y4 ~== expected2 absTol 1e-15)
+    gemv(true, 1.0, dAT, x, 2.0, y5)
+    gemv(true, 1.0, sAT, x, 2.0, y6)
+    gemv(true, 2.0, dAT, x, 2.0, y7)
+    gemv(true, 2.0, sAT, x, 2.0, y8)
+    assert(y5 ~== expected2 absTol 1e-15)
+    assert(y6 ~== expected2 absTol 1e-15)
+    assert(y7 ~== expected3 absTol 1e-15)
+    assert(y8 ~== expected3 absTol 1e-15)
   }
 }
