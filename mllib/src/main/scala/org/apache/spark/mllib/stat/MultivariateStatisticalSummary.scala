@@ -58,4 +58,9 @@ trait MultivariateStatisticalSummary {
    * Euclidean magnitude of each column
    */
   def magnitude: Vector
+
+  /**
+   * L1 norm of each column
+   */
+  def normL1: Vector
 }

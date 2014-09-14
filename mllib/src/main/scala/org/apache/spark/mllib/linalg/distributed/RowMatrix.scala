@@ -394,39 +394,73 @@ class RowMatrix(
   }
 
   /**
-   * Find all similar columns using cosine similarity.
+   * Compute all similarities between columns of this matrix using the brute-force
+   * approach of computing normalized dot products.
    *
-   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumns(): CoordinateMatrix = {
-    similarColumns(Double.PositiveInfinity)
+  def columnSimilarities(): CoordinateMatrix = {
+    similarColumns(0.0)
   }
 
   /**
-   * Find all similar columns using the DIMSUM sampling algorithm, described in
-   * http://arxiv.org/abs/1304.1467
+   * Compute all similarities between columns of this matrix using a sampling approach.
    *
-   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s,
-   *              where s is the smallest similarity score to be estimated,
-   *              and n is the number of columns
-   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   * The threshold parameter is a trade-off knob between correctness and computational cost.
+   *
+   * Setting a threshold of 0 guarantees deterministic correct results, but comes at exactly
+   * the same cost as the brute-force approach. Setting the threshold to positive values
+   * incurs strictly less computational cost than the brute-force aproach, however the
+   * similarities computed will be estimates.
+   *
+   * The sampling guarantees correctness for those pairs of columns that have
+   * similarity greater than the given similarity threshold.
+   *
+   * To describe the guarantee, we set some notation:
+   * Let A be the smallest in magnitude non-zero element of this matrix.
+   * Let B be the largest  in magnitude non-zero element of this matrix.
+   * Let L be the number of non-zeros per row.
+   *
+   * For example, for {0,1} matrices: A=B=1.
+   * Another example, for the Netflix matrix: A=1, B=5
+   *
+   * For those column pairs that are above the threshold,
+   * the computed similarity is correct to within 20% relative error with probability
+   * at least 1 - (0.981)^(100/B)
+   *
+   * The shuffle size is bounded by the *smaller* of the following two expressions:
+   *
+   * O(n log(n) L / (threshold * A))
+   * O(m L^2)
+   *
+   * The latter is the cost of the brute-force approach, so for non-zero thresholds,
+   * the cost is always cheaper than the brute-force approach.
+   *
+   * @param threshold Similarities above this threshold are probably computed correctly.
+   *                  Set to 0 for deterministic guaranteed correctness.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumns(gamma: Double): CoordinateMatrix = {
-    val colMags = computeColumnSummaryStatistics().magnitude.toArray
-    similarColumnsDIMSUM(colMags, gamma)
+  def similarColumns(threshold: Double): CoordinateMatrix = {
+    require(threshold >= 0 && threshold <= 1, s"Threshold not in [0,1]: $threshold")
+
+    val gamma = if (math.abs(threshold) < 1e-6) Double.PositiveInfinity else 100 * math.log(numCols()) / threshold
+
+    similarColumnsDIMSUM(computeColumnSummaryStatistics().magnitude.toArray, gamma)
   }
 
   /**
-   * Find all similar columns using the DIMSUM sampling algorithm, described in
+   * Find all similar columns using the DIMSUM sampling algorithm, described in two papers
+   *
+   * http://arxiv.org/abs/1206.2082
    * http://arxiv.org/abs/1304.1467
    *
    * @param colMags A vector of column magnitudes
-   * @param gamma The oversampling parameter. For provable results, set to 4 * log(n) / s,
+   * @param gamma The oversampling parameter. For provable results, set to 100 * log(n) / s,
    *              where s is the smallest similarity score to be estimated,
    *              and n is the number of columns
-   * @return An n x n sparse matrix of cosine similarities between columns of this matrix.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
    */
-  def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double): CoordinateMatrix = {
+  private[mllib] def similarColumnsDIMSUM(colMags: Array[Double], gamma: Double): CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
     require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
 
@@ -437,13 +471,15 @@ class RowMatrix(
       row.toBreeze.activeIterator.foreach {
         case (_, 0.0) => // Skip explicit zero elements.
         case (i, iVal) =>
-          if (Math.random < sg / colMags(i)) {
+          val rand = new scala.util.Random(iVal.toLong)
+          val ci = colMags(i)
+          if (rand.nextDouble < sg / ci) {
             row.toBreeze.activeIterator.foreach {
               case (_, 0.0) => // Skip explicit zero elements.
               case (j, jVal) =>
-                if (Math.random < sg / colMags(j)) {
-                  val contrib = ((i, j), (iVal * jVal) /
-                    (math.min(sg, colMags(i)) * math.min(sg, colMags(j))))
+                val cj = colMags(j)
+                if (i < j && rand.nextDouble < sg / cj) {
+                  val contrib = ((i, j), (iVal * jVal) / (math.min(sg, ci) * math.min(sg, cj)))
                   buf += contrib
                 }
             }

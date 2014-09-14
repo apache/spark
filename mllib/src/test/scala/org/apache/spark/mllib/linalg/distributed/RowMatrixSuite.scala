@@ -98,21 +98,28 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
   test("similar columns") {
     val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
     val expected = BDM(
-      (126.0, 54.0, 72.0),
-      (54.0, 66.0, 78.0),
-      (72.0, 78.0, 94.0))
+      (0.0, 54.0, 72.0),
+      (0.0, 0.0, 78.0),
+      (0.0, 0.0, 0.0))
 
     for(i <- 0 until n) for(j <- 0 until n) {
       expected(i, j) /= (colMags(i) * colMags(j))
     }
 
     for (mat <- Seq(denseMat, sparseMat)) {
-      val G = mat.similarColumnsDIMSUM(150.0)
-      assert(closeToZero(G.toBreeze() - expected))
+      val G = mat.similarColumns(0.1).toBreeze()
+      for(i <- 0 until n) for(j <- 0 until n) {
+        if (expected(i, j) > 0) {
+          val actual = expected(i, j)
+          val estimate = G(i, j)
+          assert(math.abs(actual - estimate) / actual < 0.1,
+            s"Similarities not close enough: $actual vs $estimate")
+        }
+      }
     }
 
     for (mat <- Seq(denseMat, sparseMat)) {
-      val G = mat.similarColumns()
+      val G = mat.columnSimilarities()
       assert(closeToZero(G.toBreeze() - expected))
     }
 
@@ -219,6 +226,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
         assert(summary.magnitude === Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94)),
           "magnitude mismatch.")
+        assert(summary.normL1 === Vectors.dense(18.0, 12.0, 16.0), "L1 norm mismatch")
       }
     }
   }
