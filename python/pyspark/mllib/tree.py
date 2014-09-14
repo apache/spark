@@ -18,13 +18,9 @@
 from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
-from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, _serialize_double_vector, \
-    _deserialize_labeled_point, _get_unmangled_labeled_point_rdd, \
-    _deserialize_double
+from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.mllib.linalg import Vector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.serializers import NoOpSerializer
-
 
 __all__ = ['DecisionTreeModel', 'DecisionTree']
 
@@ -55,21 +51,25 @@ class DecisionTreeModel(object):
         :param x:  Data point (feature vector),
                    or an RDD of data points (feature vectors).
         """
-        pythonAPI = self._sc._jvm.PythonMLLibAPI()
+        SerDe = self._sc._jvm.SerDe
+        ser = PickleSerializer()
         if isinstance(x, RDD):
             # Bulk prediction
-            if x.count() == 0:
+            first = x.take(1)
+            if not first:
                 return self._sc.parallelize([])
-            dataBytes = _get_unmangled_double_vector_rdd(x, cache=False)
-            jSerializedPreds = \
-                pythonAPI.predictDecisionTreeModel(self._java_model,
-                                                   dataBytes._jrdd)
-            serializedPreds = RDD(jSerializedPreds, self._sc, NoOpSerializer())
-            return serializedPreds.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+            if not isinstance(first[0], Vector):
+                x = x.map(_convert_to_vector)
+            jvrdd = SerDe.asVectorRDD(x._to_java_object_rdd())
+            jPred = self._java_model.predict(jvrdd).toJavaRDD()
+            jpyrdd = self._sc._jvm.PythonRDD.javaToPython(jPred)
+            return RDD(jpyrdd, self._sc, BatchedSerializer(PickleSerializer(), 1024))
+
         else:
             # Assume x is a single data point.
-            x_ = _serialize_double_vector(x)
-            return pythonAPI.predictDecisionTreeModel(self._java_model, x_)
+            bytes = bytearray(ser.dumps(_convert_to_vector(x)))
+            vec = SerDe.asVector(self._sc._jvm.SerDe.loads(bytes))
+            return self._java_model.predict(vec)
 
     def numNodes(self):
         return self._java_model.numNodes()
@@ -77,7 +77,7 @@ class DecisionTreeModel(object):
     def depth(self):
         return self._java_model.depth()
 
-    def __str__(self):
+    def __repr__(self):
         return self._java_model.toString()
 
 
@@ -93,7 +93,6 @@ class DecisionTree(object):
     Example usage:
 
     >>> from numpy import array
-    >>> import sys
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> from pyspark.mllib.tree import DecisionTree
     >>> from pyspark.mllib.linalg import SparseVector
@@ -107,7 +106,7 @@ class DecisionTree(object):
     >>> categoricalFeaturesInfo = {} # no categorical features
     >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2,
     ...                                      categoricalFeaturesInfo=categoricalFeaturesInfo)
-    >>> sys.stdout.write(model)
+    >>> print model,  # it already has newline
     DecisionTreeModel classifier
       If (feature 0 <= 0.5)
        Predict: 0.0
@@ -156,16 +155,16 @@ class DecisionTree(object):
         :param maxBins: Number of bins used for finding splits at each node.
         :return: DecisionTreeModel
         """
+        first = data.first()
+        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeleddPoint"
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
-        categoricalFeaturesInfoJMap = \
-            MapConverter().convert(categoricalFeaturesInfo,
-                                   sc._gateway._gateway_client)
+        jrdd = data._to_java_object_rdd().cache()
+        cfiMap = MapConverter().convert(categoricalFeaturesInfo,
+                                        sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
-            dataBytes._jrdd, "classification",
-            numClasses, categoricalFeaturesInfoJMap,
+            jrdd, "classification", numClasses, cfiMap,
             impurity, maxDepth, maxBins)
-        dataBytes.unpersist()
+        jrdd.unpersist()
         return DecisionTreeModel(sc, model)
 
     @staticmethod
@@ -187,16 +186,15 @@ class DecisionTree(object):
         :param maxBins: Number of bins used for finding splits at each node.
         :return: DecisionTreeModel
         """
+        first = data.first()
+        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeleddPoint"
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
-        categoricalFeaturesInfoJMap = \
-            MapConverter().convert(categoricalFeaturesInfo,
-                                   sc._gateway._gateway_client)
+        jrdd = data._to_java_object_rdd().cache()
+        cfiMap = MapConverter().convert(categoricalFeaturesInfo,
+                                        sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
-            dataBytes._jrdd, "regression",
-            0, categoricalFeaturesInfoJMap,
-            impurity, maxDepth, maxBins)
-        dataBytes.unpersist()
+            jrdd, "regression", 0, cfiMap, impurity, maxDepth, maxBins)
+        jrdd.unpersist()
         return DecisionTreeModel(sc, model)
 
 

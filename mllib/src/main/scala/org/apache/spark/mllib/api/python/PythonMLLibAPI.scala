@@ -236,9 +236,9 @@ class PythonMLLibAPI extends Serializable {
     val data = dataBytesJRDD.rdd.map(SerDe.deserializeLabeledPoint)
     val model = NaiveBayes.train(data, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(SerDe.serializeDoubleVector(Vectors.dense(model.labels)))
-    ret.add(SerDe.serializeDoubleVector(Vectors.dense(model.pi)))
-    ret.add(SerDe.serializeDoubleMatrix(model.theta))
+    ret.add(Vectors.dense(model.labels))
+    ret.add(Vectors.dense(model.pi))
+    ret.add(model.theta)
     ret
   }
 
@@ -293,11 +293,11 @@ class PythonMLLibAPI extends Serializable {
    * This stub returns a handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
    * see the Py4J documentation.
-   * @param dataBytesJRDD  Training data
+   * @param dataJRDD  Training data
    * @param categoricalFeaturesInfoJMap  Categorical features info, as Java map
    */
   def trainDecisionTreeModel(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       algoStr: String,
       numClasses: Int,
       categoricalFeaturesInfoJMap: java.util.Map[Int, Int],
@@ -305,8 +305,7 @@ class PythonMLLibAPI extends Serializable {
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
 
-    val data = dataBytesJRDD.rdd.map(SerDe.deserializeLabeledPoint)
-
+    val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
 
@@ -322,20 +321,6 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Predict the label of the given data point.
-   * This is a Java stub for python DecisionTreeModel.predict()
-   *
-   * @param featuresBytes Serialized feature vector for data point
-   * @return predicted label
-   */
-  def predictDecisionTreeModel(
-      model: DecisionTreeModel,
-      featuresBytes: Array[Byte]): Double = {
-    val features: Vector = SerDe.deserializeDoubleVector(featuresBytes)
-    model.predict(features)
-  }
-
-  /**
    * Predict the labels of the given data points.
    * This is a Java stub for python DecisionTreeModel.predict()
    *
@@ -344,9 +329,9 @@ class PythonMLLibAPI extends Serializable {
    */
   def predictDecisionTreeModel(
       model: DecisionTreeModel,
-      dataJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    val data = dataJRDD.rdd.map(xBytes => SerDe.deserializeDoubleVector(xBytes))
-    model.predict(data).map(SerDe.serializeDouble)
+      dataJRDD: JavaRDD[Any]): JavaRDD[Double] = {
+    val data = dataJRDD.rdd.map(_.asInstanceOf[Vector])
+    model.predict(data)
   }
 
   /**
@@ -788,8 +773,20 @@ private[spark] object SerDe extends Serializable {
     Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
   }
 
+  def asVector(vec: Any): Vector = {
+    vec.asInstanceOf[Vector]
+  }
+
   /* convert object into Tuple */
-  def asTupleRDD(rdd: RDD[Array[Object]]): RDD[(Int, Int)] = {
+  def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
+  }
+
+  def asDoubleRDD(rdd: JavaRDD[Any]): JavaRDD[Double] = {
+    rdd.rdd.map(_.asInstanceOf[Double])
+  }
+
+  def asVectorRDD(rdd: JavaRDD[Any]): JavaRDD[Vector] = {
+    rdd.rdd.map(_.asInstanceOf[Vector])
   }
 }
