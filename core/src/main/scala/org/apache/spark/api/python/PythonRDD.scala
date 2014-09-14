@@ -124,6 +124,10 @@ private[spark] class PythonRDD(
               val total = finishTime - startTime
               logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
                 init, finish))
+              val memoryBytesSpilled = stream.readLong()
+              val diskBytesSpilled = stream.readLong()
+              context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
+              context.taskMetrics.diskBytesSpilled += diskBytesSpilled
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
