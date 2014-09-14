@@ -78,6 +78,11 @@ def _get_local_dirs(sub):
     return [os.path.join(d, "python", str(os.getpid()), sub) for d in dirs]
 
 
+# global stats
+MemoryBytesSpilled = 0L
+DiskBytesSpilled = 0L
+
+
 class Aggregator(object):
 
     """
@@ -318,10 +323,12 @@ class ExternalMerger(Merger):
 
         It will dump the data in batch for better performance.
         """
+        global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
 
+        used_memory = get_used_memory()
         if not self.pdata:
             # The data has not been partitioned, it will iterator the
             # dataset once, write them into different files, has no
@@ -339,6 +346,7 @@ class ExternalMerger(Merger):
                 self.serializer.dump_stream([(k, v)], streams[h])
 
             for s in streams:
+                DiskBytesSpilled += s.tell()
                 s.close()
 
             self.data.clear()
@@ -351,9 +359,11 @@ class ExternalMerger(Merger):
                     # dump items in batch
                     self.serializer.dump_stream(self.pdata[i].iteritems(), f)
                 self.pdata[i].clear()
+                DiskBytesSpilled += os.path.getsize(p)
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
+        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
 
     def iteritems(self):
         """ Return all merged items as iterator """
@@ -454,7 +464,6 @@ class ExternalSorter(object):
         self.local_dirs = _get_local_dirs("sort")
         self.serializer = serializer or BatchedSerializer(
             CompressedSerializer(PickleSerializer()), 1024)
-        self._spilled_bytes = 0
 
     def _get_path(self, n):
         """ Choose one directory for spill by number n """
@@ -468,6 +477,7 @@ class ExternalSorter(object):
         Sort the elements in iterator, do external sort when the memory
         goes above the limit.
         """
+        global MemoryBytesSpilled, DiskBytesSpilled
         batch = 10
         chunks, current_chunk = [], []
         iterator = iter(iterator)
@@ -478,17 +488,19 @@ class ExternalSorter(object):
             if len(chunk) < batch:
                 break
 
-            if get_used_memory() > self.memory_limit:
+            used_memory = get_used_memory()
+            if used_memory > self.memory_limit:
                 # sort them inplace will save memory
                 current_chunk.sort(key=key, reverse=reverse)
                 path = self._get_path(len(chunks))
                 with open(path, 'w') as f:
                     self.serializer.dump_stream(current_chunk, f)
-                self._spilled_bytes += os.path.getsize(path)
                 chunks.append(self.serializer.load_stream(open(path)))
                 os.unlink(path)  # data will be deleted after close
                 current_chunk = []
                 gc.collect()
+                MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+                DiskBytesSpilled += os.path.getsize(path)
 
             elif not chunks:
                 batch = min(batch * 2, 10000)
@@ -569,6 +581,7 @@ class SameKey(object):
 
     def _spill(self):
         """ dump the values into disk """
+        global MemoryBytesSpilled, DiskBytesSpilled
         if self._file is None:
             dirs = _get_local_dirs("objects")
             d = dirs[id(self) % len(dirs)]
@@ -578,9 +591,13 @@ class SameKey(object):
             self._file = open(p, "w+", 65536)
             self._ser = CompressedSerializer(PickleSerializer())
 
+        used_memory = get_used_memory()
+        pos = self._file.tell()
         self._ser.dump_stream([self.values], self._file)
+        DiskBytesSpilled += self._file.tell() - pos
         self.values = []
         gc.collect()
+        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
 
 
 class GroupByKey(object):
@@ -641,10 +658,12 @@ class ExternalGroupBy(ExternalMerger):
         """
         dump already partitioned data into disks.
         """
+        global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
 
+        used_memory = get_used_memory()
         if not self.pdata:
             # The data has not been partitioned, it will iterator the
             # data once, write them into different files, has no
@@ -669,6 +688,7 @@ class ExternalGroupBy(ExternalMerger):
                     self.serializer.dump_stream([(k, v)], streams[h])
 
             for s in streams:
+                DiskBytesSpilled += s.tell()
                 s.close()
 
             self.data.clear()
@@ -687,9 +707,11 @@ class ExternalGroupBy(ExternalMerger):
                     else:
                         self.serializer.dump_stream(self.pdata[i].iteritems(), f)
                 self.pdata[i].clear()
+                DiskBytesSpilled += os.path.getsize(p)
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
+        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
 
     def _merged_items(self, index, limit=0):
         size = sum(os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
