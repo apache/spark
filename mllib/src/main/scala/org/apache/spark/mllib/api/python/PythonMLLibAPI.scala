@@ -63,18 +63,18 @@ class PythonMLLibAPI extends Serializable {
   def loadLabeledPoints(
       jsc: JavaSparkContext,
       path: String,
-      minPartitions: Int): JavaRDD[Array[Byte]] =
-    MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions).map(SerDe.serializeLabeledPoint)
+      minPartitions: Int): JavaRDD[LabeledPoint] =
+    MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
   private def trainRegressionModel(
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(SerDe.deserializeLabeledPoint)
-    val initialWeights = SerDe.deserializeDoubleVector(initialWeightsBA)
+    val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
+    val initialWeights = SerDe.loads(initialWeightsBA).asInstanceOf[Vector]
     val model = trainFunc(data, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(SerDe.serializeDoubleVector(model.weights))
+    ret.add(SerDe.dumps(model.weights))
     ret.add(model.intercept: java.lang.Double)
     ret
   }
@@ -83,7 +83,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LinearRegressionWithSGD.train()
    */
   def trainLinearRegressionModelWithSGD(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -109,7 +109,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         lrAlg.run(data, initialWeights),
-      dataBytesJRDD,
+      dataJRDD,
       initialWeightsBA)
   }
 
@@ -117,7 +117,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LassoWithSGD.train()
    */
   def trainLassoModelWithSGD(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -132,7 +132,7 @@ class PythonMLLibAPI extends Serializable {
           regParam,
           miniBatchFraction,
           initialWeights),
-      dataBytesJRDD,
+      dataJRDD,
       initialWeightsBA)
   }
 
@@ -140,7 +140,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib RidgeRegressionWithSGD.train()
    */
   def trainRidgeModelWithSGD(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -155,7 +155,7 @@ class PythonMLLibAPI extends Serializable {
           regParam,
           miniBatchFraction,
           initialWeights),
-      dataBytesJRDD,
+      dataJRDD,
       initialWeightsBA)
   }
 
@@ -163,7 +163,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib SVMWithSGD.train()
    */
   def trainSVMModelWithSGD(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -189,7 +189,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         SVMAlg.run(data, initialWeights),
-      dataBytesJRDD,
+      dataJRDD,
       initialWeightsBA)
   }
 
@@ -197,7 +197,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LogisticRegressionWithSGD.train()
    */
   def trainLogisticRegressionModelWithSGD(
-      dataBytesJRDD: JavaRDD[Array[Byte]],
+      dataJRDD: JavaRDD[Any],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -223,7 +223,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         LogRegAlg.run(data, initialWeights),
-      dataBytesJRDD,
+      dataJRDD,
       initialWeightsBA)
   }
 
