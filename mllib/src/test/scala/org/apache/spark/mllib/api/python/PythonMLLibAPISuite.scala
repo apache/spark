@@ -42,22 +42,6 @@ class PythonMLLibAPISuite extends FunSuite {
     }
   }
 
-  test("vector serialization") {
-    val vectors = Seq(
-      Vectors.dense(Array.empty[Double]),
-      Vectors.dense(0.0),
-      Vectors.dense(0.0, -2.0),
-      Vectors.sparse(0, Array.empty[Int], Array.empty[Double]),
-      Vectors.sparse(1, Array.empty[Int], Array.empty[Double]),
-      Vectors.sparse(2, Array(1), Array(-2.0)))
-    vectors.foreach { v =>
-      val bytes = SerDe.serializeDoubleVector(v)
-      val u = SerDe.deserializeDoubleVector(bytes)
-      assert(u.getClass === v.getClass)
-      assert(u === v)
-    }
-  }
-
   test("pickle labeled point") {
     val points = Seq(
       LabeledPoint(0.0, Vectors.dense(Array.empty[Double])),
@@ -74,35 +58,9 @@ class PythonMLLibAPISuite extends FunSuite {
     }
   }
 
-  test("labeled point serialization") {
-    val points = Seq(
-      LabeledPoint(0.0, Vectors.dense(Array.empty[Double])),
-      LabeledPoint(1.0, Vectors.dense(0.0)),
-      LabeledPoint(-0.5, Vectors.dense(0.0, -2.0)),
-      LabeledPoint(0.0, Vectors.sparse(0, Array.empty[Int], Array.empty[Double])),
-      LabeledPoint(1.0, Vectors.sparse(1, Array.empty[Int], Array.empty[Double])),
-      LabeledPoint(-0.5, Vectors.sparse(2, Array(1), Array(-2.0))))
-    points.foreach { p =>
-      val bytes = SerDe.serializeLabeledPoint(p)
-      val q = SerDe.deserializeLabeledPoint(bytes)
-      assert(q.label === p.label)
-      assert(q.features.getClass === p.features.getClass)
-      assert(q.features === p.features)
-    }
-  }
-
   test("pickle double") {
     for (x <- List(123.0, -10.0, 0.0, Double.MaxValue, Double.MinValue, Double.NaN)) {
       val deser = SerDe.loads(SerDe.dumps(x.asInstanceOf[AnyRef])).asInstanceOf[Double]
-      // We use `equals` here for comparison because we cannot use `==` for NaN
-      assert(x.equals(deser))
-    }
-  }
-
-  test("double serialization") {
-    for (x <- List(123.0, -10.0, 0.0, Double.MaxValue, Double.MinValue, Double.NaN)) {
-      val bytes = SerDe.serializeDouble(x)
-      val deser = SerDe.deserializeDouble(bytes)
       // We use `equals` here for comparison because we cannot use `==` for NaN
       assert(x.equals(deser))
     }
