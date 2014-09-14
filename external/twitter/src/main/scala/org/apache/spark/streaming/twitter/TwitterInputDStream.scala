@@ -28,6 +28,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.Receiver
 
+/** Bounding box to filter tweets by location. Units are degrees. */
+case class BoundingBox(west: Double, south: Double, east: Double, north: Double)
+
 /* A stream of Twitter statuses, potentially filtered by one or more keywords and locations.
 *
 * @constructor create a new Twitter stream using the supplied Twitter4J authentication credentials.
@@ -44,7 +47,7 @@ class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
     filters: Seq[String],
-    locations: Seq[Seq[Double]],
+    locations: Seq[BoundingBox],
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
@@ -63,7 +66,7 @@ private[streaming]
 class TwitterReceiver(
     twitterAuth: Authorization,
     filters: Seq[String],
-    locations: Seq[Seq[Double]],
+    locations: Seq[BoundingBox],
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
 
@@ -95,7 +98,8 @@ class TwitterReceiver(
           query.track(filters.toArray)
         }
         if (locations.size > 0) {
-          query.locations(locations.map(_.toArray).toArray)
+          query.locations(locations.flatMap(box => 
+            Seq(Array(box.west, box.south), Array(box.east, box.north))).toArray)
         }
         newTwitterStream.filter(query)
       } else {

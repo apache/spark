@@ -33,17 +33,16 @@ object TwitterUtils {
    *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    *        twitter4j.oauth.accessTokenSecret
    * @param filters Set of filter strings to get only those tweets that match them
-   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
-            bounding box defined by those points. Example: Seq(Seq(-180.0,-90.0),Seq(180.0,90.0))
-            gives any geotagged tweet. If locations and filters are both nonempty, then any tweet
-            matching either condition may be returned.
+   * @param locations   Bounding boxes to get only geotagged tweets within them. Example: 
+            Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. If locations and
+            filters are both nonempty, then any tweet matching either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       ssc: StreamingContext,
       twitterAuth: Option[Authorization],
       filters: Seq[String] = Nil,
-      locations: Seq[Seq[Double]] = Nil,
+      locations: Seq[BoundingBox] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, filters, locations, storageLevel)
@@ -119,18 +118,16 @@ object TwitterUtils {
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param filters   Set of filter strings to get only those tweets that match them
-   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
-            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
-            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
-            either condition may be returned.
+   * @param locations Bounding boxes to get only geotagged tweets within them. Example: 
+            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
+            filters are both nonempty, then any tweet matching either condition may be returned.
    */
   def createStream(
       jssc: JavaStreamingContext,
       filters: Array[String],
-      locations: Array[Array[Double]]
+      locations: Array[BoundingBox]
     ): JavaReceiverInputDStream[Status] = {
-    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
-    createStream(jssc.ssc, None, filters, locations.map(_.toList))
+    createStream(jssc.ssc, None, filters, locations)
   }
 
   /**
@@ -140,20 +137,18 @@ object TwitterUtils {
    * twitter4j.oauth.accessTokenSecret.
    * @param jssc         JavaStreamingContext object
    * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
-            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
-            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
-            either condition may be returned.
+   * @param locations    Bounding boxes to get only geotagged tweets within them. Example: 
+            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
+            filters are both nonempty, then any tweet matching either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
       filters: Array[String],
-      locations: Array[Array[Double]],
+      locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
-    createStream(jssc.ssc, None, filters, locations.map(_.toList), storageLevel)
+    createStream(jssc.ssc, None, filters, locations, storageLevel)
   }
 
   /**
@@ -204,19 +199,17 @@ object TwitterUtils {
    * @param jssc        JavaStreamingContext object
    * @param twitterAuth Twitter4J Authorization
    * @param filters     Set of filter strings to get only those tweets that match them
-   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
-            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
-            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
-            either condition may be returned.
+   * @param locations   Bounding boxes to get only geotagged tweets within them. Example: 
+            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
+            filters are both nonempty, then any tweet matching either condition may be returned.
    */
   def createStream(
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
       filters: Array[String],
-      locations: Array[Array[Double]]
+      locations: Array[BoundingBox]
     ): JavaReceiverInputDStream[Status] = {
-    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
-    createStream(jssc.ssc, Some(twitterAuth), filters, locations.map(_.toList))
+    createStream(jssc.ssc, Some(twitterAuth), filters, locations)
   }
 
   /**
@@ -224,20 +217,18 @@ object TwitterUtils {
    * @param jssc         JavaStreamingContext object
    * @param twitterAuth  Twitter4J Authorization object
    * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations Set of longitude and latitude coordinates to get only those tweets within the
-            bounding box defined by those points. Example: {{-180.0,-90.0},{180.0,90.0}} gives any
-            geotagged tweet. If locations and filters are both nonempty, then any tweet matching
-            either condition may be returned.
+   * @param locations    Bounding boxes to get only geotagged tweets within them. Example: 
+            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
+            filters are both nonempty, then any tweet matching either condition may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
       filters: Array[String],
-      locations: Array[Array[Double]],
+      locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    // Scala implicitly converts Array[T] to Seq[T], but not Array[Array[T]] to Seq[Seq[T]]
-    createStream(jssc.ssc, Some(twitterAuth), filters, locations.map(_.toList), storageLevel)
+    createStream(jssc.ssc, Some(twitterAuth), filters, locations, storageLevel)
   }
 }

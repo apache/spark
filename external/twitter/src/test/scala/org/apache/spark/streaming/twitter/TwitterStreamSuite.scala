@@ -28,7 +28,7 @@ class TwitterStreamSuite extends TestSuiteBase {
   test("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filters = Seq("filter1", "filter2")
-    val locations = Seq(Seq(-180.0,-90.0), Seq(180.0,90.0))
+    val locations = Seq(BoundingBox(-180.0,-90.0,180.0,90.0))
     val authorization: Authorization = NullAuthorization.getInstance()
 
     // tests the API, does not actually test data receiving
