@@ -78,9 +78,9 @@ class TypedSqlSuite extends FunSuite {
   }
 
   test("join query") {
-    val results = sql"""SELECT a.name FROM $people a JOIN $people b ON a.age = b.age"""
+    val results = sql"""SELECT a.name FROM $people a JOIN $people b ON a.age = b.age ORDER BY name"""
 
-    assert(results.first().name == "Michael")
+    assert(results.first().name == "Bob")
   }
 
   test("lambda udf") {
@@ -155,7 +155,7 @@ class TypedSqlSuite extends FunSuite {
   test("array bigdecimal results") {
     val data = sparkContext.parallelize(1 to 10).map(x => DataBigDecimal(Seq(new java.math.BigDecimal(1), new java.math.BigDecimal(2), new java.math.BigDecimal(3))))
     val abd = sql"SELECT arr FROM $data"
-    assert(abd.take(1).head.arr === Seq(new java.math.BigDecimal(1), new java.math.BigDecimal(2), new java.math.BigDecimal(3)))
+    assert(abd.take(1).head.arr === Seq(BigDecimal(1), BigDecimal(2), BigDecimal(3)))
   }
 
   test("array timestamp results") {
