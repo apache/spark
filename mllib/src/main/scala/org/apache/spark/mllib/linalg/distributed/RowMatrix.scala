@@ -394,7 +394,7 @@ class RowMatrix(
   }
 
   /**
-   * Compute all similarities between columns of this matrix using the brute-force
+   * Compute all cosine similarities between columns of this matrix using the brute-force
    * approach of computing normalized dot products.
    *
    * @return An n x n sparse upper-triangular matrix of cosine similarities between columns of this matrix.
@@ -406,14 +406,14 @@ class RowMatrix(
   /**
    * Compute all similarities between columns of this matrix using a sampling approach.
    *
-   * The threshold parameter is a trade-off knob between correctness and computational cost.
+   * The threshold parameter is a trade-off knob between estimate quality and computational cost.
    *
    * Setting a threshold of 0 guarantees deterministic correct results, but comes at exactly
    * the same cost as the brute-force approach. Setting the threshold to positive values
-   * incurs strictly less computational cost than the brute-force aproach, however the
+   * incurs strictly less computational cost than the brute-force approach, however the
    * similarities computed will be estimates.
    *
-   * The sampling guarantees correctness for those pairs of columns that have
+   * The sampling guarantees relative-error correctness for those pairs of columns that have
    * similarity greater than the given similarity threshold.
    *
    * To describe the guarantee, we set some notation:
