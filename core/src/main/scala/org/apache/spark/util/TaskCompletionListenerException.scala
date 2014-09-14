@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.util
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLConf, SQLContext}
+/**
+ * Exception thrown when there is an exception in
+ * executing the callback in TaskCompletionListener.
+ */
+private[spark]
+class TaskCompletionListenerException(errorMessages: Seq[String]) extends Exception {
 
-/** A SQLContext that can be used for local testing. */
-object TestSQLContext
-  extends SQLContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf())) {
-
-  /** Fewer partitions to speed up testing. */
-  override private[spark] def numShufflePartitions: Int =
-    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  override def getMessage: String = {
+    if (errorMessages.size == 1) {
+      errorMessages.head
+    } else {
+      errorMessages.zipWithIndex.map { case (msg, i) => s"Exception $i: $msg" }.mkString("\n")
+    }
+  }
 }
