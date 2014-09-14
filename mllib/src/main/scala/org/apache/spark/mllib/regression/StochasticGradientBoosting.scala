@@ -106,24 +106,6 @@ class StochasticGradientBoostingModel (
   override def predict(testData: Vector): Double = {
     computeValue(testData)
   }
-
-  override def equals(other: Any): Boolean = {
-    other match {
-      case model: StochasticGradientBoostingModel => {
-        val result: Boolean = countOfTrees == model.countOfTrees &&
-          initValue == initValue &&
-          learningRate == learningRate &&
-          index == model.index
-
-//        for (i <- 0 to index) {
-//          result = result && trees(i).equals(model.trees(i))
-//        }
-
-        result
-      }
-      case _ => false
-    }
-  }
 }
 
 object StochasticGradientBoosting {
