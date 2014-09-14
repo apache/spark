@@ -41,8 +41,7 @@ def _convert_to_vector(l):
         csc = l.tocsc()
         return SparseVector(l.shape[0], csc.indices, csc.data)
     else:
-        raise TypeError("Expected array, NumPy array, list, SparseVector, or scipy.sparse matrix")
-    return l
+        raise TypeError("Cannot convert type %s into Vector" % type(l))
 
 
 class Vector(object):
@@ -57,17 +56,10 @@ class DenseVector(Vector):
         return DenseVector, (self.array,)
 
     def dot(self, other):
-        if len(self) != len(other):
-            raise ValueError("two Vectors should have same length")
-        if isinstance(other, SparseVector):
-            return other.dot(self)
-        # TODO improve it using numpy
-        n = len(self.array)
-        return sum(self[i] * other[i] for i in xrange(n))
+        return np.dot(self.toArray(), other)
 
     def squared_distance(self, other):
-        if len(self) != len(other):
-            raise ValueError("two Vectors should have same length")
+        other = _convert_to_vector(other)
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         n = len(self)
@@ -183,7 +175,7 @@ class SparseVector(Vector):
                     j += 1
             return result
         else:
-            raise TypeError("unexpected type: %s" % type(other))
+            return self.dot(_convert_to_vector(other))
 
     def squared_distance(self, other):
         """
@@ -240,7 +232,7 @@ class SparseVector(Vector):
                 j += 1
             return result
         else:
-            raise TypeError("unexpected type: %s" % type(other))
+            return self.squared_distance(_convert_to_vector(other))
 
     def toArray(self):
         """
