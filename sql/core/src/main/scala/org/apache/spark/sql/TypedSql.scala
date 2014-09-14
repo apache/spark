@@ -18,8 +18,10 @@ import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 /**
  * A collection of Scala macros for working with SQL in a type-safe way.
  */
-private[sql] object SQLMacros {
+object SQLMacros {
   import scala.reflect.macros._
+
+  var currentContext: SQLContext = _
 
   def sqlImpl(c: Context)(args: c.Expr[Any]*) =
     new Macros[c.type](c).sql(args)
@@ -68,10 +70,29 @@ private[sql] object SQLMacros {
 
     case class RecSchema(name: String, index: Int, cType: DataType, tpe: Type)
 
+    def getSchema(sqlQuery: String, interpolatedArguments: Seq[InterpolatedItem]) = {
+      if (currentContext == null) {
+        val parser = new SqlParser()
+        val logicalPlan = parser(sqlQuery)
+        val catalog = new SimpleCatalog(true)
+        val functionRegistry = new SimpleFunctionRegistry
+        val analyzer = new Analyzer(catalog, functionRegistry, true)
+
+        interpolatedArguments.foreach(_.localRegister(catalog, functionRegistry))
+        val analyzedPlan = analyzer(logicalPlan)
+
+        analyzedPlan.output.map(attr => (attr.name, attr.dataType))
+      } else {
+        interpolatedArguments.foreach(
+            _.localRegister(currentContext.catalog, currentContext.functionRegistry))
+        currentContext.sql(sqlQuery).schema.fields.map(attr => (attr.name, attr.dataType))
+      }
+    }
+
     def sql(args: Seq[c.Expr[Any]]) = {
 
       val q"""
-        org.apache.spark.sql.test.TestSQLContext.SqlInterpolator(
+        $path.SQLInterpolation(
           scala.StringContext.apply(..$rawParts))""" = c.prefix.tree
 
       //rawParts.map(_.toString).foreach(println)
@@ -96,16 +117,7 @@ private[sql] object SQLMacros {
         interpolatedArguments(i).placeholderName + parts(i + 1)
       }.mkString("")
 
-      val parser = new SqlParser()
-      val logicalPlan = parser(query)
-      val catalog = new SimpleCatalog(true)
-      val functionRegistry = new SimpleFunctionRegistry
-      val analyzer = new Analyzer(catalog, functionRegistry, true)
-
-      interpolatedArguments.foreach(_.localRegister(catalog, functionRegistry))
-      val analyzedPlan = analyzer(logicalPlan)
-
-      val fields = analyzedPlan.output.map(attr => (attr.name, attr.dataType))
+      val fields = getSchema(query, interpolatedArguments)
       val record = genRecord(q"row", fields)
 
       val tree = q"""
@@ -157,16 +169,50 @@ private[sql] object SQLMacros {
      * Constructs a nested record if necessary
      */
     def genGetField(row: Tree, index: Int, t: DataType): Tree = t match {
+      case BinaryType =>
+        q"$row($index).asInstanceOf[Array[Byte]]"
+      case DecimalType =>
+        q"$row($index).asInstanceOf[scala.math.BigDecimal]"
       case t: PrimitiveType =>
+        // this case doesn't work for DecimalType or BinaryType,
+        // note that they both extend PrimitiveType
         val methodName = newTermName("get" + primitiveForType(t))
         q"$row.$methodName($index)"
+      case ArrayType(elementType, _) =>
+        val tpe = typeOfDataType(elementType)
+        q"$row($index).asInstanceOf[Array[$tpe]]"        
       case StructType(structFields) =>
         val fields = structFields.map(f => (f.name, f.dataType))
         genRecord(q"$row($index).asInstanceOf[$rowTpe]", fields)
       case _ =>
         c.abort(NoPosition, s"Query returns currently unhandled field type: $t")
     }
-  }
+
+    private def typeOfDataType(dt: DataType): Type = dt match {
+      case ArrayType(elementType, _) =>
+        val elemTpe = typeOfDataType(elementType)
+        appliedType(definitions.ArrayClass.toType, List(elemTpe))
+      case TimestampType =>
+        typeOf[java.sql.Timestamp]
+      case DecimalType =>
+        typeOf[BigDecimal]
+      case BinaryType =>
+        typeOf[Array[Byte]]
+      case _ if dt.isPrimitive =>
+        typeOfPrimitive(dt.asInstanceOf[PrimitiveType])
+    }
+
+    private def typeOfPrimitive(dt: PrimitiveType): Type = dt match {
+      case IntegerType => typeOf[Int]
+      case LongType => typeOf[Long]
+      case ShortType => typeOf[Short]
+      case ByteType => typeOf[Byte]
+      case DoubleType => typeOf[Double]
+      case FloatType => typeOf[Float]
+      case BooleanType => typeOf[Boolean]
+      case StringType => typeOf[String]
+    }
+  } // end of class Macros
 
   // TODO: Duplicated from codegen PR...
   protected def primitiveForType(dt: PrimitiveType) = dt match {
