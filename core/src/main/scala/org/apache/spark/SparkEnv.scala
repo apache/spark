@@ -108,6 +108,14 @@ class SparkEnv (
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
+
+  private[spark]
+  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+    synchronized {
+      val key = (pythonExec, envVars)
+      pythonWorkers.get(key).foreach(_.releaseWorker(worker))
+    }
+  }
 }
 
 object SparkEnv extends Logging {
