@@ -23,8 +23,7 @@ import sys
 import time
 import socket
 import traceback
-# CloudPickler needs to be imported so that depicklers are registered using the
-# copy_reg module.
+
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.files import SparkFiles
