@@ -33,19 +33,13 @@ import org.apache.spark.sql.hive.HiveContext
  */
 @DeveloperApi
 case class AnalyzeTable(tableName: String) extends LeafNode with Command {
-
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     hiveContext.analyze(tableName)
-    Seq.empty[Any]
-  }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
+    Seq.empty[Row]
   }
 }
 
@@ -55,20 +49,30 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
  */
 @DeveloperApi
 case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with Command {
-
   def hiveContext = sqlContext.asInstanceOf[HiveContext]
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Any] = {
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
-    Seq.empty
+    Seq.empty[Row]
   }
+}
 
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class AddJar(path: String) extends LeafNode with Command {
+  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+  override def output = Seq.empty
+
+  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+    hiveContext.runSqlHive(s"ADD JAR $path")
+    hiveContext.sparkContext.addJar(path)
+    Seq.empty[Row]
   }
 }

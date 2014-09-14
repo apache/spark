@@ -54,6 +54,8 @@ spark.home=/path
 (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
 
+__all__ = ['SparkConf']
+
 
 class SparkConf(object):
 

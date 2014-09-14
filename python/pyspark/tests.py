@@ -43,6 +43,7 @@ from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.sql import SQLContext, IntegerType
 
 _have_scipy = False
 _have_numpy = False
@@ -168,6 +169,17 @@ class SerializationTestCase(unittest.TestCase):
         self.assertEquals(p1, p2)
 
 
+# Regression test for SPARK-3415
+class CloudPickleTest(unittest.TestCase):
+    def test_pickling_file_handles(self):
+        from pyspark.cloudpickle import dumps
+        from StringIO import StringIO
+        from pickle import load
+        out1 = sys.stderr
+        out2 = load(StringIO(dumps(out1)))
+        self.assertEquals(out1, out2)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -279,6 +291,15 @@ class TestAddFile(PySparkTestCase):
 
 
 class TestRDDFunctions(PySparkTestCase):
+
+    def test_id(self):
+        rdd = self.sc.parallelize(range(10))
+        id = rdd.id()
+        self.assertEqual(id, rdd.id())
+        rdd2 = rdd.map(str).filter(bool)
+        id2 = rdd2.id()
+        self.assertEqual(id + 1, id2)
+        self.assertEqual(id2, rdd2.id())
 
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
@@ -523,6 +544,35 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals([2, 1], rdd.histogram(["a", "b", "c"])[1])
         self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
+
+    def test_repartitionAndSortWithinPartitions(self):
+        rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
+
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2)
+        partitions = repartitioned.glom().collect()
+        self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
+        self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+
+class TestSQL(PySparkTestCase):
+
+    def setUp(self):
+        PySparkTestCase.setUp(self)
+        self.sqlCtx = SQLContext(self.sc)
+
+    def test_udf(self):
+        self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_broadcast_in_udf(self):
+        bar = {"a": "aa", "b": "bb", "c": "abc"}
+        foo = self.sc.broadcast(bar)
+        self.sqlCtx.registerFunction("MYUDF", lambda x: foo.value[x] if x else '')
+        [res] = self.sqlCtx.sql("SELECT MYUDF('c')").collect()
+        self.assertEqual("abc", res[0])
+        [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
+        self.assertEqual("", res[0])
 
 
 class TestIO(PySparkTestCase):
@@ -1202,6 +1252,35 @@ class TestSparkSubmit(unittest.TestCase):
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out)
+
+
+class ContextStopTests(unittest.TestCase):
+
+    def test_stop(self):
+        sc = SparkContext()
+        self.assertNotEqual(SparkContext._active_spark_context, None)
+        sc.stop()
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with(self):
+        with SparkContext() as sc:
+            self.assertNotEqual(SparkContext._active_spark_context, None)
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with_exception(self):
+        try:
+            with SparkContext() as sc:
+                self.assertNotEqual(SparkContext._active_spark_context, None)
+                raise Exception()
+        except:
+            pass
+        self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_with_stop(self):
+        with SparkContext() as sc:
+            self.assertNotEqual(SparkContext._active_spark_context, None)
+            sc.stop()
+        self.assertEqual(SparkContext._active_spark_context, None)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
