@@ -112,6 +112,9 @@ private[yarn] abstract class YarnAllocator(
   def allocateResources() = {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
 
+    // this is needed by alpha, do it here since we add numPending right after this
+    val executorsPending = numPendingAllocate.get()
+
     if (missing > 0) {
       numPendingAllocate.addAndGet(missing)
       logInfo("Will Allocate %d executor containers, each with %d memory".format(
@@ -121,7 +124,7 @@ private[yarn] abstract class YarnAllocator(
       logDebug("Empty allocation request ...")
     }
 
-    val allocateResponse = allocateContainers(missing)
+    val allocateResponse = allocateContainers(missing, executorsPending)
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
     if (allocatedContainers.size > 0) {
@@ -435,9 +438,10 @@ private[yarn] abstract class YarnAllocator(
    *
    * @param count Number of containers to allocate.
    *              If zero, should still contact RM (as a heartbeat).
+   * @param pending Number of containers pending allocate. Only used on alpha.
    * @return Response to the allocation request.
    */
-  protected def allocateContainers(count: Int): YarnAllocateResponse
+  protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse
 
   /** Called to release a previously allocated container. */
   protected def releaseContainer(container: Container): Unit
