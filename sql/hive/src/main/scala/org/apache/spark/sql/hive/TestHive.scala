@@ -35,12 +35,13 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.SQLConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
 object TestHive
-  extends TestHiveContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
+  extends TestHiveContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf()))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -89,6 +90,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  /** Fewer partitions to speed up testing. */
+  override private[spark] def numShufflePartitions: Int =
+    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -269,7 +274,74 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |)
        """.stripMargin.cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
-    )
+    ),
+    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC PARITIONING
+    // IS NOT YET SUPPORTED
+    TestTable("episodes_part",
+      s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
+         |PARTITIONED BY (doctor_pt INT)
+         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
+         |STORED AS
+         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
+         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |TBLPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+       """.stripMargin.cmd,
+      // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
+      // TODO: Pass this automatically from the table to partitions.
+      s"""
+         |ALTER TABLE episodes_part SET SERDEPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+        """.stripMargin.cmd,
+      s"""
+        INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
+        SELECT title, air_date, doctor FROM episodes
+      """.cmd
+      )
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
@@ -309,15 +381,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      // It is important that we RESET first as broken hooks that might have been set could break
-      // other sql exec here.
-      runSqlHive("RESET")
-      // For some reason, RESET does not reset the following variables...
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
-      // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
@@ -343,6 +406,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // It is important that we RESET first as broken hooks that might have been set could break
+      // other sql exec here.
+      runSqlHive("RESET")
+      // For some reason, RESET does not reset the following variables...
+      runSqlHive("set datanucleus.cache.collections=true")
+      runSqlHive("set datanucleus.cache.collections.lazy=true")
+      // Lots of tests fail if we do not change the partition whitelist from the default.
+      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
       configure()
 
       runSqlHive("USE default")

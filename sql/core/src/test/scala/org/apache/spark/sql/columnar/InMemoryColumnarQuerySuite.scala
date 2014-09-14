@@ -17,20 +17,27 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.{QueryTest, TestData}
 
 class InMemoryColumnarQuerySuite extends QueryTest {
-  import TestData._
-  import TestSQLContext._
+  import org.apache.spark.sql.TestData._
+  import org.apache.spark.sql.test.TestSQLContext._
 
   test("simple columnar query") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
+  }
+
+  test("default size avoids broadcast") {
+    // TODO: Improve this test when we have better statistics
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
+    cacheTable("sizeTst")
+    assert(
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
   }
 
   test("projection") {
@@ -84,5 +91,17 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
+  }
+
+  test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
+    checkAnswer(
+      sql("SELECT * FROM withEmptyParts"),
+      withEmptyParts.collect().toSeq)
+
+    TestSQLContext.cacheTable("withEmptyParts")
+
+    checkAnswer(
+      sql("SELECT * FROM withEmptyParts"),
+      withEmptyParts.collect().toSeq)
   }
 }

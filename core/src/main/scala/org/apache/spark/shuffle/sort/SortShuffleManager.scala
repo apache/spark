@@ -17,14 +17,17 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{DataInputStream, FileInputStream}
+import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.{SparkConf, TaskContext, ShuffleDependency}
 import org.apache.spark.shuffle._
-import org.apache.spark.{TaskContext, ShuffleDependency}
 import org.apache.spark.shuffle.hash.HashShuffleReader
-import org.apache.spark.storage.{DiskBlockManager, FileSegment, ShuffleBlockId}
 
-private[spark] class SortShuffleManager extends ShuffleManager {
+private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager {
+
+  private val indexShuffleBlockManager = new IndexShuffleBlockManager()
+  private val shuffleMapNumber = new ConcurrentHashMap[Int, Int]()
+
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
    */
@@ -52,29 +55,29 @@ private[spark] class SortShuffleManager extends ShuffleManager {
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
-    new SortShuffleWriter(handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
+    val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, V, _]]
+    shuffleMapNumber.putIfAbsent(baseShuffleHandle.shuffleId, baseShuffleHandle.numMaps)
+    new SortShuffleWriter(
+      shuffleBlockManager, baseShuffleHandle, mapId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
-  override def unregisterShuffle(shuffleId: Int): Unit = {}
+  override def unregisterShuffle(shuffleId: Int): Boolean = {
+    if (shuffleMapNumber.containsKey(shuffleId)) {
+      val numMaps = shuffleMapNumber.remove(shuffleId)
+      (0 until numMaps).map{ mapId =>
+        shuffleBlockManager.removeDataByMap(shuffleId, mapId)
+      }
+    }
+    true
+  }
+
+  override def shuffleBlockManager: IndexShuffleBlockManager = {
+    indexShuffleBlockManager
+  }
 
   /** Shut down this ShuffleManager. */
-  override def stop(): Unit = {}
-
-  /** Get the location of a block in a map output file. Uses the index file we create for it. */
-  def getBlockLocation(blockId: ShuffleBlockId, diskManager: DiskBlockManager): FileSegment = {
-    // The block is actually going to be a range of a single map output file for this map, so
-    // figure out the ID of the consolidated file, then the offset within that from our index
-    val consolidatedId = blockId.copy(reduceId = 0)
-    val indexFile = diskManager.getFile(consolidatedId.name + ".index")
-    val in = new DataInputStream(new FileInputStream(indexFile))
-    try {
-      in.skip(blockId.reduceId * 8)
-      val offset = in.readLong()
-      val nextOffset = in.readLong()
-      new FileSegment(diskManager.getFile(consolidatedId), offset, nextOffset - offset)
-    } finally {
-      in.close()
-    }
+  override def stop(): Unit = {
+    shuffleBlockManager.stop()
   }
 }

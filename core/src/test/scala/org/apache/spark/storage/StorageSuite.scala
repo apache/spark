@@ -27,7 +27,7 @@ class StorageSuite extends FunSuite {
 
   // For testing add, update, and remove (for non-RDD blocks)
   private def storageStatus1: StorageStatus = {
-    val status = new StorageStatus(BlockManagerId("big", "dog", 1, 1), 1000L)
+    val status = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L)
     assert(status.blocks.isEmpty)
     assert(status.rddBlocks.isEmpty)
     assert(status.memUsed === 0L)
@@ -78,7 +78,7 @@ class StorageSuite extends FunSuite {
 
   // For testing add, update, remove, get, and contains etc. for both RDD and non-RDD blocks
   private def storageStatus2: StorageStatus = {
-    val status = new StorageStatus(BlockManagerId("big", "dog", 1, 1), 1000L)
+    val status = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L)
     assert(status.rddBlocks.isEmpty)
     status.addBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 10L, 20L, 0L))
     status.addBlock(TestBlockId("man"), BlockStatus(memAndDisk, 10L, 20L, 0L))
@@ -271,9 +271,9 @@ class StorageSuite extends FunSuite {
 
   // For testing StorageUtils.updateRddInfo and StorageUtils.getRddBlockLocations
   private def stockStorageStatuses: Seq[StorageStatus] = {
-    val status1 = new StorageStatus(BlockManagerId("big", "dog", 1, 1), 1000L)
-    val status2 = new StorageStatus(BlockManagerId("fat", "duck", 2, 2), 2000L)
-    val status3 = new StorageStatus(BlockManagerId("fat", "cat", 3, 3), 3000L)
+    val status1 = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L)
+    val status2 = new StorageStatus(BlockManagerId("fat", "duck", 2), 2000L)
+    val status3 = new StorageStatus(BlockManagerId("fat", "cat", 3), 3000L)
     status1.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
     status1.addBlock(RDDBlockId(0, 1), BlockStatus(memAndDisk, 1L, 2L, 0L))
     status2.addBlock(RDDBlockId(0, 2), BlockStatus(memAndDisk, 1L, 2L, 0L))

@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -296,8 +295,16 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
 
   test("implement identity function using case statement") {
-    val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
-    val expected = sql("SELECT key FROM src").collect().toSet
+    val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
+      .map { case Row(i: Int) => i }
+      .collect()
+      .toSet
+
+    val expected = sql("SELECT key FROM src")
+      .map { case Row(i: Int) => i }
+      .collect()
+      .toSet
+
     assert(actual === expected)
   }
 
@@ -309,11 +316,11 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
-  createQueryTest("case sensitivity: Hive table",
+  createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
@@ -467,7 +474,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     // Describe a registered temporary table.
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
@@ -495,6 +502,45 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
+  test("ADD JAR command") {
+    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    sql("CREATE TABLE alter1(a INT, b INT)")
+    intercept[Exception] {
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+        |WITH serdeproperties('s1'='9')
+      """.stripMargin)
+    sql("DROP TABLE alter1")
+  }
+
+  case class LogEntry(filename: String, message: String)
+  case class LogFile(name: String)
+
+  test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
+    sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
+    sparkContext.makeRDD(Seq.empty[LogFile]).registerTempTable("logFiles")
+
+    sql(
+      """
+      SELECT name, message
+      FROM rawLogs
+      JOIN (
+        SELECT name
+        FROM logFiles
+      ) files
+      ON rawLogs.filename = files.name
+      """).registerTempTable("boom")
+
+    // This should be successfully analyzed
+    sql("SELECT * FROM boom").queryExecution.analyzed
+  }
+
   test("parse HQL set commands") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
@@ -520,62 +566,67 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-
+    val KV = "([^=]+)=([^=]*)".r
+    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
+      rdd.collect().map {
+        case Row(key: String, value: String) => key -> value
+        case Row(KV(key, value)) => key -> value
+      }.toSet
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(hql(s"SET $testKey=$testVal"))
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(hql("SET"))
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql(s"SET").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      collectResults(hql("SET"))
     }
 
     // "set key"
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(hql(s"SET $testKey"))
     }
 
-    assertResult(Array(s"$nonexistentKey=<undefined>")) {
-      sql(s"SET $nonexistentKey").collect().map(_.getString(0))
+    assertResult(Set(nonexistentKey -> "<undefined>")) {
+      collectResults(hql(s"SET $nonexistentKey"))
     }
 
     // Assert that sql() should have the same effects as sql() by repeating the above using sql().
     clear()
     assert(sql("SET").collect().size == 0)
 
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(sql(s"SET $testKey=$testVal"))
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql("SET").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(sql("SET"))
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql("SET").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      collectResults(sql("SET"))
     }
 
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(sql(s"SET $testKey"))
     }
 
-    assertResult(Array(s"$nonexistentKey=<undefined>")) {
-      sql(s"SET $nonexistentKey").collect().map(_.getString(0))
+    assertResult(Set(nonexistentKey -> "<undefined>")) {
+      collectResults(sql(s"SET $nonexistentKey"))
     }
 
     clear()

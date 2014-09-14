@@ -75,7 +75,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
-  <td>
+  </td>
 </tr>
 <tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
@@ -125,6 +125,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
      the environment of the executor launcher. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.containerLauncherMaxThreads</code></td>
+  <td>25</td>
+  <td>
+    The maximum number of threads to use in the application master for launching executor containers.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
@@ -148,6 +155,7 @@ For example:
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1 \
+        --queue thequeue \
         lib/spark-examples*.jar \
         10
 

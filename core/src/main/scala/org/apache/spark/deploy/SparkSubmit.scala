@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -173,6 +173,14 @@ object SparkSubmit {
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraClassPath"),
+      OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraJavaOptions"),
+      OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
@@ -202,16 +210,7 @@ object SparkSubmit {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files"),
-
-      // Only process driver specific options for cluster mode here,
-      // because they have already been processed in bash for client mode
-      OptionAssigner(args.driverExtraClassPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraClassPath"),
-      OptionAssigner(args.driverExtraJavaOptions, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraJavaOptions"),
-      OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraLibraryPath")
+        sysProp = "spark.files")
     )
 
     // In client mode, launch the application main class directly
@@ -324,7 +323,9 @@ object SparkSubmit {
     }
 
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
-
+    if (!Modifier.isStatic(mainMethod.getModifiers)) {
+      throw new IllegalStateException("The main method in the given main class must be static")
+    }
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {

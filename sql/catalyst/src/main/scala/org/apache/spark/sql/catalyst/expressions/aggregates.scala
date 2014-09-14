@@ -105,17 +105,18 @@ case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class MinFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var currentMin: Any = _
+  val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
+  val cmp = GreaterThan(currentMin, expr)
 
   override def update(input: Row): Unit = {
-    if (currentMin == null) {
-      currentMin = expr.eval(input)
-    } else if(GreaterThan(Literal(currentMin, expr.dataType), expr).eval(input) == true) {
-      currentMin = expr.eval(input)
+    if (currentMin.value == null) {
+      currentMin.value = expr.eval(input)
+    } else if(cmp.eval(input) == true) {
+      currentMin.value = expr.eval(input)
     }
   }
 
-  override def eval(input: Row): Any = currentMin
+  override def eval(input: Row): Any = currentMin.value
 }
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -135,17 +136,18 @@ case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class MaxFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var currentMax: Any = _
+  val currentMax: MutableLiteral = MutableLiteral(null, expr.dataType)
+  val cmp = LessThan(currentMax, expr)
 
   override def update(input: Row): Unit = {
-    if (currentMax == null) {
-      currentMax = expr.eval(input)
-    } else if(LessThan(Literal(currentMax, expr.dataType), expr).eval(input) == true) {
-      currentMax = expr.eval(input)
+    if (currentMax.value == null) {
+      currentMax.value = expr.eval(input)
+    } else if(cmp.eval(input) == true) {
+      currentMax.value = expr.eval(input)
     }
   }
 
-  override def eval(input: Row): Any = currentMax
+  override def eval(input: Row): Any = currentMax.value
 }
 
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -342,6 +344,21 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def newInstance() = new FirstFunction(child, this)
 }
 
+case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+  override def references = child.references
+  override def nullable = true
+  override def dataType = child.dataType
+  override def toString = s"LAST($child)"
+
+  override def asPartial: SplitEvaluation = {
+    val partialLast = Alias(Last(child), "PartialLast")()
+    SplitEvaluation(
+      Last(partialLast.toAttribute),
+      partialLast :: Nil)
+  }
+  override def newInstance() = new LastFunction(child, this)
+}
+
 case class AverageFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
 
@@ -350,7 +367,7 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   private val zero = Cast(Literal(0), expr.dataType)
 
   private var count: Long = _
-  private val sum = MutableLiteral(zero.eval(EmptyRow))
+  private val sum = MutableLiteral(zero.eval(null), expr.dataType)
   private val sumAsDouble = Cast(sum, DoubleType)
 
   private def addFunction(value: Any) = Add(sum, Literal(value))
@@ -423,7 +440,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val zero = Cast(Literal(0), expr.dataType)
 
-  private val sum = MutableLiteral(zero.eval(null))
+  private val sum = MutableLiteral(zero.eval(null), expr.dataType)
 
   private val addFunction = Add(sum, Coalesce(Seq(expr, zero)))
 
@@ -486,4 +503,17 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
   }
 
   override def eval(input: Row): Any = result
+}
+
+case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var result: Any = null
+
+  override def update(input: Row): Unit = {
+    result = input
+  }
+
+  override def eval(input: Row): Any =  if (result != null) expr.eval(result.asInstanceOf[Row])
+                                        else null
 }

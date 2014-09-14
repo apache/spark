@@ -42,12 +42,6 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
  * Client submits an application to the YARN ResourceManager.
- *
- * Depending on the deployment mode this will launch one of two application master classes:
- * 1. In cluster mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
- *      which launches a driver program inside of the cluster.
- * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]] to
- *      request executors on behalf of a driver running outside of the cluster.
  */
 trait ClientBase extends Logging {
   val args: ClientArguments
@@ -67,14 +61,11 @@ trait ClientBase extends Logging {
 
   // Additional memory overhead - in mb.
   protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    YarnAllocationHandler.MEMORY_OVERHEAD)
+    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
-      ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
-          "Error: You must specify a user jar when running in standalone mode!"),
-      (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
       (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
         "greater than: " + memoryOverhead),
@@ -218,7 +209,7 @@ trait ClientBase extends Logging {
       if (! localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
-          val setPermissions = if (destName.equals(ClientBase.APP_JAR)) true else false
+          val setPermissions = destName.equals(ClientBase.APP_JAR)
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), conf)
           distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,
@@ -309,8 +300,6 @@ trait ClientBase extends Logging {
     retval.toString
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int
-
   def setupSecurityToken(amContainer: ContainerLaunchContext)
 
   def createContainerLaunchContext(
@@ -321,6 +310,8 @@ trait ClientBase extends Logging {
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
 
+    val isLaunchingDriver = args.userClass != null
+
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
     // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
     // SparkContext will not let that set spark* system properties, which is expected behavior for
@@ -329,7 +320,7 @@ trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    if (args.amClass == classOf[ApplicationMaster].getName) {
+    if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
           s"""
@@ -353,7 +344,7 @@ trait ClientBase extends Logging {
     }
     amContainer.setEnvironment(env)
 
-    val amMemory = calculateAMMemory(newApp)
+    val amMemory = args.amMemory
 
     val javaOpts = ListBuffer[String]()
 
@@ -389,7 +380,7 @@ trait ClientBase extends Logging {
       javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
-    if (args.amClass == classOf[ApplicationMaster].getName) {
+    if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
@@ -397,22 +388,37 @@ trait ClientBase extends Logging {
         .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
 
-    // Command for the ApplicationMaster
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
-      javaOpts ++
-      Seq(args.amClass, "--class", YarnSparkHadoopUtil.escapeForShell(args.userClass),
-        "--jar ", YarnSparkHadoopUtil.escapeForShell(args.userJar),
-        userArgsToString(args),
-        "--executor-memory", args.executorMemory.toString,
+    val userClass =
+      if (args.userClass != null) {
+        Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
+      } else {
+        Nil
+      }
+    val amClass =
+      if (isLaunchingDriver) {
+        classOf[ApplicationMaster].getName()
+      } else {
+        classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
+      }
+    val amArgs =
+      Seq(amClass) ++ userClass ++
+      (if (args.userJar != null) Seq("--jar", args.userJar) else Nil) ++
+      Seq("--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,
         "--num-executors ", args.numExecutors.toString,
+        userArgsToString(args))
+
+    // Command for the ApplicationMaster
+    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+      javaOpts ++ amArgs ++
+      Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
     logInfo("Yarn AM launch context:")
-    logInfo(s"  class:   ${args.amClass}")
-    logInfo(s"  env:     $env")
-    logInfo(s"  command: ${commands.mkString(" ")}")
+    logInfo(s"  user class: ${args.userClass}")
+    logInfo(s"  env:        $env")
+    logInfo(s"  command:    ${commands.mkString(" ")}")
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
@@ -422,10 +428,8 @@ trait ClientBase extends Logging {
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
-    val acls = Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityManager.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityManager.getModifyAcls)
-    amContainer.setApplicationACLs(acls)
+    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+
     amContainer
   }
 }
@@ -623,7 +627,7 @@ object ClientBase extends Logging {
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
 
-  /** 
+  /**
    * Get the list of namenodes the user may access.
    */
   private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
