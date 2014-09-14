@@ -23,6 +23,7 @@ import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Try, Success, Failure}
@@ -52,6 +53,7 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
+  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions = parent.partitions
 
@@ -63,19 +65,26 @@ private[spark] class PythonRDD(
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
     envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
+    if (reuse_worker) {
+      envVars += ("SPARK_REUSE_WORKER" -> "1")
+    }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
+    var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-
-      // Cleanup the worker socket. This will also cause the Python worker to exit.
-      try {
-        worker.close()
-      } catch {
-        case e: Exception => logWarning("Failed to close worker socket", e)
+      if (reuse_worker && complete_cleanly) {
+        env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+      } else {
+        try {
+          worker.close()
+        } catch {
+          case e: Exception =>
+            logWarning("Failed to close worker socket", e)
+        }
       }
     }
 
@@ -133,6 +142,7 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+               complete_cleanly = true
               null
           }
         } catch {
@@ -195,11 +205,26 @@ private[spark] class PythonRDD(
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
-        dataOut.writeInt(broadcastVars.length)
+        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
+        val newBids = broadcastVars.map(_.id).toSet
+        // number of different broadcasts
+        val cnt = oldBids.diff(newBids).size + newBids.diff(oldBids).size
+        dataOut.writeInt(cnt)
+        for (bid <- oldBids) {
+          if (!newBids.contains(bid)) {
+            // remove the broadcast from worker
+            dataOut.writeLong(- bid - 1)  // bid >= 0
+            oldBids.remove(bid)
+          }
+        }
         for (broadcast <- broadcastVars) {
-          dataOut.writeLong(broadcast.id)
-          dataOut.writeInt(broadcast.value.length)
-          dataOut.write(broadcast.value)
+          if (!oldBids.contains(broadcast.id)) {
+            // send new broadcast
+            dataOut.writeLong(broadcast.id)
+            dataOut.writeInt(broadcast.value.length)
+            dataOut.write(broadcast.value)
+            oldBids.add(broadcast.id)
+          }
         }
         dataOut.flush()
         // Serialized command:
@@ -207,17 +232,18 @@ private[spark] class PythonRDD(
         dataOut.write(command)
         // Data values
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
+        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.flush()
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
+          worker.shutdownOutput()
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-      } finally {
-        Try(worker.shutdownOutput()) // kill Python worker process
+          worker.shutdownOutput()
       }
     }
   }
@@ -277,6 +303,14 @@ private object SpecialLengths {
 
 private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
+
+  // remember the broadcasts sent to each worker
+  private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
+  private def getWorkerBroadcasts(worker: Socket) = {
+    synchronized {
+      workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
+    }
+  }
 
   /**
    * Adapter for calling SparkContext#runJob from Python.
