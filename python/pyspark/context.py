@@ -33,6 +33,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
+from pyspark.traceback_utils import extract_concise_traceback
 
 from py4j.java_collections import ListConverter
 
@@ -99,8 +100,8 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        if rdd._extract_concise_traceback() is not None:
-            self._callsite = rdd._extract_concise_traceback()
+        if extract_concise_traceback() is not None:
+            self._callsite = extract_concise_traceback()
         else:
             tempNamedTuple = namedtuple("Callsite", "function file linenum")
             self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
