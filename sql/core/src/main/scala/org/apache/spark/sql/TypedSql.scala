@@ -126,6 +126,8 @@ object SQLMacros {
         result.map(row => $record)
       """
 
+      println(tree)
+
       c.Expr(tree)
     }
 
@@ -141,6 +143,8 @@ object SQLMacros {
 
         ImplSchema(name, tpe, tree)
       }
+
+      println(implSchemas)
 
       val schema = implSchemas.map(f => (f.name, f.tpe))
 
@@ -180,7 +184,7 @@ object SQLMacros {
         q"$row.$methodName($index)"
       case ArrayType(elementType, _) =>
         val tpe = typeOfDataType(elementType)
-        q"$row($index).asInstanceOf[Array[$tpe]]"        
+        q"$row($index).asInstanceOf[Seq[$tpe]]"
       case StructType(structFields) =>
         val fields = structFields.map(f => (f.name, f.dataType))
         genRecord(q"$row($index).asInstanceOf[$rowTpe]", fields)
@@ -191,7 +195,7 @@ object SQLMacros {
     private def typeOfDataType(dt: DataType): Type = dt match {
       case ArrayType(elementType, _) =>
         val elemTpe = typeOfDataType(elementType)
-        appliedType(definitions.ArrayClass.toType, List(elemTpe))
+        appliedType(typeOf[Seq[Any]], List(elemTpe))
       case TimestampType =>
         typeOf[java.sql.Timestamp]
       case DecimalType =>
