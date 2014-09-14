@@ -79,7 +79,7 @@ class IndexedRowMatrix(
    * Computes the singular value decomposition of this IndexedRowMatrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
    *
-   * This cost and implementation of this method is similar to that in
+   * The cost and implementation of this method is identical to that in
    * [[org.apache.spark.mllib.linalg.distributed.RowMatrix]]
    * With the addition of indices.
    *
