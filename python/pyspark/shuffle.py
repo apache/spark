@@ -496,11 +496,11 @@ class ExternalSorter(object):
                 with open(path, 'w') as f:
                     self.serializer.dump_stream(current_chunk, f)
                 chunks.append(self.serializer.load_stream(open(path)))
-                os.unlink(path)  # data will be deleted after close
                 current_chunk = []
                 gc.collect()
                 MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
                 DiskBytesSpilled += os.path.getsize(path)
+                os.unlink(path)  # data will be deleted after close
 
             elif not chunks:
                 batch = min(batch * 2, 10000)
