@@ -20,16 +20,14 @@ import os
 import traceback
 
 
-__all__ = ["extract_concise_traceback", "SparkContext"]
+CallSite = namedtuple("CallSite", "function file linenum")
 
 
-def extract_concise_traceback():
+def first_spark_call():
     """
-    This function returns the traceback info for a callsite, returns a dict
-    with function name, file name and line number
+    Return a CallSite representing the first Spark call in the current call stack.
     """
     tb = traceback.extract_stack()
-    callsite = namedtuple("Callsite", "function file linenum")
     if len(tb) == 0:
         return None
     file, line, module, what = tb[len(tb) - 1]
@@ -42,39 +40,39 @@ def extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return callsite(function=fun, file=file, linenum=line)
+        return CallSite(function=fun, file=file, linenum=line)
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame - 1]
-    return callsite(function=sfun, file=ufile, linenum=uline)
+    return CallSite(function=sfun, file=ufile, linenum=uline)
 
 
-class JavaStackTrace(object):
+class SCCallSiteSync(object):
     """
     Helper for setting the spark context call site.
 
     Example usage:
-    from pyspark.context import JavaStackTrace
-    with JavaStackTrace(<relevant SparkContext>) as st:
+    from pyspark.context import SCCallSiteSync
+    with SCCallSiteSync(<relevant SparkContext>) as css:
         <a Spark call>
     """
 
     _spark_stack_depth = 0
 
     def __init__(self, sc):
-        tb = extract_concise_traceback()
-        if tb is not None:
-            self._traceback = "%s at %s:%s" % (
-                tb.function, tb.file, tb.linenum)
+        call_site = first_spark_call()
+        if call_site is not None:
+            self._call_site = "%s at %s:%s" % (
+                call_site.function, call_site.file, call_site.linenum)
         else:
-            self._traceback = "Error! Could not extract traceback info"
+            self._call_site = "Error! Could not extract traceback info"
         self._context = sc
 
     def __enter__(self):
-        if JavaStackTrace._spark_stack_depth == 0:
-            self._context._jsc.setCallSite(self._traceback)
-        JavaStackTrace._spark_stack_depth += 1
+        if SCCallSiteSync._spark_stack_depth == 0:
+            self._context._jsc.setCallSite(self._call_site)
+        SCCallSiteSync._spark_stack_depth += 1
 
     def __exit__(self, type, value, tb):
-        JavaStackTrace._spark_stack_depth -= 1
-        if JavaStackTrace._spark_stack_depth == 0:
+        SCCallSiteSync._spark_stack_depth -= 1
+        if SCCallSiteSync._spark_stack_depth == 0:
             self._context._jsc.setCallSite(None)
