@@ -78,7 +78,7 @@ class RandomForestModel(private[tree] val trees: Array[DecisionTreeModel], val a
 
 private[tree] object RandomForestModel {
 
-  def buildRandomForestModel(trees: Array[DecisionTreeModel]): RandomForestModel = {
+  def build(trees: Array[DecisionTreeModel]): RandomForestModel = {
     require(trees.size > 0, s"RandomForestModel cannot be created with empty trees collection.")
     val algo: Algo = trees(0).algo
     require(trees.forall(_.algo == algo),

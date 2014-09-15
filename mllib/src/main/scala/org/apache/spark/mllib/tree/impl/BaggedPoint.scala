@@ -74,4 +74,8 @@ private[tree] object BaggedPoint {
     }
   }
 
+  def convertToBaggedRDDWithoutSampling(input: RDD[TreePoint]): RDD[BaggedPoint[TreePoint]] = {
+    input.map(treePoint => new BaggedPoint(treePoint, Array(1.0)))
+  }
+
 }

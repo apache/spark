@@ -102,9 +102,14 @@ private[tree] class DTStatsAggregator(
   /**
    * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
    */
-  def update(nodeIndex: Int, featureIndex: Int, binIndex: Int, label: Double): Unit = {
+  def update(
+      nodeIndex: Int,
+      featureIndex: Int,
+      binIndex: Int,
+      label: Double,
+      instanceWeight: Double): Unit = {
     val i = nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(allStats, i, label)
+    impurityAggregator.update(allStats, i, label, instanceWeight)
   }
 
   /**
@@ -117,9 +122,14 @@ private[tree] class DTStatsAggregator(
    * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
    * @param nodeOffset  Pre-computed node offset from [[getNodeOffset]].
    */
-  def nodeUpdate(nodeOffset: Int, featureIndex: Int, binIndex: Int, label: Double): Unit = {
+  def nodeUpdate(
+      nodeOffset: Int,
+      featureIndex: Int,
+      binIndex: Int,
+      label: Double,
+      instanceWeight: Double): Unit = {
     val i = nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(allStats, i, label)
+    impurityAggregator.update(allStats, i, label, instanceWeight)
   }
 
   /**
@@ -154,8 +164,13 @@ private[tree] class DTStatsAggregator(
    *                           (node, feature, left/right child) offset from
    *                           [[getLeftRightNodeFeatureOffsets]].
    */
-  def nodeFeatureUpdate(nodeFeatureOffset: Int, binIndex: Int, label: Double): Unit = {
-    impurityAggregator.update(allStats, nodeFeatureOffset + binIndex * statsSize, label)
+  def nodeFeatureUpdate(
+      nodeFeatureOffset: Int,
+      binIndex: Int,
+      label: Double,
+      instanceWeight: Double): Unit = {
+    impurityAggregator.update(allStats, nodeFeatureOffset + binIndex * statsSize, label,
+      instanceWeight)
   }
 
   /**

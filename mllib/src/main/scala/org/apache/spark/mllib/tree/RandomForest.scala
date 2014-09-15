@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -24,29 +27,30 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.{TreePoint, DecisionTreeMetadata, TimeTracker}
+import org.apache.spark.mllib.tree.impl.{BaggedPoint, TreePoint, DecisionTreeMetadata, TimeTracker}
 import org.apache.spark.mllib.tree.impurity.Impurities
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
-import scala.collection.JavaConverters._
-
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
- * A class which implements a decision tree learning algorithm for classification and regression.
+ * A class which implements a random forest learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
+ *
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of algorithm (classification, regression, etc.), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
  *                 etc.
+ * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
  */
 @Experimental
 private class RandomForest (
     private val strategy: Strategy,
     private val numTrees: Int,
-    featureSubsetStrategy: String)
+    featureSubsetStrategy: String,
+    private val seed: Int)
   extends Serializable with Logging {
 
   strategy.assertValid()
@@ -94,13 +98,17 @@ private class RandomForest (
     timer.stop("findSplitsBins")
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
-      s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
-    }.mkString("\n"))
+        s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
+      }.mkString("\n"))
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+    val baggedInput = if (numTrees > 1) {
+      BaggedPoint.convertToBaggedRDD(treeInput, numTrees, seed)
+    } else {
+      BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    }.persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -110,19 +118,15 @@ private class RandomForest (
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
-    val maxMemoryUsage = strategy.maxMemoryInMB * 1024 * 1024
+    val maxMemoryUsage = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     // TODO: Calculate memory usage more precisely.
     val numElementsPerNode = DecisionTree.getElementsPerNode(metadata)
 
     logDebug("numElementsPerNode = " + numElementsPerNode)
     val arraySizePerNode = 8 * numElementsPerNode // approx. memory usage for bin aggregate array
-    val maxNumberOfNodesPerGroup = math.max(maxMemoryUsage / arraySizePerNode, 1)
+    val maxNumberOfNodesPerGroup = math.max((maxMemoryUsage / arraySizePerNode).toInt, 1)
     logDebug("maxNumberOfNodesPerGroup = " + maxNumberOfNodesPerGroup)
-    // nodes at a level is 2^level. level is zero indexed.
-    val maxLevelForSingleGroup = math.max(
-      (math.log(maxNumberOfNodesPerGroup) / math.log(2)).floor.toInt, 0)
-    logDebug("max level for single group = " + maxLevelForSingleGroup)
 
     timer.stop("init")
 
@@ -133,41 +137,40 @@ private class RandomForest (
      * beforehand and is not used in later levels.
      */
 
-    var topNode: Node = null // set on first iteration
-    var level = 0
-    var break = false
-    while (level <= maxDepth && !break) {
-      logDebug("#####################################")
-      logDebug("level = " + level)
-      logDebug("#####################################")
+    // FIFO queue of nodes to train: (treeIndex, node)
+    val nodeQueue = new mutable.Queue[(Int, Node)]()
 
-      // Find best split for all nodes at a level.
+    // Allocate and queue root nodes.
+    val topNodes: Array[Node] = Array.fill[Node](numTrees)(Node.emptyNode(nodeIndex = 1))
+    Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
+
+    while (nodeQueue.nonEmpty) {
+      // Collect some nodes to split:
+      //  nodesForGroup(treeIndex) = nodes to split
+      val totalNodesInGroup = math.min(nodeQueue.size, maxNumberOfNodesPerGroup)
+      val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[Node]]()
+      var nodeInGroup = 0
+      while (nodeInGroup < totalNodesInGroup) {
+        val (treeIndex, node) = nodeQueue.dequeue()
+        mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[Node]()) += node
+        nodeInGroup += 1
+      }
+      val nodesForGroup = mutableNodesForGroup.mapValues(_.toArray).toMap
+
+      // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
-      val (tmpTopNode: Node, doneTraining: Boolean) = DecisionTree.findBestSplits(treeInput,
-        metadata, level, topNode, splits, bins, maxLevelForSingleGroup, timer)
+      DecisionTree.findBestSplits(baggedInput,
+        metadata, topNodes, nodesForGroup, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
-
-      if (level == 0) {
-        topNode = tmpTopNode
-      }
-      if (doneTraining) {
-        break = true
-        logDebug("done training")
-      }
-
-      level += 1
     }
-
-    logDebug("#####################################")
-    logDebug("Extracting tree model")
-    logDebug("#####################################")
 
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    new DecisionTreeModel(topNode, strategy.algo)
+    val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
+    RandomForestModel.build(trees)
   }
 
 }
@@ -206,11 +209,12 @@ object RandomForest extends Serializable with Logging {
       featureSubsetStrategy: String,
       impurity: String,
       maxDepth: Int,
-      maxBins: Int): RandomForestModel = {
+      maxBins: Int,
+      seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
     val dtStrategy = new Strategy(Classification, impurityType, maxDepth,
       numClassesForClassification, maxBins, Sort, categoricalFeaturesInfo)
-    val rf = new RandomForest(dtStrategy, numTrees, featureSubsetStrategy)
+    val rf = new RandomForest(dtStrategy, numTrees, featureSubsetStrategy, seed)
     rf.train(input)
   }
 
@@ -225,10 +229,11 @@ object RandomForest extends Serializable with Logging {
       featureSubsetStrategy: String,
       impurity: String,
       maxDepth: Int,
-      maxBins: Int): RandomForestModel = {
+      maxBins: Int,
+      seed: Int): RandomForestModel = {
     trainClassifier(input.rdd, numClassesForClassification,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
+      numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
   }
 
   /**
@@ -261,11 +266,12 @@ object RandomForest extends Serializable with Logging {
       featureSubsetStrategy: String,
       impurity: String,
       maxDepth: Int,
-      maxBins: Int): RandomForestModel = {
+      maxBins: Int,
+      seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
     val dtStrategy = new Strategy(Regression, impurityType, maxDepth,
-      numClassesForClassification = 0, maxBins, Sort, categoricalFeaturesInfo)
-    val rf = new RandomForest(dtStrategy, numTrees, featureSubsetStrategy)
+      0, maxBins, Sort, categoricalFeaturesInfo)
+    val rf = new RandomForest(dtStrategy, numTrees, featureSubsetStrategy, seed)
     rf.train(input)
   }
 
@@ -279,10 +285,11 @@ object RandomForest extends Serializable with Logging {
       featureSubsetStrategy: String,
       impurity: String,
       maxDepth: Int,
-      maxBins: Int): RandomForestModel = {
+      maxBins: Int,
+      seed: Int): RandomForestModel = {
     trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
+      numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
   }
 
 }
