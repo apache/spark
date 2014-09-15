@@ -123,6 +123,7 @@ class CachedTableSuite extends QueryTest {
   test("CACHE TABLE tableName AS SELECT Star Table") {
     TestSQLContext.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
     TestSQLContext.sql("SELECT * FROM testCacheTable WHERE key = 1").collect()
+    assert(TestSQLContext.isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
     TestSQLContext.uncacheTable("testCacheTable")
   }
   

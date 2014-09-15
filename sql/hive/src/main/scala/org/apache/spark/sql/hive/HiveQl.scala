@@ -213,7 +213,6 @@ private[hive] object HiveQl {
    * Returns the AST for the given SQL string.
    */
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
-
  
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
@@ -240,7 +239,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        NativeCommand(sql)
+        AddJar(sql.trim.drop(8).trim)
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
       } else if (sql.trim.toLowerCase.startsWith("dfs")) {
@@ -1109,7 +1108,7 @@ private[hive] object HiveQl {
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         HiveGenericUdtf(functionName, attributes, children.map(nodeToExpr))
-        
+
       case a: ASTNode =>
         throw new NotImplementedError(
           s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:

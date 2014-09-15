@@ -127,7 +127,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SQRT = Keyword("SQRT")
   protected val ABS = Keyword("ABS")
-  protected val ADD = Keyword("ADD")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
