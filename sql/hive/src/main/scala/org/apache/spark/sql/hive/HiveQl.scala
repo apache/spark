@@ -213,7 +213,7 @@ private[hive] object HiveQl {
    * Returns the AST for the given SQL string.
    */
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
- 
+
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
