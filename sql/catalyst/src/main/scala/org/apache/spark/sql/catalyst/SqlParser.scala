@@ -188,7 +188,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case tableName ~ None => 
         CacheCommand(tableName, true)
       case tableName ~ Some(as ~ plan) =>
-        CacheTableAsSelectCommand(tableName,plan)
+        CacheTableAsSelectCommand(tableName, plan)
     }
     
   protected lazy val unCache: Parser[LogicalPlan] =
