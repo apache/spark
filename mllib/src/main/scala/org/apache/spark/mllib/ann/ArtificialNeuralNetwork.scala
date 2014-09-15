@@ -81,7 +81,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     while(l <= L) {
       tmp(l) = curPos
       curPos = curPos + (topology(l - 1) + 1) * (topology(l))
-      l = l + 1
+      l += 1
     }
     tmp
   }
@@ -96,7 +96,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     i = 0
     while(i < topology(0)) {
       arrPrev(i) = arrData(i)
-      i = i + 1
+      i += 1
     }
     l = 1
     while(l <= L) {
@@ -108,15 +108,15 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
         while( i < topology(l - 1) ) {
           cum = cum +
             arrPrev(i) * arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + i)
-          i = i + 1
+          i += 1
         }
         cum = cum +
           arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1)) // bias
         arrCur(j) = g(cum)
-        j = j + 1
+        j += 1
       }
       arrPrev = arrCur
-      l = l + 1
+      l += 1
     }
     arrPrev
   }
@@ -201,7 +201,6 @@ object ArtificialNeuralNetwork {
     train(input, model.topology, model.weights, numIterations, stepSize)
   }
 
-
   def train(
       input: RDD[(Vector, Vector)],
       topology: Array[Int],
@@ -222,23 +221,23 @@ object ArtificialNeuralNetwork {
 
   def randomWeights(topology: Array[Int]): Vector = {
     val rand = new XORShiftRandom()
-    
+
     var i: Int = 0
     var l: Int = 0
-    
+
     val noWeights = {
       var tmp = 0
       var i = 1
       while(i < topology.size) {
         tmp = tmp + topology(i) * (topology(i - 1) + 1)
-        i = i + 1
+        i += 1
       }
       tmp
     }
 
     val initialWeightsArr = new Array[Double](noWeights)
     var pos = 0;
-    
+
     l = 1
     while( l < topology.length) {
       i = 0
@@ -308,11 +307,11 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     val arrData = data.toArray
     val arrWeights = weights.toArray
     val arrNodes = new Array[Double](noNodes)
-        
+
     var i: Int = 0
     var j: Int = 0
     var l: Int = 0
-    
+
     // forward run
     i = 0;
     while(i < topology(0)) {
@@ -343,6 +342,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
       arrDiff(j) = (arrNodes(ofsNode(L) + j) - arrData(topology(0) + j))
       j += 1
     }
+
     var err: Double = 0;
     j = 0
     while(j < topology(L)) {
