@@ -26,7 +26,8 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
-import org.apache.spark.io.CompressionCodec
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 import java.io.File

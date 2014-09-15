@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -44,7 +45,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   after {
-    Utils.getHadoopFileSystem("/").delete(new Path(testDir.getAbsolutePath()), true)
+    Utils.getHadoopFileSystem("/", SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+      .delete(new Path(testDir.getAbsolutePath()), true)
   }
 
   test("Parse new and old application logs") {
@@ -56,13 +58,13 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     // Write a new-style application log.
     val logFile1 = new File(testDir, "app1-1-2-1.0")
     writeFile(logFile1,
-      SparkListenerApplicationStart("app1-1", 1L, "test"),
+      SparkListenerApplicationStart("app1-1", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
       )
 
     // Write an unfinished app, new-style.
     writeFile(new File(testDir, "app2-2-1-1.0.inprogress"),
-      SparkListenerApplicationStart("app2-2", 1L, "test")
+      SparkListenerApplicationStart("app2-2", None, 1L, "test")
       )
 
     // Write an old-style application log.
@@ -70,7 +72,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldLog.mkdir()
     writeFile(new File(oldLog, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldLog, provider.LOG_PREFIX + "1"),
-      SparkListenerApplicationStart("app3", 2L, "test"),
+      SparkListenerApplicationStart("app3", None, 2L, "test"),
       SparkListenerApplicationEnd(3L)
       )
     writeFile(new File(oldLog, provider.APPLICATION_COMPLETE))
@@ -80,14 +82,14 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldLog2.mkdir()
     writeFile(new File(oldLog2, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldLog2, provider.LOG_PREFIX + "1"),
-      SparkListenerApplicationStart("app4", 2L, "test")
+      SparkListenerApplicationStart("app4", None, 2L, "test")
       )
 
     // Force a reload of data from the log directory, and check that both logs are loaded.
     // Take the opportunity to check that the offset checks work as expected.
     provider.checkForLogs()
 
-    val list = provider.getListing()
+    val list = provider.getListing().toSeq
     list should not be (null)
     list.size should be (2)
 
@@ -113,21 +115,20 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       logDir.mkdir()
       writeFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
       writeFile(new File(logDir, provider.LOG_PREFIX + "1"),
-        SparkListenerApplicationStart("app2", 2L, "test"),
+        SparkListenerApplicationStart("app2", None, 2L, "test"),
         SparkListenerApplicationEnd(3L)
         )
       writeFile(new File(logDir, provider.COMPRESSION_CODEC_PREFIX + codec))
 
       val logPath = new Path(logDir.getAbsolutePath())
-      val info = provider.loadOldLoggingInfo(logPath)
-      if (valid) {
-        info.path.toUri().getPath() should be (logPath.toUri().getPath())
-        info.sparkVersion should be ("1.0")
-        info.compressionCodec should not be (None)
-        info.compressionCodec.get.getClass().getName() should be (codec)
-        info.applicationComplete should be (false)
-      } else {
-        info should be (null)
+      try {
+        val (path, parsedCodec) = provider.loadOldLoggingInfo(logPath)
+        path.toUri().getPath() should be
+          (logPath.toUri().getPath() + "/" + provider.LOG_PREFIX + "1")
+        parsedCodec should not be (None)
+        parsedCodec.get.getClass().getName() should be (codec)
+      } catch {
+        case e: IllegalArgumentException => valid should be (false)
       }
     }
   }

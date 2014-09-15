@@ -56,6 +56,7 @@ private[spark] class Master(
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
   val conf = new SparkConf
+  val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
@@ -687,6 +688,7 @@ private[spark] class Master(
    */
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
+    val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     val eventLogFile = app.desc.eventLogFile.getOrElse { return false }
     val eventLogInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogFile))
     if (eventLogInfo == null) {
@@ -702,7 +704,7 @@ private[spark] class Master(
 
     try {
       val compressionCodec = eventLogInfo.compressionCodec
-      val fileSystem = Utils.getHadoopFileSystem(eventLogFile)
+      val fileSystem = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
       val replayBus = new ReplayListenerBus(eventLogInfo.path, fileSystem, compressionCodec)
       val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
       replayBus.replay()

@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -60,7 +60,7 @@ private[spark] class EventLoggingListener(
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir))
+  private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir), hadoopConf)
   private lazy val compressionCodec = CompressionCodec.createCodec(sparkConf)
 
   // Only defined if the file system scheme is not local
@@ -79,7 +79,7 @@ private[spark] class EventLoggingListener(
         .append("-")
         .append(System.currentTimeMillis())
         .append("-")
-        .append(SparkContext.SPARK_VERSION)
+        .append(SPARK_VERSION)
       if (shouldCompress) {
         val codec =
           sparkConf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
