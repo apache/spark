@@ -872,7 +872,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.set("mapred.output.compression.codec", c.getCanonicalName)
       hadoopConf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
-    hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
+
+    // Useful on EMR where direct output committer is set by default
+    if (conf.getOutputCommitter == null) {
+      hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
+    }
+
     FileOutputFormat.setOutputPath(hadoopConf,
       SparkHadoopWriter.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
