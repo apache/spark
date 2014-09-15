@@ -37,6 +37,25 @@ case class Duration (private val millis: Long) {
 
   def / (that: Duration): Double = millis.toDouble / that.millis.toDouble
 
+  // Java-friendlier versions of the above:
+
+  def less(that: Duration): Boolean = this.<(that)
+
+  def lessEq(that: Duration): Boolean = this.<=(that)
+
+  def greater(that: Duration): Boolean = this.>(that)
+
+  def greaterEq(that: Duration): Boolean = this.>=(that)
+
+  def plus(that: Duration): Duration = this.+(that)
+
+  def minus(that: Duration): Duration = this.-(that)
+
+  def times(times: Int): Duration = this.*(times)
+
+  def div(that: Duration): Double = this./(that)
+
+
   def isMultipleOf(that: Duration): Boolean =
     (this.millis % that.millis == 0)
 
