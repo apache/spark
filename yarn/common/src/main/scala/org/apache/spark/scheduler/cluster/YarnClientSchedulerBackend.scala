@@ -42,10 +42,10 @@ private[spark] class YarnClientSchedulerBackend(
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
-    if (System.getenv(envVar) != null) {
-      arrayBuf += (optionName, System.getenv(envVar))
-    } else if (sc.getConf.contains(sysProp)) {
+    if (sc.getConf.contains(sysProp)) {
       arrayBuf += (optionName, sc.getConf.get(sysProp))
+    } else if (System.getenv(envVar) != null) {
+      arrayBuf += (optionName, System.getenv(envVar))
     }
   }
 
