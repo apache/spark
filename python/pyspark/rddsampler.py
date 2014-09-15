@@ -28,17 +28,23 @@ class RDDSamplerBase(object):
         self._split = None
         self._rand_initialized = False
         self._tried_numpy = False
+        try:
+            import numpy
+            self._driver_has_numpy = True
+        except ImportError:
+            self._driver_has_numpy = False
 
     def initRandomGenerator(self, split):
         if not self._tried_numpy:
-            try:
-                import numpy
-                self._use_numpy = True
-            except ImportError:
-                print >> sys.stderr, (
-                    "NumPy does not appear to be installed. "
-                    "Falling back to default random generator for sampling.")
-                self._use_numpy = False
+            self._use_numpy = False
+            if self._driver_has_numpy:
+                try:
+                    import numpy
+                    self._use_numpy = True
+                except ImportError:
+                    print >> sys.stderr, (
+                        "NumPy does not appear to be installed. "
+                        "Falling back to default random generator for sampling.")
             self._tried_numpy = True
 
         if self._use_numpy:
