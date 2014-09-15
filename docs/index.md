@@ -105,7 +105,7 @@ options for deployment:
 * [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-* [Community Projects](community-projects.html): third party Spark projects
+* [Supplemental Projects](https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects): related third party Spark projects
 
 **External Resources:**
 
