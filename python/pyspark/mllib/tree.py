@@ -161,7 +161,7 @@ class DecisionTree(object):
         :return: DecisionTreeModel
         """
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
+        dataBytes = _get_unmangled_labeled_point_rdd(data, cache=False)
         categoricalFeaturesInfoJMap = \
             MapConverter().convert(categoricalFeaturesInfo,
                                    sc._gateway._gateway_client)
@@ -169,7 +169,6 @@ class DecisionTree(object):
             dataBytes._jrdd, "classification",
             numClasses, categoricalFeaturesInfoJMap,
             impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
-        dataBytes.unpersist()
         return DecisionTreeModel(sc, model)
 
     @staticmethod
@@ -196,7 +195,7 @@ class DecisionTree(object):
         :return: DecisionTreeModel
         """
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
+        dataBytes = _get_unmangled_labeled_point_rdd(data, cache=False)
         categoricalFeaturesInfoJMap = \
             MapConverter().convert(categoricalFeaturesInfo,
                                    sc._gateway._gateway_client)
@@ -204,7 +203,6 @@ class DecisionTree(object):
             dataBytes._jrdd, "regression",
             0, categoricalFeaturesInfoJMap,
             impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
-        dataBytes.unpersist()
         return DecisionTreeModel(sc, model)
 
 

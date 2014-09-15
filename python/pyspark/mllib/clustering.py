@@ -22,7 +22,7 @@ from pyspark.mllib._common import \
     _get_unmangled_rdd, _get_unmangled_double_vector_rdd, _squared_distance, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper
+    _get_initial_weights, _serialize_rating
 from pyspark.mllib.linalg import SparseVector
 
 __all__ = ['KMeansModel', 'KMeans']
