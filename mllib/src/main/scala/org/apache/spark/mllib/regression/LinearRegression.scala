@@ -92,6 +92,7 @@ object LinearRegressionWithSGD {
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    */
+  @Deprecated
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -100,6 +101,17 @@ object LinearRegressionWithSGD {
       initialWeights: Vector): LinearRegressionModel = {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
       .run(input, initialWeights)
+  }
+
+  def createLearner(
+             numIterations: Int,
+             stepSize: Double,
+             miniBatchFraction: Double,
+             initialWeights: Vector): RegressionLearner = {
+    new RegressionLearner {
+      override def train(trainData: RDD[LabeledPoint]): RegressionModel =
+        LinearRegressionWithSGD.train(trainData, numIterations, stepSize, miniBatchFraction, initialWeights)
+    }
   }
 
   /**
@@ -113,12 +125,24 @@ object LinearRegressionWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
+  @Deprecated
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double): LinearRegressionModel = {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
+  }
+
+
+  def createLearner(
+                     numIterations: Int,
+                     stepSize: Double,
+                     miniBatchFraction: Double): RegressionLearner = {
+    new RegressionLearner {
+      override def train(trainData: RDD[LabeledPoint]): RegressionModel =
+        LinearRegressionWithSGD.train(trainData, numIterations, stepSize, miniBatchFraction)
+    }
   }
 
   /**
@@ -132,11 +156,22 @@ object LinearRegressionWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
    */
+  @Deprecated
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double): LinearRegressionModel = {
     train(input, numIterations, stepSize, 1.0)
+  }
+
+
+  def createLearner(
+                     numIterations: Int,
+                     stepSize: Double): RegressionLearner = {
+    new RegressionLearner {
+      override def train(trainData: RDD[LabeledPoint]): RegressionModel =
+        LinearRegressionWithSGD.train(trainData, numIterations, stepSize)
+    }
   }
 
   /**
@@ -149,9 +184,19 @@ object LinearRegressionWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
    */
+  @Deprecated
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): LinearRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
+  }
+
+
+  def createLearner(
+                    numIterations: Int): RegressionLearner = {
+    new RegressionLearner {
+      override def train(trainData: RDD[LabeledPoint]): RegressionModel =
+        LinearRegressionWithSGD.train(trainData, numIterations)
+    }
   }
 }
