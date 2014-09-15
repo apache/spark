@@ -96,8 +96,6 @@ private[spark] class MetricsSystem private (val instance: String,
   }
 
   def buildRegistryName(source: Source) = {
-    new Exception().printStackTrace()
-/*
     val appNameOpt = conf.getOption("spark.unique.app.name")
     val executorIdOpt = conf.getOption("spark.executor.id")
     val registryName = {
@@ -108,8 +106,6 @@ private[spark] class MetricsSystem private (val instance: String,
       }
     }
     registryName
-    */
-    "hoge"
   }
 
   def registerSource(source: Source) {

@@ -187,7 +187,7 @@ class SparkContext(config: SparkConf) extends Logging {
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
   val uniqueAppName = appName + "-" + System.currentTimeMillis()
-//  conf.set("spark.unique.app.name", uniqueAppName)
+  conf.set("spark.unique.app.name", uniqueAppName)
 
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
@@ -202,7 +202,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val listenerBus = new LiveListenerBus
 
   // Create the Spark execution environment (cache, map output tracker, etc)
-//  conf.set("spark.executor.id", "driver")
+  conf.set("spark.executor.id", "driver")
   private[spark] val env = SparkEnv.create(
     conf,
     "<driver>",
