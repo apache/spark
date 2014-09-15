@@ -49,7 +49,6 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
-conf/*.conf
 scalastyle-output.xml
 
 # For Hive
