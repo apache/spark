@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -35,7 +34,7 @@ import org.apache.spark.util.Utils
 
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 
-  private val oldConf = new HashMap[String, String]()
+  private var oldConf: Map[String, String] = _
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
@@ -47,14 +46,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
     yarnCluster.init(new YarnConfiguration())
     yarnCluster.start()
 
-    val sysProps = sys.props.map { case (k, v) => (k, v) }
-    sysProps.foreach { case (k, v) =>
-      if (k.startsWith("spark.")) {
-        oldConf += (k -> v)
-        sys.props -= k
-      }
-    }
-
+    oldConf = sys.props.toMap
     yarnCluster.getConfig().foreach { e =>
       sys.props += ("spark.hadoop." + e.getKey() -> e.getValue())
     }
@@ -78,7 +70,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
       }
     }
 
-    oldConf.foreach { case (k, v) => sys.props += (k -> v) }
+    sys.props ++= oldConf
 
     super.afterAll()
   }
@@ -100,7 +92,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
       "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
       "--arg", "yarn-cluster",
       "--arg", result.getAbsolutePath(),
-      "--num-executors", "4")
+      "--num-executors", "1")
     val sparkConf = new SparkConf()
     val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val clientArgs = new ClientArguments(args, sparkConf)
@@ -125,7 +117,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
   def main(args: Array[String]) = {
     val sc = new SparkContext(new SparkConf().setMaster(args(0))
-      .setAppName("yarn \"test app\" 'with quotes'"))
+      .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
     val status = new File(args(1))
     var result = "failure"
     try {
