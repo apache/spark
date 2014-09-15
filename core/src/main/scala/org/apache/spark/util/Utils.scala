@@ -356,8 +356,7 @@ private[spark] object Utils extends Logging {
           logInfo(("File %s exists and does not match contents of %s, " +
             "replacing it with %s").format(targetFile, url, url))
         } else {
-          throw new SparkException(
-            "File " + targetFile + " exists and does not match contents of" + " " + url)
+          throw new SparkException(s"File $targetFile exists and does not match contents of $url")
         }
       }
       Files.copy(cachedFile, targetFile)
