@@ -169,4 +169,12 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    sbt -Pyarn -Phadoop-2.3 compile
+    sbt/sbt -Pyarn -Phadoop-2.3 compile
+
+# Speeding up Compilation with Zinc
+
+[Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
+compiler. When run locally as a background process, it speeds up builds of Scala-based projects
+like Spark. Developers who regularly recompile Spark will be most interested in Zinc. The project
+site gives instructions for building and running `zinc`; OS X users can install it using
+`brew install zinc`.
