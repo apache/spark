@@ -57,7 +57,8 @@ private[hive] abstract class HiveFunctionRegistry
         functionClassName,
         children.zip(expectedDataTypes).map {
           case (e, NullType) => e
-          case (e, t) => if (e.dataType == t) e else Cast(e, t)
+          case (e, t) if (e.dataType == t) => e
+          case (e, t) => Cast(e, t)
         }
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {

@@ -244,18 +244,22 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
 
-  private[this] lazy val cast: Any => Any = dataType match {
-    case StringType => castToString
-    case BinaryType => castToBinary
-    case DecimalType => castToDecimal
-    case TimestampType => castToTimestamp
-    case BooleanType => castToBoolean
-    case ByteType => castToByte
-    case ShortType => castToShort
-    case IntegerType => castToInt
-    case FloatType => castToFloat
-    case LongType => castToLong
-    case DoubleType => castToDouble
+  private[this] lazy val cast: Any => Any = if (child.dataType == dataType) { 
+    sys.error(s"$dataType Cast To $dataType should have been eliminated in ConstantFolding")
+  } else {
+    dataType match {
+      case StringType => castToString
+      case BinaryType => castToBinary
+      case DecimalType => castToDecimal
+      case TimestampType => castToTimestamp
+      case BooleanType => castToBoolean
+      case ByteType => castToByte
+      case ShortType => castToShort
+      case IntegerType => castToInt
+      case FloatType => castToFloat
+      case LongType => castToLong
+      case DoubleType => castToDouble
+    }
   }
 
   override def eval(input: Row): Any = {
