@@ -166,3 +166,22 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
       child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan)
+  extends LeafNode with Command {
+  
+  override protected[sql] lazy val sideEffectResult = {
+    sqlContext.catalog.registerTable(None, tableName,  sqlContext.executePlan(plan).analyzed)
+    sqlContext.cacheTable(tableName)
+    // It does the caching eager.
+    sqlContext.table(tableName).count
+    Seq.empty[Row]
+  }
+
+  override def output: Seq[Attribute] = Seq.empty  
+  
+}
