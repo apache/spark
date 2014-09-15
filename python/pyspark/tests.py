@@ -587,12 +587,9 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
     def test_distinct(self):
-        rdd = self.sc.parallelize((1, 2, 3)*10).distinct()
-        self.assertEquals(rdd.count(), 3)
-
-    def test_distinct_numPartitions(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
         self.assertEquals(rdd.getNumPartitions(), 10)
+        self.assertEquals(rdd.distinct().count(), 3)
         result = rdd.distinct(5)
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
@@ -647,14 +644,10 @@ class TestSQL(PySparkTestCase):
         srdd.collect()
 
     def test_distinct(self):
-        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10)
-        srdd = self.sqlCtx.jsonRDD(rdd).distinct()
-        self.assertEquals(srdd.count(), 3)
-
-    def test_distinct_numPartitions(self):
         rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
         srdd = self.sqlCtx.jsonRDD(rdd)
         self.assertEquals(srdd.getNumPartitions(), 10)
+        self.assertEquals(srdd.distinct().count(), 3)
         result = srdd.distinct(5)
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
