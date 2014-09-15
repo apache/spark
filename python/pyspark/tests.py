@@ -46,6 +46,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
     CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType
+from pyspark import shuffle
 
 _have_scipy = False
 _have_numpy = False
@@ -138,17 +139,17 @@ class TestSorter(unittest.TestCase):
         random.shuffle(l)
         sorter = ExternalSorter(1)
         self.assertEquals(sorted(l), list(sorter.sorted(l)))
-        self.assertGreater(sorter._spilled_bytes, 0)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, 0)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
-        self.assertGreater(sorter._spilled_bytes, last)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
-        self.assertGreater(sorter._spilled_bytes, last)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
                           list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
-        self.assertGreater(sorter._spilled_bytes, last)
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):
         conf = SparkConf().set("spark.python.worker.memory", "1m")
