@@ -175,6 +175,6 @@ can be set to control the SBT build. For example:
 
 [Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
 compiler. When run locally as a background process, it speeds up builds of Scala-based projects
-like Spark. Developers who regularly recompile Spark will be most interested in Zinc. The project
-site gives instructions for building and running `zinc`; OS X users can install it using
-`brew install zinc`.
+like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
+Zinc. The project site gives instructions for building and running `zinc`; OS X users can
+install it using `brew install zinc`.
