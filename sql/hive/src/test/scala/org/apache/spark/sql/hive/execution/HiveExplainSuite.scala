@@ -51,4 +51,12 @@ class HiveExplainSuite extends QueryTest {
           "== Physical Plan ==", 
           "Code Generation", "== RDD ==")
   }
+
+  test("explain native command") {
+    check("explain set a=123", true, "== Physical Plan ==", "SetCommand", "a", "123")
+    check("explain show tables", true, "== Physical Plan ==", "NativeCommand", "show tables")
+    check("  Explain   show tables  ", true, "== Physical Plan ==", "NativeCommand", "show tables")
+    check(" Explain   create table temp__B as select * from src", true,
+          "== Physical Plan ==", "HiveTableScan")
+  }
 }
