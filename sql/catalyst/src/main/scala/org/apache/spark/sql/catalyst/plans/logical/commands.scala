@@ -77,6 +77,6 @@ case class DescribeCommand(
 }
 
 /**
- * Returned for the "ADD CACHE TABLE tableName AS SELECT .." command.
+ * Returned for the "CACHE TABLE tableName AS SELECT .." command.
  */
 case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan) extends Command

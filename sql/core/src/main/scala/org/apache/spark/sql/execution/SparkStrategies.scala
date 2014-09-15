@@ -305,7 +305,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
       case logical.CacheCommand(tableName, cache) =>
         Seq(execution.CacheCommand(tableName, cache)(context))
-      case logical.CacheTableAsSelectCommand(tableName,plan) =>
+      case logical.CacheTableAsSelectCommand(tableName, plan) =>
         Seq(execution.CacheTableAsSelectCommand(tableName, plan))
       case _ => Nil
     }
