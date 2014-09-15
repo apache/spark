@@ -45,8 +45,6 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
- *
- * See python/pyspark/mllib/_common.py for the mutually agreed upon data format.
  */
 @DeveloperApi
 class PythonMLLibAPI extends Serializable {
