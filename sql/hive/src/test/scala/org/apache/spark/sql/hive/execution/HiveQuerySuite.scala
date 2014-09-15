@@ -148,6 +148,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     sql("FROM src SELECT key").collect()
   }
 
+  test("Query with constant folding the CAST") {
+    sql("SELECT CAST(CAST('123' AS binary) AS binary) FROM src LIMIT 1").collect()
+  }
+
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
     "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
 
