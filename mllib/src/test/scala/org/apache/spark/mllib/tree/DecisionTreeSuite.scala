@@ -350,9 +350,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val split = rootNode.split.get
-    assert(split.feature === 0)
-
     val stats = rootNode.stats.get
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
@@ -376,9 +373,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
-
-    val split = rootNode.split.get
-    assert(split.feature === 0)
 
     val stats = rootNode.stats.get
     assert(stats.gain === 0)
@@ -405,9 +399,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val split = rootNode.split.get
-    assert(split.feature === 0)
-
     val stats = rootNode.stats.get
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
@@ -432,9 +423,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(0).length === 100)
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
-
-    val split = rootNode.split.get
-    assert(split.feature === 0)
 
     val stats = rootNode.stats.get
     assert(stats.gain === 0)

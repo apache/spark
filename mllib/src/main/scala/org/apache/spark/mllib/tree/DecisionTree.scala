@@ -56,7 +56,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
-    // Note: random seed will not be used.
+    // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
     val rfModel = rf.train(input)
     rfModel.trees(0)
@@ -265,8 +265,8 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Get the node index corresponding to this data point.
-   * This function mimics prediction, passing an example from the root node down to a node
-   * at the current level being trained; that node's index is returned.
+   * This function mimics prediction, passing an example from the root node down to a leaf
+   * or unsplit node; that node's index is returned.
    *
    * @param node  Node in tree from which to classify the given data point.
    * @param binnedFeatures  Binned feature vector for data point.
@@ -276,7 +276,7 @@ object DecisionTree extends Serializable with Logging {
    *          Otherwise, last node reachable in tree matching this example.
    *          Note: This is the global node index, i.e., the index used in the tree.
    *                This index is different from the index used during training a particular
-   *                set of nodes in a (level, group).
+   *                group of nodes on one call to [[findBestSplits()]].
    */
   private def predictNodeIndex(
       node: Node,
@@ -329,9 +329,10 @@ object DecisionTree extends Serializable with Logging {
    * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
    *             each (node, feature, bin).
    * @param treePoint  Data point being aggregated.
-   * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
+   * @param nodeIndex  Node corresponding to treePoint.  agg is indexed in [0, numNodes).
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param unorderedFeatures  Set of indices of unordered features.
+   * @param instanceWeight  Weight (importance) of instance in dataset.
    */
   private def mixedBinSeqOp(
       agg: DTStatsAggregator,
@@ -380,7 +381,8 @@ object DecisionTree extends Serializable with Logging {
    * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
    *             each (node, feature, bin).
    * @param treePoint  Data point being aggregated.
-   * @param nodeIndex  Node corresponding to treePoint. Indexed from 0 at start of (level, group).
+   * @param nodeIndex  Node corresponding to treePoint.  agg is indexed in [0, numNodes).
+   * @param instanceWeight  Weight (importance) of instance in dataset.
    * @return agg
    */
   private def orderedBinSeqOp(
@@ -401,16 +403,16 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Given an array of nodes, this finds the best split for each node.
+   * Given a group of nodes, this finds the best split for each node.
    *
-   * TODO: Update docs!
    * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
    * @param metadata Learning and dataset metadata
+   * @param topNodes Root node for each tree.  Used for matching instances with nodes.
+   * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
-   * @return  (root, doneTraining) where:
-   *          root = Root node (which is newly created on the first iteration),
-   *          doneTraining = true if no more internal nodes were created.
+   * @param nodeQueue  Queue of nodes to split, with values (treeIndex, node).
+   *                   Updated with new non-leaf nodes which are created.
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
@@ -425,18 +427,16 @@ object DecisionTree extends Serializable with Logging {
     /*
      * The high-level descriptions of the best split optimizations are noted here.
      *
-     * *Level-wise training*
-     * We perform bin calculations for all nodes at the given level to avoid making multiple
-     * passes over the data. Thus, for a slightly increased computation and storage cost we save
-     * several iterations over the data especially at higher levels of the decision tree.
+     * *Group-wise training*
+     * We perform bin calculations for groups of nodes to reduce the number of
+     * passes over the data.  Each iteration requires more computation and storage,
+     * but saves several iterations over the data.
      *
      * *Bin-wise computation*
      * We use a bin-wise best split computation strategy instead of a straightforward best split
      * computation strategy. Instead of analyzing each sample for contribution to the left/right
      * child node impurity of every split, we first categorize each feature of a sample into a
-     * bin. Each bin is an interval between a low and high split. Since each split, and thus bin,
-     * is ordered (read ordering for categorical variables in the findSplitsBins method),
-     * we exploit this structure to calculate aggregates for bins and then use these aggregates
+     * bin. We exploit this structure to calculate aggregates for bins and then use these aggregates
      * to calculate information gain for each split.
      *
      * *Aggregation over partitions*
@@ -446,8 +446,7 @@ object DecisionTree extends Serializable with Logging {
      * drastically reduce the communication overhead.
      */
 
-    // numNodes:  Number of nodes in this (level of tree, group),
-    //            where nodes at deeper (larger) levels may be divided into groups.
+    // numNodes:  Number of nodes in this group
     val numNodes = nodesForGroup.values.map(_.size).sum
     logDebug("numNodes = " + numNodes)
 
@@ -526,7 +525,7 @@ object DecisionTree extends Serializable with Logging {
     }
     timer.stop("aggregation")
 
-    // Calculate best splits for all nodes at a given level
+    // Calculate best splits for all nodes in the group
     timer.start("chooseSplits")
 
     // Iterate over all nodes in this group.
@@ -535,26 +534,22 @@ object DecisionTree extends Serializable with Logging {
         val (split: Split, stats: InformationGainStats, predict: Predict) =
           binsToBestSplit(binAggregates, aggNodeIndex, metadata, splits)
         val node = groupNodeMap(treeIndex)(nodeIndex)
-        val level = Node.indexToLevel(nodeIndex)
         logDebug("best split = " + split)
 
-        // Extract info for this node at the current level.
-        // Create children.
-        val isLeaf = (stats.gain <= 0) || (level == metadata.maxDepth)
+        // Extract info for this node.  Create children if not leaf.
+        val isLeaf = (stats.gain <= 0) || (Node.indexToLevel(nodeIndex) == metadata.maxDepth)
         assert(node.id == nodeIndex)
         node.predict = predict.predict
         node.isLeaf = isLeaf
-        node.split = Some(split)
-        node.leftNode = Some(Node.emptyNode(Node.leftChildIndex(nodeIndex)))
-        node.rightNode = Some(Node.emptyNode(Node.rightChildIndex(nodeIndex)))
         node.stats = Some(stats)
         logDebug("Node = " + node)
 
         if (!isLeaf) {
+          node.split = Some(split)
+          node.leftNode = Some(Node.emptyNode(Node.leftChildIndex(nodeIndex)))
+          node.rightNode = Some(Node.emptyNode(Node.rightChildIndex(nodeIndex)))
           nodeQueue.enqueue((treeIndex, node.leftNode.get))
           nodeQueue.enqueue((treeIndex, node.rightNode.get))
-        }
-        if (level < metadata.maxDepth) {
           logDebug("leftChildIndex = " + node.leftNode.get.id +
             ", impurity = " + stats.leftImpurity)
           logDebug("rightChildIndex = " + node.rightNode.get.id +
@@ -569,7 +564,7 @@ object DecisionTree extends Serializable with Logging {
    * Calculate the information gain for a given (feature, split) based upon left/right aggregates.
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
    * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @return information gain and statistics for all splits
+   * @return information gain and statistics for split
    */
   private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
@@ -613,7 +608,7 @@ object DecisionTree extends Serializable with Logging {
    * Calculate predict value for current node, given stats of any split.
    * Note that this function is called only once for each node.
    * @param leftImpurityCalculator left node aggregates for a split
-   * @param rightImpurityCalculator right node aggregates for a node
+   * @param rightImpurityCalculator right node aggregates for a split
    * @return predict value for current node
    */
   private def calculatePredict(
@@ -630,8 +625,8 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Find the best split for a node.
    * @param binAggregates Bin statistics.
-   * @param nodeIndex Index for node to split in this (level, group).
-   * @return tuple for best split: (Split, information gain)
+   * @param nodeIndex Index into aggregates for node to split in this group.
+   * @return tuple for best split: (Split, information gain, prediction at node)
    */
   private def binsToBestSplit(
       binAggregates: DTStatsAggregator,

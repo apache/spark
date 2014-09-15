@@ -44,6 +44,12 @@ import org.apache.spark.util.Utils
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
  *                 etc.
  * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+ * @param featureSubsetStrategy Number of features to consider for splits at each node.
+ *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+ *                              If "auto" is set, this parameter is set based on numTrees:
+ *                              if numTrees == 1, then featureSubsetStrategy = "all";
+ *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+ * @param seed  Random seed for bootstrapping and choosing feature subsets.
  */
 @Experimental
 private class RandomForest (
@@ -80,6 +86,8 @@ private class RandomForest (
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata = DecisionTreeMetadata.buildMetadata(retaggedInput, strategy)
     logDebug("algo = " + strategy.algo)
+    logDebug("numTrees = " + numTrees)
+    logDebug("seed = " + seed)
     logDebug("maxBins = " + metadata.maxBins)
 
     logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
@@ -115,8 +123,6 @@ private class RandomForest (
     require(maxDepth <= 30,
       s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
 
-    // Calculate level for single group construction
-
     // Max memory usage for aggregates
     val maxMemoryUsage = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
@@ -131,10 +137,10 @@ private class RandomForest (
     timer.stop("init")
 
     /*
-     * The main idea here is to perform level-wise training of the decision tree nodes thus
-     * reducing the passes over the data from l to log2(l) where l is the total number of nodes.
-     * Each data sample is handled by a particular node at that level (or it reaches a leaf
-     * beforehand and is not used in later levels.
+     * The main idea here is to perform group-wise training of the decision tree nodes thus
+     * reducing the passes over the data from (# nodes) to (# nodes / maxNumberOfNodesPerGroup).
+     * Each data sample is handled by a particular node (or it reaches a leaf and is not used
+     * in lower levels).
      */
 
     // FIFO queue of nodes to train: (treeIndex, node)
@@ -199,6 +205,7 @@ object RandomForest extends Serializable with Logging {
    *                  (suggested value: 4)
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
+   * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction
    */
   def trainClassifier(
@@ -257,6 +264,7 @@ object RandomForest extends Serializable with Logging {
    *                  (suggested value: 4)
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
+   * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction
    */
   def trainRegressor(
