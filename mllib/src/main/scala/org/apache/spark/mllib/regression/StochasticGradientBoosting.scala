@@ -1,6 +1,5 @@
 package org.apache.spark.mllib.regression
 
-import java.util.Random
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.configuration.Algo.Algo
@@ -9,18 +8,19 @@ import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.{DoubleRDDFunctions, RDD}
 
+import scala.util.Random
+
 /**
- * Created by olgaoskina on 06/08/14.
  *
  * Read about the algorithm "Gradient boosting" here:
  * http://www.montefiore.ulg.ac.be/services/stochastic/pubs/2007/GWD07/geurts-icml2007.pdf
  *
- * Libraries that implement the algorithm "Gradient boosting"
+ * Libraries that implement the algorithm "Gradient boosting" similar way
  * https://code.google.com/p/jforests/
  * https://code.google.com/p/jsgbm/
  *
  */
-class StochasticGradientBoosting () {
+class StochasticGradientBoosting {
 
   def run(
        input : RDD[LabeledPoint],
@@ -40,11 +40,10 @@ class StochasticGradientBoosting () {
         .zip(gradient)
         .map{case(inputVal, gradientVal) => new LabeledPoint(gradientVal, inputVal.features)}
 
-      val rand = new Random()
       val randomSample = newInput.sample(
         false,
         (samplingSizeRatio * featureDimension).asInstanceOf[Int],
-        rand.nextInt()
+        Random.nextInt()
       )
 
       val model = DecisionTree.train(randomSample, strategy)
@@ -87,22 +86,10 @@ class StochasticGradientBoostingModel (
     initValue = value
   }
 
-  /**
-   * Predict values for the given data set using the model trained.
-   *
-   * @param testData RDD representing data points to be predicted
-   * @return RDD[Double] where each entry contains the corresponding prediction
-   */
   override def predict(testData: RDD[Vector]): RDD[Double] = {
     testData.map(v => predict(v))
   }
 
-  /**
-   * Predict values for a single data point using the model trained.
-   *
-   * @param testData array representing a single data point
-   * @return Double prediction from the trained model
-   */
   override def predict(testData: Vector): Double = {
     computeValue(testData)
   }
