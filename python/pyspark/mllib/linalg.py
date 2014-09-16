@@ -66,6 +66,8 @@ class DenseVector(Vector):
         return DenseVector, (self.array,)
 
     def dot(self, other):
+        if isinstance(other, SparseVector):
+            return other.dot(self)
         return np.dot(self.toArray(), other)
 
     def squared_distance(self, other):
