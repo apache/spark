@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Building Spark with Maven
+title: Building Spark
+redirect_from: "building-with-maven.html"
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -159,4 +160,21 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
 
+# Building with SBT
 
+Maven is the official recommendation for packaging Spark, and is the "build of reference".
+But SBT is supported for day-to-day development since it can provide much faster iterative
+compilation. More advanced developers may wish to use SBT.
+
+The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
+can be set to control the SBT build. For example:
+
+    sbt/sbt -Pyarn -Phadoop-2.3 compile
+
+# Speeding up Compilation with Zinc
+
+[Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
+compiler. When run locally as a background process, it speeds up builds of Scala-based projects
+like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
+Zinc. The project site gives instructions for building and running `zinc`; OS X users can
+install it using `brew install zinc`.

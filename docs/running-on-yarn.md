@@ -11,7 +11,7 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 
 Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the Spark project website. 
-To build Spark yourself, refer to the [building with Maven guide](building-with-maven.html).
+To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 # Configuration
 

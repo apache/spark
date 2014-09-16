@@ -40,7 +40,7 @@ function exit_with_usage {
   echo ""
   echo "usage:"
   echo "./make-distribution.sh [--name] [--tgz] [--with-tachyon] <maven build options>"
-  echo "See Spark's \"Building with Maven\" doc for correct Maven options."
+  echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
 }
