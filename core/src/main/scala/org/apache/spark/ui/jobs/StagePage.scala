@@ -96,7 +96,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             }
             {if (hasCacheHitRatio)
             <li>
-              <strong>Cache hit ratio: </strong>{stageData.cacheHitCount.toDouble /
+              <strong>Cache hit ratio: </strong>{stageData.cacheHitCount * 100.0 /
               (stageData.cacheHitCount + stageData.cacheMissCount)}
               %
             </li>
