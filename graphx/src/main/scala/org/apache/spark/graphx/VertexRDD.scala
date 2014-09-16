@@ -392,7 +392,7 @@ object VertexRDD {
    */
   def apply[VD: ClassTag](
       vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD): VertexRDD[VD] = {
-    VertexRDD(vertices, edges, defaultVal, (a, b) => b)
+    VertexRDD(vertices, edges, defaultVal, (a, b) => a)
   }
 
   /**
