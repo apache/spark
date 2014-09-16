@@ -35,8 +35,7 @@ __all__ = ['SparseVector', 'Vectors']
 if sys.version_info[:2] == (2, 7):
     # speed up pickling array in Python 2.7
     def fast_pickle_array(ar):
-        return array.array, (ar.typecode, bytearray(ar.tostring()))
-
+        return array.array, (ar.typecode, ar.tostring())
     copy_reg.pickle(array.array, fast_pickle_array)
 
 
