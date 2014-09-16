@@ -21,12 +21,8 @@ import java.io.IOException
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
-import scala.util.Try
-
 import akka.actor._
 import akka.remote._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
@@ -107,8 +103,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
-    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, 30)
+
+    // Use higher priority than FileSystem.
+    assert(ApplicationMaster.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager
+      .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
@@ -189,7 +188,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIAddress, securityMgr)
+      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       try {
         userThread.join()
       } finally {
@@ -283,11 +282,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
 
         val sparkContext = sparkContextRef.get()
-        assert(sparkContext != null || count >= numTries)
         if (sparkContext == null) {
-          logError(
-            "Unable to retrieve sparkContext inspite of waiting for %d, numTries = %d".format(
-              count * waitTime, numTries))
+          logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
+            + " log output for errors. Failing the application.").format(numTries * waitTime))
         }
         sparkContext
       }
@@ -408,6 +405,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 }
 
 object ApplicationMaster extends Logging {
+
+  val SHUTDOWN_HOOK_PRIORITY: Int = 30
 
   private var master: ApplicationMaster = _
 
