@@ -159,4 +159,23 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
 
+# Building under http-proxy environment
 
+Sometimes,spark is built in http-proxy environment. We recommend the following settings:
+
+<div class="highlight"><pre><code class="bash"><span class="nb">export </span><span class="nv">MAVEN_OPTS</span><span class="o">=</span><span class="s2">&quot;-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true&quot;</span></code></pre></div>
+
+ 
+<p>If you don&#8217;t run this, you may see warnings like the following:</p>
+
+<pre><code>Downloading: https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
+Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
+WARNING: NTLM authentication error: Credentials cannot be used for NTLM authentication: org.apache.maven.wagon.providers.http.httpclient.auth.UsernamePasswordCredentials
+Downloading: https://repository.apache.org/content/repositories/releases/org/apache/hadoop/hadoop-client/1.0.4/hadoop-client-1.0.4.pom
+Aug 27, 2014 5:08:21 PM org.apache.maven.wagon.providers.http.httpclient.client.protocol.RequestAuthenticationBase process
+WARNING: NTLM authentication error: Credentials cannot be used for NTLM authentication: org.apache.maven.wagon.providers.http.httpclient.auth.UsernamePasswordCredentials
+</code></pre>
+
+<p>You can fix this by setting the <code>MAVEN_OPTS</code> variable as discussed before.</p>
+
+<p><strong>Note:</strong> <em>the setting could lead to security risks of your Maven server.</em></p>
