@@ -18,7 +18,6 @@
 #
 
 # NOTE: Any changes to this file must be reflected in SparkSubmitDriverBootstrapper.scala!
-
 cygwin=false
 case "`uname`" in
     CYGWIN*) cygwin=true;;
@@ -143,7 +142,31 @@ if [[ "$?" != "0" ]]; then
   echo "$classpath_output"
   exit 1
 else
-  CLASSPATH="$classpath_output"
+  if [[ $@ == *execution-context:* ]]; then
+    if [ -z "$EXECUTION_CONTEXT_HOME" ]; then
+      echo "Need to set EXECUTION_CONTEXT_HOME"
+      exit 1
+    fi  
+    if [ -z "$HADOOP_CONF_DIR" ]; then
+       export HADOOP_CONF_DIR=$EXECUTION_CONTEXT_HOME/conf
+       CLASSPATH=$EXECUTION_CONTEXT_HOME/conf
+    fi
+    CLASSPATH=$HADOOP_CONF_DIR
+        export IFS=","
+        for word in $@; do
+           if [[ "$word" == *jar ]]; then
+              CLASSPATH=$CLASSPATH":"$word
+           fi
+        done
+        unset IFS
+    for i in `ls -a $EXECUTION_CONTEXT_HOME/lib/*.jar`  
+       do  
+       CLASSPATH=$CLASSPATH":"$i
+    done  
+    #echo STARK CLASSPATH: $CLASSPATH
+  else
+    CLASSPATH="$classpath_output"
+  fi
 fi
 
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then

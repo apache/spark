@@ -138,6 +138,9 @@ client mode. The cluster location will be found based on the HADOOP_CONF_DIR var
 <tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
 cluster mode. The cluster location will be found based on HADOOP_CONF_DIR.
 </td></tr>
+<tr><td> execution-context:[org.apache.spark.JobExecutionContext implementation] </td><td> Allows one to specify custom implementation of JobExecutionContext.
+Primarily used within the context of Hadoop/YARN to provide access to its native features related to batch/ETL processing.
+</td></tr>
 </table>
 
 
