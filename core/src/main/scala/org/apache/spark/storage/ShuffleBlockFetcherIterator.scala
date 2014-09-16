@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
@@ -112,18 +111,10 @@ final class ShuffleBlockFetcherIterator(
     blockTransferService.fetchBlocks(req.address.host, req.address.port, blockIds,
       new BlockFetchingListener {
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          var is: InputStream = null
-          try {
-            is = data.inputStream()
-            results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
-              () => serializer.newInstance().deserializeStream(
-                blockManager.wrapForCompression(BlockId(blockId), is)).asIterator
-            ))
-          } finally {
-            if (is != null) {
-              is.close()
-            }
-          }
+          results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
+            () => serializer.newInstance().deserializeStream(
+              blockManager.wrapForCompression(BlockId(blockId), data.inputStream())).asIterator
+          ))
           shuffleMetrics.remoteBytesRead += data.size
           shuffleMetrics.remoteBlocksFetched += 1
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
