@@ -1929,7 +1929,8 @@ class RDD(object):
         """
         rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer())) \
             if not self._is_pickled() else self
-        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, True)
+        is_batch = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
+        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, is_batch)
 
     def countApprox(self, timeout, confidence=0.95):
         """
