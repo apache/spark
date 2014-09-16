@@ -242,7 +242,7 @@ class NaiveBayes(object):
         @param lambda_: The smoothing parameter
         """
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
+        dataBytes = _get_unmangled_labeled_point_rdd(data, cache=False)
         ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),

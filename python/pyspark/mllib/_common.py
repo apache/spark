@@ -428,7 +428,7 @@ def _get_initial_weights(initial_weights, data):
 # _regression_train_wrapper is responsible for setup and error checking.
 def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
     initial_weights = _get_initial_weights(initial_weights, data)
-    dataBytes = _get_unmangled_labeled_point_rdd(data)
+    dataBytes = _get_unmangled_labeled_point_rdd(data, cache=False)
     ans = train_func(dataBytes, _serialize_double_vector(initial_weights))
     if len(ans) != 2:
         raise RuntimeError("JVM call result had unexpected length")

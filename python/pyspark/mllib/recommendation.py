@@ -20,8 +20,8 @@ from pyspark.mllib._common import \
     _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _serialize_tuple, RatingDeserializer
+    _get_initial_weights, _serialize_rating, _serialize_tuple, \
+    RatingDeserializer
 from pyspark.rdd import RDD
 
 __all__ = ['MatrixFactorizationModel', 'ALS']
@@ -65,7 +65,7 @@ class ALS(object):
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
         sc = ratings.context
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
+        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating, cache=False)
         mod = sc._jvm.PythonMLLibAPI().trainALSModel(
             ratingBytes._jrdd, rank, iterations, lambda_, blocks)
         return MatrixFactorizationModel(sc, mod)
@@ -73,7 +73,7 @@ class ALS(object):
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
         sc = ratings.context
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
+        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating, cache=False)
         mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(
             ratingBytes._jrdd, rank, iterations, lambda_, blocks, alpha)
         return MatrixFactorizationModel(sc, mod)

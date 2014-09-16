@@ -67,7 +67,8 @@ class PythonMLLibAPI extends Serializable {
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
       dataBytesJRDD: JavaRDD[Array[Byte]],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(SerDe.deserializeLabeledPoint)
+    // Cache deserialized RDD for iterative learning. SPARK-3488
+    val data = dataBytesJRDD.rdd.map(SerDe.deserializeLabeledPoint).cache()
     val initialWeights = SerDe.deserializeDoubleVector(initialWeightsBA)
     val model = trainFunc(data, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
@@ -248,7 +249,8 @@ class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String): java.util.List[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(bytes => SerDe.deserializeDoubleVector(bytes))
+    // Cache deserialized RDD for iterative learning. SPARK-3488
+    val data = dataBytesJRDD.rdd.map(bytes => SerDe.deserializeDoubleVector(bytes)).cache()
     val model = KMeans.train(data, k, maxIterations, runs, initializationMode)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(SerDe.serializeDoubleMatrix(model.clusterCenters.map(_.toArray)))
