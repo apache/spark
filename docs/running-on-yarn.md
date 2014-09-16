@@ -155,6 +155,7 @@ For example:
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1 \
+        --queue thequeue \
         lib/spark-examples*.jar \
         10
 
