@@ -377,15 +377,15 @@ class SchemaRDD(
   def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
 
   /**
-   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   * Helper for converting a Row to a simple Array suitable for pyspark serialization.
    */
-  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+  private def rowToJArray(row: Row, structType: StructType): Array[Any] = {
     import scala.collection.Map
 
     def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
       case (null, _) => null
 
-      case (obj: Row, struct: StructType) => rowToArray(obj, struct)
+      case (obj: Row, struct: StructType) => rowToJArray(obj, struct)
 
       case (seq: Seq[Any], array: ArrayType) =>
         seq.map(x => toJava(x, array.elementType)).asJava
@@ -402,20 +402,35 @@ class SchemaRDD(
       case (other, _) => other
     }
 
-    def rowToArray(row: Row, structType: StructType): Array[Any] = {
-      val fields = structType.fields.map(field => field.dataType)
-      row.zip(fields).map {
-        case (obj, dataType) => toJava(obj, dataType)
-      }.toArray
-    }
+    val fields = structType.fields.map(field => field.dataType)
+    row.zip(fields).map {
+      case (obj, dataType) => toJava(obj, dataType)
+    }.toArray
+  }
 
+  /**
+   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   */
+  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToArray(row, rowSchema)
+        rowToJArray(row, rowSchema)
       }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
+  }
+
+  /**
+   * Serializes the Array[Row] returned by SchemaRDD's optimized collect(), using the same
+   * format as javaToPython. It is used by pyspark.
+   */
+  private[sql] def collectToPython: JList[Array[Byte]] = {
+    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
+    val pickle = new Pickler
+    new java.util.ArrayList(collect().map { row =>
+      rowToJArray(row, rowSchema)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 
   /**
@@ -433,7 +448,7 @@ class SchemaRDD(
   }
 
   // =======================================================================
-  // Overriden RDD actions
+  // Overridden RDD actions
   // =======================================================================
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()

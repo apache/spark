@@ -776,7 +776,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.
    */
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
