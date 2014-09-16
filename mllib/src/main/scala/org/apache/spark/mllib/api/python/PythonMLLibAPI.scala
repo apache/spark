@@ -541,8 +541,8 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val rating: Rating = obj.asInstanceOf[Rating]
-      saveObjects(out, pickler, rating.user.asInstanceOf[Object], rating.product.asInstanceOf[Object],
-        rating.rating.asInstanceOf[Object])
+      saveObjects(out, pickler, rating.user.asInstanceOf[Object],
+        rating.product.asInstanceOf[Object], rating.rating.asInstanceOf[Object])
     }
 
     def construct(args: Array[Object]) :Object = {
