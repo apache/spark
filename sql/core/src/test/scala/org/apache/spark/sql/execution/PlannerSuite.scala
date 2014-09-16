@@ -39,39 +39,22 @@ class PlannerSuite extends FunSuite {
 
   test("count is partially aggregated") {
     val query = testData.groupBy('value)(Count('key)).queryExecution.analyzed
-    val planned = PartialAggregation(query).head
-    val aggregations = planned.collect { case a: Aggregate => a }
+    val planned = HashAggregation(query).head
+    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
     assert(aggregations.size === 2)
   }
 
-  test("count distinct is not partially aggregated") {
+  test("count distinct is partially aggregated") {
     val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = PartialAggregation(query)
-    assert(planned.isEmpty)
+    val planned = HashAggregation(query)
+    assert(planned.nonEmpty)
   }
 
-  test("mixed aggregates are not partially aggregated") {
+  test("mixed aggregates are partially aggregated") {
     val query =
       testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = PartialAggregation(query)
-    assert(planned.isEmpty)
-  }
-
-  test("equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
-  }
-
-  test("multiple-key equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner,
-      Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
+    val planned = HashAggregation(query)
+    assert(planned.nonEmpty)
   }
 }

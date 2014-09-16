@@ -86,10 +86,26 @@ private[spark] class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-      "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+    val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
+      .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
+      .getOrElse {
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraLibraryPath = sc.conf.getOption("spark.executor.extraLibraryPath").map { lp =>
+      s"-Djava.library.path=$lp"
+    }
+    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("SPARK_EXECUTOR_OPTS")
+        .setValue(extraOpts)
+        .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
@@ -100,7 +116,7 @@ private[spark] class MesosSchedulerBackend(
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
+      command.setValue(new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -185,8 +201,8 @@ private[spark] class MesosSchedulerBackend(
       synchronized {
         // Build a big list of the offerable workers, and remember their indices so that we can
         // figure out which Offer to reply to for each worker
-        val offerableIndices = new ArrayBuffer[Int]
         val offerableWorkers = new ArrayBuffer[WorkerOffer]
+        val offerableIndices = new HashMap[String, Int]
 
         def enoughMemory(o: Offer) = {
           val mem = getResource(o.getResourcesList, "mem")
@@ -195,7 +211,7 @@ private[spark] class MesosSchedulerBackend(
         }
 
         for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
-          offerableIndices += index
+          offerableIndices.put(offer.getSlaveId.getValue, index)
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
             offer.getHostname,
@@ -206,14 +222,13 @@ private[spark] class MesosSchedulerBackend(
         val taskLists = scheduler.resourceOffers(offerableWorkers)
 
         // Build a list of Mesos tasks for each slave
-        val mesosTasks = offers.map(o => Collections.emptyList[MesosTaskInfo]())
+        val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
         for ((taskList, index) <- taskLists.zipWithIndex) {
           if (!taskList.isEmpty) {
-            val offerNum = offerableIndices(index)
-            val slaveId = offers(offerNum).getSlaveId.getValue
-            slaveIdsWithExecutors += slaveId
-            mesosTasks(offerNum) = new JArrayList[MesosTaskInfo](taskList.size)
             for (taskDesc <- taskList) {
+              val slaveId = taskDesc.executorId
+              val offerNum = offerableIndices(slaveId)
+              slaveIdsWithExecutors += slaveId
               taskIdToSlaveId(taskDesc.taskId) = slaveId
               mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
             }
@@ -334,4 +349,5 @@ private[spark] class MesosSchedulerBackend(
 
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
 }

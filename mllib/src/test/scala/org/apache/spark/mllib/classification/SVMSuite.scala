@@ -17,17 +17,16 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.util.Random
 import scala.collection.JavaConversions._
-
-import org.scalatest.FunSuite
+import scala.util.Random
 
 import org.jblas.DoubleMatrix
+import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 object SVMSuite {
 
@@ -191,5 +190,21 @@ class SVMSuite extends FunSuite with LocalSparkContext {
 
     // Turning off data validation should not throw an exception
     new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
+  }
+}
+
+class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = SVMWithSGD.train(points, 2)
+    val predictions = model.predict(points.map(_.features))
   }
 }

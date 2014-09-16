@@ -33,4 +33,17 @@ private[spark] class DriverInfo(
   @transient var exception: Option[Exception] = None
   /* Most recent worker assigned to this driver */
   @transient var worker: Option[WorkerInfo] = None
+
+  init()
+
+  private def readObject(in: java.io.ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    init()
+  }
+
+  private def init(): Unit = {
+    state = DriverState.SUBMITTED
+    worker = None
+    exception = None
+  }
 }

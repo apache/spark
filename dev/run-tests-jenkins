@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Wrapper script that runs the Spark tests then reports QA results
+# to github via its API.
+# Environment variables are populated by the code here:
+#+ https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
+
+# Go to the Spark project root directory
+FWDIR="$(cd `dirname $0`/..; pwd)"
+cd "$FWDIR"
+
+COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
+PULL_REQUEST_URL="https://github.com/apache/spark/pull/$ghprbPullId"
+
+COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
+# GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
+SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
+
+TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
+
+function post_message () {
+  local message=$1
+  local data="{\"body\": \"$message\"}"
+  local HTTP_CODE_HEADER="HTTP Response Code: "
+  
+  echo "Attempting to post to Github..."
+  
+  local curl_output=$(
+    curl `#--dump-header -` \
+      --silent \
+      --user x-oauth-basic:$GITHUB_OAUTH_KEY \
+      --request POST \
+      --data "$data" \
+      --write-out "${HTTP_CODE_HEADER}%{http_code}\n" \
+      --header "Content-Type: application/json" \
+      "$COMMENTS_URL" #> /dev/null #| "$FWDIR/dev/jq" .id #| head -n 8
+  )
+  local curl_status=${PIPESTATUS[0]}
+
+  if [ "$curl_status" -ne 0 ]; then
+      echo "Failed to post message to GitHub." >&2
+      echo " > curl_status: ${curl_status}" >&2
+      echo " > curl_output: ${curl_output}" >&2
+      echo " > data: ${data}" >&2
+      # exit $curl_status
+  fi
+  
+  local api_response=$(
+    echo "${curl_output}" \
+    | grep -v -e "^${HTTP_CODE_HEADER}"
+  )
+  
+  local http_code=$(
+    echo "${curl_output}" \
+    | grep -e "^${HTTP_CODE_HEADER}" \
+    | sed -r -e "s/^${HTTP_CODE_HEADER}//g"
+  )
+
+  if [ -n "$http_code" ] && [ "$http_code" -ne "201" ]; then
+      echo " > http_code: ${http_code}." >&2
+      echo " > api_response: ${api_response}" >&2
+      echo " > data: ${data}" >&2
+  fi
+  
+  if [ "$curl_status" -eq 0 ] && [ "$http_code" -eq "201" ]; then
+    echo " > Post successful."
+  fi
+}
+
+# check PR merge-ability and check for new public classes
+{
+  if [ "$sha1" == "$ghprbActualCommit" ]; then
+    merge_note=" * This patch **does not** merge cleanly!"
+  else
+    merge_note=" * This patch merges cleanly."
+
+    source_files=$(
+        git diff master --name-only \
+      | grep -v -e "\/test"                         `# ignore files in test directories` \
+      | grep -e "\.py$" -e "\.java$" -e "\.scala$"  `# include only code files` \
+      | tr "\n" " "
+    )
+    new_public_classes=$(
+        git diff master ${source_files}         `# diff this patch against master and...` \
+      | grep "^\+"                              `# filter in only added lines` \
+      | sed -r -e "s/^\+//g"                    `# remove the leading +` \
+      | grep -e "trait " -e "class "            `# filter in lines with these key words` \
+      | grep -e "{" -e "("                      `# filter in lines with these key words, too` \
+      | grep -v -e "\@\@" -e "private"          `# exclude lines with these words` \
+      | grep -v -e "^// " -e "^/\*" -e "^ \* "  `# exclude comment lines` \
+      | sed -r -e "s/\{.*//g"                   `# remove from the { onwards` \
+      | sed -r -e "s/\}//g"                     `# just in case, remove }; they mess the JSON` \
+      | sed -r -e "s/\"/\\\\\"/g"               `# escape double quotes; they mess the JSON` \
+      | sed -r -e "s/^(.*)$/\`\1\`/g"           `# surround with backticks for style` \
+      | sed -r -e "s/^/  \* /g"                 `# prepend '  *' to start of line` \
+      | sed -r -e "s/$/\\\n/g"                  `# append newline to end of line` \
+      | tr -d "\n"                              `# remove actual LF characters`
+    )
+
+    if [ "$new_public_classes" == "" ]; then
+      public_classes_note=" * This patch adds no public classes."
+    else
+      public_classes_note=" * This patch adds the following public classes _(experimental)_:"
+      public_classes_note="${public_classes_note}\n${new_public_classes}"
+    fi
+  fi
+}
+
+# post start message
+{
+  start_message="\
+  [QA tests have started](${BUILD_URL}consoleFull) for \
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
+  
+  start_message="${start_message}\n${merge_note}"
+  # start_message="${start_message}\n${public_classes_note}"
+  
+  post_message "$start_message"
+}
+
+# run tests
+{
+  timeout "${TESTS_TIMEOUT}" ./dev/run-tests
+  test_result="$?"
+
+  if [ "$test_result" -eq "124" ]; then
+    fail_message="**[Tests timed out](${BUILD_URL}consoleFull)** after \
+    a configured wait of \`${TESTS_TIMEOUT}\`."
+    post_message "$fail_message"
+    exit $test_result
+  else
+    if [ "$test_result" -eq "0" ]; then
+      test_result_note=" * This patch **passes** unit tests."
+    else
+      test_result_note=" * This patch **fails** unit tests."
+    fi
+  fi
+}
+
+# post end message
+{
+  result_message="\
+  [QA tests have finished](${BUILD_URL}consoleFull) for \
+  PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
+
+  result_message="${result_message}\n${test_result_note}"
+  result_message="${result_message}\n${merge_note}"
+  result_message="${result_message}\n${public_classes_note}"
+
+  post_message "$result_message"
+}
+
+exit $test_result

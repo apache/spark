@@ -81,7 +81,9 @@ table.sortable thead {
 
 span.kill-link {
   margin-right: 2px;
+  margin-left: 20px;
   color: gray;
+  float: right;
 }
 
 span.kill-link a {
@@ -93,6 +95,10 @@ span.expand-details {
   cursor: pointer;
   color: grey;
   float: right;
+}
+
+pre {
+  font-size: 0.8em;
 }
 
 .stage-details {
@@ -108,3 +114,8 @@ span.expand-details {
   padding-bottom: 0;
   border: none;
 }
+
+.tooltip {
+ font-weight: normal;
+}
+

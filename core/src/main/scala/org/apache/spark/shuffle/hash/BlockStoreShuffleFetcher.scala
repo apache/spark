@@ -20,11 +20,11 @@ package org.apache.spark.shuffle.hash
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.executor.ShuffleReadMetrics
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
-import org.apache.spark.util.CompletionIterator
 import org.apache.spark._
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
+import org.apache.spark.util.CompletionIterator
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
   def fetch[T](
@@ -63,7 +63,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
           blockId match {
             case ShuffleBlockId(shufId, mapId, _) =>
               val address = statuses(mapId.toInt)._1
-              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, null)
+              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId)
             case _ =>
               throw new SparkException(
                 "Failed to get block " + blockId + ", which is not a shuffle block")
@@ -72,18 +72,17 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       }
     }
 
-    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
+    val blockFetcherItr = new ShuffleBlockFetcherIterator(
+      context,
+      SparkEnv.get.blockTransferService,
+      blockManager,
+      blocksByAddress,
+      serializer,
+      SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
-      val shuffleMetrics = new ShuffleReadMetrics
-      shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
-      shuffleMetrics.fetchWaitTime = blockFetcherItr.fetchWaitTime
-      shuffleMetrics.remoteBytesRead = blockFetcherItr.remoteBytesRead
-      shuffleMetrics.totalBlocksFetched = blockFetcherItr.totalBlocks
-      shuffleMetrics.localBlocksFetched = blockFetcherItr.numLocalBlocks
-      shuffleMetrics.remoteBlocksFetched = blockFetcherItr.numRemoteBlocks
-      context.taskMetrics.shuffleReadMetrics = Some(shuffleMetrics)
+      context.taskMetrics.updateShuffleReadMetrics()
     })
 
     new InterruptibleIterator[T](context, completionIter)

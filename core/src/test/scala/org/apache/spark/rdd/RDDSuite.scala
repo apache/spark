@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
@@ -26,6 +27,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
@@ -79,11 +81,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
 
-    val size = 100
-    val uniformDistro = for (i <- 1 to 100000) yield i % size
-    val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
-    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
+    val size = 1000
+    val uniformDistro = for (i <- 1 to 5000) yield i % size
+    val simpleRdd = sc.makeRDD(uniformDistro, 10)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.2)
+    assert(error(simpleRdd.countApproxDistinct(12, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -121,6 +123,18 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(union.partitioner === nums1.partitioner)
   }
 
+  test("UnionRDD partition serialized size should be small") {
+    val largeVariable = new Array[Byte](1000 * 1000)
+    val rdd1 = sc.parallelize(1 to 10, 2).map(i => largeVariable.length)
+    val rdd2 = sc.parallelize(1 to 10, 3)
+
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    val union = rdd1.union(rdd2)
+    // The UnionRDD itself should be large, but each individual partition should be small.
+    assert(ser.serialize(union).limit() > 2000)
+    assert(ser.serialize(union.partitions.head).limit() < 2000)
+  }
+
   test("aggregate") {
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
@@ -155,19 +169,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
       override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
-        if (shouldFail) {
-          throw new Exception("injected failure")
-        } else {
-          Array(1, 2, 3, 4).iterator
-        }
+        throw new Exception("injected failure")
       }
     }.cache()
     val thrown = intercept[Exception]{
       rdd.collect()
     }
     assert(thrown.getMessage.contains("injected failure"))
-    shouldFail = false
-    assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
   test("empty RDD") {
@@ -351,6 +359,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  // Test for SPARK-2412 -- ensure that the second pass of the algorithm does not throw an exception
+  test("coalesced RDDs with locality, fail first pass") {
+    val initialPartitions = 1000
+    val targetLen = 50
+    val couponCount = 2 * (math.log(targetLen)*targetLen + targetLen + 0.5).toInt // = 492
+
+    val blocks = (1 to initialPartitions).map { i =>
+      (i, List(if (i > couponCount) "m2" else "m1"))
+    }
+    val data = sc.makeRDD(blocks)
+    val coalesced = data.coalesce(targetLen)
+    assert(coalesced.partitions.length == targetLen)
+  }
+
   test("zipped RDDs") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val zipped = nums.zip(nums.map(_ + 1.0))
@@ -379,6 +401,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("mapWith") {
     import java.util.Random
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val randoms = ones.mapWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) => prng.nextDouble * t}.collect()
@@ -397,6 +420,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("flatMapWith") {
     import java.util.Random
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val randoms = ones.flatMapWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) =>
@@ -418,6 +442,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("filterWith") {
     import java.util.Random
     val ints = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val sample = ints.filterWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) => prng.nextInt(3) == 0}.
@@ -496,6 +521,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedLowerK === Array(1, 2, 3, 4, 5))
   }
 
+  test("takeOrdered with limit 0") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedLowerK = rdd.takeOrdered(0)
+    assert(sortedLowerK.size === 0)
+  }
+
   test("takeOrdered with custom ordering") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     implicit val ord = implicitly[Ordering[Int]].reverse
@@ -506,10 +538,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedTopK === nums.sorted(ord).take(5))
   }
 
+  test("sample preserves partitioner") {
+    val partitioner = new HashPartitioner(2)
+    val rdd = sc.parallelize(Seq((0, 1), (2, 3))).partitionBy(partitioner)
+    for (withReplacement <- Seq(true, false)) {
+      val sampled = rdd.sample(withReplacement, 1.0)
+      assert(sampled.partitioner === rdd.partitioner)
+    }
+  }
+
   test("takeSample") {
     val n = 1000000
     val data = sc.parallelize(1 to n, 2)
-    
+
     for (num <- List(5, 20, 100)) {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
@@ -587,6 +628,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("sort an empty RDD") {
+    val data = sc.emptyRDD[Int]
+    assert(data.sortBy(x => x).collect() === Array.empty)
+  }
+
   test("sortByKey") {
     val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
 
@@ -636,6 +682,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
   }
 
+  test("repartitionAndSortWithinPartitions") {
+    val data = sc.parallelize(Seq((0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)), 2)
+
+    val partitioner = new Partitioner {
+      def numPartitions: Int = 2
+      def getPartition(key: Any): Int = key.asInstanceOf[Int] % 2
+    }
+
+    val repartitioned = data.repartitionAndSortWithinPartitions(partitioner)
+    val partitions = repartitioned.glom().collect()
+    assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
+    assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
@@ -681,6 +741,22 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ids.length === n)
   }
 
+  test("retag with implicit ClassTag") {
+    val jsc: JavaSparkContext = new JavaSparkContext(sc)
+    val jrdd: JavaRDD[String] = jsc.parallelize(Seq("A", "B", "C").asJava)
+    jrdd.rdd.retag.collect()
+  }
+
+  test("parent method") {
+    val rdd1 = sc.parallelize(1 to 10, 2)
+    val rdd2 = rdd1.filter(_ % 2 == 0)
+    val rdd3 = rdd2.map(_ + 1)
+    val rdd4 = new UnionRDD(sc, List(rdd1, rdd2, rdd3))
+    assert(rdd4.parent(0).isInstanceOf[ParallelCollectionRDD[_]])
+    assert(rdd4.parent(1).isInstanceOf[FilteredRDD[_]])
+    assert(rdd4.parent(2).isInstanceOf[MappedRDD[_, _]])
+  }
+
   test("getNarrowAncestors") {
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.filter(_ % 2 == 0).map(_ + 1)
@@ -704,11 +780,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
 
     // Any ancestors before the shuffle are not considered
-    assert(ancestors4.size === 1)
-    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
-    assert(ancestors5.size === 4)
+    assert(ancestors4.size === 0)
+    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 0)
+    assert(ancestors5.size === 3)
     assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
-    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 0)
     assert(ancestors5.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 2)
   }
 

@@ -21,8 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.InputFormatInfo
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.MemoryParam
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
@@ -38,17 +37,26 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var numExecutors = 2
   var amQueue = sparkConf.get("QUEUE", "default")
   var amMemory: Int = 512 // MB
-  var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
-  var inputFormatInfo: List[InputFormatInfo] = null
   var priority = 0
 
   parseArgs(args.toList)
 
+  // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
+  // it should default to hdfs://
+  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
+  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+
+  // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
+  // for both yarn-client and yarn-cluster
+  files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").
+    map(p => Utils.resolveURIs(p)).orNull)
+  archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").
+    map(p => Utils.resolveURIs(p)).orNull)
+
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
-    val inputFormatMap: HashMap[String, InputFormatInfo] = new HashMap[String, InputFormatInfo]()
-
+  
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -69,10 +77,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
-          if (args(0) == "--master-class") {
-            println("--master-class is deprecated. Use --am-class instead.")
-          }
-          amClass = value
+          println(s"${args(0)} is deprecated and is not used anymore.")
           args = tail
 
         case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
@@ -124,9 +129,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case Nil =>
-          if (userClass == null) {
-            throw new IllegalArgumentException(getUsageMessage())
-          }
 
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))
@@ -134,7 +136,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     }
 
     userArgs = userArgsBuffer.readOnly
-    inputFormatInfo = inputFormatMap.values.toList
   }
 
 

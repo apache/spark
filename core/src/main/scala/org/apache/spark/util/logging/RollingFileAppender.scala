@@ -19,7 +19,7 @@ package org.apache.spark.util.logging
 
 import java.io.{File, FileFilter, InputStream}
 
-import org.apache.commons.io.FileUtils
+import com.google.common.io.Files
 import org.apache.spark.SparkConf
 import RollingFileAppender._
 
@@ -83,7 +83,7 @@ private[spark] class RollingFileAppender(
       logDebug(s"Attempting to rollover file $activeFile to file $rolloverFile")
       if (activeFile.exists) {
         if (!rolloverFile.exists) {
-          FileUtils.moveFile(activeFile, rolloverFile)
+          Files.move(activeFile, rolloverFile)
           logInfo(s"Rolled over $activeFile to $rolloverFile")
         } else {
           // In case the rollover file name clashes, make a unique file name.
@@ -100,7 +100,7 @@ private[spark] class RollingFileAppender(
 
           logWarning(s"Rollover file $rolloverFile already exists, " +
             s"rolled over $activeFile to file $altRolloverFile")
-          FileUtils.moveFile(activeFile, altRolloverFile)
+          Files.move(activeFile, altRolloverFile)
         }
       } else {
         logWarning(s"File $activeFile does not exist")

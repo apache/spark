@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import java.io.File
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -25,7 +24,7 @@ import scala.xml.Node
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.Logging
-import org.apache.spark.util.logging.{FileAppender, RollingFileAppender}
+import org.apache.spark.util.logging.RollingFileAppender
 
 private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
@@ -64,11 +63,11 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
-    val (logDir, params) = (appId, executorId, driverId) match {
+    val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
-        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e")
+        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e", s"$a/$e")
       case (None, None, Some(d)) =>
-        (s"${workDir.getPath}/$d/", s"driverId=$d")
+        (s"${workDir.getPath}/$d/", s"driverId=$d", d)
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
@@ -120,7 +119,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, logType + " log page for " + appId)
+    UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */

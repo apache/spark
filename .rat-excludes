@@ -4,6 +4,8 @@ target
 .classpath
 .mima-excludes
 .generated-mima-excludes
+.generated-mima-class-excludes
+.generated-mima-member-excludes
 .rat-excludes
 .*md
 derby.log
@@ -20,12 +22,16 @@ slaves
 spark-env.sh
 spark-env.sh.template
 log4j-defaults.properties
+bootstrap-tooltip.js
+jquery-1.11.1.min.js
 sorttable.js
+.*avsc
 .*txt
 .*json
 .*data
 .*log
 cloudpickle.py
+heapq3.py
 join.py
 SparkExprTyper.scala
 SparkILoop.scala
@@ -51,3 +57,4 @@ dist/*
 .*ipr
 .*iws
 logs
+.*scalastyle-output.xml

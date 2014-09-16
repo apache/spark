@@ -17,16 +17,17 @@
 
 from numpy import array, ndarray
 from pyspark import SparkContext
-from pyspark.mllib._common import \
-    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
+from pyspark.mllib._common import _dot, _regression_train_wrapper, \
     _linear_predictor_typecheck, _have_scipy, _scipy_issparse
 from pyspark.mllib.linalg import SparseVector, Vectors
 
 
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+           'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
+
+
 class LabeledPoint(object):
+
     """
     The features and labels of a data point.
 
@@ -34,6 +35,7 @@ class LabeledPoint(object):
     @param features: Vector of features for this point (NumPy array, list,
         pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
     """
+
     def __init__(self, label, features):
         self.label = label
         if (type(features) == ndarray or type(features) == SparseVector
@@ -49,7 +51,9 @@ class LabeledPoint(object):
 
 
 class LinearModel(object):
+
     """A linear model that has a vector of coefficients and an intercept."""
+
     def __init__(self, weights, intercept):
         self._coeff = weights
         self._intercept = intercept
@@ -64,6 +68,7 @@ class LinearModel(object):
 
 
 class LinearRegressionModelBase(LinearModel):
+
     """A linear regression model.
 
     >>> lrmb = LinearRegressionModelBase(array([1.0, 2.0]), 0.1)
@@ -72,6 +77,7 @@ class LinearRegressionModelBase(LinearModel):
     >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
     True
     """
+
     def predict(self, x):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
@@ -80,6 +86,7 @@ class LinearRegressionModelBase(LinearModel):
 
 
 class LinearRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit.
 
     >>> from pyspark.mllib.regression import LabeledPoint
@@ -111,17 +118,43 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
 
 class LinearRegressionWithSGD(object):
+
     @classmethod
-    def train(cls, data, iterations=100, step=1.0,
-              miniBatchFraction=1.0, initialWeights=None):
-        """Train a linear regression model on the given data."""
+    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
+              initialWeights=None, regParam=1.0, regType=None, intercept=False):
+        """
+        Train a linear regression model on the given data.
+
+        @param data:              The training data.
+        @param iterations:        The number of iterations (default: 100).
+        @param step:              The step parameter used in SGD
+                                  (default: 1.0).
+        @param miniBatchFraction: Fraction of data to be used for each SGD
+                                  iteration.
+        @param initialWeights:    The initial weights (default: None).
+        @param regParam:          The regularizer parameter (default: 1.0).
+        @param regType:           The type of regularizer used for training
+                                  our model.
+                                  Allowed values: "l1" for using L1Updater,
+                                                  "l2" for using
+                                                       SquaredL2Updater,
+                                                  "none" for no regularizer.
+                                  (default: "none")
+        @param intercept:         Boolean parameter which indicates the use
+                                  or not of the augmented representation for
+                                  training data (i.e. whether bias features
+                                  are activated or not).
+        """
         sc = data.context
+        if regType is None:
+            regType = "none"
         train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-            d._jrdd, iterations, step, miniBatchFraction, i)
+            d._jrdd, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
         return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 
 class LassoModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with an
     l_1 penalty term.
 
@@ -154,6 +187,7 @@ class LassoModel(LinearRegressionModelBase):
 
 
 class LassoWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
@@ -165,6 +199,7 @@ class LassoWithSGD(object):
 
 
 class RidgeRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with an
     l_2 penalty term.
 
@@ -197,6 +232,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 
 class RidgeRegressionWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):

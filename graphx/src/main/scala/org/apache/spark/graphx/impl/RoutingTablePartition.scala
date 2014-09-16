@@ -27,27 +27,14 @@ import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
-/**
- * A message from the edge partition `pid` to the vertex partition containing `vid` specifying that
- * the edge partition references `vid` in the specified `position` (src, dst, or both).
-*/
-private[graphx]
-class RoutingTableMessage(
-    var vid: VertexId,
-    var pid: PartitionID,
-    var position: Byte)
-  extends Product2[VertexId, (PartitionID, Byte)] with Serializable {
-  override def _1 = vid
-  override def _2 = (pid, position)
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[RoutingTableMessage]
-}
+import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
 
 private[graphx]
 class RoutingTableMessageRDDFunctions(self: RDD[RoutingTableMessage]) {
   /** Copartition an `RDD[RoutingTableMessage]` with the vertex RDD with the given `partitioner`. */
   def copartitionWithVertices(partitioner: Partitioner): RDD[RoutingTableMessage] = {
-    new ShuffledRDD[VertexId, (PartitionID, Byte), RoutingTableMessage](self, partitioner)
-      .setSerializer(new RoutingTableMessageSerializer)
+    new ShuffledRDD[VertexId, Int, Int](
+      self, partitioner).setSerializer(new RoutingTableMessageSerializer)
   }
 }
 
@@ -62,6 +49,23 @@ object RoutingTableMessageRDDFunctions {
 
 private[graphx]
 object RoutingTablePartition {
+  /**
+   * A message from an edge partition to a vertex specifying the position in which the edge
+   * partition references the vertex (src, dst, or both). The edge partition is encoded in the lower
+   * 30 bytes of the Int, and the position is encoded in the upper 2 bytes of the Int.
+   */
+  type RoutingTableMessage = (VertexId, Int)
+
+  private def toMessage(vid: VertexId, pid: PartitionID, position: Byte): RoutingTableMessage = {
+    val positionUpper2 = position << 30
+    val pidLower30 = pid & 0x3FFFFFFF
+    (vid, positionUpper2 | pidLower30)
+  }
+
+  private def vidFromMessage(msg: RoutingTableMessage): VertexId = msg._1
+  private def pidFromMessage(msg: RoutingTableMessage): PartitionID = msg._2 & 0x3FFFFFFF
+  private def positionFromMessage(msg: RoutingTableMessage): Byte = (msg._2 >> 30).toByte
+
   val empty: RoutingTablePartition = new RoutingTablePartition(Array.empty)
 
   /** Generate a `RoutingTableMessage` for each vertex referenced in `edgePartition`. */
@@ -77,7 +81,9 @@ object RoutingTablePartition {
       map.changeValue(dstId, 0x2, (b: Byte) => (b | 0x2).toByte)
     }
     map.iterator.map { vidAndPosition =>
-      new RoutingTableMessage(vidAndPosition._1, pid, vidAndPosition._2)
+      val vid = vidAndPosition._1
+      val position = vidAndPosition._2
+      toMessage(vid, pid, position)
     }
   }
 
@@ -88,9 +94,12 @@ object RoutingTablePartition {
     val srcFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
     val dstFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
     for (msg <- iter) {
-      pid2vid(msg.pid) += msg.vid
-      srcFlags(msg.pid) += (msg.position & 0x1) != 0
-      dstFlags(msg.pid) += (msg.position & 0x2) != 0
+      val vid = vidFromMessage(msg)
+      val pid = pidFromMessage(msg)
+      val position = positionFromMessage(msg)
+      pid2vid(pid) += vid
+      srcFlags(pid) += (position & 0x1) != 0
+      dstFlags(pid) += (position & 0x2) != 0
     }
 
     new RoutingTablePartition(pid2vid.zipWithIndex.map {
@@ -119,7 +128,7 @@ object RoutingTablePartition {
  */
 private[graphx]
 class RoutingTablePartition(
-    private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) {
+    private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) extends Serializable {
   /** The maximum number of edge partitions this `RoutingTablePartition` is built to join with. */
   val numEdgePartitions: Int = routingTable.size
 

@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{FutureAction, Partition, SparkContext, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
@@ -43,8 +43,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  /** Set of partitions in this RDD. */
+  @deprecated("Use partitions() instead.", "1.1.0")
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+  
+  /** Set of partitions in this RDD. */
+  def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -570,5 +573,18 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 
   def name(): String = rdd.name
+
+  /**
+   * :: Experimental ::
+   * The asynchronous version of the foreach action.
+   *
+   * @param f the function to apply to all the elements of the RDD
+   * @return a FutureAction for the action
+   */
+  @Experimental
+  def foreachAsync(f: VoidFunction[T]): FutureAction[Unit] = {
+    import org.apache.spark.SparkContext._
+    rdd.foreachAsync(x => f.call(x))
+  }
 
 }
