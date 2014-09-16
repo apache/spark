@@ -183,10 +183,10 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
 
   protected lazy val cache: Parser[LogicalPlan] =
-    CACHE ~ TABLE ~> ident ~ opt(AS ~ select) <~ opt(";") ^^ {
+    CACHE ~ TABLE ~> ident ~ opt(AS ~> select) <~ opt(";") ^^ {
       case tableName ~ None => 
         CacheCommand(tableName, true)
-      case tableName ~ Some(as ~ plan) =>
+      case tableName ~ Some(plan) =>
         CacheTableAsSelectCommand(tableName, plan)
     }
     

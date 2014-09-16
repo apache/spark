@@ -232,9 +232,8 @@ private[hive] object HiveQl {
         sql.trim.drop(12).trim.split(" ").toSeq match {
           case Seq(tableName) => 
             CacheCommand(tableName, true)
-          case Seq(tableName,as, select@_*) => 
-            CacheTableAsSelectCommand(tableName,
-                createPlan(sql.trim.drop(12 + tableName.length() + as.length() + 2)))
+          case Seq(tableName, _, select @ _*) => 
+            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
         }
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
