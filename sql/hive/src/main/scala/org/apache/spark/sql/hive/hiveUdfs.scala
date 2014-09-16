@@ -128,7 +128,7 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
             c.getParameterTypes.head.getCanonicalName.equals(a.getClass.getCanonicalName)
           }.getOrElse(matchingConstructors.head)
           logDebug(
-            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getCanonicalName} $constructor.")
+            s"Wrapping $a of type ${a.getClass.getCanonicalName} $constructor.")
           // We must make sure that primitives get boxed java style.
           constructor.newInstance(a match {
             case i: Int => i: java.lang.Integer
