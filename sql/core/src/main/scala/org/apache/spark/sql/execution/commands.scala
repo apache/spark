@@ -177,8 +177,6 @@ case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan)
   override protected[sql] lazy val sideEffectResult = {
     sqlContext.catalog.registerTable(None, tableName,  sqlContext.executePlan(plan).analyzed)
     sqlContext.cacheTable(tableName)
-    // It does the caching eager.
-    sqlContext.table(tableName).count
     Seq.empty[Row]
   }
 
