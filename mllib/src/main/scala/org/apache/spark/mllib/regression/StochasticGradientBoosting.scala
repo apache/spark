@@ -33,7 +33,6 @@ class StochasticGradientBoosting {
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return StochasticGradientBoostingModel that can be used for prediction
    */
-  // TODO: think about correct scaladoc format
   def run(
        input : RDD[LabeledPoint],
        leaningRate : Double,
