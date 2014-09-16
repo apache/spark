@@ -81,6 +81,8 @@ def main(infile, outfile):
 
         _accumulatorRegistry.clear()
         command = pickleSer._read_with_length(infile)
+        if isinstance(command, Broadcast):
+            command = pickleSer.loads(command.value)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
