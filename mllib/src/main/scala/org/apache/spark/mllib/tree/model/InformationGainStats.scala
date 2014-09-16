@@ -26,20 +26,26 @@ import org.apache.spark.annotation.DeveloperApi
  * @param impurity current node impurity
  * @param leftImpurity left node impurity
  * @param rightImpurity right node impurity
- * @param predict predicted value
- * @param prob probability of the label (classification only)
  */
 @DeveloperApi
 class InformationGainStats(
     val gain: Double,
     val impurity: Double,
     val leftImpurity: Double,
-    val rightImpurity: Double,
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+    val rightImpurity: Double) extends Serializable {
 
   override def toString = {
-    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f, prob = %f"
-      .format(gain, impurity, leftImpurity, rightImpurity, predict, prob)
+    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
+      .format(gain, impurity, leftImpurity, rightImpurity)
   }
+}
+
+
+private[tree] object InformationGainStats {
+  /**
+   * An [[org.apache.spark.mllib.tree.model.InformationGainStats]] object to
+   * denote that current split doesn't satisfies minimum info gain or
+   * minimum number of instances per node.
+   */
+  val invalidInformationGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0)
 }
