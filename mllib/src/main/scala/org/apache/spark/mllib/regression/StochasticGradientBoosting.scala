@@ -7,7 +7,6 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.{DoubleRDDFunctions, RDD}
-
 import scala.util.Random
 
 /**
@@ -22,18 +21,31 @@ import scala.util.Random
  */
 class StochasticGradientBoosting {
 
+  /**
+   * Train a Gradient Boosting model given an RDD of (label, features) pairs.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param leaningRate Learning rate
+   * @param countOfTrees Number of trees.
+   * @param samplingSizeRatio Size of random sample, percent of ${input} size.
+   * @param strategy The configuration parameters for the tree algorithm which specify the type
+   *                 of algorithm (classification, regression, etc.), feature type (continuous,
+   *                 categorical), depth of the tree, quantile calculation strategy, etc.
+   * @return StochasticGradientBoostingModel that can be used for prediction
+   */
+  // TODO: think about correct scaladoc format
   def run(
        input : RDD[LabeledPoint],
        leaningRate : Double,
-       M : Int,
+       countOfTrees : Int,
        samplingSizeRatio : Double,
        strategy: Strategy): StochasticGradientBoostingModel = {
 
     val featureDimension = input.count()
     val mean = new DoubleRDDFunctions(input.map(l => l.label)).mean()
-    val boostingModel = new StochasticGradientBoostingModel(M, mean, leaningRate)
+    val boostingModel = new StochasticGradientBoostingModel(countOfTrees, mean, leaningRate)
 
-    for (i <- 0 to M - 1) {
+    for (i <- 0 to countOfTrees - 1) {
       val gradient = input.map(l => l.label - boostingModel.computeValue(l.features))
 
       val newInput: RDD[LabeledPoint] = input
@@ -53,6 +65,13 @@ class StochasticGradientBoosting {
   }
 }
 
+/**
+ * Model that can be used for prediction.
+ *
+ * @param countOfTrees Number of trees.
+ * @param initValue Initialize model with this value.
+ * @param learningRate Learning rate.
+ */
 class StochasticGradientBoostingModel (
     private val countOfTrees: Int,
     private var initValue: Double,
@@ -61,8 +80,8 @@ class StochasticGradientBoostingModel (
   val trees: Array[DecisionTreeModel] = new Array[DecisionTreeModel](countOfTrees)
   var index: Int = 0
 
-  def this(M:Int, learning_rate: Double) = {
-    this(M, 0, learning_rate)
+  def this(countOfTrees:Int, learning_rate: Double) = {
+    this(countOfTrees, 0, learning_rate)
   }
 
   def computeValue(feature_x: Vector): Double = {
@@ -95,7 +114,19 @@ class StochasticGradientBoostingModel (
   }
 }
 
+
 object StochasticGradientBoosting {
+
+  /**
+   * Train a Gradient Boosting model given an RDD of (label, features) pairs.
+   * 
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param algo Algorithm, classification or regression.
+   * @param impurity Impurity criterion used for information gain calculation.
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @return StochasticGradientBoostingModel that can be used for prediction.
+   */
   def train(
        input : RDD[LabeledPoint],
        algo : Algo,
@@ -104,11 +135,24 @@ object StochasticGradientBoosting {
     train(input, 0.05, 100, 0.5, algo, impurity, maxDepth)
   }
 
+  /**
+   * Train a Gradient Boosting model given an RDD of (label, features) pairs.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param leaningRate Learning rate.
+   * @param countOfTrees Number of trees.
+   * @param samplingSizeRatio Size of random sample, percent of {input} size.
+   * @param algo Algorithm, classification or regression.
+   * @param impurity Impurity criterion used for information gain calculation.
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @return StochasticGradientBoostingModel that can be used for prediction.
+   */
   def train(
        input : RDD[LabeledPoint],
        leaningRate : Double,
-       M : Int,
-       m_sampling_size_ratio : Double,
+       countOfTrees : Int,
+       samplingSizeRatio : Double,
        algo : Algo,
        impurity : Impurity,
        maxDepth : Int) : StochasticGradientBoostingModel= {
@@ -121,8 +165,8 @@ object StochasticGradientBoosting {
     new StochasticGradientBoosting().run(
       input,
       leaningRate,
-      M,
-      m_sampling_size_ratio,
+      countOfTrees,
+      samplingSizeRatio,
       strategy
     )
   }
