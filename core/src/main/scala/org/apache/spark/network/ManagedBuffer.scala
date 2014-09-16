@@ -19,6 +19,7 @@ package org.apache.spark.network
 
 import java.io.{FileInputStream, RandomAccessFile, File, InputStream}
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode
 
 import com.google.common.io.ByteStreams
@@ -66,8 +67,15 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
   override def size: Long = length
 
   override def nioByteBuffer(): ByteBuffer = {
-    val channel = new RandomAccessFile(file, "r").getChannel
-    channel.map(MapMode.READ_ONLY, offset, length)
+    var channel: FileChannel = null
+    try {
+      channel = new RandomAccessFile(file, "r").getChannel
+      channel.map(MapMode.READ_ONLY, offset, length)
+    } finally {
+      if (channel != null) {
+        channel.close()
+      }
+    }
   }
 
   override def inputStream(): InputStream = {
