@@ -24,7 +24,6 @@ class StochasticGradientBoostingSuite extends FunSuite with LocalSparkContext {
     checkModel(parsedData, Utils.deserialize[StochasticGradientBoostingModel](Utils.serialize(model)))
   }
 
-
   def checkModel(parsedData: RDD[LabeledPoint], model: RegressionModel) {
     val valuesAndPredictions = parsedData.map { point =>
       val prediction = model.predict(point.features)
@@ -32,7 +31,7 @@ class StochasticGradientBoostingSuite extends FunSuite with LocalSparkContext {
     }
     val actualValues = parsedData.map(l => l.label)
     val mean = new DoubleRDDFunctions(actualValues).mean()
-    var meanError = new DoubleRDDFunctions(actualValues.map(i => math.pow(i - mean, 2))).mean()
+    val meanError = new DoubleRDDFunctions(actualValues.map(i => math.pow(i - mean, 2))).mean()
     val MSE = valuesAndPredictions.map { case (v, p) => math.pow(v - p, 2)}
     val error = new DoubleRDDFunctions(MSE).mean()
     assert(meanError / error > 100)
@@ -42,5 +41,4 @@ class StochasticGradientBoostingSuite extends FunSuite with LocalSparkContext {
     sc.parallelize(LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 34), 2).cache()
   }
-
 }
