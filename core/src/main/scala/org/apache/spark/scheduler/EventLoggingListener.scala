@@ -66,6 +66,14 @@ private[spark] class EventLoggingListener(
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
+  // The Hadoop APIs have changed over time, so we use reflection to figure out
+  // the correct method to use to flush a hadoop data stream. See SPARK-1518
+  // for details.
+  private val hadoopFlushMethod = {
+    val cls = classOf[FSDataOutputStream]
+    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
+  }
+
   private var writer: Option[PrintWriter] = None
 
   // For testing. Keep track of all JSON serialized events that have been logged.
@@ -138,9 +146,13 @@ private[spark] class EventLoggingListener(
   }
 
   /** Log the event as JSON. */
-  private def logEvent(event: SparkListenerEvent) {
+  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     writer.foreach(_.println(compact(render(eventJson))))
+    if (flushLogger) {
+      writer.foreach(_.flush())
+      hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+    }
     if (testing) {
       loggedEvents += eventJson
     }
@@ -157,21 +169,21 @@ private[spark] class EventLoggingListener(
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
     logEvent(event)
   override def onStageCompleted(event: SparkListenerStageCompleted) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onJobStart(event: SparkListenerJobStart) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onJobEnd(event: SparkListenerJobEnd) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onApplicationStart(event: SparkListenerApplicationStart) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
-    logEvent(event)
+    logEvent(event, flushLogger = true)
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
 
