@@ -956,8 +956,6 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(new_dataset, data)
 
-    @unittest.skipIf(sys.version_info[:2] <= (2, 6) or python_implementation() == "PyPy",
-                     "Skipped on 2.6 and PyPy until SPARK-2951 is fixed")
     def test_newhadoop_with_array(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
