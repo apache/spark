@@ -17,13 +17,14 @@
 
 package org.apache.spark.storage
 
+import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
 
-import org.apache.spark.{TaskContext, Logging, SparkException}
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener, BlockTransferService}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
@@ -111,13 +112,21 @@ final class ShuffleBlockFetcherIterator(
     blockTransferService.fetchBlocks(req.address.host, req.address.port, blockIds,
       new BlockFetchingListener {
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
-            () => serializer.newInstance().deserializeStream(
-              blockManager.wrapForCompression(BlockId(blockId), data.inputStream())).asIterator
-          ))
-          shuffleMetrics.remoteBytesRead += data.size
-          shuffleMetrics.remoteBlocksFetched += 1
-          logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          var is: InputStream = null
+          try {
+            is = data.inputStream()
+            results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
+              () => serializer.newInstance().deserializeStream(
+                blockManager.wrapForCompression(BlockId(blockId), is)).asIterator
+            ))
+            shuffleMetrics.remoteBytesRead += data.size
+            shuffleMetrics.remoteBlocksFetched += 1
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          } finally {
+            if (is != null) {
+              is.close()
+            }
+          }
         }
 
         override def onBlockFetchFailure(e: Throwable): Unit = {
