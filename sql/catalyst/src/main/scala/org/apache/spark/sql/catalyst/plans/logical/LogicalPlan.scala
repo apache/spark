@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
   /**
@@ -101,7 +102,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     val options = input.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
       val remainingParts =
-        if (option.qualifiers.filter(resolver(_, parts.head)).nonEmpty && parts.size > 1) {
+        if (option.qualifiers.find(resolver(_, parts.head)).nonEmpty && parts.size > 1) {
           parts.drop(1)
         } else {
           parts
@@ -120,7 +121,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       case Seq((a, nestedFields)) =>
         Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
       case Seq() =>
-        println(s"Could not find $name in ${input.mkString(", ")}")
+        logTrace(s"Could not find $name in ${input.mkString(", ")}")
         None         // No matches.
       case ambiguousReferences =>
         throw new TreeNodeException(

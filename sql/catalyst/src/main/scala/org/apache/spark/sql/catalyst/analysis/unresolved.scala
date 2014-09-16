@@ -103,7 +103,7 @@ case class Star(
       // If there is no table specified, use all input attributes.
       case None => input
       // If there is a table, pick out attributes that are part of this table.
-      case Some(t) => input.filter(_.qualifiers.filter(resolver(_,t)).nonEmpty)
+      case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
       case (n: NamedExpression, _) => n
