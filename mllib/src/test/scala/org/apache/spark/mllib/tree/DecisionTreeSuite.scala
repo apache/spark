@@ -234,7 +234,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       numClassesForClassification = 100,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
-    // 2^10 - 1 > 100, so categorical features will be ordered
+    // 2^(10-1) - 1 > 100, so categorical features will be ordered
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
@@ -459,7 +459,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
     val nodeQueue = new mutable.Queue[(Int, Node)]()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
-      nodesForGroup, splits, bins, nodeQueue)
+      nodesForGroup, null, splits, bins, nodeQueue)
     val children1 = new Array[Node](2)
     children1(0) = rootNode1.leftNode.get
     children1(1) = rootNode1.rightNode.get
@@ -468,11 +468,11 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupA, splits, bins, nodeQueue)
+      nodesForGroupA, null, splits, bins, nodeQueue)
     val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupB, splits, bins, nodeQueue)
+      nodesForGroupB, null, splits, bins, nodeQueue)
     val children2 = new Array[Node](2)
     children2(0) = rootNode2.leftNode.get
     children2(1) = rootNode2.rightNode.get
