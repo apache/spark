@@ -504,17 +504,6 @@ object DecisionTree extends Serializable with Logging {
       metadata.isMulticlassWithCategoricalFeatures)
 
     /**
-     * Find the node index for the given example, for the given tree.
-     * Nodes are indexed in [0, numNodes), where the numNodes may be in different trees or levels.
-     * If the example does not reach this group of nodes, returns a value < 0.
-     */
-    def treePointToNodeIndex(treePoint: TreePoint, treeIndex: Int): Int = {
-      val nodeIndex = predictNodeIndex(topNodes(treeIndex), treePoint.binnedFeatures, bins,
-        metadata.unorderedFeatures)
-      groupNodeIndex(treeIndex).getOrElse(nodeIndex, -1)
-    }
-
-    /**
      * Performs a sequential aggregation over a partition.
      *
      * Each data point contributes to one node. For each feature,
@@ -529,19 +518,21 @@ object DecisionTree extends Serializable with Logging {
         agg: DTStatsAggregator,
         baggedPoint: BaggedPoint[TreePoint]): DTStatsAggregator = {
       nodesForGroup.keys.foreach { treeIndex =>
-        val nodeIndex = treePointToNodeIndex(baggedPoint.datum, treeIndex)
-        val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
-        // If the example does not reach a node in this group, then nodeIndex < 0.
-        if (nodeIndex >= 0) {
+        val nodeIndex = predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures,
+          bins, metadata.unorderedFeatures)
+        val aggNodeIndex = groupNodeIndex(treeIndex).getOrElse(nodeIndex, -1)
+        // If the example does not reach a node in this group, then aggNodeIndex < 0.
+        if (aggNodeIndex >= 0) {
           val featuresForNode: Array[Int] = if (featuresForNodes != null) {
             featuresForNodes(treeIndex)(nodeIndex)
           } else {
             null
           }
+          val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
           if (metadata.unorderedFeatures.isEmpty) {
-            orderedBinSeqOp(agg, baggedPoint.datum, nodeIndex, instanceWeight, featuresForNode)
+            orderedBinSeqOp(agg, baggedPoint.datum, aggNodeIndex, instanceWeight, featuresForNode)
           } else {
-            mixedBinSeqOp(agg, baggedPoint.datum, nodeIndex, bins, metadata.unorderedFeatures,
+            mixedBinSeqOp(agg, baggedPoint.datum, aggNodeIndex, bins, metadata.unorderedFeatures,
               instanceWeight, featuresForNode)
           }
         }
