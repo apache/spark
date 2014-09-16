@@ -134,6 +134,15 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     this
   }
 
+  /** Whether a warning should be logged if the input RDD is uncached. */
+  private var warnOnUncachedInput = true
+
+  /** Disable warnings about uncached input. */
+  def disableUncachedWarning() = {
+    warnOnUncachedInput = false
+    this
+  }
+
   /**
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
@@ -150,7 +159,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
-    if (input.getStorageLevel == StorageLevel.NONE) {
+    if (warnOnUncachedInput && input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
@@ -230,7 +239,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     }
 
     // Warn at the end of the run as well, for increased visibility.
-    if (input.getStorageLevel == StorageLevel.NONE) {
+    if (warnOnUncachedInput && input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
