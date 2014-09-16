@@ -300,7 +300,9 @@ class PythonMLLibAPI extends Serializable {
       categoricalFeaturesInfoJMap: java.util.Map[Int, Int],
       impurityStr: String,
       maxDepth: Int,
-      maxBins: Int): DecisionTreeModel = {
+      maxBins: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): DecisionTreeModel = {
 
     val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
     val algo = Algo.fromString(algoStr)
@@ -312,7 +314,9 @@ class PythonMLLibAPI extends Serializable {
       maxDepth = maxDepth,
       numClassesForClassification = numClasses,
       maxBins = maxBins,
-      categoricalFeaturesInfo = categoricalFeaturesInfoJMap.asScala.toMap)
+      categoricalFeaturesInfo = categoricalFeaturesInfoJMap.asScala.toMap,
+      minInstancesPerNode = minInstancesPerNode,
+      minInfoGain = minInfoGain)
 
     DecisionTree.train(data, strategy)
   }

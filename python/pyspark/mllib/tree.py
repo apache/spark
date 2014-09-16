@@ -137,7 +137,8 @@ class DecisionTree(object):
 
     @staticmethod
     def trainClassifier(data, numClasses, categoricalFeaturesInfo,
-                        impurity="gini", maxDepth=5, maxBins=32):
+                        impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
+                        minInfoGain=0.0):
         """
         Train a DecisionTreeModel for classification.
 
@@ -153,6 +154,9 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
+        :param minInstancesPerNode: Min number of instances required at child nodes to create
+                                    the parent split
+        :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
         """
         first = data.first()
@@ -163,13 +167,14 @@ class DecisionTree(object):
                                         sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
             jrdd, "classification", numClasses, cfiMap,
-            impurity, maxDepth, maxBins)
+            impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
         jrdd.unpersist()
         return DecisionTreeModel(sc, model)
 
     @staticmethod
     def trainRegressor(data, categoricalFeaturesInfo,
-                       impurity="variance", maxDepth=5, maxBins=32):
+                       impurity="variance", maxDepth=5, maxBins=32, minInstancesPerNode=1,
+                       minInfoGain=0.0):
         """
         Train a DecisionTreeModel for regression.
 
@@ -184,6 +189,9 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
+        :param minInstancesPerNode: Min number of instances required at child nodes to create
+                                    the parent split
+        :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
         """
         first = data.first()
@@ -193,7 +201,8 @@ class DecisionTree(object):
         cfiMap = MapConverter().convert(categoricalFeaturesInfo,
                                         sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
-            jrdd, "regression", 0, cfiMap, impurity, maxDepth, maxBins)
+            jrdd, "regression", 0, cfiMap, impurity, maxDepth, maxBins,
+            minInstancesPerNode, minInfoGain)
         jrdd.unpersist()
         return DecisionTreeModel(sc, model)
 
