@@ -245,7 +245,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this] lazy val cast: Any => Any = if (child.dataType == dataType) { 
-    sys.error(s"$dataType Cast To $dataType should have been eliminated in ConstantFolding")
+    (e: Any) => e
   } else {
     dataType match {
       case StringType => castToString

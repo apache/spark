@@ -32,12 +32,12 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
-      SimplifyCasts,
       NullPropagation,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
       SimplifyFilters,
+      SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
     Batch("Filter Pushdown", FixedPoint(100),
       CombineFilters,
