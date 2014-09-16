@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -690,30 +691,33 @@ private[spark] class Master(
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     val eventLogFile = app.desc.eventLogFile.getOrElse { return false }
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogFile))
-    if (eventLogInfo == null) {
-      // Event logging is enabled for this application, but no event logs are found
-      val title = s"Application history not found (${app.id})"
-      var msg = s"No event logs found for application $appName in $eventLogFile."
-      logWarning(msg)
-      msg += " Did you specify the correct logging directory?"
-      msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-      return false
-    }
 
     try {
-      val compressionCodec = eventLogInfo.compressionCodec
-      val fileSystem = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-      val replayBus = new ReplayListenerBus(eventLogInfo.path, fileSystem, compressionCodec)
+      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
+      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val replayBus = new ReplayListenerBus()
       val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
-      replayBus.replay()
+      try {
+        replayBus.replay(logInput, sparkVersion)
+      } finally {
+        logInput.close()
+      }
+
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
       app.desc.appUiUrl = ui.basePath
       true
     } catch {
+      case fnf: FileNotFoundException =>
+        // Event logging is enabled for this application, but no event logs are found
+        val title = s"Application history not found (${app.id})"
+        var msg = s"No event logs found for application $appName in $eventLogFile."
+        logWarning(msg)
+        msg += " Did you specify the correct logging directory?"
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        false
       case e: Exception =>
         // Relay exception message to application UI page
         val title = s"Application history load error (${app.id})"

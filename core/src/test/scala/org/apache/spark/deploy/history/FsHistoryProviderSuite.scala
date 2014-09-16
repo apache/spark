@@ -19,19 +19,21 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
 
+import scala.io.Source
+
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
-class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers {
+class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
 
   private var testDir: File = null
 
@@ -56,32 +58,32 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val provider = new FsHistoryProvider(conf)
 
     // Write a new-style application log.
-    val logFile1 = new File(testDir, "app1-1-2-1.0")
-    writeFile(logFile1,
+    val logFile1 = new File(testDir, "new1")
+    writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
       )
 
     // Write an unfinished app, new-style.
-    writeFile(new File(testDir, "app2-2-1-1.0.inprogress"),
+    writeFile(new File(testDir, "new2" + EventLoggingListener.IN_PROGRESS), true, None,
       SparkListenerApplicationStart("app2-2", None, 1L, "test")
       )
 
     // Write an old-style application log.
-    val oldLog = new File(testDir, "app3-1234")
+    val oldLog = new File(testDir, "old1")
     oldLog.mkdir()
-    writeFile(new File(oldLog, provider.SPARK_VERSION_PREFIX + "1.0"))
-    writeFile(new File(oldLog, provider.LOG_PREFIX + "1"),
+    createEmptyFile(new File(oldLog, provider.SPARK_VERSION_PREFIX + "1.0"))
+    writeFile(new File(oldLog, provider.LOG_PREFIX + "1"), false, None,
       SparkListenerApplicationStart("app3", None, 2L, "test"),
       SparkListenerApplicationEnd(3L)
       )
-    writeFile(new File(oldLog, provider.APPLICATION_COMPLETE))
+    createEmptyFile(new File(oldLog, provider.APPLICATION_COMPLETE))
 
     // Write an unfinished app, old-style.
-    val oldLog2 = new File(testDir, "app4-1234")
+    val oldLog2 = new File(testDir, "old2")
     oldLog2.mkdir()
-    writeFile(new File(oldLog2, provider.SPARK_VERSION_PREFIX + "1.0"))
-    writeFile(new File(oldLog2, provider.LOG_PREFIX + "1"),
+    createEmptyFile(new File(oldLog2, provider.SPARK_VERSION_PREFIX + "1.0"))
+    writeFile(new File(oldLog2, provider.LOG_PREFIX + "1"), false, None,
       SparkListenerApplicationStart("app4", None, 2L, "test")
       )
 
@@ -110,36 +112,51 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       (classOf[SnappyCompressionCodec].getName(), true),
       ("invalid.codec", false))
 
-    testCodecs.foreach { case (codec, valid) =>
+    testCodecs.foreach { case (codecName, valid) =>
       val logDir = new File(testDir, "test")
+      val codec = if (valid) CompressionCodec.createCodec(new SparkConf(), codecName) else null
       logDir.mkdir()
-      writeFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
-      writeFile(new File(logDir, provider.LOG_PREFIX + "1"),
+      createEmptyFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
+      writeFile(new File(logDir, provider.LOG_PREFIX + "1"), false, Option(codec),
         SparkListenerApplicationStart("app2", None, 2L, "test"),
         SparkListenerApplicationEnd(3L)
         )
-      writeFile(new File(logDir, provider.COMPRESSION_CODEC_PREFIX + codec))
+      createEmptyFile(new File(logDir, provider.COMPRESSION_CODEC_PREFIX + codecName))
 
       val logPath = new Path(logDir.getAbsolutePath())
       try {
-        val (path, parsedCodec) = provider.loadOldLoggingInfo(logPath)
-        path.toUri().getPath() should be
-          (logPath.toUri().getPath() + "/" + provider.LOG_PREFIX + "1")
-        parsedCodec should not be (None)
-        parsedCodec.get.getClass().getName() should be (codec)
+        val (logInput, sparkVersion) = provider.openOldLog(logPath)
+        try {
+          Source.fromInputStream(logInput).getLines().toSeq.size should be (2)
+        } finally {
+          logInput.close()
+        }
       } catch {
-        case e: IllegalArgumentException => valid should be (false)
+        case e: IllegalArgumentException =>
+          valid should be (false)
       }
     }
   }
 
-  private def writeFile(file: File, events: SparkListenerEvent*) = {
-    val out = new OutputStreamWriter(new FileOutputStream(file), "UTF-8")
+  private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
+    events: SparkListenerEvent*) = {
+    val out =
+      if (isNewFormat) {
+        EventLoggingListener.initEventLog(new FileOutputStream(file), codec)
+      } else {
+        val fileStream = new FileOutputStream(file)
+        codec.map(_.compressedOutputStream(fileStream)).getOrElse(fileStream)
+      }
+    val writer = new OutputStreamWriter(out, "UTF-8")
     try {
-      events.foreach(e => out.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
+      events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
     } finally {
-      out.close()
+      writer.close()
     }
+  }
+
+  private def createEmptyFile(file: File) = {
+    new FileOutputStream(file).close()
   }
 
 }
