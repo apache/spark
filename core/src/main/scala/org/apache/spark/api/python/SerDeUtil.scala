@@ -66,13 +66,9 @@ private[python] object SerDeUtil extends Logging {
     override def construct(args: Array[Object]): Object = {
       if (args.length == 1) {
         construct(args ++ Array(""))
-      } else if (args.length == 2 &&
-        (args(1).isInstanceOf[String] || args(1).isInstanceOf[Array[Byte]])) {
+      } else if (args.length == 2 && args(1).isInstanceOf[String]) {
         val typecode = args(0).asInstanceOf[String].charAt(0)
-        val data: Array[Byte] = args(1) match {
-          case s: String => s.getBytes("ISO-8859-1")
-          case b: Array[Byte] => b
-        }
+        val data: Array[Byte] = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
         construct(typecode, machineCodes(typecode), data)
       } else {
         super.construct(args)

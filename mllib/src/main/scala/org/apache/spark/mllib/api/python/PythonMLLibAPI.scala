@@ -66,11 +66,10 @@ class PythonMLLibAPI extends Serializable {
 
   private def trainRegressionModel(
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
-    val data = dataJRDD.rdd
     val initialWeights = SerDe.loads(initialWeightsBA).asInstanceOf[Vector]
-    val model = trainFunc(data, initialWeights)
+    val model = trainFunc(data.rdd, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(SerDe.dumps(model.weights))
     ret.add(model.intercept: java.lang.Double)
@@ -81,7 +80,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LinearRegressionWithSGD.train()
    */
   def trainLinearRegressionModelWithSGD(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -107,7 +106,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         lrAlg.run(data, initialWeights),
-      dataJRDD,
+      data,
       initialWeightsBA)
   }
 
@@ -115,7 +114,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LassoWithSGD.train()
    */
   def trainLassoModelWithSGD(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -130,7 +129,7 @@ class PythonMLLibAPI extends Serializable {
           regParam,
           miniBatchFraction,
           initialWeights),
-      dataJRDD,
+      data,
       initialWeightsBA)
   }
 
@@ -138,7 +137,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib RidgeRegressionWithSGD.train()
    */
   def trainRidgeModelWithSGD(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -153,7 +152,7 @@ class PythonMLLibAPI extends Serializable {
           regParam,
           miniBatchFraction,
           initialWeights),
-      dataJRDD,
+      data,
       initialWeightsBA)
   }
 
@@ -161,7 +160,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib SVMWithSGD.train()
    */
   def trainSVMModelWithSGD(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -187,7 +186,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         SVMAlg.run(data, initialWeights),
-      dataJRDD,
+      data,
       initialWeightsBA)
   }
 
@@ -195,7 +194,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LogisticRegressionWithSGD.train()
    */
   def trainLogisticRegressionModelWithSGD(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -221,7 +220,7 @@ class PythonMLLibAPI extends Serializable {
     trainRegressionModel(
       (data, initialWeights) =>
         LogRegAlg.run(data, initialWeights),
-      dataJRDD,
+      data,
       initialWeightsBA)
   }
 
@@ -229,9 +228,9 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for NaiveBayes.train()
    */
   def trainNaiveBayes(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       lambda: Double): java.util.List[java.lang.Object] = {
-    val model = NaiveBayes.train(dataJRDD.rdd, lambda)
+    val model = NaiveBayes.train(data.rdd, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(Vectors.dense(model.labels))
     ret.add(Vectors.dense(model.pi))
@@ -243,12 +242,12 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib KMeans.train()
    */
   def trainKMeansModel(
-      dataJRDD: JavaRDD[Vector],
+      data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    KMeans.train(dataJRDD.rdd, k, maxIterations, runs, initializationMode)
+    KMeans.train(data.rdd, k, maxIterations, runs, initializationMode)
   }
 
   /**
@@ -258,12 +257,12 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratingsJRDD: JavaRDD[Rating],
+      ratings: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int): MatrixFactorizationModel = {
-    ALS.train(ratingsJRDD.rdd, rank, iterations, lambda, blocks)
+    ALS.train(ratings.rdd, rank, iterations, lambda, blocks)
   }
 
   /**
@@ -287,11 +286,11 @@ class PythonMLLibAPI extends Serializable {
    * This stub returns a handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
    * see the Py4J documentation.
-   * @param dataJRDD  Training data
+   * @param data  Training data
    * @param categoricalFeaturesInfoJMap  Categorical features info, as Java map
    */
   def trainDecisionTreeModel(
-      dataJRDD: JavaRDD[LabeledPoint],
+      data: JavaRDD[LabeledPoint],
       algoStr: String,
       numClasses: Int,
       categoricalFeaturesInfoJMap: java.util.Map[Int, Int],
@@ -314,7 +313,7 @@ class PythonMLLibAPI extends Serializable {
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
 
-    DecisionTree.train(dataJRDD.rdd, strategy)
+    DecisionTree.train(data.rdd, strategy)
   }
 
   /**
@@ -330,8 +329,8 @@ class PythonMLLibAPI extends Serializable {
    * Returns the correlation matrix serialized into a byte array understood by deserializers in
    * pyspark.
    */
-  def corr(X: JavaRDD[Vector], method: String): Matrix = {
-    Statistics.corr(X.rdd, getCorrNameOrDefault(method))
+  def corr(x: JavaRDD[Vector], method: String): Matrix = {
+    Statistics.corr(x.rdd, getCorrNameOrDefault(method))
   }
 
   /**
@@ -448,13 +447,18 @@ class PythonMLLibAPI extends Serializable {
  */
 private[spark] object SerDe extends Serializable {
 
+  /**
+   * Base class used for pickle
+   * @param module the module of class in pyspark.mllib
+   * @param cls  the class
+   */
   private[python] abstract case class BasePickler(module: String, cls: Class[_])
     extends IObjectPickler with IObjectConstructor {
 
     def name = cls.getSimpleName
 
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      pickler.save(this)
+      pickler.save(this)  // it will be memorized by Pickler
       saveState(obj, out, pickler)
       out.write(Opcodes.REDUCE)
     }
