@@ -54,7 +54,7 @@ class UISuite extends FunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sc.ui.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase.contains("stages"))
         assert(html.toLowerCase.contains("storage"))
