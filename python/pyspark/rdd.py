@@ -1927,7 +1927,8 @@ class RDD(object):
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
         """
-        rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer()))
+        rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer())) \
+            if not self._is_pickled() else self
         return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, True)
 
     def countApprox(self, timeout, confidence=0.95):

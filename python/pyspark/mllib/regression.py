@@ -125,7 +125,7 @@ def _regression_train_wrapper(sc, train_func, modelClass, data, initial_weights)
     initial_weights = initial_weights or [0.0] * len(data.first().features)
     ser = PickleSerializer()
     initial_bytes = bytearray(ser.dumps(_convert_to_vector(initial_weights)))
-    ans = train_func(data._to_java_object_rdd(), initial_bytes)
+    ans = train_func(data.cache()._to_java_object_rdd(), initial_bytes)
     assert len(ans) == 2, "JVM call result had unexpected length"
     weights = ser.loads(str(ans[0]))
     return modelClass(weights, ans[1])
