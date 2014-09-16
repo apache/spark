@@ -31,7 +31,8 @@ import scala.reflect.ClassTag
  *
  */
 
-private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps: PointOps[P,C], maxIterations: Int) extends MultiKMeansClusterer[P,C] {
+private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps: PointOps[P,C], maxIterations: Int)
+  extends MultiKMeansClusterer[P,C] {
 
   def cluster(data: RDD[P], centers: Array[Array[C]]): (Double, GeneralizedKMeansModel[P, C]) = {
     val runs = centers.length
@@ -50,7 +51,9 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
 
-      if (log.isInfoEnabled) for (r <- 0 until activeCenters.length) log.info("run {} has {} centers", activeRuns(r), activeCenters(r).length)
+      if (log.isInfoEnabled)
+        for (r <- 0 until activeCenters.length)
+          log.info("run {} has {} centers", activeRuns(r), activeCenters(r).length)
 
       // Find the sum and count of points mapping to each center
       val (centroids: Array[((Int, Int), Centroid)], runDistortion: Array[Double]) = getCentroids(data, activeCenters)

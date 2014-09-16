@@ -20,15 +20,20 @@ package org.apache.spark.mllib.clustering
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.base.{PointOps, FP, Zero}
+import org.apache.spark.mllib.base.{ PointOps, FP, Zero }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-
-private[mllib] class KMeansParallel[P <: FP : ClassTag, C <: FP : ClassTag](pointOps: PointOps[P,C], k: Int, runs: Int, initializationSteps: Int, numPartitions: Int) extends KMeansInitializer[P,C] with Logging {
+private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
+  pointOps: PointOps[P, C],
+  k: Int,
+  runs: Int,
+  initializationSteps: Int,
+  numPartitions: Int)
+  extends KMeansInitializer[P, C] with Logging {
 
   /**
    * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
@@ -47,13 +52,13 @@ private[mllib] class KMeansParallel[P <: FP : ClassTag, C <: FP : ClassTag](poin
     log.debug("k-means parallel on {} points" + data.count())
 
     // randomly select one center per run, putting each into a separate array buffer
-    val sample = data.takeSample(withReplacement=true, runs, seed).toSeq.map(pointOps.pointToCenter)
+    val sample = data.takeSample(withReplacement = true, runs, seed).toSeq.map(pointOps.pointToCenter)
     val centers: Array[ArrayBuffer[C]] = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
 
     // add at most 2k points per step
     for (step <- 0 until initializationSteps) {
       if (log.isInfoEnabled) showCenters(centers, step)
-      val centerArrays = centers.map{ x: ArrayBuffer[C] => x.toArray}
+      val centerArrays = centers.map { x: ArrayBuffer[C] => x.toArray }
       val bcCenters = data.sparkContext.broadcast(centerArrays)
       for ((r, p) <- choose(data, seed, step, bcCenters)) {
         centers(r) += pointOps.pointToCenter(p)
@@ -75,7 +80,8 @@ private[mllib] class KMeansParallel[P <: FP : ClassTag, C <: FP : ClassTag](poin
   }
 
   /**
-   * Randomly choose at most 2 * k  additional cluster centers by weighting them by their distance to the current closest cluster
+   * Randomly choose at most 2 * k  additional cluster centers by weighting them by their distance to
+   * the current closest cluster
    *
    * @param data  the RDD of points
    * @param seed  random generator seed
@@ -131,8 +137,10 @@ private[mllib] class KMeansParallel[P <: FP : ClassTag, C <: FP : ClassTag](poin
         val myCenters = centers(r).toArray
         log.info("run {} has {} centers", r, myCenters.length)
         val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), Zero)).toArray
-        val initialCenters = kmeansPlusPlus.getCenters(data.sparkContext, seed, myCenters, myWeights, if (k > myCenters.length) myCenters.length else k, numPartitions, 1)
-        trackingKmeans.cluster(data.sparkContext.parallelize(myCenters.map(pointOps.centerToPoint)), Array(initialCenters))._2.centers
+        val kval = if (k > myCenters.length) myCenters.length else k
+        val initial = kmeansPlusPlus.getCenters(data.sparkContext, seed, myCenters, myWeights, kval, numPartitions, 1)
+        trackingKmeans.cluster(data.sparkContext.parallelize(myCenters.map(pointOps.centerToPoint)),
+          Array(initial))._2.centers
     }
     finalCenters.toArray
   }

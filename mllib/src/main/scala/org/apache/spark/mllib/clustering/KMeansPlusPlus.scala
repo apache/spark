@@ -32,7 +32,8 @@ import scala.reflect.ClassTag
  * @tparam P point type
  * @tparam C center type
  */
-private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](pointOps: PointOps[P, C]) extends Serializable with Logging {
+private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](pointOps: PointOps[P, C])
+  extends Serializable with Logging {
 
   /**
    * We will maintain for each point the distance to its closest cluster center.  Since only one center is added on each
@@ -72,7 +73,8 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
    * @param perRound the number of centers to add per round
    * @return   an array of at most k cluster centers
    */
-  def getCenters(sc: SparkContext, seed: Int, points: Array[C], weights: Array[Double], k: Int, numPartitions: Int, perRound: Int): Array[C] = {
+  def getCenters(sc: SparkContext, seed: Int, points: Array[C], weights: Array[Double], k: Int, numPartitions: Int,
+                 perRound: Int): Array[C] = {
     assert(points.length > 0)
     assert(k > 0)
     assert(numPartitions > 0)

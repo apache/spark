@@ -59,7 +59,8 @@ object KMeans extends Logging  {
     initializationSteps: Int = 5,
     epsilon: Double = 1e-4)(implicit ctag: ClassTag[C], ptag: ClassTag[P]): (Double, GeneralizedKMeansModel[P, C]) = {
 
-    val initializer = if (initializationMode == RANDOM) new KMeansRandom(pointOps, k, runs) else new KMeansParallel(pointOps, k, runs, initializationSteps, 1)
+    val initializer = if (initializationMode == RANDOM) new KMeansRandom(pointOps, k, runs) else
+      new KMeansParallel(pointOps, k, runs, initializationSteps, 1)
     val data = (raw map { vals => pointOps.vectorToPoint(vals) }).cache()
 
     val centers = initializer.init(data, 0)
