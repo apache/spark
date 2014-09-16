@@ -68,6 +68,7 @@ import sys
 import types
 import collections
 import zlib
+import itertools
 
 from pyspark import cloudpickle
 
@@ -205,6 +206,42 @@ class BatchedSerializer(Serializer):
 
     def __eq__(self, other):
         return (isinstance(other, BatchedSerializer) and
+                other.serializer == self.serializer)
+
+    def __str__(self):
+        return "BatchedSerializer<%s>" % str(self.serializer)
+
+
+class AutoBatchedSerializer(BatchedSerializer):
+    """
+    Choose the size of batch automatically based on the size of object
+    """
+
+    def __init__(self, serializer, bestSize=1 << 20):
+        BatchedSerializer.__init__(self, serializer, -1)
+        self.bestSize = bestSize
+
+    def dump_stream(self, iterator, stream):
+        batch, best = 1, self.bestSize
+        iterator = iter(iterator)
+        while True:
+            vs = list(itertools.islice(iterator, batch))
+            if not vs:
+                break
+
+            bytes = self.serializer.dumps(vs)
+            size = len(bytes)
+            if size < best / 10:
+                batch = best / 10 / size
+            elif size < best:
+                batch *= 2
+            elif size > best * 10:
+                batch /= 2
+            write_int(len(bytes), stream)
+            stream.write(bytes)
+
+    def __eq__(self, other):
+        return (isinstance(other, AutoBatchedSerializer) and
                 other.serializer == self.serializer)
 
     def __str__(self):
