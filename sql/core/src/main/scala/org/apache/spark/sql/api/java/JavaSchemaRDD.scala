@@ -112,6 +112,8 @@ class JavaSchemaRDD(
     new java.util.ArrayList(arr)
   }
 
+  override def count(): Long = baseSchemaRDD.count
+
   override def take(num: Int): JList[Row] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[Row] = baseSchemaRDD.take(num).toSeq.map(new Row(_))

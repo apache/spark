@@ -31,6 +31,7 @@ import tempfile
 import time
 import zipfile
 import random
+from platform import python_implementation
 
 if sys.version_info[:2] <= (2, 6):
     import unittest2 as unittest
@@ -41,9 +42,11 @@ else:
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer
+from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
+    CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType
+from pyspark import shuffle
 
 _have_scipy = False
 _have_numpy = False
@@ -136,17 +139,17 @@ class TestSorter(unittest.TestCase):
         random.shuffle(l)
         sorter = ExternalSorter(1)
         self.assertEquals(sorted(l), list(sorter.sorted(l)))
-        self.assertGreater(sorter._spilled_bytes, 0)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, 0)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
-        self.assertGreater(sorter._spilled_bytes, last)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
-        self.assertGreater(sorter._spilled_bytes, last)
-        last = sorter._spilled_bytes
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
+        last = shuffle.DiskBytesSpilled
         self.assertEquals(sorted(l, key=lambda x: -x, reverse=True),
                           list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
-        self.assertGreater(sorter._spilled_bytes, last)
+        self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):
         conf = SparkConf().set("spark.python.worker.memory", "1m")
@@ -168,15 +171,46 @@ class SerializationTestCase(unittest.TestCase):
         p2 = loads(dumps(p1, 2))
         self.assertEquals(p1, p2)
 
+    def test_itemgetter(self):
+        from operator import itemgetter
+        ser = CloudPickleSerializer()
+        d = range(10)
+        getter = itemgetter(1)
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
 
-# Regression test for SPARK-3415
-class CloudPickleTest(unittest.TestCase):
+        getter = itemgetter(0, 3)
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+    def test_attrgetter(self):
+        from operator import attrgetter
+        ser = CloudPickleSerializer()
+
+        class C(object):
+            def __getattr__(self, item):
+                return item
+        d = C()
+        getter = attrgetter("a")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+        getter = attrgetter("a", "b")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+        d.e = C()
+        getter = attrgetter("e.a")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+        getter = attrgetter("e.a", "e.b")
+        getter2 = ser.loads(ser.dumps(getter))
+        self.assertEqual(getter(d), getter2(d))
+
+    # Regression test for SPARK-3415
     def test_pickling_file_handles(self):
-        from pyspark.cloudpickle import dumps
-        from StringIO import StringIO
-        from pickle import load
+        ser = CloudPickleSerializer()
         out1 = sys.stderr
-        out2 = load(StringIO(dumps(out1)))
+        out2 = ser.loads(ser.dumps(out1))
         self.assertEquals(out1, out2)
 
 
@@ -553,6 +587,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
+    def test_distinct(self):
+        rdd = self.sc.parallelize((1, 2, 3)*10, 10)
+        self.assertEquals(rdd.getNumPartitions(), 10)
+        self.assertEquals(rdd.distinct().count(), 3)
+        result = rdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
+
 
 class TestSQL(PySparkTestCase):
 
@@ -573,6 +615,43 @@ class TestSQL(PySparkTestCase):
         self.assertEqual("abc", res[0])
         [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
+
+    def test_basic_functions(self):
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        srdd.count()
+        srdd.collect()
+        srdd.schemaString()
+        srdd.schema()
+
+        # cache and checkpoint
+        self.assertFalse(srdd.is_cached)
+        srdd.persist()
+        srdd.unpersist()
+        srdd.cache()
+        self.assertTrue(srdd.is_cached)
+        self.assertFalse(srdd.isCheckpointed())
+        self.assertEqual(None, srdd.getCheckpointFile())
+
+        srdd = srdd.coalesce(2, True)
+        srdd = srdd.repartition(3)
+        srdd = srdd.distinct()
+        srdd.intersection(srdd)
+        self.assertEqual(2, srdd.count())
+
+        srdd.registerTempTable("temp")
+        srdd = self.sqlCtx.sql("select foo from temp")
+        srdd.count()
+        srdd.collect()
+
+    def test_distinct(self):
+        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        self.assertEquals(srdd.getNumPartitions(), 10)
+        self.assertEquals(srdd.distinct().count(), 3)
+        result = srdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
 
 
 class TestIO(PySparkTestCase):
@@ -861,8 +940,40 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
 
-    @unittest.skipIf(sys.version_info[:2] <= (2, 6), "Skipped on 2.6 until SPARK-2951 is fixed")
     def test_newhadoop(self):
+        basepath = self.tempdir.name
+        data = [(1, ""),
+                (1, "a"),
+                (2, "bcdf")]
+        self.sc.parallelize(data).saveAsNewAPIHadoopFile(
+            basepath + "/newhadoop/",
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text")
+        result = sorted(self.sc.newAPIHadoopFile(
+            basepath + "/newhadoop/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text").collect())
+        self.assertEqual(result, data)
+
+        conf = {
+            "mapreduce.outputformat.class":
+                "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapred.output.value.class": "org.apache.hadoop.io.Text",
+            "mapred.output.dir": basepath + "/newdataset/"
+        }
+        self.sc.parallelize(data).saveAsNewAPIHadoopDataset(conf)
+        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        new_dataset = sorted(self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text",
+            conf=input_conf).collect())
+        self.assertEqual(new_dataset, data)
+
+    def test_newhadoop_with_array(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
         array_data = [(1, array('d')),
@@ -1127,10 +1238,45 @@ class TestWorker(PySparkTestCase):
         except OSError:
             self.fail("daemon had been killed")
 
+        # run a normal job
+        rdd = self.sc.parallelize(range(100), 1)
+        self.assertEqual(100, rdd.map(str).count())
+
     def test_fd_leak(self):
         N = 1100  # fd limit is 1024 by default
         rdd = self.sc.parallelize(range(N), N)
         self.assertEquals(N, rdd.count())
+
+    def test_after_exception(self):
+        def raise_exception(_):
+            raise Exception()
+        rdd = self.sc.parallelize(range(100), 1)
+        self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+        self.assertEqual(100, rdd.map(str).count())
+
+    def test_after_jvm_exception(self):
+        tempFile = tempfile.NamedTemporaryFile(delete=False)
+        tempFile.write("Hello World!")
+        tempFile.close()
+        data = self.sc.textFile(tempFile.name, 1)
+        filtered_data = data.filter(lambda x: True)
+        self.assertEqual(1, filtered_data.count())
+        os.unlink(tempFile.name)
+        self.assertRaises(Exception, lambda: filtered_data.count())
+
+        rdd = self.sc.parallelize(range(100), 1)
+        self.assertEqual(100, rdd.map(str).count())
+
+    def test_accumulator_when_reuse_worker(self):
+        from pyspark.accumulators import INT_ACCUMULATOR_PARAM
+        acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
+        self.assertEqual(sum(range(100)), acc1.value)
+
+        acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
+        self.assertEqual(sum(range(100)), acc2.value)
+        self.assertEqual(sum(range(100)), acc1.value)
 
 
 class TestSparkSubmit(unittest.TestCase):

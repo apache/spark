@@ -41,7 +41,9 @@ class NullableColumnBuilderSuite extends FunSuite {
     testNullableColumnBuilder(_)
   }
 
-  def testNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
+  def testNullableColumnBuilder[T <: DataType, JvmType](
+      columnType: ColumnType[T, JvmType]): Unit = {
+
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
     test(s"$typeName column builder: empty column") {

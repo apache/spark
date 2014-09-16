@@ -55,6 +55,8 @@ object DecisionTreeRunner {
       maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
       maxBins: Int = 32,
+      minInstancesPerNode: Int = 1,
+      minInfoGain: Double = 0.0,
       fracTest: Double = 0.2)
 
   def main(args: Array[String]) {
@@ -75,6 +77,13 @@ object DecisionTreeRunner {
       opt[Int]("maxBins")
         .text(s"max number of bins, default: ${defaultParams.maxBins}")
         .action((x, c) => c.copy(maxBins = x))
+      opt[Int]("minInstancesPerNode")
+        .text(s"min number of instances required at child nodes to create the parent split," +
+        s" default: ${defaultParams.minInstancesPerNode}")
+        .action((x, c) => c.copy(minInstancesPerNode = x))
+      opt[Double]("minInfoGain")
+        .text(s"min info gain required to create a split, default: ${defaultParams.minInfoGain}")
+        .action((x, c) => c.copy(minInfoGain = x))
       opt[Double]("fracTest")
         .text(s"fraction of data to hold out for testing, default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
@@ -179,7 +188,9 @@ object DecisionTreeRunner {
           impurity = impurityCalculator,
           maxDepth = params.maxDepth,
           maxBins = params.maxBins,
-          numClassesForClassification = numClasses)
+          numClassesForClassification = numClasses,
+          minInstancesPerNode = params.minInstancesPerNode,
+          minInfoGain = params.minInfoGain)
     val model = DecisionTree.train(training, strategy)
 
     println(model)
