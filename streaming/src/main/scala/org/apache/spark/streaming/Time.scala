@@ -41,26 +41,21 @@ case class Time(private val millis: Long) {
 
   def - (that: Duration): Time = new Time(millis - that.milliseconds)
 
-  // Java-friendlier versions of the above. scalastyle is disabled here to avoid warnings
-  // on spacing around binary operators.
+  // Java-friendlier versions of the above.
 
-  // scalastyle:off
+  def less(that: Time): Boolean = this < that
 
-  def less(that: Time): Boolean = this.<(that)
+  def lessEq(that: Time): Boolean = this <= that
 
-  def lessEq(that: Time): Boolean = this.<=(that)
+  def greater(that: Time): Boolean = this > that
 
-  def greater(that: Time): Boolean = this.>(that)
+  def greaterEq(that: Time): Boolean = this >= that
 
-  def greaterEq(that: Time): Boolean = this.>=(that)
+  def plus(that: Duration): Time = this + that
 
-  def plus(that: Duration): Time = this.+(that)
+  def minus(that: Time): Duration = this - that
 
-  def minus(that: Time): Duration = this.-(that)
-
-  def minus(that: Duration): Time = this.-(that)
-
-  // scalastyle:on
+  def minus(that: Duration): Time = this - that
 
 
   def floor(that: Duration): Time = {
