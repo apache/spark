@@ -106,8 +106,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     checkForLogs()
 
-    // Treat 0 as "disable the background thread", mostly for testing.
-    if (UPDATE_INTERVAL_MS > 0) {
+    // Disable the background thread during tests.
+    if (!conf.contains("spark.testing")) {
       logCheckingThread.setDaemon(true)
       logCheckingThread.start()
     }
@@ -264,18 +264,20 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     var codecName: String = null
     var sparkVersion: String = null
 
-    children.foreach(child => child.getPath().getName() match {
-      case name if name.startsWith(LOG_PREFIX) =>
-        eventLogPath = child.getPath()
+    children.foreach { child =>
+      child.getPath().getName() match {
+        case name if name.startsWith(LOG_PREFIX) =>
+          eventLogPath = child.getPath()
 
-      case codec if codec.startsWith(COMPRESSION_CODEC_PREFIX) =>
-        codecName = codec.substring(COMPRESSION_CODEC_PREFIX.length())
+        case codec if codec.startsWith(COMPRESSION_CODEC_PREFIX) =>
+          codecName = codec.substring(COMPRESSION_CODEC_PREFIX.length())
 
-      case version if version.startsWith(SPARK_VERSION_PREFIX) =>
-        sparkVersion = version.substring(SPARK_VERSION_PREFIX.length())
+        case version if version.startsWith(SPARK_VERSION_PREFIX) =>
+          sparkVersion = version.substring(SPARK_VERSION_PREFIX.length())
 
-      case _ =>
-      })
+        case _ =>
+      }
+    }
 
     val codec = try {
         if (codecName != null) {
