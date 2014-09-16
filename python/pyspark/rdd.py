@@ -301,7 +301,7 @@ class RDD(object):
             return ifilter(f, iterator)
         return self.mapPartitions(func, True)
 
-    def distinct(self):
+    def distinct(self, numPartitions=None):
         """
         Return a new RDD containing the distinct elements in this RDD.
 
@@ -309,7 +309,7 @@ class RDD(object):
         [1, 2, 3]
         """
         return self.map(lambda x: (x, None)) \
-                   .reduceByKey(lambda x, _: x) \
+                   .reduceByKey(lambda x, _: x, numPartitions) \
                    .map(lambda (x, _): x)
 
     def sample(self, withReplacement, fraction, seed=None):
