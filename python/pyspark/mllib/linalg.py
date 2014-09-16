@@ -23,10 +23,21 @@ object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
 
+import sys
 import array
+import copy_reg
+
 import numpy as np
 
 __all__ = ['SparseVector', 'Vectors']
+
+
+if sys.version_info[:2] == (2, 7):
+    # speed up pickling array in Python 2.7
+    def fast_pickle_array(ar):
+        return array.array, (ar.typecode, bytearray(ar.tostring()))
+
+    copy_reg.pickle(array.array, fast_pickle_array)
 
 
 # Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
