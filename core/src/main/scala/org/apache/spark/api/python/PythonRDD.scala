@@ -786,7 +786,7 @@ private[spark] object PythonRDD extends Logging {
       while (iter.hasNext && buffer.length < batch) {
         buffer += iter.next()
       }
-      val bytes = pickle.dumps(buffer)
+      val bytes = pickle.dumps(buffer.toArray)
       val size = bytes.length
       // let  1M < size < 10M
       if (size < 1024 * 100) {
