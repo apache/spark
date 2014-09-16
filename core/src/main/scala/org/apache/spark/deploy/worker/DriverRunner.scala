@@ -177,7 +177,6 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-
   private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
                            supervise: Boolean) {
     val builder = new ProcessBuilder(command: _*).directory(baseDir)
