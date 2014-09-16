@@ -30,6 +30,12 @@ object MimaBuild {
 
   def excludeMember(fullName: String) = Seq(
       ProblemFilters.exclude[MissingMethodProblem](fullName),
+      // Sometimes excluded methods have default arguments and 
+      // they are translated into public methods/fields($default$) in generated
+      // bytecode. It is not possible to exhustively list everything.
+      // But this should be okay.
+      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$2"),
+      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$1"),
       ProblemFilters.exclude[MissingFieldProblem](fullName),
       ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
