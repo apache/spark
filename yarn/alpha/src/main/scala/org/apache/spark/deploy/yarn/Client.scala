@@ -88,7 +88,7 @@ private[spark] class Client(
       : ContainerLaunchContext = {
     val containerContext = super.createContainerLaunchContext(newAppResponse)
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(getAMMemory(newAppResponse) + amMemoryOverhead)
+    capability.setMemory(args.amMemory + amMemoryOverhead)
     containerContext.setResource(capability)
     containerContext
   }
@@ -114,17 +114,6 @@ private[spark] class Client(
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
     amContainer.setContainerTokens(ByteBuffer.wrap(dob.getData()))
-  }
-
-  /**
-   * Return the amount of memory for launching the ApplicationMaster container (MB).
-   * GetNewApplicationResponse#getMinimumResourceCapability does not exist in the stable API.
-   */
-  override def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = {
-    val minResMemory = newAppResponse.getMinimumResourceCapability().getMemory()
-    val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) - amMemoryOverhead)
-    amMemory
   }
 
   /**

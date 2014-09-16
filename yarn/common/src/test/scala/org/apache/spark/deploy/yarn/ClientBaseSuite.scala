@@ -237,7 +237,6 @@ class ClientBaseSuite extends FunSuite with Matchers {
       val hadoopConf: Configuration,
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
-    override def getAMMemory(newApp: GetNewApplicationResponse): Int = ???
     override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = ???
     override def submitApplication(): ApplicationId = ???
     override def getApplicationReport(appId: ApplicationId): ApplicationReport = ???

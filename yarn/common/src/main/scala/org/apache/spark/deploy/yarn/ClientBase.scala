@@ -66,7 +66,7 @@ private[spark] trait ClientBase extends Logging {
       throw new IllegalArgumentException(s"Required executor memory ($executorMem MB) " +
         s"is above the max threshold ($maxMem MB) of this cluster!")
     }
-    val amMem = getAMMemory(newAppResponse) + amMemoryOverhead
+    val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
       throw new IllegalArgumentException(s"Required AM memory ($amMem MB) " +
         s"is above the max threshold ($maxMem MB) of this cluster!")
@@ -306,7 +306,7 @@ private[spark] trait ClientBase extends Logging {
     val javaOpts = ListBuffer[String]()
 
     // Add Xmx for AM memory
-    javaOpts += "-Xmx" + getAMMemory(newAppResponse) + "m"
+    javaOpts += "-Xmx" + args.amMemory + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
@@ -476,9 +476,6 @@ private[spark] trait ClientBase extends Logging {
    * If no security is enabled, the token returned by the report is null.
    */
   protected def getClientToken(report: ApplicationReport): String
-
-  /** Return the amount of memory for launching the ApplicationMaster container (MB). */
-  protected def getAMMemory(newAppResponse: GetNewApplicationResponse): Int = args.amMemory
 }
 
 private[spark] object ClientBase extends Logging {
