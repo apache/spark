@@ -187,7 +187,7 @@ object OldDeps {
     Some("org.apache.spark" % fullId % "1.1.0")
   }
 
-  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
     retrieveManaged := true,
