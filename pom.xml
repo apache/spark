@@ -134,6 +134,7 @@
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
+    <avro.mapred.classifier></avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
@@ -621,6 +622,7 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
+        <classifier>${avro.mapred.classifier}</classifier>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1108,6 +1110,7 @@
       <properties>
         <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 
@@ -1117,6 +1120,7 @@
         <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 
@@ -1126,6 +1130,7 @@
         <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 

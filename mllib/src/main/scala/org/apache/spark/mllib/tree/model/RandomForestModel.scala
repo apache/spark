@@ -74,6 +74,23 @@ class RandomForestModel(private[tree] val trees: Array[DecisionTreeModel], val a
    */
   def numTrees: Int = trees.size
 
+  /**
+   * Print full model.
+   */
+  override def toString: String = {
+    val header = algo match {
+      case Classification =>
+        s"RandomForestModel classifier with $numTrees trees\n"
+      case Regression =>
+        s"RandomForestModel regressor with $numTrees trees\n"
+      case _ => throw new IllegalArgumentException(
+        s"RandomForestModel given unknown algo parameter: $algo.")
+    }
+    header + trees.zipWithIndex.map { case (tree, treeIndex) =>
+      s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
+    }.fold("")(_ + _)
+  }
+
 }
 
 private[tree] object RandomForestModel {
