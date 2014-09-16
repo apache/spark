@@ -118,19 +118,17 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
     }
 
     if (matchingConstructors.length == 0) {
-      (a: Any) => a match {
-        case wrapper => wrap(wrapper)
-      }
+      (a: Any) => wrap(a)
     } else {
       (a: Any) => {
         if (a == null) {
           null
         } else {
           val constructor = matchingConstructors.find { c =>
-            c.getParameterTypes.head.getName.equals(a.getClass.getName)
+            c.getParameterTypes.head.getCanonicalName.equals(a.getClass.getCanonicalName)
           }.getOrElse(matchingConstructors.head)
           logDebug(
-            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} $constructor.")
+            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getCanonicalName} $constructor.")
           // We must make sure that primitives get boxed java style.
           constructor.newInstance(a match {
             case i: Int => i: java.lang.Integer
