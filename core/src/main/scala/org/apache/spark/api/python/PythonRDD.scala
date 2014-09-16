@@ -789,11 +789,9 @@ private[spark] object PythonRDD extends Logging {
       val bytes = pickle.dumps(buffer.toArray)
       val size = bytes.length
       // let  1M < size < 10M
-      if (size < 1024 * 100) {
-        batch = (1024 * 100) / size  // fast grow
-      } else if (size < 1024 * 1024) {
+      if (size < 1024 * 1024) {
         batch *= 2
-      } else if (size > 1024 * 1024 * 10) {
+      } else if (size > 1024 * 1024 * 10 && batch > 1) {
         batch /= 2
       }
       buffer.clear()
