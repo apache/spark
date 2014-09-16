@@ -109,7 +109,6 @@ class UISuite extends FunSuite {
   test("jetty selects different port under contention") {
     val server = new ServerSocket(0)
     val startPort = server.getLocalPort
-
     val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     val serverInfo2 = JettyUtils.startJettyServer(
@@ -120,6 +119,9 @@ class UISuite extends FunSuite {
     assert(boundPort1 != startPort)
     assert(boundPort2 != startPort)
     assert(boundPort1 != boundPort2)
+    serverInfo1.server.stop()
+    serverInfo2.server.stop()
+    server.close()
   }
 
   test("jetty binds to port 0 correctly") {
