@@ -72,7 +72,9 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
       channel = new RandomAccessFile(file, "r").getChannel
       channel.map(MapMode.READ_ONLY, offset, length)
     } finally {
-      channel.close()
+      if (channel != null) {
+        channel.close()
+      }
     }
   }
 
