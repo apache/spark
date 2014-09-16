@@ -789,7 +789,6 @@ class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
-    val namedAccumulablesBinary = createNamedAccumulablesBinary()
 
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
@@ -823,6 +822,7 @@ class DAGScheduler(
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
     var taskBinary: Broadcast[Array[Byte]] = null
+    var namedAccumulablesBinary: Broadcast[Array[Byte]] = null
     try {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
@@ -833,6 +833,9 @@ class DAGScheduler(
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
       taskBinary = sc.broadcast(taskBinaryBytes)
+      // Broadcast a serialized version of all "named" accumulables so that they can be looked-up
+      // by name when a task is executing
+      namedAccumulablesBinary = broadcastNamedAccumulablesBinary()
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
@@ -898,8 +901,14 @@ class DAGScheduler(
     }
   }
 
-  private def createNamedAccumulablesBinary(): Broadcast[Array[Byte]] = {
-    val namedAccumulablesList = Accumulators.originals.values.filter(_.name.isDefined).toList
+  private def broadcastNamedAccumulablesBinary(): Broadcast[Array[Byte]] = {
+    // We only broadcast accumulables that were created with the SparkContext that is being used
+    // to run this job. This is because Accumulators is a singleton object, and if we didn't do
+    // this we could end up broadcasting accumulables that were associated with "old" SparkContexts.
+    // Not only would we end up serializing lots of unnecessary objects, but we might retrieve the
+    // wrong accumulables at the other end when we look them up by name.
+    val namedAccumulablesList = Accumulators.originals.values.
+        filter(accum => {accum.name.isDefined && accum.sc == sc}).toList
     val serializer = env.closureSerializer.newInstance()
     sc.broadcast(serializer.serialize(namedAccumulablesList).array())
   }

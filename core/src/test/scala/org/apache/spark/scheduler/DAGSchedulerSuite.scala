@@ -675,7 +675,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       override def addInPlace(r1: Int, r2: Int): Int = {
         throw new DAGSchedulerSuiteDummyException
       }
-    })
+    }, sc)
 
     // Run this on executors
     sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
