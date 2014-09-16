@@ -20,6 +20,8 @@ Fuller unit tests for Python MLlib.
 """
 
 import sys
+import array as pyarray
+
 from numpy import array, array_equal
 
 if sys.version_info[:2] <= (2, 6):
@@ -51,17 +53,22 @@ def _squared_distance(a, b):
         return b.squared_distance(a)
 
 
-class VectorTests(unittest.TestCase):
+class VectorTests(PySparkTestCase):
+
+    def _test_serialize(self, v):
+        jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
+        nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
+        self.assertEqual(v, nv)
+        vs = [v] * 100
+        jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
+        nvs = ser.loads(str(self.sc._jvm.SerDe.dumps(jvecs)))
+        self.assertEqual(vs, nvs)
 
     def test_serialize(self):
-        sv = SparseVector(4, {1: 1, 3: 2})
-        dv = array([1., 2., 3., 4.])
-        lst = [1, 2, 3, 4]
-        self.assertTrue(sv is _convert_to_vector(sv))
-        self.assertTrue(array_equal(dv, _convert_to_vector(dv).toArray()))
-        self.assertTrue(array_equal(dv, _convert_to_vector(dv).toArray()))
-        self.assertEquals(sv, ser.loads(ser.dumps(sv)))
-        self.assertTrue(array_equal(dv, ser.loads(ser.dumps(dv))))
+        self._test_serialize(DenseVector(range(10)))
+        self._test_serialize(DenseVector(array([1., 2., 3., 4.])))
+        self._test_serialize(DenseVector(pyarray.array('d', range(10))))
+        self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})

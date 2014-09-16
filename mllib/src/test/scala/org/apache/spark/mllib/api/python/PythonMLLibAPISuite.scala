@@ -97,5 +97,10 @@ class PythonMLLibAPISuite extends FunSuite {
     val rat = new Rating(1, 2, 3.0)
     val rat2 = SerDe.loads(SerDe.dumps(rat)).asInstanceOf[Rating]
     assert(rat == rat2)
+
+    // Test name of class only occur once
+    val rats = (1 to 10).map(_ => new Rating(1, 2, 3.0)).toArray
+    val bytes = SerDe.dumps(rats)
+    assert(bytes.toString.split("Rating").length == 1)
   }
 }

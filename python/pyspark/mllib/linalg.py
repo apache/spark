@@ -90,6 +90,12 @@ class DenseVector(Vector):
     def __repr__(self):
         return "DenseVector(%r)" % self.array
 
+    def __eq__(self, other):
+        return isinstance(other, DenseVector) and self.array == other.array
+
+    def __ne__(self, other):
+        return not self == other
+
     def __getattr__(self, item):
         return getattr(self.array, item)
 
