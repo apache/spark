@@ -55,6 +55,7 @@ class DurationSuite extends TestSuiteBase {
   test("minus") {
     assert((new Duration(1000) - new Duration(100)) == new Duration(900))
     assert((new Duration(1000) - new Duration(0)) == new Duration(1000))
+    assert((new Duration(1000) - new Duration(1000)) == new Duration(0))
   }
 
   test("times") {
@@ -92,6 +93,18 @@ class DurationSuite extends TestSuiteBase {
   test("isZero") {
     assert(new Duration(0).isZero)
     assert(!(new Duration(1).isZero))
+  }
+
+  test("Milliseconds") {
+    assert(new Duration(100) == Milliseconds(100))
+  }
+
+  test("Seconds") {
+    assert(new Duration(30 * 1000) == Seconds(30))
+  }
+
+  test("Minutes") {
+    assert(new Duration(2 * 60 * 1000) == Minutes(2))
   }
 
 }

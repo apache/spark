@@ -37,7 +37,10 @@ case class Duration (private val millis: Long) {
 
   def / (that: Duration): Double = millis.toDouble / that.millis.toDouble
 
-  // Java-friendlier versions of the above:
+  // Java-friendlier versions of the above. scalastyle is disabled here to avoid warnings
+  // on spacing around binary operators.
+
+  // scalastyle:off
 
   def less(that: Duration): Boolean = this.<(that)
 
@@ -54,6 +57,8 @@ case class Duration (private val millis: Long) {
   def times(times: Int): Duration = this.*(times)
 
   def div(that: Duration): Double = this./(that)
+
+  // scalastyle:on
 
 
   def isMultipleOf(that: Duration): Boolean =
@@ -99,4 +104,14 @@ object Minutes {
   def apply(minutes: Long) = new Duration(minutes * 60000)
 }
 
+// Java-friendlier versions of the objects above.
 
+object Duration {
+
+  // No 'milliseconds' since it would conflict with methods above. Use the constructor directly.
+
+  def seconds(seconds: Long) = Seconds(seconds)
+
+  def minutes(minutes: Long) = Minutes(minutes)
+
+}
