@@ -119,14 +119,14 @@ final class ShuffleBlockFetcherIterator(
               () => serializer.newInstance().deserializeStream(
                 blockManager.wrapForCompression(BlockId(blockId), is)).asIterator
             ))
-            shuffleMetrics.remoteBytesRead += data.size
-            shuffleMetrics.remoteBlocksFetched += 1
-            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           } finally {
             if (is != null) {
               is.close()
             }
           }
+          shuffleMetrics.remoteBytesRead += data.size
+          shuffleMetrics.remoteBlocksFetched += 1
+          logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
 
         override def onBlockFetchFailure(e: Throwable): Unit = {
