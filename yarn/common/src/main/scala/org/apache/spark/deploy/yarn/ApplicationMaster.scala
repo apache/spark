@@ -107,8 +107,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
-    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, 30)
+
+    // Use higher priority than FileSystem.
+    assert(ApplicationMaster.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager
+      .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
@@ -444,6 +447,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 }
 
 object ApplicationMaster extends Logging {
+
+  val SHUTDOWN_HOOK_PRIORITY: Int = 30
 
   private var master: ApplicationMaster = _
 
