@@ -69,7 +69,7 @@ class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, i
    */
   private lazy val path = {
     val pathp = split.getPath(index)
-    path = pathp.toString
+    pathp.toString
   }
 
   /**
