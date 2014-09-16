@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
 
-/**
- * Predicted value for a node
- * @param predict predicted value
- * @param prob probability of the label (classification only)
- */
-private[tree] class Predict(
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+package org.apache.spark.scalastyle
 
-  override def toString = {
-    "predict = %f, prob = %f".format(predict, prob)
+import java.util.regex.Pattern
+
+import org.scalastyle.{PositionError, ScalariformChecker, ScalastyleError}
+
+import scalariform.lexer.Token
+import scalariform.parser.CompilationUnit
+
+class NonASCIICharacterChecker extends ScalariformChecker {
+  val errorKey: String = "non.ascii.character.disallowed"
+
+  override def verify(ast: CompilationUnit): List[ScalastyleError] = {
+    ast.tokens.filter(hasNonAsciiChars).map(x => PositionError(x.offset)).toList
   }
+
+  private def hasNonAsciiChars(x: Token) =
+    x.rawText.trim.nonEmpty && !Pattern.compile( """\p{ASCII}+""", Pattern.DOTALL)
+    .matcher(x.text.trim).matches()
+
 }
