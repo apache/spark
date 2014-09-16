@@ -20,8 +20,9 @@ package org.apache.spark.mllib.api.python
 import java.io.OutputStream
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
-import net.razorvine.pickle.{Pickler, Unpickler, IObjectConstructor, IObjectPickler, PickleException, Opcodes}
+import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -65,9 +66,9 @@ class PythonMLLibAPI extends Serializable {
 
   private def trainRegressionModel(
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
-    val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
+    val data = dataJRDD.rdd
     val initialWeights = SerDe.loads(initialWeightsBA).asInstanceOf[Vector]
     val model = trainFunc(data, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
@@ -80,7 +81,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LinearRegressionWithSGD.train()
    */
   def trainLinearRegressionModelWithSGD(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -114,7 +115,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LassoWithSGD.train()
    */
   def trainLassoModelWithSGD(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -137,7 +138,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib RidgeRegressionWithSGD.train()
    */
   def trainRidgeModelWithSGD(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -160,7 +161,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib SVMWithSGD.train()
    */
   def trainSVMModelWithSGD(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -194,7 +195,7 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LogisticRegressionWithSGD.train()
    */
   def trainLogisticRegressionModelWithSGD(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
@@ -228,10 +229,9 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for NaiveBayes.train()
    */
   def trainNaiveBayes(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       lambda: Double): java.util.List[java.lang.Object] = {
-    val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
-    val model = NaiveBayes.train(data, lambda)
+    val model = NaiveBayes.train(dataJRDD.rdd, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(Vectors.dense(model.labels))
     ret.add(Vectors.dense(model.pi))
@@ -243,13 +243,12 @@ class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib KMeans.train()
    */
   def trainKMeansModel(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    val data = dataJRDD.rdd.map(_.asInstanceOf[Vector])
-    KMeans.train(data, k, maxIterations, runs, initializationMode)
+    KMeans.train(dataJRDD.rdd, k, maxIterations, runs, initializationMode)
   }
 
   /**
@@ -259,13 +258,12 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratingsJRDD: JavaRDD[Object],
+      ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int): MatrixFactorizationModel = {
-    val ratings = ratingsJRDD.rdd.map(_.asInstanceOf[Rating])
-    ALS.train(ratings, rank, iterations, lambda, blocks)
+    ALS.train(ratingsJRDD.rdd, rank, iterations, lambda, blocks)
   }
 
   /**
@@ -275,14 +273,13 @@ class PythonMLLibAPI extends Serializable {
    * exit; see the Py4J documentation.
    */
   def trainImplicitALSModel(
-      ratingsJRDD: JavaRDD[Object],
+      ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
-    val ratings = ratingsJRDD.rdd.map(_.asInstanceOf[Rating])
-    ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+    ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha)
   }
 
   /**
@@ -294,7 +291,7 @@ class PythonMLLibAPI extends Serializable {
    * @param categoricalFeaturesInfoJMap  Categorical features info, as Java map
    */
   def trainDecisionTreeModel(
-      dataJRDD: JavaRDD[Any],
+      dataJRDD: JavaRDD[LabeledPoint],
       algoStr: String,
       numClasses: Int,
       categoricalFeaturesInfoJMap: java.util.Map[Int, Int],
@@ -304,7 +301,6 @@ class PythonMLLibAPI extends Serializable {
       minInstancesPerNode: Int,
       minInfoGain: Double): DecisionTreeModel = {
 
-    val data = dataJRDD.rdd.map(_.asInstanceOf[LabeledPoint])
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
 
@@ -318,29 +314,15 @@ class PythonMLLibAPI extends Serializable {
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
 
-    DecisionTree.train(data, strategy)
-  }
-
-  /**
-   * Predict the labels of the given data points.
-   * This is a Java stub for python DecisionTreeModel.predict()
-   *
-   * @param dataJRDD A JavaRDD with serialized feature vectors
-   * @return JavaRDD of serialized predictions
-   */
-  def predictDecisionTreeModel(
-      model: DecisionTreeModel,
-      dataJRDD: JavaRDD[Any]): JavaRDD[Double] = {
-    val data = dataJRDD.rdd.map(_.asInstanceOf[Vector])
-    model.predict(data)
+    DecisionTree.train(dataJRDD.rdd, strategy)
   }
 
   /**
    * Java stub for mllib Statistics.colStats(X: RDD[Vector]).
    * TODO figure out return type.
    */
-  def colStats(rdd: JavaRDD[Any]): MultivariateStatisticalSummary = {
-    Statistics.colStats(rdd.rdd.map(_.asInstanceOf[Vector]))
+  def colStats(rdd: JavaRDD[Vector]): MultivariateStatisticalSummary = {
+    Statistics.colStats(rdd.rdd)
   }
 
   /**
@@ -348,18 +330,15 @@ class PythonMLLibAPI extends Serializable {
    * Returns the correlation matrix serialized into a byte array understood by deserializers in
    * pyspark.
    */
-  def corr(X: JavaRDD[Any], method: String): Matrix = {
-    val inputMatrix = X.rdd.map(_.asInstanceOf[Vector])
-    Statistics.corr(inputMatrix, getCorrNameOrDefault(method))
+  def corr(X: JavaRDD[Vector], method: String): Matrix = {
+    Statistics.corr(X.rdd, getCorrNameOrDefault(method))
   }
 
   /**
    * Java stub for mllib Statistics.corr(x: RDD[Double], y: RDD[Double], method: String).
    */
-  def corr(x: JavaRDD[Any], y: JavaRDD[Any], method: String): Double = {
-    val xDeser = x.rdd.map(_.asInstanceOf[Double])
-    val yDeser = y.rdd.map(_.asInstanceOf[Double])
-    Statistics.corr(xDeser, yDeser, getCorrNameOrDefault(method))
+  def corr(x: JavaRDD[Double], y: JavaRDD[Double], method: String): Double = {
+    Statistics.corr(x.rdd, y.rdd, getCorrNameOrDefault(method))
   }
 
   // used by the corr methods to retrieve the name of the correlation method passed in via pyspark
