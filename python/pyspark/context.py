@@ -20,7 +20,6 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
-from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -33,6 +32,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
+from pyspark.traceback_utils import CallSite, first_spark_call
 
 from py4j.java_collections import ListConverter
 
@@ -99,11 +99,7 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        if rdd._extract_concise_traceback() is not None:
-            self._callsite = rdd._extract_concise_traceback()
-        else:
-            tempNamedTuple = namedtuple("Callsite", "function file linenum")
-            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
+        self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
