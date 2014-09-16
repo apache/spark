@@ -205,7 +205,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
-    val accumUpdateMap = taskInfo.accumulables
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
     ("Attempt" -> taskInfo.attempt) ~

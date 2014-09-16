@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.network.nio
 
-import java.net.InetAddress
-import java.net.InetSocketAddress
+import java.net.{InetAddress, InetSocketAddress}
 import java.nio.ByteBuffer
 
-private[spark] class MessageChunkHeader(
+private[nio] class MessageChunkHeader(
     val typ: Long,
     val id: Int,
     val totalSize: Int,
@@ -57,7 +56,7 @@ private[spark] class MessageChunkHeader(
 }
 
 
-private[spark] object MessageChunkHeader {
+private[nio] object MessageChunkHeader {
   val HEADER_SIZE = 45
 
   def create(buffer: ByteBuffer): MessageChunkHeader = {

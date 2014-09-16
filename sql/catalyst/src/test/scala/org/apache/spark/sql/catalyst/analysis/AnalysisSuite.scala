@@ -93,6 +93,17 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     val e = intercept[TreeNodeException[_]] {
       caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("abcd")), testRelation))
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved"))
+    assert(e.getMessage().toLowerCase.contains("unresolved attribute"))
+  }
+
+  test("throw errors for unresolved plans during analysis") {
+    case class UnresolvedTestPlan() extends LeafNode {
+      override lazy val resolved = false
+      override def output = Nil
+    }
+    val e = intercept[TreeNodeException[_]] {
+      caseSensitiveAnalyze(UnresolvedTestPlan())
+    }
+    assert(e.getMessage().toLowerCase.contains("unresolved plan"))
   }
 }
