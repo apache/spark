@@ -30,6 +30,7 @@ from operator import itemgetter
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import SCCallSiteSync
 
 from itertools import chain, ifilter, imap
 
@@ -1559,7 +1560,7 @@ class SchemaRDD(RDD):
         >>> srdd.limit(0).collect()
         []
         """
-        rdd = self._jschema_rdd.limit(num)
+        rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
         return SchemaRDD(rdd, self.sql_ctx)
 
     def saveAsParquetFile(self, path):
@@ -1651,9 +1652,8 @@ class SchemaRDD(RDD):
         >>> srdd.collect()
         [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
         """
-        from pyspark.context import JavaStackTrace
-        with JavaStackTrace(self.context) as st:
-            bytesInJava = self._jschema_rdd.collectToPython().iterator()
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD().collectToPython().iterator()
         cls = _create_cls(self.schema())
         return map(cls, self._collect_iterator_through_file(bytesInJava))
 
