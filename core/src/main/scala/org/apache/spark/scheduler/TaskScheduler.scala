@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
@@ -71,5 +73,7 @@ private[spark] trait TaskScheduler {
    * @return The application ID, or None if the backend does not provide an ID.
    */
   def applicationId(): Option[String] = None
+
+  val started = new AtomicBoolean(false)
 
 }
