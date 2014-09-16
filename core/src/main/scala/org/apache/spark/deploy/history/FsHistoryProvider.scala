@@ -118,7 +118,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
       applications.get(appId).map { info =>
-        val (replayBus, appListener) = createReplayBus()
+        val replayBus = new ReplayListenerBus()
         val ui = {
           val conf = this.conf.clone()
           val appSecManager = new SecurityManager(conf)
@@ -126,7 +126,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             s"${HistoryServer.UI_PATH_PREFIX}/$appId")
           // Do not call ui.bind() to avoid creating a new server for each application
         }
-        replayEvents(fs.getFileStatus(new Path(logDir, info.logPath)), replayBus)
+        val appListener = replay(fs.getFileStatus(new Path(logDir, info.logPath)), replayBus)
 
         ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
 
@@ -184,8 +184,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
         .flatMap { entry =>
           try {
-            val (replayBus, appListener) = createReplayBus()
-            replayEvents(entry, replayBus)
+            val appListener = replay(entry, new ReplayListenerBus())
             Some(new FsApplicationHistoryInfo(
               entry.getPath().getName(),
               appListener.appId.getOrElse(entry.getPath().getName()),
@@ -232,14 +231,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  private def createReplayBus(): (ReplayListenerBus, ApplicationEventListener) = {
-    val replayBus = new ReplayListenerBus()
-    val appListener = new ApplicationEventListener
-    replayBus.addListener(appListener)
-    (replayBus, appListener)
-  }
-
-  private def replayEvents(logPath: FileStatus, bus: ReplayListenerBus) = {
+  private def replay(logPath: FileStatus, bus: ReplayListenerBus): ApplicationEventListener = {
     val (logInput, sparkVersion) =
       if (logPath.isDir()) {
         openOldLog(logPath.getPath())
@@ -247,7 +239,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         EventLoggingListener.openEventLog(logPath.getPath(), fs)
       }
     try {
+      val appListener = new ApplicationEventListener
+      bus.addListener(appListener)
       bus.replay(logInput, sparkVersion)
+      appListener
     } finally {
       logInput.close()
     }
