@@ -106,6 +106,41 @@ object TestJsonData {
               "inner1": "str4"
             }],
             "field2": [[5, 6], [7, 8]]
-          }]
+          }],
+          "arrayOfArray1": [
+          [
+            [5]
+          ],
+          [
+            [6, 7],
+            [8]
+          ]],
+          "arrayOfArray2": [
+          [
+            [
+              {
+                "inner1": "str1"
+              }
+            ]
+          ],
+          [
+            [],
+            [
+              {"inner2": ["str3", "str33"]},
+              {"inner2": ["str4"], "inner1": "str11"}
+            ]
+          ],
+          [
+            [
+              {"inner3": [[{"inner4": 2}]]}
+            ]
+          ]]
       }""" :: Nil)
+
+  val jsonArray =
+    TestSQLContext.sparkContext.parallelize(
+      """[{"a":"str_a_1"}]""" ::
+      """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
+      """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
+      """[]""" :: Nil)
 }
