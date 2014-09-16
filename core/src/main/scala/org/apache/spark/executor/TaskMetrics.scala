@@ -115,6 +115,10 @@ class TaskMetrics extends Serializable {
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 
+  var cacheHitCount: Long = _
+
+  var cacheMissCount: Long = _
+
   /**
    * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
    * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each

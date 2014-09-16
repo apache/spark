@@ -34,6 +34,8 @@ private[jobs] object UIData {
     var shuffleWrite : Long = 0
     var memoryBytesSpilled : Long = 0
     var diskBytesSpilled : Long = 0
+    var cacheHitCount: Long = 0
+    var cacheMissCount: Long = 0
   }
 
   class StageUIData {
@@ -49,6 +51,8 @@ private[jobs] object UIData {
     var shuffleWriteBytes: Long = _
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
+    var cacheHitCount: Long = _
+    var cacheMissCount: Long = _
 
     var schedulingPool: String = ""
     var description: Option[String] = None
