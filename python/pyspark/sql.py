@@ -289,7 +289,7 @@ class StructType(DataType):
     """Spark SQL StructType
 
     The data type representing rows.
-    A StructType object comprises a list of L{StructField}s.
+    A StructType object comprises a list of L{StructField}.
 
     """
 
@@ -904,7 +904,7 @@ class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
 
-    A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
+    A SQLContext can be used create L{SchemaRDD}, register L{SchemaRDD} as
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
@@ -994,7 +994,7 @@ class SQLContext(object):
                                       str(returnType))
 
     def inferSchema(self, rdd):
-        """Infer and apply a schema to an RDD of L{Row}s.
+        """Infer and apply a schema to an RDD of L{Row}.
 
         We peek at the first row of the RDD to determine the fields' names
         and types. Nested collections are supported, which include array,
@@ -1047,7 +1047,7 @@ class SQLContext(object):
 
     def applySchema(self, rdd, schema):
         """
-        Applies the given schema to the given RDD of L{tuple} or L{list}s.
+        Applies the given schema to the given RDD of L{tuple} or L{list}.
 
         These tuples or lists can contain complex nested structures like
         lists, maps or nested rows.
@@ -1183,6 +1183,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1193,6 +1194,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -1233,6 +1235,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1243,6 +1246,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",

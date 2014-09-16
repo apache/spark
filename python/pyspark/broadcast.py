@@ -78,6 +78,9 @@ class Broadcast(object):
         return self._value
 
     def unpersist(self, blocking=False):
+        """
+        Delete cached copies of this broadcast on the executors.
+        """
         self._jbroadcast.unpersist(blocking)
         os.unlink(self.path)
 
