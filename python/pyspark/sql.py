@@ -1694,8 +1694,11 @@ class SchemaRDD(RDD):
         rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
         return SchemaRDD(rdd, self.sql_ctx)
 
-    def distinct(self):
-        rdd = self._jschema_rdd.distinct()
+    def distinct(self, numPartitions=None):
+        if numPartitions is None:
+            rdd = self._jschema_rdd.distinct()
+        else:
+            rdd = self._jschema_rdd.distinct(numPartitions)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def intersection(self, other):
