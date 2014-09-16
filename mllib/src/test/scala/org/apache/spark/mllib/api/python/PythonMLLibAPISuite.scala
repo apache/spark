@@ -79,20 +79,6 @@ class PythonMLLibAPISuite extends FunSuite {
     assert(emptyMatrix == ne)
   }
 
-  test("matrix to 2D array") {
-    val values = Array[Double](0, 1.2, 3, 4.56, 7, 8)
-    val matrix = Matrices.dense(2, 3, values)
-    val arr = SerDe.to2dArray(matrix)
-    val expected = Array(Array[Double](0, 3, 7), Array[Double](1.2, 4.56, 8))
-    assert(arr === expected)
-
-    // Test conversion for empty matrix
-    val empty = Array[Double]()
-    val emptyMatrix = Matrices.dense(0, 0, empty)
-    val empty2D = SerDe.to2dArray(emptyMatrix)
-    assert(empty2D === Array[Array[Double]]())
-  }
-
   test("pickle rating") {
     val rat = new Rating(1, 2, 3.0)
     val rat2 = SerDe.loads(SerDe.dumps(rat)).asInstanceOf[Rating]

@@ -449,7 +449,6 @@ class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   private[python] abstract case class BasePickler(module: String, cls: Class[_])
-
     extends IObjectPickler with IObjectConstructor {
 
     def name = cls.getSimpleName
@@ -461,7 +460,7 @@ private[spark] object SerDe extends Serializable {
     }
 
     private[python] def saveObjects(out: OutputStream, pickler: Pickler,
-                                    objects: Object*) = {
+                                    objects: Any*) = {
       out.write(Opcodes.MARK)
       objects.foreach(pickler.save(_))
       out.write(Opcodes.TUPLE)
@@ -480,10 +479,12 @@ private[spark] object SerDe extends Serializable {
 
   private[python] class DenseVectorPickler
     extends BasePickler("pyspark.mllib.linalg", classOf[DenseVector]) {
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       saveObjects(out, pickler, vector.toArray)
     }
+
     def construct(args: Array[Object]) :Object = {
       require(args.length == 1)
       new DenseVector(args(0).asInstanceOf[Array[Double]])
@@ -492,11 +493,12 @@ private[spark] object SerDe extends Serializable {
 
   private[python] class DenseMatrixPickler
     extends BasePickler("pyspark.mllib.linalg", classOf[DenseMatrix]) {
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
-      saveObjects(out, pickler, m.numRows.asInstanceOf[Object],
-        m.numCols.asInstanceOf[Object], m.values)
+      saveObjects(out, pickler, m.numRows, m.numCols, m.values)
     }
+
     def construct(args: Array[Object]) :Object = {
       require(args.length == 3)
       new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
@@ -506,10 +508,12 @@ private[spark] object SerDe extends Serializable {
 
   private[python] class SparseVectorPickler
     extends BasePickler("pyspark.mllib.linalg", classOf[SparseVector]) {
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
-      saveObjects(out, pickler, v.size.asInstanceOf[Object], v.indices, v.values)
+      saveObjects(out, pickler, v.size, v.indices, v.values)
     }
+
     def construct(args: Array[Object]) :Object = {
       require(args.length == 3)
       new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
@@ -522,7 +526,7 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
-      saveObjects(out, pickler, point.label.asInstanceOf[Object], point.features)
+      saveObjects(out, pickler, point.label, point.features)
     }
 
     def construct(args: Array[Object]) :Object = {
@@ -541,8 +545,7 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val rating: Rating = obj.asInstanceOf[Rating]
-      saveObjects(out, pickler, rating.user.asInstanceOf[Object],
-        rating.product.asInstanceOf[Object], rating.rating.asInstanceOf[Object])
+      saveObjects(out, pickler, rating.user, rating.product, rating.rating)
     }
 
     def construct(args: Array[Object]) :Object = {
@@ -576,26 +579,8 @@ private[spark] object SerDe extends Serializable {
     new Unpickler().loads(bytes)
   }
 
-  // Reformat a Matrix into Array[Array[Double]] for serialization
-  private[python] def to2dArray(matrix: Matrix): Array[Array[Double]] = {
-    val values = matrix.toArray
-    Array.tabulate(matrix.numRows, matrix.numCols)((i, j) => values(i + j * matrix.numRows))
-  }
-
-  def asVector(vec: Any): Vector = {
-    vec.asInstanceOf[Vector]
-  }
-
   /* convert object into Tuple */
   def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
-  }
-
-  def asDoubleRDD(rdd: JavaRDD[Any]): JavaRDD[Double] = {
-    rdd.rdd.map(_.asInstanceOf[Double])
-  }
-
-  def asVectorRDD(rdd: JavaRDD[Any]): JavaRDD[Vector] = {
-    rdd.rdd.map(_.asInstanceOf[Vector])
   }
 }

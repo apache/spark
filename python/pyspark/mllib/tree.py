@@ -60,15 +60,14 @@ class DecisionTreeModel(object):
                 return self._sc.parallelize([])
             if not isinstance(first[0], Vector):
                 x = x.map(_convert_to_vector)
-            jvrdd = SerDe.asVectorRDD(x._to_java_object_rdd())
-            jPred = self._java_model.predict(jvrdd).toJavaRDD()
+            jPred = self._java_model.predict(x._to_java_object_rdd()).toJavaRDD()
             jpyrdd = self._sc._jvm.PythonRDD.javaToPython(jPred)
             return RDD(jpyrdd, self._sc, BatchedSerializer(PickleSerializer(), 1024))
 
         else:
             # Assume x is a single data point.
             bytes = bytearray(ser.dumps(_convert_to_vector(x)))
-            vec = SerDe.asVector(self._sc._jvm.SerDe.loads(bytes))
+            vec = self._sc._jvm.SerDe.loads(bytes)
             return self._java_model.predict(vec)
 
     def numNodes(self):
