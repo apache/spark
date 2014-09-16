@@ -61,6 +61,8 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  */
 
 class SparkContext(config: SparkConf) extends Logging {
+  
+  private[spark] var executionContext:JobExecutionContext = new DefaultExecutionContext
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -304,7 +306,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
-  taskScheduler.start()
+  if (taskScheduler != null) {
+    taskScheduler.start()
+  }
 
   val applicationId: String = taskScheduler.applicationId()
   conf.set("spark.app.id", applicationId)
@@ -429,7 +433,9 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   // Post init
-  taskScheduler.postStartHook()
+  if (taskScheduler != null){
+    taskScheduler.postStartHook()
+  }
 
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
@@ -562,17 +568,8 @@ class SparkContext(config: SparkConf) extends Logging {
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
-    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
-    val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
-    val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
-    new HadoopRDD(
-      this,
-      confBroadcast,
-      Some(setInputPathsFunc),
-      inputFormatClass,
-      keyClass,
-      valueClass,
-      minPartitions).setName(path)
+    this.executionContext.
+        hadoopFile(this, path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /**
@@ -641,10 +638,7 @@ class SparkContext(config: SparkConf) extends Logging {
       kClass: Class[K],
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
-    val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
-    val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
+    this.executionContext.newAPIHadoopFile(this, path, fClass, kClass, vClass, conf)
   }
 
   /**
@@ -813,9 +807,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * The variable will be sent to each cluster only once.
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
-    cleaner.foreach(_.registerBroadcastForCleanup(bc))
-    bc
+    this.executionContext.broadcast(this, value)
   }
 
   /**
@@ -1098,15 +1090,7 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    if (dagScheduler == null) {
-      throw new SparkException("SparkContext has been shutdown")
-    }
-    val callSite = getCallSite
-    val cleanedFunc = clean(func)
-    logInfo("Starting job: " + callSite.shortForm)
-    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
-      resultHandler, localProperties.get)
-    rdd.doCheckpoint()
+    this.executionContext.runJob(this, rdd, func, partitions, allowLocal, resultHandler)
   }
 
   /**
@@ -1506,6 +1490,8 @@ object SparkContext extends Logging {
     val MESOS_REGEX = """(mesos|zk)://.*""".r
     // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
+    // Regular expression for custom execution context
+    val EXECUTION_CONTEXT = """execution-context:(.*)""".r
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -1637,7 +1623,12 @@ object SparkContext extends Logging {
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
         scheduler
-
+      
+      case EXECUTION_CONTEXT(sparkUrl) =>
+        logInfo("Will use custom job execution context " + sparkUrl)
+        sc.executionContext = Class.forName(sparkUrl).newInstance().
+            asInstanceOf[JobExecutionContext]
+        null
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
