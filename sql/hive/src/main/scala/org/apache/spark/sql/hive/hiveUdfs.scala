@@ -123,15 +123,15 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
       }
     } else {
       (a: Any) => {
-        val constructor = matchingConstructors.find { c =>
-          c.getParameterTypes.head.getName.equals(a.getClass.getName)
-        }.getOrElse(matchingConstructors.head)
-        logDebug(
-          s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} $constructor.")
-        // We must make sure that primitives get boxed java style.
         if (a == null) {
           null
         } else {
+          val constructor = matchingConstructors.find { c =>
+            c.getParameterTypes.head.getName.equals(a.getClass.getName)
+          }.getOrElse(matchingConstructors.head)
+          logDebug(
+            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} $constructor.")
+          // We must make sure that primitives get boxed java style.
           constructor.newInstance(a match {
             case i: Int => i: java.lang.Integer
             case bd: BigDecimal => new HiveDecimal(bd.underlying())
