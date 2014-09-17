@@ -40,6 +40,7 @@ abstract class NamedExpression extends Expression {
   def name: String
   def exprId: ExprId
   def qualifiers: Seq[String]
+  def metadata: Map[String, Any] = Map.empty
 
   def toAttribute: Attribute
 
@@ -112,9 +113,13 @@ case class Alias(child: Expression, name: String)
  *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                   tableName and subQueryAlias are possible qualifiers.
  */
-case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
-    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
-  extends Attribute with trees.LeafNode[Expression] {
+case class AttributeReference(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    override val metadata: Map[String, Any] = Map.empty)(
+    val exprId: ExprId = NamedExpression.newExprId,
+    val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
 
   override def references = AttributeSet(this :: Nil)
 
@@ -131,7 +136,8 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     h
   }
 
-  override def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance =
+    AttributeReference(name, dataType, nullable, metadata)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -140,7 +146,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers)
     }
   }
 
@@ -151,7 +157,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     if (newQualifiers == qualifiers) {
       this
     } else {
-      AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers)
     }
   }
 

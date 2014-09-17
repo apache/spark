@@ -296,8 +296,14 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
+ * @param metadata The metadata of this field, which is a map from string to simple type that can be
+ *                 serialized to JSON automatically.
  */
-case class StructField(name: String, dataType: DataType, nullable: Boolean) {
+case class StructField(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean,
+    metadata: Map[String, Any] = Map.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- ${name}: ${dataType.simpleString} (nullable = ${nullable})\n")
@@ -307,7 +313,7 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -342,7 +348,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   }
 
   protected[sql] def toAttributes =
-    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder
