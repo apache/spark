@@ -429,10 +429,12 @@ private[spark] trait ClientBase extends Logging {
 
       if (logApplicationReport) {
         logInfo(s"Application report from ResourceManager for app ${appId.getId} (state: $state)")
+        val clientToken = Option(getClientToken(report)).getOrElse("N/A")
+        val appDiagnostics = Option(report.getDiagnostics).getOrElse("N/A")
         val details = "\n" +
           s"\t full application identifier: $appId\n" +
-          s"\t clientToken: ${getClientToken(report)}\n" +
-          s"\t appDiagnostics: ${report.getDiagnostics}\n" +
+          s"\t clientToken: $clientToken\n" +
+          s"\t appDiagnostics: $appDiagnostics\n" +
           s"\t appMasterHost: ${report.getHost}\n" +
           s"\t appQueue: ${report.getQueue}\n" +
           s"\t appMasterRpcPort: ${report.getRpcPort}\n" +
