@@ -313,11 +313,12 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file requested by the executor . Supports fetching the file in a variety of ways,
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
-   * If `useCache` is true, first attempts to fetch the file from a local cache that's shared across
-   * executors running the same application.
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared 
+   * across executors running the same application. `useCache` is used mainly for 
+   * the the executors, not in local mode.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
@@ -377,7 +378,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
    * Throws SparkException if the target file already exists and has different contents than
