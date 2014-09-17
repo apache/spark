@@ -69,56 +69,11 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 
 class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topology: Array[Int])
-  extends Serializable {
-
-  private val L = topology.length - 1
-
-  private val ofsWeight: Array[Int] = {
-    val tmp = new Array[Int](L + 1)
-    var curPos = 0
-    tmp(0) = 0
-    var l = 1
-    while(l <= L) {
-      tmp(l) = curPos
-      curPos = curPos + (topology(l - 1) + 1) * topology(l)
-      l += 1
-    }
-    tmp
-  }
-
-  private def g(x: Double) = 1.0 / (1.0 + math.exp(-x))
+  extends Serializable with ANNHelper {
 
   def computeValues(arrData: Array[Double], arrWeights: Array[Double]): Array[Double] = {
-    var arrPrev = new Array[Double](topology(0))
-    var i: Int = 0
-    var j: Int = 0
-    var l: Int = 0
-    i = 0
-    while(i < topology(0)) {
-      arrPrev(i) = arrData(i)
-      i += 1
-    }
-    l = 1
-    while(l <= L) {
-      val arrCur = new Array[Double](topology(l))
-      j = 0
-      while(j < topology(l)) {
-        var cum: Double = 0.0
-        i = 0
-        while( i < topology(l - 1) ) {
-          cum = cum +
-            arrPrev(i) * arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + i)
-          i += 1
-        }
-        cum = cum +
-          arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1)) // bias
-        arrCur(j) = g(cum)
-        j += 1
-      }
-      arrPrev = arrCur
-      l += 1
-    }
-    arrPrev
+    val arrNodes = forwardRun(arrData, arrWeights)
+    arrNodes.slice(arrNodes.size - topology(L), arrNodes.size)
   }
 
   def predictPoint(data: Vector, weights: Vector): Double = {
@@ -250,16 +205,14 @@ object ArtificialNeuralNetwork {
     }
     Vectors.dense(initialWeightsArr)
   }
-
 }
 
-private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
+private[ann] trait ANNHelper {
+  protected val topology: Array[Int]
+  protected def g(x: Double) = 1.0 / (1.0 + math.exp(-x))
+  protected val L = topology.length - 1
 
-  private def g(x: Double) = 1.0 / (1.0 + math.exp(-x))
-
-  private val L = topology.length - 1
-
-  private val noWeights = {
+  protected val noWeights = {
     var tmp = 0
     var l = 1
     while(l <= L) {
@@ -269,7 +222,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     tmp
   }
 
-  val ofsWeight: Array[Int] = {
+  protected val ofsWeight: Array[Int] = {
     val tmp = new Array[Int](L + 1)
     var curPos = 0
     tmp(0) = 0
@@ -282,7 +235,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     tmp
   }
 
-  val noNodes: Int = {
+  protected val noNodes: Int = {
     var tmp: Integer = 0
     var l = 0
     while(l < topology.size) {
@@ -292,7 +245,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     tmp
   }
 
-  val ofsNode: Array[Int] = {
+  protected val ofsNode: Array[Int] = {
     val tmp = new Array[Int](L + 1)
     tmp(0) = 0
     var l = 1
@@ -303,16 +256,11 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     tmp
   }
 
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val arrData = data.toArray
-    val arrWeights = weights.toArray
+  protected def forwardRun(arrData: Array[Double], arrWeights: Array[Double]): Array[Double] = {
     val arrNodes = new Array[Double](noNodes)
-
     var i: Int = 0
     var j: Int = 0
     var l: Int = 0
-
-    // forward run
     i = 0
     while(i < topology(0)) {
       arrNodes(i) = arrData(i)
@@ -336,6 +284,21 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
       }
       l += 1
     }
+    arrNodes
+  }
+}
+
+private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient with ANNHelper {
+
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val arrData = data.toArray
+    val arrWeights = weights.toArray
+
+    var i: Int = 0
+    var j: Int = 0
+    var l: Int = 0
+    // forward run
+    val arrNodes = forwardRun(arrData, arrWeights)
     val arrDiff = new Array[Double](topology(L))
     j = 0
     while( j < topology(L)) {
