@@ -27,7 +27,9 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
-class UtilsSuite extends FunSuite {
+import org.apache.spark.Logging
+
+class UtilsSuite extends FunSuite with Logging {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
@@ -297,4 +299,12 @@ class UtilsSuite extends FunSuite {
     }
   }
 
+  // Test for using the util function to change our log levels.
+  test("log4j log level change") {
+    Utils.setLogLevel(org.apache.log4j.Level.ALL)
+    assert(log.isInfoEnabled())
+    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+    assert(!log.isInfoEnabled())
+    assert(log.isErrorEnabled())
+  }
 }

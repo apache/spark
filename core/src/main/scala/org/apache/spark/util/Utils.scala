@@ -1453,6 +1453,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * configure a new log4j level
+   */
+  def setLogLevel(l: org.apache.log4j.Level) {
+    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+  }
+
+
+  /**
    * config a log4j properties used for testsuite
    */
   def configTestLog4j(level: String): Unit = {
