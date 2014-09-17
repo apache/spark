@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
+import org.apache.spark.sql.hive.HiveShim
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
-import org.apache.spark.sql.hive.HiveShim
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {

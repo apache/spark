@@ -49,7 +49,7 @@ object HiveShim {
   /*handle the difference in "None" and empty ""*/
   def getEmptyCommentsFieldValue = "None"
 
-  def convertCatalystString2Hive(s: String) = new hadoopIo.Text(s)
+  def convertCatalystString2Hive(s: String) = new hadoopIo.Text(s) // TODO why should be Text?
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
     CommandProcessorFactory.get(cmd(0), conf)
