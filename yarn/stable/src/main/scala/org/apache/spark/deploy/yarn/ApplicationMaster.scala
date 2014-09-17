@@ -198,7 +198,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || numTries >= maxNumTries)
 
         if (sparkContext != null) {
-          uiAddress = sparkContext.ui.appUIHostPort
+          uiAddress = sparkContext.ui.map(_.appUIHostPort).getOrElse("")
           uiHistoryAddress = YarnSparkHadoopUtil.getUIHistoryAddress(sparkContext, sparkConf)
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
