@@ -189,7 +189,8 @@ private[spark] object EventLoggingListener extends Logging {
   val IN_PROGRESS = ".inprogress"
 
   private val DEFAULT_LOG_DIR = "/tmp/spark-events"
-  private val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
+  private val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8)
+    .toShort)
 
   // Marker for the end of header data in a log file. After this marker (and the following
   // new line), log data, potentially compressed, will be found.
