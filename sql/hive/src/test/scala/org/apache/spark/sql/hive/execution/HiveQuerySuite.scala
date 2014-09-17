@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -380,7 +381,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.exists(_ == "== Physical Plan ==")
+    explanation.contains("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -590,6 +591,30 @@ class HiveQuerySuite extends HiveComparisonTest {
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
 
+  test("Partition spec validation") {
+    sql("DROP TABLE IF EXISTS dp_test")
+    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
+    sql("SET hive.exec.dynamic.partition.mode=strict")
+
+    // Should throw when using strict dynamic partition mode without any static partition
+    intercept[SparkException] {
+      sql(
+        """INSERT INTO TABLE dp_test PARTITION(dp)
+          |SELECT key, value, key % 5 FROM src
+        """.stripMargin)
+    }
+
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+
+    // Should throw when a static partition appears after a dynamic partition
+    intercept[SparkException] {
+      sql(
+        """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+          |SELECT key, value, key % 5 FROM src
+        """.stripMargin)
+    }
+  }
+
   test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
     sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
     sparkContext.makeRDD(Seq.empty[LogFile]).registerTempTable("logFiles")
@@ -647,27 +672,27 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(sql("SET").collect().size == 0)
 
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey=$testVal"))
+      collectResults(sql(s"SET $testKey=$testVal"))
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql("SET"))
+      collectResults(sql("SET"))
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(hql("SET"))
+      collectResults(sql("SET"))
     }
 
     // "set key"
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey"))
+      collectResults(sql(s"SET $testKey"))
     }
 
     assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(hql(s"SET $nonexistentKey"))
+      collectResults(sql(s"SET $nonexistentKey"))
     }
 
     // Assert that sql() should have the same effects as sql() by repeating the above using sql().
