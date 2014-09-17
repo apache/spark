@@ -48,6 +48,7 @@ public class TaskContext implements Serializable {
         this.runningLocally = runningLocally;
         this.stageId = stageId;
         this.taskMetrics = taskMetrics;
+        taskContext.set(this);
     }
 
     public TaskContext(Integer stageId, Integer partitionId, Long attemptId,
@@ -57,6 +58,7 @@ public class TaskContext implements Serializable {
         this.runningLocally = runningLocally;
         this.stageId = stageId;
         this.taskMetrics = TaskMetrics.empty();
+        taskContext.set(this);
     }
 
     public TaskContext(Integer stageId, Integer partitionId, Long attemptId) {
@@ -65,6 +67,15 @@ public class TaskContext implements Serializable {
         this.runningLocally = false;
         this.stageId = stageId;
         this.taskMetrics = TaskMetrics.empty();
+        taskContext.set(this);
+    }
+
+
+    private static ThreadLocal<TaskContext> taskContext =
+            new ThreadLocal<TaskContext>();
+
+    public static TaskContext get() {
+        return taskContext.get();
     }
 
     // List of callback functions to execute when the task completes.
