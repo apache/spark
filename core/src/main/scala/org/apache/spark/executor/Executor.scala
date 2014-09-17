@@ -163,7 +163,7 @@ private[spark] class Executor(
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
         // We don't actually need to do anything with the result of the deserialization as it
-        // is the deserialization itself that registers the accumulables in the Accumulators object
+        // is the deserialization itself that registers the accumulables in the Accumulators object.
         // It is important that we do this before we deserialize any accumulators that are
         // explicitly passed with the task (this happens when the task is run) as we want
         // those accumulators to replace these ones if they have the same ID.

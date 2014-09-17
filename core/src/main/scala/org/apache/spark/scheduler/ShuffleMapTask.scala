@@ -37,6 +37,7 @@ import org.apache.spark.shuffle.ShuffleWriter
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
+ * @param accumulablesBinary serialized version of the set of named accumulables for this job
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,

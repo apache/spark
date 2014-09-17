@@ -529,8 +529,8 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
    * can "add" values with `add`. Only the master can access the accumuable's `value`.
    *
-   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
-   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * The accumulable's name is used in the Spark UI, as well as permitting accumulables to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulables are broadcast
    * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])

@@ -774,8 +774,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Tasks can add values to the accumuable using the `+=` operator. Only the driver can
    * access the accumuable's `value`.
    *
-   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
-   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * The accumulable's name is used in the Spark UI, as well as permitting accumulables to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulables are broadcast
    * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    *
    * @tparam T accumulator type
