@@ -361,9 +361,9 @@ private[spark] trait ClientBase extends Logging {
       }
     val amClass =
       if (isLaunchingDriver) {
-        Utils.getFormattedClassName(ApplicationMaster)
+        Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
-        Utils.getFormattedClassName(ExecutorLauncher)
+        Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
