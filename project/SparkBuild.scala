@@ -210,7 +210,7 @@ object Catalyst {
 object SQL {
   lazy val settings = Seq(
     addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
-    libraryDependencies += "ch.epfl.lamp" %% "scala-records" % "0.3-SNAPSHOT",
+    libraryDependencies += "ch.epfl.lamp" %% "scala-records" % "0.3",
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
