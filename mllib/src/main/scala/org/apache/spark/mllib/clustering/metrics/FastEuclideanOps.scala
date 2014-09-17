@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.clustering.metrics
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import com.rincaro.clusterer.base._
 import org.apache.spark.mllib.base._
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector}
 
@@ -43,10 +44,13 @@ class FastEuclideanOps extends PointOps[FastEUPoint, FastEUPoint] with Serializa
       p.norm + c.norm
     } else {
       val x = p.raw.dot(c.raw) / (p.weight * c.weight)
-      val b = p.norm + c.norm - 2.0 * x
-      if (b < upperBound) b else upperBound
+      p.norm + c.norm - 2.0 * x
     }
-    if (d < Zero) Zero else d
+    if (d < upperBound) {
+      if (d < Zero) Zero else d
+    } else {
+      upperBound
+    }
   }
 
   def arrayToPoint(raw: Array[Double]) = new P(new BDV[Double](raw), One)
