@@ -19,7 +19,6 @@ package org.apache.spark.mllib.tree.impl
 
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -49,15 +48,15 @@ private[tree] object BaggedPoint {
    * choosing subsample counts for each instance.
    * Each subsample has the same number of instances as the original dataset,
    * and is created by subsampling with replacement.
-   * @param input     Input dataset in [[TreePoint]] representation.
+   * @param input     Input dataset.
    * @param numSubsamples  Number of subsamples of this RDD to take.
    * @param seed   Random seed.
    * @return  BaggedPoint dataset representation
    */
-  def convertToBaggedRDD(
-      input: RDD[TreePoint],
+  def convertToBaggedRDD[Datum](
+      input: RDD[Datum],
       numSubsamples: Int,
-      seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[TreePoint]] = {
+      seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex{ (partitionIndex, instances) =>
       // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
@@ -74,8 +73,8 @@ private[tree] object BaggedPoint {
     }
   }
 
-  def convertToBaggedRDDWithoutSampling(input: RDD[TreePoint]): RDD[BaggedPoint[TreePoint]] = {
-    input.map(treePoint => new BaggedPoint(treePoint, Array(1.0)))
+  def convertToBaggedRDDWithoutSampling[Datum](input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
+    input.map(datum => new BaggedPoint(datum, Array(1.0)))
   }
 
 }

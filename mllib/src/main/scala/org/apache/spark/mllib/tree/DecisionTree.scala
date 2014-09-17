@@ -341,10 +341,10 @@ object DecisionTree extends Serializable with Logging {
       bins: Array[Array[Bin]],
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
-      featuresForNode: Array[Int]): Unit = {
-    val numFeaturesPerNode = if (featuresForNode != null) {
+      featuresForNode: Option[Array[Int]]): Unit = {
+    val numFeaturesPerNode = if (featuresForNode.nonEmpty) {
       // Use subsampled features
-      featuresForNode.size
+      featuresForNode.get.size
     } else {
       // Use all features
       agg.metadata.numFeatures
@@ -353,8 +353,8 @@ object DecisionTree extends Serializable with Logging {
     // Iterate over features.
     var featureIndexIdx = 0
     while (featureIndexIdx < numFeaturesPerNode) {
-      val featureIndex = if (featuresForNode != null) {
-        featuresForNode(featureIndexIdx)
+      val featureIndex = if (featuresForNode.nonEmpty) {
+        featuresForNode.get.apply(featureIndexIdx)
       } else {
         featureIndexIdx
       }
@@ -402,15 +402,15 @@ object DecisionTree extends Serializable with Logging {
       treePoint: TreePoint,
       nodeIndex: Int,
       instanceWeight: Double,
-      featuresForNode: Array[Int]): Unit = {
+      featuresForNode: Option[Array[Int]]): Unit = {
     val label = treePoint.label
     val nodeOffset = agg.getNodeOffset(nodeIndex)
     // Iterate over features.
-    if (featuresForNode != null) {
+    if (featuresForNode.nonEmpty) {
       // Use subsampled features
       var featureIndexIdx = 0
-      while (featureIndexIdx < featuresForNode.size) {
-        val binIndex = treePoint.binnedFeatures(featuresForNode(featureIndexIdx))
+      while (featureIndexIdx < featuresForNode.get.size) {
+        val binIndex = treePoint.binnedFeatures(featuresForNode.get.apply(featureIndexIdx))
         agg.nodeUpdate(nodeOffset, nodeIndex, featureIndexIdx, binIndex, label, instanceWeight)
         featureIndexIdx += 1
       }
@@ -433,8 +433,7 @@ object DecisionTree extends Serializable with Logging {
    * @param metadata Learning and dataset metadata
    * @param topNodes Root node for each tree.  Used for matching instances with nodes.
    * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
-   * @param featuresForNodes Mapping: treeIndex --> nodeIndex --> features to consider for splits,
-   *                         or null if all features should be used.
+   * @param featuresForNodes Mapping: treeIndex --> nodeIndex --> features to consider for splits.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param nodeQueue  Queue of nodes to split, with values (treeIndex, node).
@@ -445,7 +444,7 @@ object DecisionTree extends Serializable with Logging {
       metadata: DecisionTreeMetadata,
       topNodes: Array[Node],
       nodesForGroup: Map[Int, Array[Node]],
-      featuresForNodes: Map[Int, Map[Int, Array[Int]]],
+      featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]],
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       nodeQueue: mutable.Queue[(Int, Node)],
@@ -523,10 +522,10 @@ object DecisionTree extends Serializable with Logging {
         val aggNodeIndex = groupNodeIndex(treeIndex).getOrElse(nodeIndex, -1)
         // If the example does not reach a node in this group, then aggNodeIndex < 0.
         if (aggNodeIndex >= 0) {
-          val featuresForNode: Array[Int] = if (featuresForNodes != null) {
-            featuresForNodes(treeIndex)(nodeIndex)
+          val featuresForNode = if (featuresForNodes.nonEmpty) {
+            Some(featuresForNodes.get.apply(treeIndex)(nodeIndex))
           } else {
-            null
+            None
           }
           val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
           if (metadata.unorderedFeatures.isEmpty) {
@@ -544,7 +543,8 @@ object DecisionTree extends Serializable with Logging {
     timer.start("aggregation")
     val binAggregates: DTStatsAggregator = {
       val initAgg = if (metadata.subsamplingFeatures) {
-        new DTStatsAggregatorSubsampledFeatures(metadata, groupNodeIndex, featuresForNodes)
+        assert(featuresForNodes.nonEmpty)
+        new DTStatsAggregatorSubsampledFeatures(metadata, groupNodeIndex, featuresForNodes.get)
       } else {
         new DTStatsAggregatorFixedFeatures(metadata, numNodes)
       }
@@ -558,10 +558,10 @@ object DecisionTree extends Serializable with Logging {
     // Iterate over all nodes in this group.
     groupNodeIndex.foreach{ case (treeIndex, nodeIndexToAggIndex) =>
       nodeIndexToAggIndex.foreach{ case (nodeIndex, aggNodeIndex) =>
-        val featuresForNode = if (featuresForNodes != null) {
-          featuresForNodes(treeIndex)(nodeIndex)
+        val featuresForNode = if (featuresForNodes.nonEmpty) {
+          Some(featuresForNodes.get.apply(treeIndex)(nodeIndex))
         } else {
-          null
+          None
         }
         val (split: Split, stats: InformationGainStats, predict: Predict) =
           binsToBestSplit(binAggregates, aggNodeIndex, splits, featuresForNode)
@@ -664,7 +664,7 @@ object DecisionTree extends Serializable with Logging {
       binAggregates: DTStatsAggregator,
       nodeIndex: Int,
       splits: Array[Array[Split]],
-      featuresForNode: Array[Int]): (Split, InformationGainStats, Predict) = {
+      featuresForNode: Option[Array[Int]]): (Split, InformationGainStats, Predict) = {
 
     val metadata: DecisionTreeMetadata = binAggregates.metadata
 
@@ -673,8 +673,8 @@ object DecisionTree extends Serializable with Logging {
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val (bestSplit, bestSplitStats) = Range(0, metadata.numFeaturesPerNode).map { featureIndexIdx =>
-      val featureIndex = if (featuresForNode != null) {
-        featuresForNode(featureIndexIdx)
+      val featureIndex = if (featuresForNode.nonEmpty) {
+        featuresForNode.get.apply(featureIndexIdx)
       } else {
         featureIndexIdx
       }

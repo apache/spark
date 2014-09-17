@@ -44,22 +44,6 @@ private[tree] abstract class DTStatsAggregator(
   val statsSize: Int = impurityAggregator.statsSize
 
   /**
-   * Total number of features.
-   * Note: This is the total number, not the subsampled number.
-   */
-  //val numFeatures: Int = metadata.numFeatures
-
-  /**
-   * Number of bins for each feature.  This is indexed by the feature index.
-   */
-  //val numBins: Array[Int] = metadata.numBins
-
-  /**
-   * Number of splits for the given feature.
-   */
-  //def numSplits(featureIndex: Int): Int = metadata.numSplits(featureIndex)
-
-  /**
    * Indicator for each feature of whether that feature is an unordered feature.
    * TODO: Is Array[Boolean] any faster?
    */
@@ -289,8 +273,7 @@ private[tree] class DTStatsAggregatorFixedFeatures(
  * This instance of [[DTStatsAggregator]] is used when not subsampling features.
  *
  * @param groupNodeIndex  Mapping: treeIndex --> nodeIndex in tree --> node index in group
- * @param featuresForNodes Mapping: treeIndex --> nodeIndex in tree --> features for splits,
- *                         or null if all features should be used.
+ * @param featuresForNodes Mapping: treeIndex --> nodeIndex in tree --> features for splits.
  */
 private[tree] class DTStatsAggregatorSubsampledFeatures(
     metadata: DecisionTreeMetadata,
