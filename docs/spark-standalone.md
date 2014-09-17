@@ -307,7 +307,7 @@ tight firewall settings. For a complete list of ports to configure, see the
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.
 
-# Standby Masters with ZooKeeper
+## Standby Masters with ZooKeeper
 
 **Overview**
 
@@ -347,7 +347,7 @@ There's an important distinction to be made between "registering with a Master" 
 
 Due to this property, new Masters can be created at any time, and the only thing you need to worry about is that _new_ applications and Workers can find it to register with in case it becomes the leader. Once registered, you're taken care of.
 
-# Single-Node Recovery with Local File System
+## Single-Node Recovery with Local File System
 
 **Overview**
 
