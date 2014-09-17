@@ -103,17 +103,16 @@ case class InsertIntoHiveTable(
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
       conf: SerializableWritable[JobConf],
-      isCompressed: Boolean,
       writerContainer: SparkHiveWriterContainer) {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
 
-    assert(fileSinkConf.getTableInfo.getOutputFileFormatClassName != null)
-    // Doesn't work in Scala 2.9 due to what may be a generics bug
-    // TODO: Should we uncomment this for Scala 2.10?
-    // conf.setOutputFormat(outputFormatClass)
-    conf.value.set(
-      "mapred.output.format.class", fileSinkConf.getTableInfo.getOutputFileFormatClassName)
+    val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
+    assert(outputFileFormatClassName != null, "Output format class not set")
+    conf.value.set("mapred.output.format.class", outputFileFormatClassName)
+
+    val isCompressed = conf.value.getBoolean(
+      ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
 
     if (isCompressed) {
       // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
@@ -218,28 +217,14 @@ case class InsertIntoHiveTable(
     val jobConf = new JobConf(sc.hiveconf)
     val jobConfSer = new SerializableWritable(jobConf)
 
-    val defaultPartName = jobConf.get(
-      ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
     val writerContainer = if (numDynamicPartitions > 0) {
-      new SparkHiveDynamicPartitionWriterContainer(
-        jobConf,
-        fileSinkConf,
-        partitionColumnNames.takeRight(numDynamicPartitions),
-        defaultPartName)
+      val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
+      new SparkHiveDynamicPartitionWriterContainer(jobConf, fileSinkConf, dynamicPartColNames)
     } else {
       new SparkHiveWriterContainer(jobConf, fileSinkConf)
     }
 
-    val isCompressed = jobConf.getBoolean(
-      ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
-
-    saveAsHiveFile(
-      child.execute(),
-      outputClass,
-      fileSinkConf,
-      jobConfSer,
-      isCompressed,
-      writerContainer)
+    saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer)
 
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.

@@ -24,6 +24,7 @@ import java.util.Date
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
@@ -159,11 +160,13 @@ private[hive] object SparkHiveWriterContainer {
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
     @transient jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
-    dynamicPartColNames: Array[String],
-    defaultPartName: String)
+    dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
 
-  @transient var writers: mutable.HashMap[String, FileSinkOperator.RecordWriter] = _
+  private val defaultPartName = jobConf.get(
+    ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
+
+  @transient private var writers: mutable.HashMap[String, FileSinkOperator.RecordWriter] = _
 
   override def open(): Unit = {
     writers = mutable.HashMap.empty[String, FileSinkOperator.RecordWriter]
