@@ -37,7 +37,7 @@ trait Command {
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
+  protected lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
@@ -53,7 +53,7 @@ case class SetCommand(
     @transient context: SQLContext)
   extends LeafNode with Command with Logging {
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = (key, value) match {
+  override protected lazy val sideEffectResult: Seq[Row] = (key, value) match {
     // Set value for key k.
     case (Some(k), Some(v)) =>
       if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
@@ -121,7 +121,7 @@ case class ExplainCommand(
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = try {
+  override protected lazy val sideEffectResult: Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = context.executePlan(logicalPlan)
     val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
@@ -141,7 +141,7 @@ case class ExplainCommand(
 case class CacheCommand(tableName: String, doCache: Boolean)(@transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult = {
+  override protected lazy val sideEffectResult = {
     if (doCache) {
       context.cacheTable(tableName)
     } else {
@@ -161,7 +161,7 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     Row("# Registered as a temporary table", null, null) +:
       child.output.map(field => Row(field.name, field.dataType.toString, null))
   }

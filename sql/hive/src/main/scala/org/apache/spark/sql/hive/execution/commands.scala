@@ -37,7 +37,7 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     hiveContext.analyze(tableName)
     Seq.empty[Row]
   }
@@ -53,7 +53,7 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
 
   def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
@@ -70,7 +70,7 @@ case class AddJar(path: String) extends LeafNode with Command {
 
   override def output = Seq.empty
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
     Seq.empty[Row]
