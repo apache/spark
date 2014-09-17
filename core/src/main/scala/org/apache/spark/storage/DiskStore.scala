@@ -77,11 +77,12 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
       try {
         blockManager.dataSerializeStream(blockId, outputStream, values)
       } finally {
+        // Close outputStream here because it should be closed before file is deleted.
         outputStream.close()
       }
     } catch {
       case e: Throwable => {
-        if(file.exists()) {
+        if (file.exists()) {
           file.delete()
         }
         throw e
