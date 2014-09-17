@@ -412,17 +412,15 @@ private[spark] trait ClientBase extends Logging {
    *
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
-   * @param shouldKeepMonitoring The condition to keep monitoring.
    * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true,
-      shouldKeepMonitoring: () => Boolean = () => true): YarnApplicationState = {
+      logApplicationReport: Boolean = true): YarnApplicationState = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var firstIteration = true
-    while (shouldKeepMonitoring()) {
+    while (true) {
       Thread.sleep(interval)
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
