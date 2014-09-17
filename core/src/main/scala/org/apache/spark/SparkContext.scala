@@ -186,7 +186,11 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
-  val uniqueAppName = appName + "-" + System.currentTimeMillis()
+
+  // TODO Get Application ID by common way for all master type as well as YARN cluster mode
+  val appId = conf.getOption("spark.yarn.app.id").getOrElse(System.currentTimeMillis().toString)
+
+  val uniqueAppName = appId + "." + appName
   conf.set("spark.unique.app.name", uniqueAppName)
 
   // Generate the random name for a temp folder in Tachyon
