@@ -713,6 +713,23 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Zips this RDD with a Seq of other RDDs, returning an RDD of Array[Any]. Each Array
+   * contains an element of this RDD followed by elements from other RDDs
+   * Assumes that the two RDDs have the *same number of
+   * partitions* and the *same number of elements in each partition* (e.g. one was made through
+   * a map on the other).
+   */
+  def zip(others: Seq[RDD[_]]): RDD[Array[Any]] = {
+    zipPartitions(others, preservesPartitioning = false) { iterSeq: Seq[Iterator[Any]] =>
+        new Iterator[Array[Any]] {
+	        def hasNext = !iterSeq.exists(! _.hasNext)
+	        def next = iterSeq.map { iter => iter.next }.toArray
+      }
+    }
+  }
+
+
+  /**
    * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
    * applying a function to the zipped partitions. Assumes that all the RDDs have the
    * *same number of partitions*, but does *not* require them to have the same number
@@ -748,6 +765,10 @@ abstract class RDD[T: ClassTag](
       (f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4, false)
 
+  def zipPartitions[V: ClassTag]
+      (others: Seq[RDD[_]], preservesPartitioning: Boolean)
+      (f: (Seq[Iterator[Any]]) => Iterator[V]): RDD[V] =
+    new ZippedPartitionsRDD(sc, sc.clean(f), this +: others, false)
 
   // Actions (launch a job to return a value to the user program)
 
