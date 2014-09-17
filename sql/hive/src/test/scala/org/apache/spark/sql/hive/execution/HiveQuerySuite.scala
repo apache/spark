@@ -271,18 +271,6 @@ class HiveQuerySuite extends HiveComparisonTest {
       |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
     """.stripMargin)
 
-  createQueryTest("dynamic_partiton",
-    """
-      |drop table IF EXISTS dynamic_part_table;
-      |create table dynamic_part_table(intcol int) partitioned by (partcol1 int, partcol2 int);
-      |set hive.exec.dynamic.partition.mode=nonstrict;
-      |insert  into table dynamic_part_table partition(partcol1, partcol2) select 1, 1, 1 from src where key=150;
-      |insert  into table dynamic_part_table partition(partcol1, partcol2) select 1, NULL, 1 from src where key=150;
-      |insert  into table dynamic_part_table partition(partcol1, partcol2) select 1, 1, NULL from src where key=150;
-      |insert  into table dynamic_part_table partition(partcol1, partcol2) select 1, NULL, NULL from src where key=150;
-      |drop table IF EXISTS dynamic_part_table;
-    """.stripMargin)
-
   createQueryTest("lateral view5",
     "FROM src SELECT explode(array(key+3, key+4))")
 
@@ -579,6 +567,28 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   case class LogEntry(filename: String, message: String)
   case class LogFile(name: String)
+
+  createQueryTest("dynamic_partition",
+    """
+      |DROP TABLE IF EXISTS dynamic_part_table;
+      |CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT);
+      |
+      |SET hive.exec.dynamic.partition.mode=nonstrict;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, 1, 1 FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, NULL, 1 FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, 1, NULL FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLe dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, NULL, NULL FROM src WHERE key=150;
+      |
+      |DROP TABLE IF EXISTS dynamic_part_table;
+    """.stripMargin)
 
   test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
     sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
