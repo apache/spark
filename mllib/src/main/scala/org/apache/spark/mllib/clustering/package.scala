@@ -125,7 +125,8 @@ package object base {
 
     def distortion(data: RDD[P], centers: Array[C]) = {
       data.mapPartitions{
-        points => Array(points.foldLeft(Zero){ case (total, p) => total + findClosest(centers, p)._2}).iterator
+        points => Array(points.foldLeft(Zero){
+          case (total, p) => total + findClosest(centers, p)._2}).iterator
       }.reduce( _ + _ )
     }
 

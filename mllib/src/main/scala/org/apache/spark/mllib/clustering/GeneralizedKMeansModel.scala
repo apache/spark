@@ -26,7 +26,9 @@ import org.apache.spark.rdd.RDD
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-private[mllib] class GeneralizedKMeansModel[P<:FP, C<:FP](val pointOps: PointOps[P, C], val centers: Array[C])
+private[mllib] class GeneralizedKMeansModel[P<:FP, C<:FP](
+  val pointOps: PointOps[P, C],
+  val centers: Array[C])
   extends Serializable {
 
   val k: Int = clusterCenters.length

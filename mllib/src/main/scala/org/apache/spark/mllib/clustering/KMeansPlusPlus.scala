@@ -32,12 +32,13 @@ import scala.reflect.ClassTag
  * @tparam P point type
  * @tparam C center type
  */
-private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](pointOps: PointOps[P, C])
-  extends Serializable with Logging {
+private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
+  pointOps: PointOps[P, C]) extends Serializable with Logging {
 
   /**
-   * We will maintain for each point the distance to its closest cluster center.  Since only one center is added on each
-   * iteration, recomputing the closest cluster center only requires computing the distance to the new cluster center if
+   * We will maintain for each point the distance to its closest cluster center.
+   * Since only one center is added on each iteration, recomputing the closest cluster center
+   * only requires computing the distance to the new cluster center if
    * that distance is less than the closest cluster center.  
    */
   case class FatPoint(location: P, index: Int, weight: Double, distance: Double)
@@ -61,8 +62,9 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
   }
 
   /**
-   * Select centers in rounds.  On each round, select 'perRound' centers, with probability of selection
-   * equal to the product of the given weights and distance to the closest cluster center of the previous round.
+   * Select centers in rounds.  On each round, select 'perRound' centers, with probability of
+   * selection equal to the product of the given weights and distance to the closest cluster center
+   * of the previous round.
    *
    * @param sc the Spark context
    * @param seed a random number seed
@@ -73,14 +75,15 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
    * @param perRound the number of centers to add per round
    * @return   an array of at most k cluster centers
    */
-  def getCenters(sc: SparkContext, seed: Int, points: Array[C], weights: Array[Double], k: Int, numPartitions: Int,
-                 perRound: Int): Array[C] = {
+  def getCenters(sc: SparkContext, seed: Int, points: Array[C], weights: Array[Double], k: Int,
+                 numPartitions: Int, perRound: Int): Array[C] = {
     assert(points.length > 0)
     assert(k > 0)
     assert(numPartitions > 0)
     assert(perRound > 0)
 
-    if (points.length < k) log.warn("number of clusters requested {} exceeds number of points {}", k, points.length)
+    if (points.length < k) log.warn("number of clusters requested {} exceeds number of points {}",
+      k, points.length)
     val centers = new ArrayBuffer[C](k)
     val rand = new XORShiftRandom(seed)
     centers += points(pickWeighted(rand, weights))
@@ -102,7 +105,8 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
       more = chosen.nonEmpty
     }
     val result = centers.take(k)
-    log.info("completed kMeansPlusPlus initialization with {} centers of {} requested", result.length, k)
+    log.info("completed kMeansPlusPlus initialization with {} centers of {} requested",
+      result.length, k)
     result.toArray
   }
 
@@ -125,11 +129,12 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
    * @return fat points with given weighs and infinite distance to closest cluster center
    */
   def initialFatPoints(points: Array[C], weights: Array[Double]): Array[FatPoint] =
-    (0 until points.length).map{ i => FatPoint( pointOps.centerToPoint(points(i)), i, weights(i), Infinity)}.toArray
+    (0 until points.length).map{ i => FatPoint( pointOps.centerToPoint(points(i)), i, weights(i),
+      Infinity)}.toArray
 
   /**
-   * Update the distance of each point to its closest cluster center, given only the given cluster centers that were
-   * modified.
+   * Update the distance of each point to its closest cluster center, given only the given cluster
+   * centers that were modified.
    *
    * @param points set of candidate initial cluster centers
    * @param center new cluster center
@@ -150,7 +155,8 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](poin
     }
 
   /**
-   * Pick a point at random, weighing the choices by the given weight vector.  Return -1 if all weights are 0.0
+   * Pick a point at random, weighing the choices by the given weight vector.
+   * Return -1 if all weights are 0.0
    *
    * @param rand  random number generator
    * @param weights  the weights of the points

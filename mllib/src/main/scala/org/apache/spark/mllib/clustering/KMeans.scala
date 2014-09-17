@@ -33,8 +33,8 @@ object KMeans extends Logging  {
   val RANDOM = "random"
   val K_MEANS_PARALLEL = "k-means||"
 
-  def train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int, initializationMode: String): KMeansModel =
-    new KMeansModel(doTrain(new FastEuclideanOps)(data, k, maxIterations, runs, initializationMode)._2)
+  def train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int, mode: String): KMeansModel =
+    new KMeansModel(doTrain(new FastEuclideanOps)(data, k, maxIterations, runs, mode)._2)
 
   /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
@@ -57,12 +57,15 @@ object KMeans extends Logging  {
     runs: Int = 1,
     initializationMode: String = K_MEANS_PARALLEL,
     initializationSteps: Int = 5,
-    epsilon: Double = 1e-4)(implicit ctag: ClassTag[C], ptag: ClassTag[P]): (Double, GeneralizedKMeansModel[P, C]) = {
+    epsilon: Double = 1e-4)(implicit ctag: ClassTag[C], ptag: ClassTag[P])
+  : (Double, GeneralizedKMeansModel[P, C]) = {
 
-    val initializer = if (initializationMode == RANDOM) new KMeansRandom(pointOps, k, runs) else
+    val initializer = if (initializationMode == RANDOM) {
+      new KMeansRandom(pointOps, k, runs)
+    } else {
       new KMeansParallel(pointOps, k, runs, initializationSteps, 1)
+    }
     val data = (raw map { vals => pointOps.vectorToPoint(vals) }).cache()
-
     val centers = initializer.init(data, 0)
     new MultiKMeans(pointOps, maxIterations).cluster(data, centers)
   }

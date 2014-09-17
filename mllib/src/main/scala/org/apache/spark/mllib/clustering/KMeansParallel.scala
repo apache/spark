@@ -52,7 +52,7 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
     log.debug("k-means parallel on {} points" + data.count())
 
     // randomly select one center per run, putting each into a separate array buffer
-    val sample = data.takeSample(withReplacement = true, runs, seed).toSeq.map(pointOps.pointToCenter)
+    val sample = data.takeSample(true, runs, seed).toSeq.map(pointOps.pointToCenter)
     val centers: Array[ArrayBuffer[C]] = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
 
     // add at most 2k points per step
@@ -80,15 +80,16 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
   }
 
   /**
-   * Randomly choose at most 2 * k  additional cluster centers by weighting them by their distance to
-   * the current closest cluster
+   * Randomly choose at most 2 * k  additional cluster centers by weighting them by their distance
+   * to the current closest cluster
    *
    * @param data  the RDD of points
    * @param seed  random generator seed
    * @param step  which step of the selection process
    * @return  array of (run, point)
    */
-  def choose(data: RDD[P], seed: Int, step: Int, bcCenters: Broadcast[Array[Array[C]]]): Array[(Int, P)] = {
+  def choose(data: RDD[P], seed: Int, step: Int, bcCenters: Broadcast[Array[Array[C]]])
+  : Array[(Int, P)] = {
     // compute the weighted distortion for each run
     val sumCosts = data.flatMap {
       point =>
@@ -113,20 +114,23 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
   }
 
   /**
-   * Reduce sets of candidate cluster centers to at most k points per set using KMeansPlusPlus. Weight the points
-   * by the distance to the closest cluster center.
+   * Reduce sets of candidate cluster centers to at most k points per set using KMeansPlusPlus.
+   * Weight the points by the distance to the closest cluster center.
    *
    * @param data  original points
    * @param bcCenters  array of sets of candidate centers
    * @param seed  random number seed
    * @return  array of sets of cluster centers
    */
-  def finalCenters(data: RDD[P], bcCenters: Broadcast[Array[Array[C]]], seed: Int): Array[Array[C]] = {
+  def finalCenters(data: RDD[P], bcCenters: Broadcast[Array[Array[C]]], seed: Int)
+  : Array[Array[C]] = {
     // for each (run, cluster) compute the sum of the weights of the points in the cluster
     val weightMap = data.flatMap {
       point =>
         val centers = bcCenters.value
-        for (r <- 0 until runs) yield ((r, pointOps.findClosest(centers(r), point)._1), point.weight)
+        for (r <- 0 until runs) yield {
+          ((r, pointOps.findClosest(centers(r), point)._1), point.weight)
+        }
     }.reduceByKey(_ + _).collectAsMap()
 
     val centers = bcCenters.value
@@ -136,9 +140,10 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
       r =>
         val myCenters = centers(r).toArray
         log.info("run {} has {} centers", r, myCenters.length)
-        val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), Zero)).toArray
-        val kval = if (k > myCenters.length) myCenters.length else k
-        val initial = kmeansPlusPlus.getCenters(data.sparkContext, seed, myCenters, myWeights, kval, numPartitions, 1)
+        val weights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), Zero)).toArray
+        val kx = if (k > myCenters.length) myCenters.length else k
+        val sc = data.sparkContext
+        val initial = kmeansPlusPlus.getCenters(sc, seed, myCenters, weights, kx, numPartitions, 1)
         trackingKmeans.cluster(data.sparkContext.parallelize(myCenters.map(pointOps.centerToPoint)),
           Array(initial))._2.centers
     }

@@ -33,7 +33,9 @@ class EuclideanOps extends PointOps[FPoint, FPoint] with Serializable {
   val epsilon = 1e-4
 
   def distance(p: P, c: C, upperBound: Double = Infinity): Double = {
-    val d = p.inh.zip(c.inh).foldLeft(Zero) { case (d: Double, (a: Double, b: Double)) => d + (a - b) * (a - b)}
+    val d = p.inh.zip(c.inh).foldLeft(Zero) {
+      case (d: Double, (a: Double, b: Double)) => d + (a - b) * (a - b)
+    }
     if( d < Zero) Zero else d
   }
 

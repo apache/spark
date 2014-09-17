@@ -26,13 +26,13 @@ import scala.reflect.ClassTag
 
 
 /**
- * A K-Means clustering implementation that performs multiple K-means clusterings simultaneously, returning the
- * one with the lowest cost.
+ * A K-Means clustering implementation that performs multiple K-means clusterings simultaneously,
+ * returning the one with the lowest cost.
  *
  */
 
-private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps: PointOps[P,C], maxIterations: Int)
-  extends MultiKMeansClusterer[P,C] {
+private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](
+  pointOps: PointOps[P,C], maxIterations: Int) extends MultiKMeansClusterer[P,C] {
 
   def cluster(data: RDD[P], centers: Array[Array[C]]): (Double, GeneralizedKMeansModel[P, C]) = {
     val runs = centers.length
@@ -51,14 +51,17 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
 
-      if (log.isInfoEnabled)
+      if (log.isInfoEnabled) {
         for (r <- 0 until activeCenters.length)
           log.info("run {} has {} centers", activeRuns(r), activeCenters(r).length)
+      }
 
       // Find the sum and count of points mapping to each center
-      val (centroids: Array[((Int, Int), Centroid)], runDistortion: Array[Double]) = getCentroids(data, activeCenters)
+      val (centroids, runDistortion) = getCentroids(data, activeCenters)
 
-      if (log.isInfoEnabled) for (run <- activeRuns) log.info("run {} distortion {}", run, runDistortion(run))
+      if (log.isInfoEnabled) {
+        for (run <- activeRuns) log.info("run {} distortion {}", run, runDistortion(run))
+      }
 
       for (run <- activeRuns) active(run) = false
 
@@ -80,8 +83,7 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps
       // update distortions and print log message if run completed during this iteration
       for ((run, runIndex) <- activeRuns.zipWithIndex) {
         costs(run) = runDistortion(runIndex)
-        if (!active(run))
-          log.info("run {} finished in {} iterations", run, iteration + 1)
+        if (!active(run)) log.info("run {} finished in {} iterations", run, iteration + 1)
       }
       activeRuns = activeRuns.filter(active(_))
       iteration += 1
@@ -91,7 +93,10 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](pointOps
     (costs(best), new GeneralizedKMeansModel(pointOps, centers(best)))
   }
 
-  def getCentroids(data: RDD[P], activeCenters: Array[Array[C]]): (Array[((Int, Int), Centroid)], Array[Double]) = {
+  def getCentroids(
+    data: RDD[P],
+    activeCenters: Array[Array[C]])
+  : (Array[((Int, Int), Centroid)], Array[Double]) = {
     val runDistortion = activeCenters.map(_ => data.sparkContext.accumulator(Zero))
     val bcActiveCenters = data.sparkContext.broadcast(activeCenters)
     val result = data.mapPartitions { points =>
