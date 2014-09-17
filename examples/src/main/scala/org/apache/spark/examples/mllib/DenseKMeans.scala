@@ -94,11 +94,7 @@ object DenseKMeans {
       case Parallel => KMeans.K_MEANS_PARALLEL
     }
 
-    val model = new KMeans()
-      .setInitializationMode(initMode)
-      .setK(params.k)
-      .setMaxIterations(params.numIterations)
-      .run(examples)
+    val model = KMeans.train(examples, params.k, params.numIterations, 1, initMode)
 
     val cost = model.computeCost(examples)
 
