@@ -70,7 +70,7 @@ class ANNSuite extends FunSuite with LocalSparkContext {
 
       var l = 1
       while(l <= L) {
-        noWeights += (topology(l - 1) + 1)*(topology(l))
+        noWeights += (topology(l - 1) + 1) * topology(l)
         l += 1
       }
 
@@ -120,8 +120,8 @@ class ANNSuite extends FunSuite with LocalSparkContext {
         val annModel2 = new ArtificialNeuralNetworkModel(tmpWeights, topology)
         val brzO2 = annModel2.predictV(data).toBreeze
 
-        val E1 = .5*((brzO1 - brzOut).dot(brzO1 - brzOut))
-        val E2 = .5*((brzO2 - brzOut).dot(brzO2 - brzOut))
+        val E1 = .5* (brzO1 - brzOut).dot(brzO1 - brzOut)
+        val E2 = .5* (brzO2 - brzOut).dot(brzO2 - brzOut)
         val dEdW = ( E2 - E1 ) / eps
 
         val gradw = gradient(w)

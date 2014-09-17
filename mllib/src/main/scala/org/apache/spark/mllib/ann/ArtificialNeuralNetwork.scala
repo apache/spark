@@ -80,7 +80,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     var l = 1
     while(l <= L) {
       tmp(l) = curPos
-      curPos = curPos + (topology(l - 1) + 1) * (topology(l))
+      curPos = curPos + (topology(l - 1) + 1) * topology(l)
       l += 1
     }
     tmp
@@ -236,14 +236,14 @@ object ArtificialNeuralNetwork {
     }
 
     val initialWeightsArr = new Array[Double](noWeights)
-    var pos = 0;
+    var pos = 0
 
     l = 1
     while( l < topology.length) {
       i = 0
       while(i < (topology(l) * (topology(l - 1) + 1))) {
         initialWeightsArr(pos) = (rand.nextDouble * 4.8 - 2.4) / (topology(l - 1) + 1)
-        pos += 1;
+        pos += 1
         i += 1
       }
       l += 1
@@ -271,12 +271,12 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
 
   val ofsWeight: Array[Int] = {
     val tmp = new Array[Int](L + 1)
-    var curPos = 0;
-    tmp(0) = 0;
+    var curPos = 0
+    tmp(0) = 0
     var l = 1
     while(l <= L) {
       tmp(l) = curPos
-      curPos = curPos + (topology(l - 1) + 1) * (topology(l))
+      curPos = curPos + (topology(l - 1) + 1) * topology(l)
       l += 1
     }
     tmp
@@ -313,7 +313,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     var l: Int = 0
 
     // forward run
-    i = 0;
+    i = 0
     while(i < topology(0)) {
       arrNodes(i) = arrData(i)
       i += 1
@@ -322,7 +322,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     while( l <= L ) {
       j = 0
       while(j < topology(l)) {
-        var cum: Double = 0.0;
+        var cum: Double = 0.0
         i = 0
         while(i < topology(l - 1)) {
           cum = cum +
@@ -339,11 +339,11 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
     val arrDiff = new Array[Double](topology(L))
     j = 0
     while( j < topology(L)) {
-      arrDiff(j) = (arrNodes(ofsNode(L) + j) - arrData(topology(0) + j))
+      arrDiff(j) = arrNodes(ofsNode(L) + j) - arrData(topology(0) + j)
       j += 1
     }
 
-    var err: Double = 0;
+    var err: Double = 0
     j = 0
     while(j < topology(L)) {
       err = err + arrDiff(j) * arrDiff(j)
@@ -406,7 +406,7 @@ private class ANNLeastSquaresGradient(topology: Array[Int]) extends Gradient {
       cumGradient: Vector): Double = {
     val (grad, err) = compute(data, label, weights)
     cumGradient.toBreeze += grad.toBreeze
-    return err
+    err
   }
 }
 
