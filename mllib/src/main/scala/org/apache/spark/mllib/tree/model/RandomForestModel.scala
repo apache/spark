@@ -54,7 +54,6 @@ class RandomForestModel(private[tree] val trees: Array[DecisionTreeModel], val a
         }
         predictionToCount.maxBy(_._2)._1
       case Regression =>
-        // TODO: Support other aggregation methods?
         trees.map(_.predict(features)).sum / trees.size
     }
   }

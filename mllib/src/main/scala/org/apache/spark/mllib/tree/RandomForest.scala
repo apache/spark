@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
 import org.apache.spark.Logging
@@ -117,11 +116,12 @@ private class RandomForest (
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     val maxMemoryPerNode = {
-      val featureSubset: Array[Int] = if (metadata.subsamplingFeatures) {
+      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         // Find numFeaturesPerNode largest bins to get an upper bound on memory usage.
-        metadata.numBins.zipWithIndex.sortBy(- _._1).take(metadata.numFeaturesPerNode).map(_._2)
+        Some(metadata.numBins.zipWithIndex.sortBy(- _._1)
+          .take(metadata.numFeaturesPerNode).map(_._2))
       } else {
-        null
+        None
       }
       RandomForest.numElementsForNode(metadata, featureSubset) * 8L
     }
@@ -378,22 +378,22 @@ object RandomForest extends Serializable with Logging {
     var memUsage: Long = 0L
     while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
       val (treeIndex, node) = nodeQueue.head
-      // Choose subset of features for node, or null if using all.
-      val featureSubset: Array[Int] = if (metadata.subsamplingFeatures) {
+      // Choose subset of features for node (if subsampling).
+      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         // TODO: Use more efficient subsampling?
-        rng.shuffle(Range(0, metadata.numFeatures).toList)
-          .take(metadata.numFeaturesPerNode).toArray
+        Some(rng.shuffle(Range(0, metadata.numFeatures).toList)
+          .take(metadata.numFeaturesPerNode).toArray)
       } else {
-        null
+        None
       }
       val nodeMemUsage = RandomForest.numElementsForNode(metadata, featureSubset) * 8L
       if (memUsage + nodeMemUsage <= maxMemoryUsage) {
         nodeQueue.dequeue()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[Node]()) += node
-        if (metadata.subsamplingFeatures) {
+        if (featureSubset.nonEmpty) {
           mutableFeaturesForNodes
             .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, Array[Int]]())(node.id)
-            = featureSubset
+            = featureSubset.get
         }
       }
       memUsage += nodeMemUsage
@@ -410,13 +410,13 @@ object RandomForest extends Serializable with Logging {
   /**
    * Get the number of values to be stored for this node in the bin aggregates.
    * @param featureSubset  Indices of features which may be split at this node.
-   *                       If null, then use all features.
+   *                       If None, then use all features.
    */
   private[tree] def numElementsForNode(
       metadata: DecisionTreeMetadata,
-      featureSubset: Array[Int]): Long = {
-    val totalBins = if (featureSubset != null) {
-      featureSubset.map(featureIndex => metadata.numBins(featureIndex).toLong).sum
+      featureSubset: Option[Array[Int]]): Long = {
+    val totalBins = if (featureSubset.nonEmpty) {
+      featureSubset.get.map(featureIndex => metadata.numBins(featureIndex).toLong).sum
     } else {
       metadata.numBins.map(_.toLong).sum
     }
