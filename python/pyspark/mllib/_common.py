@@ -198,7 +198,8 @@ def _deserialize_double(ba, offset=0):
     """
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
-    if len(ba) - offset != 8:
+    nb = len(ba) - offset
+    if nb != 8:
         raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
     return _unpack("d", ba[offset:])[0]
 
