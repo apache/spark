@@ -44,9 +44,9 @@ PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 # ASF JIRA username
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
 # ASF JIRA password
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "35500")
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
