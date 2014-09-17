@@ -38,7 +38,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
-import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
@@ -419,7 +418,7 @@ private[spark] trait ClientBase extends Logging {
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true): YarnApplicationState = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
-    var firstIteration = true
+    var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
       val report = getApplicationReport(appId)
@@ -427,26 +426,32 @@ private[spark] trait ClientBase extends Logging {
 
       if (logApplicationReport) {
         logInfo(s"Application report from ResourceManager for app ${appId.getId} (state: $state)")
-        val clientToken = Option(getClientToken(report)).getOrElse("N/A")
-        val appDiagnostics = Option(report.getDiagnostics).getOrElse("N/A")
-        val details = "\n" +
-          s"\t full application identifier: $appId\n" +
-          s"\t clientToken: $clientToken\n" +
-          s"\t appDiagnostics: $appDiagnostics\n" +
-          s"\t appMasterHost: ${report.getHost}\n" +
-          s"\t appQueue: ${report.getQueue}\n" +
-          s"\t appMasterRpcPort: ${report.getRpcPort}\n" +
-          s"\t appStartTime: ${report.getStartTime}\n" +
-          s"\t yarnAppState: $state\n" +
-          s"\t distributedFinalState: ${report.getFinalApplicationStatus}\n" +
-          s"\t appTrackingUrl: ${report.getTrackingUrl}\n" +
-          s"\t appUser: ${report.getUser}"
+        val details = Seq[(String, String)](
+          ("full identifier", appId.toString),
+          ("client token", getClientToken(report)),
+          ("diagnostics", report.getDiagnostics),
+          ("ApplicationMaster host", report.getHost),
+          ("ApplicationMaster RPC port", report.getRpcPort.toString),
+          ("queue", report.getQueue),
+          ("start time", report.getStartTime.toString),
+          ("final status", report.getFinalApplicationStatus.toString),
+          ("tracking URL", report.getTrackingUrl),
+          ("user", report.getUser)
+        )
 
-        // Log report details every iteration if DEBUG is enabled, otherwise only the first
+        // Use more loggable format if value is null or empty
+        val formattedDetails = details
+          .map { case (k, v) =>
+            val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
+            s"\n\t $k: $newValue" }
+          .mkString("")
+
+        // If DEBUG is enabled, log report details every iteration
+        // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(details)
-        } else if (firstIteration) {
-          logInfo(details)
+          logDebug(formattedDetails)
+        } else if (lastState != state) {
+          logInfo(formattedDetails)
         }
       }
 
@@ -460,8 +465,9 @@ private[spark] trait ClientBase extends Logging {
         return state
       }
 
-      firstIteration = false
+      lastState = state
     }
+
     // Never reached, but keeps compiler happy
     throw new SparkException("While loop is depleted! This should never happen...")
   }
