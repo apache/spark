@@ -28,7 +28,7 @@ set -o pipefail
 set -e
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$FWDIR/dist"
 
 SPARK_TACHYON=false
@@ -40,7 +40,7 @@ function exit_with_usage {
   echo ""
   echo "usage:"
   echo "./make-distribution.sh [--name] [--tgz] [--with-tachyon] <maven build options>"
-  echo "See Spark's \"Building with Maven\" doc for correct Maven options."
+  echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
 }
@@ -50,7 +50,8 @@ while (( "$#" )); do
   case $1 in
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
-      echo "Error: use Maven options -Phadoop.version and -Pyarn.version"
+      echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
+      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -113,7 +114,17 @@ if ! which mvn &>/dev/null; then
     echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
+
 VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | tail -n 1)
+SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | fgrep --count "<id>hive</id>";\
+    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
+    # because we use "set -o pipefail"
+    echo -n)
 
 JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
@@ -175,7 +186,7 @@ cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$FWDIR"/examples/src/main "$DISTDIR/examples/src/"
 
-if [ "$SPARK_HIVE" == "true" ]; then
+if [ "$SPARK_HIVE" == "1" ]; then
   cp "$FWDIR"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
 fi
 
@@ -209,10 +220,10 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
-  cp "tachyon-${TACHYON_VERSION}/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
+  cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
-  cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/tachyon/src/main/java/tachyon/web"
+  cp -r "tachyon-${TACHYON_VERSION}"/core/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
 
   if [[ `uname -a` == Darwin* ]]; then
     # need to run sed differently on osx

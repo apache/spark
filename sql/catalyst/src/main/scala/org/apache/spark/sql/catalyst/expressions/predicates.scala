@@ -265,12 +265,13 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
       false
     } else {
       val allCondBooleans = predicates.forall(_.dataType == BooleanType)
-      val dataTypesEqual = values.map(_.dataType).distinct.size <= 1
+      // both then and else val should be considered.
+      val dataTypesEqual = (values ++ elseValue).map(_.dataType).distinct.size <= 1
       allCondBooleans && dataTypesEqual
     }
   }
 
-  /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
+  /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
     val len = branchesArr.length
     var i = 0

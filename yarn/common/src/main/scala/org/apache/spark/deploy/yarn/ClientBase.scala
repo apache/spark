@@ -209,7 +209,7 @@ trait ClientBase extends Logging {
       if (! localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
-          val setPermissions = if (destName.equals(ClientBase.APP_JAR)) true else false
+          val setPermissions = destName.equals(ClientBase.APP_JAR)
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), conf)
           distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,
@@ -300,8 +300,6 @@ trait ClientBase extends Logging {
     retval.toString
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int
-
   def setupSecurityToken(amContainer: ContainerLaunchContext)
 
   def createContainerLaunchContext(
@@ -346,7 +344,7 @@ trait ClientBase extends Logging {
     }
     amContainer.setEnvironment(env)
 
-    val amMemory = calculateAMMemory(newApp)
+    val amMemory = args.amMemory
 
     val javaOpts = ListBuffer[String]()
 
@@ -430,10 +428,8 @@ trait ClientBase extends Logging {
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
-    val acls = Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityManager.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityManager.getModifyAcls)
-    amContainer.setApplicationACLs(acls)
+    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+
     amContainer
   }
 }

@@ -15,14 +15,15 @@ import scala.tools.nsc._
 import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
 
-import scala.tools.nsc.interpreter.{ Results => IR }
-import Predef.{ println => _, _ }
-import java.io.{ BufferedReader, FileReader }
+import scala.tools.nsc.interpreter.{Results => IR}
+import Predef.{println => _, _}
+import java.io.{BufferedReader, FileReader}
+import java.net.URI
 import java.util.concurrent.locks.ReentrantLock
 import scala.sys.process.Process
 import scala.tools.nsc.interpreter.session._
-import scala.util.Properties.{ jdkHome, javaVersion }
-import scala.tools.util.{ Javap }
+import scala.util.Properties.{jdkHome, javaVersion}
+import scala.tools.util.{Javap}
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ops
@@ -32,7 +33,7 @@ import scala.tools.nsc.io.{File, Directory}
 import scala.reflect.NameTransformer._
 import scala.tools.nsc.util.ScalaClassLoader._
 import scala.tools.util._
-import scala.language.{implicitConversions, existentials}
+import scala.language.{implicitConversions, existentials, postfixOps}
 import scala.reflect.{ClassTag, classTag}
 import scala.tools.reflect.StdRuntimeTags._
 
@@ -189,8 +190,16 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     require(settings != null)
 
     if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    val addedJars =
+      if (Utils.isWindows) {
+        // Strip any URI scheme prefix so we can add the correct path to the classpath
+        // e.g. file:/C:/my/path.jar -> C:/my/path.jar
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
+      } else {
+        SparkILoop.getAddedJars
+      }
     // work around for Scala bug
-    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+    val totalClassPath = addedJars.foldLeft(
       settings.classpath.value)((l, r) => ClassPath.join(l, r))
     this.settings.classpath.value = totalClassPath
 
