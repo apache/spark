@@ -71,12 +71,12 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
   
   sql_diffs=$(
-    git diff --name-only selective-testing \
+    git diff --name-only master \
     | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
   )
 
   non_sql_diffs=$(
-    git diff --name-only selective-testing \
+    git diff --name-only master \
     | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
   )
 
