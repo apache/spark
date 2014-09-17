@@ -523,7 +523,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver, in second.
+    the driver, in seconds.
   </td>
 </tr>
 <tr>
