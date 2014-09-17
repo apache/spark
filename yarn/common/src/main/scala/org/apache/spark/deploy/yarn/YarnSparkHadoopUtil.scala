@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 /**
  * Contains util methods to interact with Hadoop from spark.
  */
-private[spark] class YarnSparkHadoopUtil extends SparkHadoopUtil {
+class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -83,7 +83,7 @@ private[spark] class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
 }
 
-private[spark] object YarnSparkHadoopUtil {
+object YarnSparkHadoopUtil {
   // Additional memory overhead - in mb.
   val DEFAULT_MEMORY_OVERHEAD = 384
 
@@ -136,7 +136,9 @@ private[spark] object YarnSparkHadoopUtil {
           m.appendReplacement(sb, Matcher.quoteReplacement(replace))
         }
         m.appendTail(sb)
-        env(parts(0)) = sb.toString
+        // This treats the environment variable as path variable delimited by `File.pathSeparator`
+        // This is kept for backward compatibility and consistency with Hadoop's behavior
+        addPathToEnvironment(env, parts(0), sb.toString)
       }
     }
   }

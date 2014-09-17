@@ -36,7 +36,9 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
+
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
@@ -217,7 +219,6 @@ private[spark] trait ClientBase extends Logging {
       sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
     }
 
-    UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
   }
 
@@ -360,9 +361,9 @@ private[spark] trait ClientBase extends Logging {
       }
     val amClass =
       if (isLaunchingDriver) {
-        classOf[ApplicationMaster].getName()
+        Utils.getFormattedClassName(ApplicationMaster)
       } else {
-        classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
+        Utils.getFormattedClassName(ExecutorLauncher)
       }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
@@ -400,6 +401,8 @@ private[spark] trait ClientBase extends Logging {
     val securityManager = new SecurityManager(sparkConf)
     amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
     setupSecurityToken(amContainer)
+    UserGroupInformation.getCurrentUser().addCredentials(credentials)
+
     amContainer
   }
 
@@ -409,22 +412,24 @@ private[spark] trait ClientBase extends Logging {
    *
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
+   * @param shouldKeepMonitoring The condition to keep monitoring.
    * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true): YarnApplicationState = {
+      logApplicationReport: Boolean = true,
+      shouldKeepMonitoring: () => Boolean = () => true): YarnApplicationState = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
-    while (true) {
+    var firstIteration = true
+    while (shouldKeepMonitoring()) {
       Thread.sleep(interval)
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
 
       if (logApplicationReport) {
-        logInfo(s"Application report from ResourceManager for application ${appId.getId} " +
-          s"(state: $state)")
-        logDebug("\n" +
+        logInfo(s"Application report from ResourceManager for app ${appId.getId} (state: $state)")
+        val details = "\n" +
           s"\t full application identifier: $appId\n" +
           s"\t clientToken: ${getClientToken(report)}\n" +
           s"\t appDiagnostics: ${report.getDiagnostics}\n" +
@@ -435,7 +440,14 @@ private[spark] trait ClientBase extends Logging {
           s"\t yarnAppState: $state\n" +
           s"\t distributedFinalState: ${report.getFinalApplicationStatus}\n" +
           s"\t appTrackingUrl: ${report.getTrackingUrl}\n" +
-          s"\t appUser: ${report.getUser}")
+          s"\t appUser: ${report.getUser}"
+
+        // Log report details every iteration if DEBUG is enabled, otherwise only the first
+        if (log.isDebugEnabled) {
+          logDebug(details)
+        } else if (firstIteration) {
+          logInfo(details)
+        }
       }
 
       if (state == YarnApplicationState.FINISHED ||
@@ -447,6 +459,8 @@ private[spark] trait ClientBase extends Logging {
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return state
       }
+
+      firstIteration = false
     }
     // Never reached, but keeps compiler happy
     throw new SparkException("While loop is depleted! This should never happen...")

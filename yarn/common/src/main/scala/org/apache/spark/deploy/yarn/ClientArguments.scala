@@ -47,22 +47,20 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     "spark.yarn.executor.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
 
   parseArgs(args.toList)
-  loadDefaultArgs()
+  loadEnvironmentArgs()
   validateArgs()
 
   /** Load any default arguments provided through environment variables and Spark properties. */
-  private def loadDefaultArgs(): Unit = {
+  private def loadEnvironmentArgs(): Unit = {
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
-    files = Option(files).orElse(sys.env.get("SPARK_YARN_DIST_FILES")).orNull
     files = Option(files)
-      .orElse(sparkConf.getOption("spark.yarn.dist.files"))
-      .map(p => Utils.resolveURIs(p))
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
       .orNull
-    archives = Option(archives).orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES")).orNull
     archives = Option(archives)
-      .orElse(sparkConf.getOption("spark.yarn.dist.archives"))
-      .map(p => Utils.resolveURIs(p))
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
       .orNull
   }
 
@@ -71,6 +69,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
    * This is intended to be called only after the provided arguments have been parsed.
    */
   private def validateArgs(): Unit = {
+    // TODO: memory checks are outdated (SPARK-3476)
     Map[Boolean, String](
       (numExecutors <= 0) -> "You must specify at least 1 executor!",
       (amMemory <= amMemoryOverhead) -> s"AM memory must be > $amMemoryOverhead MB",

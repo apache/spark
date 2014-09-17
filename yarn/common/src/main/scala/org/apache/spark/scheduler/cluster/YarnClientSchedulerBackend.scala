@@ -34,10 +34,11 @@ private[spark] class YarnClientSchedulerBackend(
     minRegisteredRatio = 0.8
   }
 
-  var client: Client = null
-  var appId: ApplicationId = null
-  var stopping: Boolean = false
-  var totalExpectedExecutors = 0
+  private var client: Client = null
+  private var appId: ApplicationId = null
+  private var stopping: Boolean = false
+  private var totalExpectedExecutors = 0
+  private def isStopping(): Boolean = stopping
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -120,7 +121,8 @@ private[spark] class YarnClientSchedulerBackend(
     assert(client != null && appId != null, "Application has not been submitted yet!")
     val t = new Thread {
       override def run() {
-        val state = client.monitorApplication(appId, logApplicationReport = false) // blocking
+        val state = client.monitorApplication(
+          appId, logApplicationReport = false, shouldKeepMonitoring = isStopping) // blocking
         if (state == YarnApplicationState.FINISHED ||
           state == YarnApplicationState.KILLED ||
           state == YarnApplicationState.FAILED) {

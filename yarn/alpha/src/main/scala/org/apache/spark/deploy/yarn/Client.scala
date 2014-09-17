@@ -125,7 +125,7 @@ private[spark] class Client(
     Option(report.getClientToken).getOrElse("")
 }
 
-private[spark] object Client {
+object Client {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a " +
@@ -145,5 +145,7 @@ private[spark] object Client {
         Console.err.println(e.getMessage)
         System.exit(1)
     }
+
+    System.exit(0)
   }
 }
