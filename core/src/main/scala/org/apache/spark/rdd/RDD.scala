@@ -722,8 +722,8 @@ abstract class RDD[T: ClassTag](
   def zip(others: Seq[RDD[_]]): RDD[Array[Any]] = {
     zipPartitions(others, preservesPartitioning = false) { iterSeq: Seq[Iterator[Any]] =>
         new Iterator[Array[Any]] {
-	        def hasNext = !iterSeq.exists(! _.hasNext)
-	        def next = iterSeq.map { iter => iter.next }.toArray
+          def hasNext = !iterSeq.exists(! _.hasNext)
+          def next = iterSeq.map { iter => iter.next }.toArray
       }
     }
   }
