@@ -34,6 +34,8 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
 
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
+    metricsSystem.registerSources()
+    metricsSystem.registerSinks()
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 
@@ -44,6 +46,8 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
 
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    metricsSystem.registerSources()
+    metricsSystem.registerSinks()
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 
