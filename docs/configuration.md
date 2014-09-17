@@ -107,7 +107,7 @@ of the most common options to set are:
   <td><code>spark.driver.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use for the driver process, i.e. where spark context is initialized.
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
