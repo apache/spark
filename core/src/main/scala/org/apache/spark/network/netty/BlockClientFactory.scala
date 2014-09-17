@@ -31,7 +31,7 @@ import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
 import io.netty.util.internal.PlatformDependent
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 
@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  * for the same remote host. It also shares a single worker thread pool for all [[BlockClient]]s.
  */
 private[netty]
-class BlockClientFactory(val conf: NettyConfig) extends Closeable {
+class BlockClientFactory(val conf: NettyConfig) extends Logging with Closeable {
 
   def this(sparkConf: SparkConf) = this(new NettyConfig(sparkConf))
 
@@ -101,6 +101,8 @@ class BlockClientFactory(val conf: NettyConfig) extends Closeable {
     if (cachedClient != null && cachedClient.isActive) {
       return cachedClient
     }
+
+    logInfo(s"Creating new connection to $remoteHost:$remotePort")
 
     // There is a chance two threads are creating two different clients connecting to the same host.
     // But that's probably ok ...

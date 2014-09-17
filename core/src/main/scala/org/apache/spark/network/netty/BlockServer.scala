@@ -114,6 +114,8 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager)
     _port = addr.getPort
     // _hostName = addr.getHostName
     _hostName = Utils.localHostName()
+
+    logInfo(s"Server started ${_hostName}:${_port}")
   }
 
   /** Shutdown the server. */
