@@ -32,6 +32,10 @@ import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.TaskCompletionListenerException;
 
+/**
+* :: DeveloperApi ::
+* Contextual information about a task which can be read or mutated during execution.
+*/
 @DeveloperApi
 public class TaskContext implements Serializable {
 
@@ -41,6 +45,17 @@ public class TaskContext implements Serializable {
   private Boolean runningLocally;
   private TaskMetrics taskMetrics;
 
+  /**
+   * :: DeveloperApi ::
+   * Contextual information about a task which can be read or mutated during execution.
+   *
+   * @param stageId stage id
+   * @param partitionId index of the partition
+   * @param attemptId the number of attempts to execute this task
+   * @param runningLocally whether the task is running locally in the driver JVM
+   * @param taskMetrics performance metrics of the task
+   */
+  @DeveloperApi
   public TaskContext(Integer stageId, Integer partitionId, Long attemptId, Boolean runningLocally,
                      TaskMetrics taskMetrics) {
     this.attemptId = attemptId;
@@ -51,6 +66,17 @@ public class TaskContext implements Serializable {
     taskContext.set(this);
   }
 
+
+  /**
+   * :: DeveloperApi ::
+   * Contextual information about a task which can be read or mutated during execution.
+   *
+   * @param stageId stage id
+   * @param partitionId index of the partition
+   * @param attemptId the number of attempts to execute this task
+   * @param runningLocally whether the task is running locally in the driver JVM
+   */
+  @DeveloperApi
   public TaskContext(Integer stageId, Integer partitionId, Long attemptId,
                      Boolean runningLocally) {
     this.attemptId = attemptId;
@@ -61,6 +87,16 @@ public class TaskContext implements Serializable {
     taskContext.set(this);
   }
 
+
+  /**
+   * :: DeveloperApi ::
+   * Contextual information about a task which can be read or mutated during execution.
+   *
+   * @param stageId stage id
+   * @param partitionId index of the partition
+   * @param attemptId the number of attempts to execute this task
+   */
+  @DeveloperApi
   public TaskContext(Integer stageId, Integer partitionId, Long attemptId) {
     this.attemptId = attemptId;
     this.partitionId = partitionId;
