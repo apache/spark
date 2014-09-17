@@ -113,30 +113,30 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
       classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
       classOf[java.sql.Timestamp]
     )
-    val matchingConstructor = argClass.getConstructors.find { c =>
+    val matchingConstructors = argClass.getConstructors.filter { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
     }
 
-    matchingConstructor match {
-      case Some(constructor) =>
-        (a: Any) => {
+    if (matchingConstructors.length == 0) {
+      (a: Any) => wrap(a)
+    } else {
+      (a: Any) => {
+        if (a == null) {
+          null
+        } else {
+          val constructor = matchingConstructors.find { c =>
+            c.getParameterTypes.head.getCanonicalName.equals(a.getClass.getCanonicalName)
+          }.getOrElse(matchingConstructors.head)
           logDebug(
-            s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} $constructor.")
+            s"Wrapping $a of type ${a.getClass.getCanonicalName} $constructor.")
           // We must make sure that primitives get boxed java style.
-          if (a == null) {
-            null
-          } else {
-            constructor.newInstance(a match {
-              case i: Int => i: java.lang.Integer
-              case bd: BigDecimal => new HiveDecimal(bd.underlying())
-              case other: AnyRef => other
-            }).asInstanceOf[AnyRef]
-          }
+          constructor.newInstance(a match {
+            case i: Int => i: java.lang.Integer
+            case bd: BigDecimal => new HiveDecimal(bd.underlying())
+            case other: AnyRef => other
+          }).asInstanceOf[AnyRef]
         }
-      case None =>
-        (a: Any) => a match {
-          case wrapper => wrap(wrapper)
-        }
+      }
     }
   }
 
