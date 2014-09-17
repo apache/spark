@@ -388,7 +388,7 @@ private[spark] trait ClientBase extends Logging {
 
     logDebug("===============================================================================")
     logDebug("Yarn AM launch context:")
-    logDebug(s"    user class: ${args.userClass}")
+    logDebug(s"    user class: ${Option(args.userClass).getOrElse("N/A")}")
     logDebug("    env:")
     launchEnv.foreach { case (k, v) => logDebug(s"        $k -> $v") }
     logDebug("    resources:")

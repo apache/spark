@@ -38,7 +38,6 @@ private[spark] class YarnClientSchedulerBackend(
   private var appId: ApplicationId = null
   private var stopping: Boolean = false
   private var totalExpectedExecutors = 0
-  private def isStopping(): Boolean = stopping
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
