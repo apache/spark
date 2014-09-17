@@ -261,9 +261,13 @@ object SparkEnv extends Logging {
     val metricsSystem = if (isDriver) {
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
-      MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      ms.registerSources()
+      ms.registerSinks()
+      ms.start()
+      ms
     }
-    metricsSystem.start()
+
 
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working

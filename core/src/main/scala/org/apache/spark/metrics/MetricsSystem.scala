@@ -80,8 +80,6 @@ private[spark] class MetricsSystem private (val instance: String,
   def getServletHandlers = metricsServlet.map(_.getHandlers).getOrElse(Array())
 
   metricsConfig.initialize()
-  registerSources()
-  registerSinks()
 
   def start() {
     sinks.foreach(_.start)
@@ -96,11 +94,14 @@ private[spark] class MetricsSystem private (val instance: String,
   }
 
   def buildRegistryName(source: Source) = {
-    val appNameOpt = conf.getOption("spark.unique.app.name")
+    val appNameOpt = conf.getOption("spark.app.name")
+    val appIdOpt = conf.getOption("spark.app.id")
     val executorIdOpt = conf.getOption("spark.executor.id")
     val registryName = {
-      if (appNameOpt.isDefined && executorIdOpt.isDefined) {
-        MetricRegistry.name(appNameOpt.get, executorIdOpt.get, source.sourceName)
+      if (appNameOpt.isDefined && appIdOpt.isDefined &&
+        executorIdOpt.isDefined) {
+        MetricRegistry.name(appIdOpt.get, appNameOpt.get,
+          executorIdOpt.get, source.sourceName)
       } else {
         MetricRegistry.name(source.sourceName)
       }

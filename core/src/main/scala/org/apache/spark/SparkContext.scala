@@ -186,8 +186,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
-  val uniqueAppName = appName + "-" + System.currentTimeMillis()
-  conf.set("spark.unique.app.name", uniqueAppName)
 
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
@@ -311,6 +309,14 @@ class SparkContext(config: SparkConf) extends Logging {
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
   taskScheduler.start()
+
+  val appId = taskScheduler.applicationId().getOrElse(System.currentTimeMillis().toString)
+  conf.set("spark.app.id", appId)
+
+  val metricsSystem = env.metricsSystem
+  metricsSystem.registerSources()
+  metricsSystem.registerSinks()
+  metricsSystem.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {

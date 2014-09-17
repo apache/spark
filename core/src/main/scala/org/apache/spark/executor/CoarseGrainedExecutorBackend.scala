@@ -106,7 +106,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       executorId: String,
       hostname: String,
       cores: Int,
-      workerUrl: Option[String]) {
+      workerUrl: Option[String],
+      appId: String) {
 
     SignalLogger.register(log)
 
@@ -122,7 +123,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val driver = fetcher.actorSelection(driverUrl)
       val timeout = AkkaUtils.askTimeout(executorConf)
       val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
-      val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]]
+      val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]] ++
+        Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
       // Create a new ActorSystem using driver's Spark properties to run the backend.
@@ -144,16 +146,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]) {
     args.length match {
-      case x if x < 4 =>
+      case x if x < 5 =>
         System.err.println(
           // Worker url is used in spark standalone mode to enforce fate-sharing with worker
           "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
           "<cores> [<workerUrl>]")
         System.exit(1)
-      case 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, None)
-      case x if x > 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, Some(args(4)))
+      case 5 =>
+        run(args(0), args(1), args(2), args(3).toInt, None, args(4))
+      case x if x > 5 =>
+        run(args(0), args(1), args(2), args(3).toInt, Some(args(4)), args(5))
     }
   }
 }
