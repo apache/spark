@@ -53,12 +53,15 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val numSubsamples = 100
     val (expectedMean, expectedStddev) = (1.0, 1.0)
 
+    val seeds = Array(123, 5354, 230, 349867, 23987)
     val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 1)
     val rdd = sc.parallelize(arr)
-    val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, numSubsamples, seed = 123)
-    val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-    RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean, expectedStddev,
-      epsilon = 0.01)
+    seeds.foreach { seed =>
+      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, numSubsamples, seed = seed)
+      val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
+      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean, expectedStddev,
+        epsilon = 0.01)
+    }
   }
 
   test("Binary classification with continuous features:" +
@@ -100,32 +103,35 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
         numTrees: Int,
         featureSubsetStrategy: String,
         numFeaturesPerNode: Int): Unit = {
-      val failString = s"Failed on test with:" +
-        s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
-        s" numFeaturesPerNode=$numFeaturesPerNode"
-      val nodeQueue = new mutable.Queue[(Int, Node)]()
-      val topNodes: Array[Node] = new Array[Node](numTrees)
-      Range(0, numTrees).foreach { treeIndex =>
-        topNodes(treeIndex) = Node.emptyNode(nodeIndex = 1)
-        nodeQueue.enqueue((treeIndex, topNodes(treeIndex)))
-      }
+      val seeds = Array(123, 5354, 230, 349867, 23987)
       val maxMemoryUsage: Long = 128 * 1024L * 1024L
       val metadata =
         DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees, featureSubsetStrategy)
-      val rng = new scala.util.Random()
-      val (nodesForGroup: Map[Int, Array[Node]],
-          featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]]) =
-        RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
+      seeds.foreach { seed =>
+        val failString = s"Failed on test with:" +
+          s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
+          s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
+        val nodeQueue = new mutable.Queue[(Int, Node)]()
+        val topNodes: Array[Node] = new Array[Node](numTrees)
+        Range(0, numTrees).foreach { treeIndex =>
+          topNodes(treeIndex) = Node.emptyNode(nodeIndex = 1)
+          nodeQueue.enqueue((treeIndex, topNodes(treeIndex)))
+        }
+        val rng = new scala.util.Random(seed = seed)
+        val (nodesForGroup: Map[Int, Array[Node]],
+        featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]]) =
+          RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
 
-      assert(nodesForGroup.size === numTrees, failString)
-      assert(nodesForGroup.values.forall(_.size == 1), failString) // 1 node per tree
-      if (numFeaturesPerNode == numFeatures) {
-        assert(featuresForNodes.isEmpty, failString)
-      } else {
-        // Check number of features.
-        featuresForNodes.get.foreach { case (treeIndex, nodeToFeaturesMap) =>
-          nodeToFeaturesMap.foreach { case (nodeIndex, features) =>
-            assert(features.size === numFeaturesPerNode, failString)
+        assert(nodesForGroup.size === numTrees, failString)
+        assert(nodesForGroup.values.forall(_.size == 1), failString) // 1 node per tree
+        if (numFeaturesPerNode == numFeatures) {
+          assert(featuresForNodes.isEmpty, failString)
+        } else {
+          // Check number of features.
+          featuresForNodes.get.foreach { case (treeIndex, nodeToFeaturesMap) =>
+            nodeToFeaturesMap.foreach { case (nodeIndex, features) =>
+              assert(features.size === numFeaturesPerNode, failString)
+            }
           }
         }
       }
