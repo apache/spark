@@ -43,6 +43,8 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
+import scala.reflect.ClassTag
+
 /**
  * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
@@ -447,42 +449,57 @@ class PythonMLLibAPI extends Serializable {
  */
 private[spark] object SerDe extends Serializable {
 
+  val PYSPARK_PACKAGE = "pyspark.mllib"
+
   /**
    * Base class used for pickle
-   * @param module the module of class in pyspark.mllib
-   * @param cls  the class
    */
-  private[python] abstract case class BasePickler(module: String, cls: Class[_])
+  private[python] abstract class BasePickler[T: ClassTag]
     extends IObjectPickler with IObjectConstructor {
 
-    def name = cls.getSimpleName
+    private val cls = implicitly[ClassTag[T]].runtimeClass
+    private val module = PYSPARK_PACKAGE + "." + cls.getName.split('.')(4)
+    private val name = cls.getSimpleName
+
+    // register this to Pickler and Unpickler
+    def register(): Unit = {
+      Pickler.registerCustomPickler(this.getClass, this)
+      Pickler.registerCustomPickler(cls, this)
+      Unpickler.registerConstructor(module, name, this)
+    }
 
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      pickler.save(this)  // it will be memorized by Pickler
-      saveState(obj, out, pickler)
-      out.write(Opcodes.REDUCE)
+      if (obj == this) {
+        out.write(Opcodes.GLOBAL)
+        out.write((module + "\n" + name + "\n").getBytes())
+      } else {
+        pickler.save(this)  // it will be memorized by Pickler
+        saveState(obj, out, pickler)
+        out.write(Opcodes.REDUCE)
+      }
     }
 
     private[python] def saveObjects(out: OutputStream, pickler: Pickler,
                                     objects: Any*) = {
-      out.write(Opcodes.MARK)
+      if (objects.length == 0 || objects.length > 3) {
+        out.write(Opcodes.MARK)
+      }
       objects.foreach(pickler.save(_))
-      out.write(Opcodes.TUPLE)
+      val code = objects.length match {
+        case 1 => Opcodes.TUPLE1
+        case 2 => Opcodes.TUPLE2
+        case 3 => Opcodes.TUPLE3
+        case _ => Opcodes.TUPLE
+      }
+      out.write(code)
     }
 
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler)
+    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
   }
 
-  private[python] class MetaPickler extends IObjectPickler {
-    def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      out.write(Opcodes.GLOBAL)
-      val cons = obj.asInstanceOf[BasePickler]
-      out.write((cons.module + "\n" + cons.name + "\n").getBytes())
-    }
-  }
-
+  // Pickler for DenseVector
   private[python] class DenseVectorPickler
-    extends BasePickler("pyspark.mllib.linalg", classOf[DenseVector]) {
+    extends BasePickler[DenseVector] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
@@ -495,8 +512,9 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  // Pickler for DenseMatrix
   private[python] class DenseMatrixPickler
-    extends BasePickler("pyspark.mllib.linalg", classOf[DenseMatrix]) {
+    extends BasePickler[DenseMatrix] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
@@ -510,8 +528,9 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  // Pickler for SparseVector
   private[python] class SparseVectorPickler
-    extends BasePickler("pyspark.mllib.linalg", classOf[SparseVector]) {
+    extends BasePickler[SparseVector] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
@@ -525,8 +544,9 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  // Pickler for LabeledPoint
   private[python] class LabeledPointPickler
-    extends BasePickler("pyspark.mllib.regression", classOf[LabeledPoint]) {
+    extends BasePickler[LabeledPoint] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
@@ -541,11 +561,9 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
-  /**
-   * Pickle Rating
-   */
+  // Pickler for Rating
   private[python] class RatingPickler
-    extends BasePickler("pyspark.mllib.recommendation", classOf[Rating]) {
+    extends BasePickler[Rating] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val rating: Rating = obj.asInstanceOf[Rating]
@@ -561,18 +579,12 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
-  def registerPickler[T](pickler: BasePickler): Unit = {
-    Pickler.registerCustomPickler(pickler.getClass, new MetaPickler)
-    Pickler.registerCustomPickler(pickler.cls, pickler)
-    Unpickler.registerConstructor(pickler.module, pickler.name, pickler)
-  }
-
   def initialize(): Unit = {
-    registerPickler(new DenseVectorPickler)
-    registerPickler(new DenseMatrixPickler)
-    registerPickler(new SparseVectorPickler)
-    registerPickler(new LabeledPointPickler)
-    registerPickler(new RatingPickler)
+    new DenseVectorPickler().register()
+    new DenseMatrixPickler().register()
+    new SparseVectorPickler().register()
+    new LabeledPointPickler().register()
+    new RatingPickler().register()
   }
 
   def dumps(obj: AnyRef): Array[Byte] = {
