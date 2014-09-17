@@ -23,6 +23,19 @@ import org.apache.spark.util.random.XORShiftRandom
 
 import scala.reflect.ClassTag
 
+/**
+ * Generate a random set of cluster centers from the points.
+ *
+ * Checks that no zero weight points are allowed to be cluster centers.
+ * This is important for some distance functions that require points with non-zero weights.
+ * When all weights are one (as is the case with the Euclidean distance function) this filter
+ * has no effect.
+
+ * @param pointOps distance function
+ * @param k  number of desired clusters
+ * @param runs number of sets of cluster centers to generate
+ */
+
 private[mllib] class KMeansRandom[P <: FP : ClassTag, C <: FP : ClassTag](
   pointOps: PointOps[P,C],
   k: Int,

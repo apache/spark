@@ -24,6 +24,9 @@ import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 
 /**
  * Euclidean distance measure
+ *
+ * This is the slow implementation of the squared Euclidean distance function,
+ * shown here simply for clarity.
  */
 class EuclideanOps extends PointOps[FPoint, FPoint] with Serializable {
 

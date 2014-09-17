@@ -141,6 +141,7 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
         val myCenters = centers(r).toArray
         log.info("run {} has {} centers", r, myCenters.length)
         val weights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), Zero)).toArray
+        // Check for the degenerate case that the number of centers available is less than k.
         val kx = if (k > myCenters.length) myCenters.length else k
         val sc = data.sparkContext
         val initial = kmeansPlusPlus.getCenters(sc, seed, myCenters, weights, kx, numPartitions, 1)

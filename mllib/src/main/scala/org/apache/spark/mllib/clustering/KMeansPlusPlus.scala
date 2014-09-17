@@ -158,6 +158,8 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
    * Pick a point at random, weighing the choices by the given weight vector.
    * Return -1 if all weights are 0.0
    *
+   * Checks for illegal weight vector and throws exception instead of returning -1
+   *
    * @param rand  random number generator
    * @param weights  the weights of the points
    * @return the index of the point chosen

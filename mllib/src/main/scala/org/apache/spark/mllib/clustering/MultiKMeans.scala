@@ -29,6 +29,11 @@ import scala.reflect.ClassTag
  * A K-Means clustering implementation that performs multiple K-means clusterings simultaneously,
  * returning the one with the lowest cost.
  *
+ * We only compute if a center has moved if we need to.
+ *
+ * We use null to represent empty clusters instead of an Option type to save space.
+ *
+ * The resulting clustering may contain fewer than K clusters.
  */
 
 private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP : ClassTag](

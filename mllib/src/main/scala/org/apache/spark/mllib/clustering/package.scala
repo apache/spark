@@ -39,7 +39,7 @@ package object base {
   }
 
   /**
-   * A mutable point in homogeneous coordinates
+   * A mutable point in homogeneous coordinates that is lazily initialized.
    */
   private[mllib] class Centroid extends Serializable {
     override def toString: String = weight + "," + (raw.toArray mkString ",")
