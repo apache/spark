@@ -308,13 +308,9 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-
-  private def validateFields(fields: Seq[StructField]): Boolean =
-    fields.map(field => field.name).distinct.size == fields.size
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
-  require(StructType.validateFields(fields), "Found fields with the same name.")
 
   /**
    * Returns all field names in a [[Seq]].

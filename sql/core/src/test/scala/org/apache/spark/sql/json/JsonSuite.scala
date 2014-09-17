@@ -622,4 +622,21 @@ class JsonSuite extends QueryTest {
       ("str1", Nil, "str4", 2) :: Nil
     )
   }
+
+  test("SPARK-3308 Read top level JSON arrays") {
+    val jsonSchemaRDD = jsonRDD(jsonArray)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql(
+        """
+          |select a, b, c
+          |from jsonTable
+        """.stripMargin),
+      ("str_a_1", null, null) ::
+      ("str_a_2", null, null) ::
+      (null, "str_b_3", null) ::
+      ("str_a_4", "str_b_4", "str_c_4") ::Nil
+    )
+  }
 }
