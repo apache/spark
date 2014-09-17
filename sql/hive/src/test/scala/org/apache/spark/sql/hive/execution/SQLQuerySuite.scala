@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class Nested1(f1: Nested2)
@@ -53,5 +55,12 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       1)
+  }
+
+  test("test CTAS") {
+    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
+    checkAnswer(
+      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
+      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 }

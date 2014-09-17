@@ -49,6 +49,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.network.netty.client.BlockClientListener")
           )
+
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

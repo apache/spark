@@ -187,7 +187,7 @@ object OldDeps {
     Some("org.apache.spark" % fullId % "1.1.0")
   }
 
-  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
     retrieveManaged := true,
@@ -337,7 +337,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.ports.maxRetries=100",
-    javaOptions in Test += "-Dspark.ui.port=0",
+    javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,

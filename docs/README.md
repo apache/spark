@@ -23,8 +23,9 @@ The markdown code can be compiled to HTML using the [Jekyll tool](http://jekyllr
 To use the `jekyll` command, you will need to have Jekyll installed. 
 The easiest way to do this is via a Ruby Gem, see the 
 [jekyll installation instructions](http://jekyllrb.com/docs/installation).
-If not already installed, you need to install `kramdown` with `sudo gem install kramdown`.
-Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory
+If not already installed, you need to install `kramdown` and `jekyll-redirect-from` Gems
+with `sudo gem install kramdown jekyll-redirect-from`.
+Execute `jekyll build` from the `docs/` directory. Compiling the site with Jekyll will create a directory
 called `_site` containing index.html as well as the rest of the compiled files.
 
 You can modify the default Jekyll build as follows:
