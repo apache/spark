@@ -154,7 +154,7 @@ echo "========================================================================="
     SBT_MAVEN_TEST_ARGS=("test")
   fi
   
-  echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS $SBT_MAVEN_TEST_ARGS"
+  echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
   
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
