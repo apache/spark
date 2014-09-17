@@ -34,7 +34,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  var appId: String = _
+  @volatile var appId: String = _
 
   val registrationLock = new Object()
   var registrationDone = false
