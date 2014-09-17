@@ -16,7 +16,7 @@
 #
 
 from pyspark import SparkContext
-from pyspark.serializers import PickleSerializer, BatchedSerializer
+from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.rdd import RDD
 
 __all__ = ['MatrixFactorizationModel', 'ALS']
@@ -47,6 +47,7 @@ class MatrixFactorizationModel(object):
     >>> model = ALS.trainImplicit(ratings, 1)
     >>> model.predict(2,2) is not None
     True
+
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
     >>> model = ALS.train(ratings, 1)
     >>> model.predictAll(testset).count() == 2
@@ -69,7 +70,7 @@ class MatrixFactorizationModel(object):
         tuplerdd = sc._jvm.SerDe.asTupleRDD(user_product._to_java_object_rdd().rdd())
         jresult = self._java_model.predict(tuplerdd).toJavaRDD()
         return RDD(sc._jvm.PythonRDD.javaToPython(jresult), sc,
-                   BatchedSerializer(PickleSerializer(), 1024))
+                   AutoBatchedSerializer(PickleSerializer()))
 
 
 class ALS(object):
@@ -83,7 +84,10 @@ class ALS(object):
                 ratings = ratings.map(lambda x: Rating(*x))
             else:
                 raise ValueError("rating should be RDD of Rating or tuple/list")
-        return ratings._to_java_object_rdd().cache()
+        # serialize them by AutoBatchedSerializer before cache to reduce the
+        # objects overhead in JVM
+        cached = ratings._reserialize(AutoBatchedSerializer(PickleSerializer())).cache()
+        return cached._to_java_object_rdd()
 
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):

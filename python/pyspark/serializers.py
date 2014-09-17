@@ -230,15 +230,14 @@ class AutoBatchedSerializer(BatchedSerializer):
                 break
 
             bytes = self.serializer.dumps(vs)
-            size = len(bytes)
-            if size < best / 10:
-                batch = best / 10 / size
-            elif size < best:
-                batch *= 2
-            elif size > best * 10:
-                batch /= 2
             write_int(len(bytes), stream)
             stream.write(bytes)
+
+            size = len(bytes)
+            if size < best:
+                batch *= 2
+            elif size > best * 10 and batch > 1:
+                batch /= 2
 
     def __eq__(self, other):
         return (isinstance(other, AutoBatchedSerializer) and

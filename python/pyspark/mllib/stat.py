@@ -161,6 +161,7 @@ class Statistics(object):
         # check if y is used to specify the method name instead.
         if type(y) == str:
             raise TypeError("Use 'method=' to specify method name.")
+
         jx = x._to_java_object_rdd()
         if not y:
             resultMat = sc._jvm.PythonMLLibAPI().corr(jx, method)

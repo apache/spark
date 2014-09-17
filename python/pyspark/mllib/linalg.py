@@ -29,7 +29,7 @@ import copy_reg
 
 import numpy as np
 
-__all__ = ['SparseVector', 'Vectors']
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -45,7 +45,6 @@ if sys.version_info[:2] == (2, 7):
 try:
     import scipy.sparse
     _have_scipy = True
-    _scipy_issparse = scipy.sparse.issparse
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
@@ -54,9 +53,9 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple):
         return DenseVector(l)
-    elif _have_scipy and _scipy_issparse(l):
+    elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
         csc = l.tocsc()
         return SparseVector(l.shape[0], csc.indices, csc.data)
@@ -65,27 +64,80 @@ def _convert_to_vector(l):
 
 
 class Vector(object):
-    pass
+    """
+    Abstract class for DenseVector and SparseVector
+    """
+    def toArray(self):
+        """
+        Convert the vector into an numpy.ndarray
+        :return: numpy.ndarray
+        """
+        raise NotImplementedError
 
 
 class DenseVector(Vector):
     def __init__(self, ar):
-        self.array = array.array('d', ar)
+        if not isinstance(ar, array.array):
+            ar = array.array('d', ar)
+        self.array = ar
 
     def __reduce__(self):
         return DenseVector, (self.array,)
 
     def dot(self, other):
+        """
+        Compute the dot product of two Vectors. We support
+        (Numpy array, list, SparseVector, or SciPy sparse)
+        and a target NumPy array that is either 1- or 2-dimensional.
+        Equivalent to calling numpy.dot of the two vectors.
+
+        >>> dense = DenseVector(array.array('d', [1., 2.]))
+        >>> dense.dot(dense)
+        5.0
+        >>> dense.dot(SparseVector(2, [0, 1], [2., 1.]))
+        4.0
+        >>> dense.dot(range(1, 3))
+        5.0
+        >>> dense.dot(np.array(range(1, 3)))
+        5.0
+        """
         if isinstance(other, SparseVector):
             return other.dot(self)
-        return np.dot(self.toArray(), other)
+        elif _have_scipy and scipy.sparse.issparse(other):
+            return other.transpose().dot(self.toArray())[0]
+        elif isinstance(other, Vector):
+            return np.dot(self.toArray(), other.toArray())
+        else:
+            return np.dot(self.toArray(), other)
 
     def squared_distance(self, other):
-        other = _convert_to_vector(other)
+        """
+        Squared distance of two Vectors.
+
+        >>> dense1 = DenseVector(array.array('d', [1., 2.]))
+        >>> dense1.squared_distance(dense1)
+        0.0
+        >>> dense2 = np.array([2., 1.])
+        >>> dense1.squared_distance(dense2)
+        2.0
+        >>> dense3 = [2., 1.]
+        >>> dense1.squared_distance(dense2)
+        2.0
+        >>> sparse1 = SparseVector(2, [0, 1], [2., 1.])
+        >>> dense1.squared_distance(sparse1)
+        2.0
+        """
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
-        n = len(self)
-        return sum((self[i] - other[i]) ** 2 for i in xrange(n))
+        elif _have_scipy and scipy.sparse.issparse(other):
+            return _convert_to_vector(other).squared_distance(self)
+
+        if isinstance(other, Vector):
+            other = other.toArray()
+        elif not isinstance(other, np.ndarray):
+            other = np.array(other)
+        diff = self.toArray() - other
+        return np.dot(diff, diff)
 
     def toArray(self):
         return np.array(self.array)
@@ -361,8 +413,8 @@ class Vectors(object):
         return str(vector)
 
 
-class Matrix(object):
-    pass
+class Matrix(Vector):
+    """ the Matrix """
 
 
 class DenseMatrix(Matrix):

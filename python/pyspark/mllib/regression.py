@@ -20,7 +20,7 @@ from numpy import array
 
 from pyspark import SparkContext
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
-from pyspark import PickleSerializer
+from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
 __all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
@@ -47,7 +47,7 @@ class LabeledPoint(object):
         return "(" + ",".join((str(self.label), str(self.features))) + ")"
 
     def __repr__(self):
-        return "LabeledPoint(" + ",".join((str(self.label), str(self.features))) + ")"
+        return "LabeledPoint(" + ",".join((repr(self.label), repr(self.features))) + ")"
 
 
 class LinearModel(object):
@@ -83,7 +83,7 @@ class LinearRegressionModelBase(LinearModel):
         Predict the value of the dependent variable given a vector x
         containing values for the independent variables.
         """
-        return self._coeff.dot(x) + self._intercept
+        return self.weights.dot(x) + self.intercept
 
 
 class LinearRegressionModel(LinearRegressionModelBase):
@@ -125,7 +125,10 @@ def _regression_train_wrapper(sc, train_func, modelClass, data, initial_weights)
     initial_weights = initial_weights or [0.0] * len(data.first().features)
     ser = PickleSerializer()
     initial_bytes = bytearray(ser.dumps(_convert_to_vector(initial_weights)))
-    ans = train_func(data.cache()._to_java_object_rdd(), initial_bytes)
+    # use AutoBatchedSerializer before cache to reduce the memory
+    # overhead in JVM
+    cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
+    ans = train_func(cached._to_java_object_rdd(), initial_bytes)
     assert len(ans) == 2, "JVM call result had unexpected length"
     weights = ser.loads(str(ans[0]))
     return modelClass(weights, ans[1])

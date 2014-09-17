@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark import SparkContext, PickleSerializer
+from pyspark import SparkContext
+from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
 __all__ = ['KMeansModel', 'KMeans']
@@ -80,11 +81,13 @@ class KMeans(object):
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||"):
         """Train a k-means clustering model."""
         sc = rdd.context
-        jrdd = rdd.map(_convert_to_vector)._to_java_object_rdd().cache()
+        ser = PickleSerializer()
+        # cache serialized data to avoid objects over head in JVM
+        cached = rdd.map(_convert_to_vector)._reserialize(AutoBatchedSerializer(ser)).cache()
         model = sc._jvm.PythonMLLibAPI().trainKMeansModel(
-            jrdd, k, maxIterations, runs, initializationMode)
+            cached._to_java_object_rdd(), k, maxIterations, runs, initializationMode)
         bytes = sc._jvm.SerDe.dumps(model.clusterCenters())
-        centers = PickleSerializer().loads(str(bytes))
+        centers = ser.loads(str(bytes))
         return KMeansModel([c.toArray() for c in centers])
 
 

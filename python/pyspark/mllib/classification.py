@@ -62,8 +62,7 @@ class LogisticRegressionModel(LinearModel):
     """
 
     def predict(self, x):
-        x = _convert_to_vector(x)
-        margin = x.dot(self._coeff) + self._intercept
+        margin = self.weights.dot(x) + self._intercept
         if margin > 0:
             prob = 1 / (1 + exp(-margin))
         else:
@@ -137,7 +136,7 @@ class SVMModel(LinearModel):
     """
 
     def predict(self, x):
-        margin = self._coeff.dot(x) + self._intercept
+        margin = self.weights.dot(x) + self.intercept
         return 1 if margin >= 0 else 0
 
 
