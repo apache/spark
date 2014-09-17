@@ -520,10 +520,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
-  <td>false</td>
+  <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver.
+    the driver, in seconds.
   </td>
 </tr>
 <tr>
