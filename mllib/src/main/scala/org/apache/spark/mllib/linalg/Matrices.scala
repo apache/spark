@@ -23,7 +23,7 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * Trait for a local matrix.
  */
-trait Matrix extends Serializable {
+sealed trait Matrix extends Serializable {
 
   /** Number of rows. */
   def numRows: Int
