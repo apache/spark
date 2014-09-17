@@ -158,6 +158,9 @@ def parse_args():
     parser.add_option(
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
+    parser.add_option(
+        "--copy-aws-credentials", action="store_true", default=False,
+        help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -713,6 +716,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
     }
+
+    if opts.copy_aws_credentials:
+        template_vars["aws_access_key_id"] = conn.aws_access_key_id
+        template_vars["aws_secret_access_key"] = conn.aws_secret_access_key
+    else:
+        template_vars["aws_access_key_id"] = ""
+        template_vars["aws_secret_access_key"] = ""
 
     # Create a temp directory in which we will place all the files to be
     # deployed after we substitue template parameters in them

@@ -75,7 +75,7 @@ can be run using:
     ./dev/run-tests
 
 Please see the guidance on how to 
-[run all automated tests](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-AutomatedTesting)
+[run all automated tests](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-AutomatedTesting).
 
 ## A Note About Hadoop Versions
 
