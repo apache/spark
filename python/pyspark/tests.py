@@ -31,7 +31,7 @@ import tempfile
 import time
 import zipfile
 import random
-from platform import python_implementation
+import itertools
 
 if sys.version_info[:2] <= (2, 6):
     import unittest2 as unittest
@@ -121,6 +121,35 @@ class TestMerger(unittest.TestCase):
         self.assertEqual(sum(len(v) for k, v in m.iteritems()),
                          self.N * 10)
         m._cleanup()
+
+    def test_group_by_key(self):
+
+        def gen_data(N, step):
+            for i in range(1, N + 1, step):
+                for j in range(i * 10):
+                    yield (i, j)
+
+        def gen_gs(N, step=1):
+            return shuffle.GroupByKey(gen_data(N, step))
+
+        self.assertEqual(1, len(list(gen_gs(1))))
+        self.assertEqual(2, len(list(gen_gs(2))))
+        self.assertEqual(100, len(list(gen_gs(100))))
+        self.assertEqual(range(1, 101), [k for k, _ in gen_gs(100)])
+        self.assertTrue(all(k * 10 == len(list(vs)) for k, vs in gen_gs(100)))
+
+        for k, vs in gen_gs(5002, 100):
+            if k % 1000 == 1:
+                self.assertEqual(range(k), list(itertools.islice(vs, k)))
+                self.assertEqual(k * 10, sum(1 for _ in vs))
+                self.assertEqual(range(k * 9, k * 10), list(itertools.islice(vs, k * 9, k * 10)))
+                self.assertEqual(k * 10, sum(1 for _ in vs))
+
+        ser = PickleSerializer()
+        l = ser.loads(ser.dumps(list(gen_gs(5002, 1000))))
+        for k, vs in l:
+            self.assertEqual(k * 10, len(vs))
+            self.assertEqual(range(k * 10), list(vs))
 
 
 class TestSorter(unittest.TestCase):
@@ -594,6 +623,19 @@ class TestRDDFunctions(PySparkTestCase):
         result = rdd.distinct(5)
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
+
+    def test_external_group_by_key(self):
+        self.sc._conf.set("spark.python.worker.memory", "5m")
+        N = 200001
+        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
+        gkv = kv.groupByKey().cache()
+        self.assertEqual(3, gkv.count())
+        filtered = gkv.filter(lambda (k, vs): k == 1)
+        self.assertEqual(1, filtered.count())
+        self.assertEqual([(1, N/3)], filtered.mapValues(len).collect())
+        result = filtered.collect()[0][1]
+        self.assertEqual(N/3, len(result))
+        self.assertTrue(isinstance(result.it, shuffle.ChainedIterable))
 
 
 class TestSQL(PySparkTestCase):

@@ -23,7 +23,8 @@ import collections
 class ResultIterable(object):
 
     """
-    A special result iterable. This is used because the standard iterator can not be pickled
+    A special result iterable. This is used because the standard
+    iterator can not be pickled
     """
 
     def __init__(self, it):
@@ -37,6 +38,3 @@ class ResultIterable(object):
             return len(self.it)
         except TypeError:
             return sum(1 for _ in self.it)
-
-    def __reduce__(self):
-        return (ResultIterable, (list(self.it),))

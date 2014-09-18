@@ -537,59 +537,73 @@ class SameKey(object):
         self.groupBy = groupBy
         self._file = None
         self._ser = None
-        self._index = None
+
+    def __getstate__(self):
+        sum(1 for _ in self)  # try to read all the values
+        if self._file is not None:
+            f = os.fdopen(os.dup(self._file.fileno()))
+            f.seek(0)
+            bytes = f.read()
+        else:
+            bytes = ''
+        return (self.key, bytes, self.values)
+
+    def __setstate__(self, item):
+        self.key, bytes, self.values = item
+        self.iterator = iter([])
+        self.groupBy = None
+        if bytes:
+            self._open_file()
+            self._file.write(bytes)
+        else:
+            self._file = None
+            self._ser = None
 
     def __iter__(self):
-        return self
+        if self._file is not None:
+            self._file.flush()
+            with os.fdopen(os.dup(self._file.fileno()), 'r', 65536) as f:
+                f.seek(0)
+                for values in self._ser.load_stream(f):
+                    for v in values:
+                        yield v
 
-    def next(self):
-        if self._index is None:
-            # begin of iterator
-            if self._file is not None:
-                if self.values:
-                    self._spill()
-                self._file.flush()
-                self._file.seek(0)
-            self._index = 0
+        for v in self.values:
+            yield v
 
-        if self._index >= len(self.values) and self._file is not None:
-            # load next chunk of values from disk
-            self.values = next(self._ser.load_stream(self._file))
-            self._index = 0
+        if self.groupBy and self.groupBy.next_item is None:
+            for key, value in self.iterator:
+                if key == self.key:
+                    self.append(value)  # save it for next read
+                    yield value
+                else:
+                    self.groupBy.next_item = (key, value)
+                    break
 
-        if self._index < len(self.values):
-            value = self.values[self._index]
-            self._index += 1
-            return value
-
-        key, value = next(self.iterator)
-        if key == self.key:
-            return value
-
-        # push them back into groupBy
-        self.groupBy.next_item = (key, value)
-        raise StopIteration
+    def __len__(self):
+        return sum(1 for _ in self)
 
     def append(self, value):
-        if self._index is not None:
-            raise ValueError("Can not append value while iterating")
-
         self.values.append(value)
         # dump them into disk if the key is huge
         if len(self.values) >= 10240:
             self._spill()
 
+    def _open_file(self):
+        dirs = _get_local_dirs("objects")
+        d = dirs[id(self) % len(dirs)]
+        if not os.path.exists(d):
+            os.makedirs(d)
+        p = os.path.join(d, str(id))
+        self._file = open(p, "w+", 65536)
+        self._ser = CompressedSerializer(PickleSerializer())
+        os.unlink(p)
+
     def _spill(self):
         """ dump the values into disk """
         global MemoryBytesSpilled, DiskBytesSpilled
         if self._file is None:
-            dirs = _get_local_dirs("objects")
-            d = dirs[id(self) % len(dirs)]
-            if not os.path.exists(d):
-                os.makedirs(d)
-            p = os.path.join(d, str(id))
-            self._file = open(p, "w+", 65536)
-            self._ser = CompressedSerializer(PickleSerializer())
+            self._open_file()
 
         used_memory = get_used_memory()
         pos = self._file.tell()
@@ -598,6 +612,19 @@ class SameKey(object):
         self.values = []
         gc.collect()
         MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+
+
+class ChainedIterable(object):
+    """
+    Pickable chained iterator
+    """
+    def __init__(self, iterators):
+        self.iterators = iterators
+
+    def __iter__(self):
+        for vs in self.iterators:
+            for v in vs:
+                yield v
 
 
 class GroupByKey(object):
@@ -719,7 +746,7 @@ class ExternalGroupBy(ExternalMerger):
         # if the memory can not hold all the partition,
         # then use sort based merge. Because of compression,
         # the data on disks will be much smaller than needed memory
-        if (size >> 20) > self.memory_limit / 10:
+        if (size >> 20) >= self.memory_limit / 10:
             return self._sorted_items(index)
 
         self.data = {}
@@ -750,8 +777,7 @@ class ExternalGroupBy(ExternalMerger):
             sorter = ExternalSorter(self.memory_limit, ser)
             sorted_items = sorter.sorted(itertools.chain(*disk_items),
                                          key=operator.itemgetter(0))
-
-        return ((k, itertools.chain.from_iterable(vs)) for k, vs in GroupByKey(sorted_items))
+        return ((k, ChainedIterable(vs)) for k, vs in GroupByKey(sorted_items))
 
 
 if __name__ == "__main__":

@@ -1619,7 +1619,7 @@ class RDD(object):
             merger.mergeCombiners(it)
             return merger.iteritems()
 
-        return shuffled.mapPartitions(groupByKey).mapValues(ResultIterable)
+        return shuffled.mapPartitions(groupByKey, True).mapValues(ResultIterable)
 
     def flatMapValues(self, f):
         """
