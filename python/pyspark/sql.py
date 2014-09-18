@@ -687,19 +687,19 @@ def _infer_schema_type(obj, dataType):
 
 
 _acceptable_types = {
-    BooleanType: bool,
+    BooleanType: (bool,),
     ByteType: (int, long),
     ShortType: (int, long),
     IntegerType: (int, long),
     LongType: (int, long),
-    FloatType: float,
-    DoubleType: float,
-    DecimalType: decimal.Decimal,
+    FloatType: (float,),
+    DoubleType: (float,),
+    DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    BinaryType: bytearray,
-    TimestampType: datetime.datetime,
+    BinaryType: (bytearray,),
+    TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
-    MapType: dict,
+    MapType: (dict,),
     StructType: (tuple, list),
 }
 
