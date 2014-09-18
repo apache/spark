@@ -33,10 +33,6 @@ import org.apache.spark.util.StatCounter
 
 /**
  * Test suite for [[RandomForest]].
- *
- * Items to check:
- *  - subsampling features
- *  - bootstrapping used when numTrees > 1, not used when numTrees = 1
  */
 class RandomForestSuite extends FunSuite with LocalSparkContext {
 
