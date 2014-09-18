@@ -39,10 +39,10 @@ import org.apache.spark.util.TaskCompletionListenerException;
 @DeveloperApi
 public class TaskContext implements Serializable {
 
-  private Integer stageId;
-  private Integer partitionId;
-  private Long attemptId;
-  private Boolean runningLocally;
+  private int stageId;
+  private int partitionId;
+  private long attemptId;
+  private boolean runningLocally;
   private TaskMetrics taskMetrics;
 
   /**
@@ -63,7 +63,6 @@ public class TaskContext implements Serializable {
     this.runningLocally = runningLocally;
     this.stageId = stageId;
     this.taskMetrics = taskMetrics;
-    taskContext.set(this);
   }
 
 
@@ -84,7 +83,6 @@ public class TaskContext implements Serializable {
     this.runningLocally = runningLocally;
     this.stageId = stageId;
     this.taskMetrics = TaskMetrics.empty();
-    taskContext.set(this);
   }
 
 
@@ -103,11 +101,14 @@ public class TaskContext implements Serializable {
     this.runningLocally = false;
     this.stageId = stageId;
     this.taskMetrics = TaskMetrics.empty();
-    taskContext.set(this);
   }
 
   private static ThreadLocal<TaskContext> taskContext =
     new ThreadLocal<TaskContext>();
+
+  public static void setTaskContext(TaskContext tc) {
+    taskContext.set(tc);
+  }
 
   public static TaskContext get() {
     return taskContext.get();
@@ -212,19 +213,19 @@ public class TaskContext implements Serializable {
     interrupted = true;
   }
 
-  public Integer stageId() {
+  public int stageId() {
     return stageId;
   }
 
-  public Integer partitionId() {
+  public int partitionId() {
     return partitionId;
   }
 
-  public Long attemptId() {
+  public long attemptId() {
     return attemptId;
   }
 
-  public Boolean runningLocally() {
+  public boolean runningLocally() {
     return runningLocally;
   }
 
