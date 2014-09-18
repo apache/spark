@@ -19,6 +19,7 @@ conf/*.sh
 conf/*.properties
 conf/*.conf
 conf/*.xml
+conf/slaves
 docs/_site
 docs/api
 target/
