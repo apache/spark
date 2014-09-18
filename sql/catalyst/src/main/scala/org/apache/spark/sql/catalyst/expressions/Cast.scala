@@ -163,8 +163,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => Date.valueOf(timestampToDateString(t)))
     // TimestampWritable.decimalToDate
-    case _ =>
-      _ => null
+    case _ => _ => null
   }
 
   // Date cannot be cast to long, according to hive
