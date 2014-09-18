@@ -18,7 +18,7 @@
 package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
-// import scala.util.Sorting
+
 import org.mockito.cglib.util.ParallelSorter
 
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveVector}
@@ -44,12 +44,13 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     val srcIdsTrim = srcIds.trim().array
     val dstIdsTrim = dstIds.trim().array
     val dataTrim = data.trim().array
-    val edgeArray = Array(srcIdsTrim, dstIdsTrim, dataTrim)
-    // TODO: sort three arrays simultaneously based on srcIds
-    val sorter = ParallelSorter.create(edgeArray)
-    sorter.mergeSort(0)
-    //val sorter = Sorting.quickSort(edgeArray)
-    // Sorting.quickSort(edgeArray)(Edge.lexicographicOrdering)
+
+    // Sort the three arrays in parallel by (srcId, dstId)
+    val arrays = Array[Object](srcIdsTrim, dstIdsTrim, dataTrim)
+    val sorter = ParallelSorter.create(arrays)
+    sorter.quickSort(1, 0, srcIdsTrim.length)
+    sorter.mergeSort(0, 0, srcIdsTrim.length)
+
     val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
