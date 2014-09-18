@@ -66,6 +66,16 @@ class MatrixFactorizationModel(object):
 
     def predictAll(self, user_product):
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
+        first = user_product.first()
+        if isinstance(first, list):
+            user_product = user_product.map(tuple)
+            first = tuple(first)
+        assert type(first) is tuple and len(first) == 2, \
+            "user_product should be RDD of (user, product)"
+        if any(isinstance(x, str) for x in first):
+            user_product = user_product.map(lambda (u, p): (int(x), int(p)))
+            first = tuple(map(int, first))
+        assert all(type(x) is int for x in first), "user and product in user_product shoul be int"
         sc = self._context
         tuplerdd = sc._jvm.SerDe.asTupleRDD(user_product._to_java_object_rdd().rdd())
         jresult = self._java_model.predict(tuplerdd).toJavaRDD()
