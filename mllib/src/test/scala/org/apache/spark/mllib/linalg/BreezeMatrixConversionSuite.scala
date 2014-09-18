@@ -40,9 +40,9 @@ class BreezeMatrixConversionSuite extends FunSuite {
 
   test("sparse matrix to breeze") {
     val values = Array(1.0, 2.0, 4.0, 5.0)
-    val colPointers = Array(0, 2, 4)
+    val colPtrs = Array(0, 2, 4)
     val rowIndices = Array(1, 2, 1, 2)
-    val mat = Matrices.sparse(3, 2, colPointers, rowIndices, values)
+    val mat = Matrices.sparse(3, 2, colPtrs, rowIndices, values)
     val breeze = mat.toBreeze.asInstanceOf[BSM[Double]]
     assert(breeze.rows === mat.numRows)
     assert(breeze.cols === mat.numCols)
@@ -51,9 +51,9 @@ class BreezeMatrixConversionSuite extends FunSuite {
 
   test("sparse breeze matrix to sparse matrix") {
     val values = Array(1.0, 2.0, 4.0, 5.0)
-    val colPointers = Array(0, 2, 4)
+    val colPtrs = Array(0, 2, 4)
     val rowIndices = Array(1, 2, 1, 2)
-    val breeze = new BSM[Double](values, 3, 2, colPointers, rowIndices)
+    val breeze = new BSM[Double](values, 3, 2, colPtrs, rowIndices)
     val mat = Matrices.fromBreeze(breeze).asInstanceOf[SparseMatrix]
     assert(mat.numRows === breeze.rows)
     assert(mat.numCols === breeze.cols)
