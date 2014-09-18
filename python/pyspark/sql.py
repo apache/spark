@@ -686,7 +686,6 @@ def _infer_schema_type(obj, dataType):
         raise ValueError("Unexpected dataType: %s" % dataType)
 
 
-# including subclasses
 _acceptable_types = {
     BooleanType: bool,
     ByteType: (int, long),
@@ -733,7 +732,8 @@ def _verify_type(obj, dataType):
     _type = type(dataType)
     assert _type in _acceptable_types, "unkown datatype: %s" % dataType
 
-    if not isinstance(obj, _acceptable_types[_type]):
+    # subclass of them can not be deserialized in JVM
+    if type(obj) not in _acceptable_types[_type]:
         raise TypeError("%s can not accept abject in type %s"
                         % (dataType, type(obj)))
 
@@ -1119,6 +1119,11 @@ class SQLContext(object):
 
         # take the first few rows to verify schema
         rows = rdd.take(10)
+        # Row() cannot been deserialized by Pyrolite
+        if rows and isinstance(rows[0], tuple) and rows[0].__class__.__name__ == 'Row':
+            rdd = rdd.map(tuple)
+            rows = rdd.take(10)
+
         for row in rows:
             _verify_type(row, schema)
 
