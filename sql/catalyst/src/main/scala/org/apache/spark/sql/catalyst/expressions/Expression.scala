@@ -179,6 +179,9 @@ abstract class Expression extends TreeNode[Expression] {
           case i: IntegralType =>
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case i: FractionalType =>
+            f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
+              i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
       }
