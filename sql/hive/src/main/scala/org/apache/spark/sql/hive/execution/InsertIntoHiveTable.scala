@@ -150,11 +150,11 @@ case class InsertIntoHiveTable(
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       writerContainer.executorSideSetup(context.stageId, context.partitionId, attemptNumber)
-      writerContainer.open()
 
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
+          // TODO (lian) avoid per row dynamic dispatching and pattern matching cost in `wrap`
           outputData(i) = wrap(row(i), fieldOIs(i))
           i += 1
         }
@@ -164,7 +164,6 @@ case class InsertIntoHiveTable(
       }
 
       writerContainer.close()
-      writerContainer.commit()
     }
   }
 
