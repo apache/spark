@@ -71,20 +71,7 @@ private[hive] class SparkHiveWriterContainer(
     setIDs(jobId, splitId, attemptId)
     setConfParams()
     committer.setupTask(taskContext)
-  }
-
-  /**
-   * Create a `HiveRecordWriter`. A relative dynamic partition path can be used to create a writer
-   * for writing data to a dynamic partition.
-   */
-  def open() {
-    writer = HiveFileFormatUtils.getHiveRecordWriter(
-      conf.value,
-      fileSinkConf.getTableInfo,
-      conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
-      fileSinkConf,
-      FileOutputFormat.getTaskOutputPath(conf.value, getOutputName),
-      Reporter.NULL)
+    initWriters()
   }
 
   protected def getOutputName: String = {
@@ -100,9 +87,26 @@ private[hive] class SparkHiveWriterContainer(
   def close() {
     // Seems the boolean value passed into close does not matter.
     writer.close(false)
+    commit()
   }
 
-  def commit() {
+  def commitJob() {
+    committer.commitJob(jobContext)
+  }
+
+  protected def initWriters() {
+    // NOTE this method is executed at the executor side.
+    // For Hive tables without partitions or with only static partitions, only 1 writer is needed.
+    writer = HiveFileFormatUtils.getHiveRecordWriter(
+      conf.value,
+      fileSinkConf.getTableInfo,
+      conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
+      fileSinkConf,
+      FileOutputFormat.getTaskOutputPath(conf.value, getOutputName),
+      Reporter.NULL)
+  }
+
+  protected def commit() {
     if (committer.needsTaskCommit(taskContext)) {
       try {
         committer.commitTask(taskContext)
@@ -116,10 +120,6 @@ private[hive] class SparkHiveWriterContainer(
     } else {
       logInfo("No need to commit output of task: " + taID.value)
     }
-  }
-
-  def commitJob() {
-    committer.commitJob(jobContext)
   }
 
   // ********* Private Functions *********
@@ -168,12 +168,15 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   @transient private var writers: mutable.HashMap[String, FileSinkOperator.RecordWriter] = _
 
-  override def open(): Unit = {
+  override protected def initWriters(): Unit = {
+    // NOTE: This method is executed at the executor side.
+    // Actual writers are created for each dynamic partition on the fly.
     writers = mutable.HashMap.empty[String, FileSinkOperator.RecordWriter]
   }
 
   override def close(): Unit = {
     writers.values.foreach(_.close(false))
+    commit()
   }
 
   override def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = {
@@ -185,13 +188,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
       .mkString
 
-    val path = {
-      val outputPath = FileOutputFormat.getOutputPath(conf.value)
-      assert(outputPath != null, "Undefined job output-path")
-      val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
-      new Path(workPath, getOutputName)
-    }
-
     def newWriter = {
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + dynamicPartPath,
@@ -199,6 +195,14 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         fileSinkConf.getCompressed)
       newFileSinkDesc.setCompressCodec(fileSinkConf.getCompressCodec)
       newFileSinkDesc.setCompressType(fileSinkConf.getCompressType)
+
+      val path = {
+        val outputPath = FileOutputFormat.getOutputPath(conf.value)
+        assert(outputPath != null, "Undefined job output-path")
+        val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
+        new Path(workPath, getOutputName)
+      }
+
       HiveFileFormatUtils.getHiveRecordWriter(
         conf.value,
         fileSinkConf.getTableInfo,
