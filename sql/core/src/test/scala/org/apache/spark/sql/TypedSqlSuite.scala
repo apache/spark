@@ -61,8 +61,8 @@ class TypedSqlSuite extends FunSuite {
     assert(results.first().name == "Michael")
   }
 
-  ignore("typed query with array") {
-    val results = sql"SELECT * FROM $garage"
+  test("typed query with array") {
+    val results = sql"SELECT owner FROM $garage"
     assert(results.first().owner == "Michael")
   }
 
