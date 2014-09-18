@@ -214,6 +214,7 @@ private[hive] object HiveQl {
    */
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
+ 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
@@ -229,11 +230,17 @@ private[hive] object HiveQl {
             SetCommand(Some(key), Some(value))
         }
       } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        CacheCommand(sql.trim.drop(12).trim, true)
+        sql.trim.drop(12).trim.split(" ").toSeq match {
+          case Seq(tableName) => 
+            CacheCommand(tableName, true)
+          case Seq(tableName,as, select@_*) => 
+            CacheTableAsSelectCommand(tableName,
+                createPlan(sql.trim.drop(12 + tableName.length() + as.length() + 2)))
+        }
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8).trim)
+        NativeCommand(sql)
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
       } else if (sql.trim.toLowerCase.startsWith("dfs")) {
@@ -243,15 +250,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
-        val tree = getAst(sql)
-        if (nativeCommands contains tree.getText) {
-          NativeCommand(sql)
-        } else {
-          nodeToPlan(tree) match {
-            case NativePlaceholder => NativeCommand(sql)
-            case other => other
-          }
-        }
+        createPlan(sql)
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -260,6 +259,19 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
+    }
+  }
+  
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
+    val tree = getAst(sql)
+    if (nativeCommands contains tree.getText) {
+      NativeCommand(sql)
+    } else {
+      nodeToPlan(tree) match {
+        case NativePlaceholder => NativeCommand(sql)
+        case other => other
+      }
     }
   }
 
@@ -1097,7 +1109,7 @@ private[hive] object HiveQl {
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         HiveGenericUdtf(functionName, attributes, children.map(nodeToExpr))
-
+        
       case a: ASTNode =>
         throw new NotImplementedError(
           s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:
