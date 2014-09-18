@@ -467,6 +467,30 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 % c2, 1, row)
   }
 
+  test("arithmetic fractional") {
+    val row = new GenericRow(Array[Any](1.1, 2, 3.1, null))
+    val c1 = 'a.double.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.double.at(2)
+    val c4 = 'a.double.at(3)
+
+    checkEvaluation(UnaryMinus(c1), -1, row)
+    checkEvaluation(UnaryMinus(Literal(100, IntegerType)), -100)
+
+    checkEvaluation(Add(c1, c4), null, row)
+    checkEvaluation(Add(c1, c2), 3.1, row)
+    checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), c2), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), Literal(null, DoubleType)), null, row)
+
+    checkEvaluation(-c1, -1.1, row)
+    checkEvaluation(c1 + c2, 3.1, row)
+    checkEvaluation(c1 - c2, -0.8, row)
+    checkEvaluation(c1 * c2, 2.2, row)
+    checkEvaluation(c1 / c2, 0.55, row)
+    checkEvaluation(c3 % c2, 1.1, row)
+  }
+
   test("BinaryComparison") {
     val row = new GenericRow(Array[Any](1, 2, 3, null, 3, null))
     val c1 = 'a.int.at(0)
