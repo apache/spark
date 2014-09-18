@@ -46,7 +46,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     val dataTrim = data.trim().array
     val edgeArray = Array(srcIdsTrim, dstIdsTrim, dataTrim)
     // TODO: sort three arrays simultaneously based on srcIds
-    val sorter = ParallelSorter(edgeArray)
+    val sorter = ParallelSorter.create(edgeArray)
     sorter.mergeSort(0)
     //val sorter = Sorting.quickSort(edgeArray)
     // Sorting.quickSort(edgeArray)(Edge.lexicographicOrdering)
