@@ -45,7 +45,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
-from pyspark.sql import SQLContext, IntegerType
+from pyspark.sql import SQLContext, IntegerType, Row
 from pyspark import shuffle
 
 _have_scipy = False
@@ -657,6 +657,10 @@ class TestSQL(PySparkTestCase):
         srdd = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
         srdd2 = self.sqlCtx.applySchema(srdd.map(lambda x: x), srdd.schema())
         self.assertEqual(srdd.collect(), srdd2.collect())
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
+        srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
+        self.assertEqual(10, srdd3.count())
 
 
 class TestIO(PySparkTestCase):
