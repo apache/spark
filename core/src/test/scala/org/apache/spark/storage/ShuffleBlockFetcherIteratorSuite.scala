@@ -176,8 +176,9 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       null,
       48 * 1024 * 1024)
 
-    iterator.foreach { case (_, iterOption) =>
-      assert(!iterOption.isDefined)
-    }
+    val result = iterator.next
+    assert(result._2 == None, "The 2nd element of the tuple should " +
+      "be None when the result is failed")
+    // When we meet failed result, we must not iterate any more.
   }
 }
