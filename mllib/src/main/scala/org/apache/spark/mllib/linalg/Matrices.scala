@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.linalg
 
+import java.util
+
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM}
 
 /**
@@ -66,8 +68,8 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   private[mllib] override def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 
   override def equals(o: Any) = o match {
-    case that: DenseMatrix =>
-      that.numRows == numRows && that.numCols == numCols && values.equals(that.values)
+    case m: DenseMatrix =>
+      m.numRows == numRows && m.numCols == numCols && util.Arrays.equals(toArray, m.toArray)
     case _ => false
   }
 }

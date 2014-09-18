@@ -70,7 +70,7 @@ class PythonMLLibAPISuite extends FunSuite {
     val values = Array[Double](0, 1.2, 3, 4.56, 7, 8)
     val matrix = Matrices.dense(2, 3, values)
     val nm = SerDe.loads(SerDe.dumps(matrix)).asInstanceOf[DenseMatrix]
-    assert(matrix == nm)
+    assert(matrix === nm)
 
     // Test conversion for empty matrix
     val empty = Array[Double]()
