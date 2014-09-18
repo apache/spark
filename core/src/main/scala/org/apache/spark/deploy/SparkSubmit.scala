@@ -54,7 +54,7 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
 
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 1024
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 127
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
