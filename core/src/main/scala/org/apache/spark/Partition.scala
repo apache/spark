@@ -18,7 +18,7 @@
 package org.apache.spark
 
 /**
- * A partition of an RDD.
+ * A partition of an RDD. Yup.
  */
 trait Partition extends Serializable {
   /**
