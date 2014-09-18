@@ -21,6 +21,7 @@ import java.io.OutputStream
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
+import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
 
@@ -43,7 +44,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-import scala.reflect.ClassTag
 
 /**
  * :: DeveloperApi ::
@@ -479,8 +479,7 @@ private[spark] object SerDe extends Serializable {
       }
     }
 
-    private[python] def saveObjects(out: OutputStream, pickler: Pickler,
-                                    objects: Any*) = {
+    private[python] def saveObjects(out: OutputStream, pickler: Pickler, objects: Any*) = {
       if (objects.length == 0 || objects.length > 3) {
         out.write(Opcodes.MARK)
       }
@@ -498,62 +497,65 @@ private[spark] object SerDe extends Serializable {
   }
 
   // Pickler for DenseVector
-  private[python] class DenseVectorPickler
-    extends BasePickler[DenseVector] {
+  private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       saveObjects(out, pickler, vector.toArray)
     }
 
-    def construct(args: Array[Object]) :Object = {
+    def construct(args: Array[Object]): Object = {
       require(args.length == 1)
+      if (args.length != 1) {
+        throw new PickleException("should be 1")
+      }
       new DenseVector(args(0).asInstanceOf[Array[Double]])
     }
   }
 
   // Pickler for DenseMatrix
-  private[python] class DenseMatrixPickler
-    extends BasePickler[DenseMatrix] {
+  private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
       saveObjects(out, pickler, m.numRows, m.numCols, m.values)
     }
 
-    def construct(args: Array[Object]) :Object = {
-      require(args.length == 3)
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
+      }
       new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
         args(2).asInstanceOf[Array[Double]])
     }
   }
 
   // Pickler for SparseVector
-  private[python] class SparseVectorPickler
-    extends BasePickler[SparseVector] {
+  private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       saveObjects(out, pickler, v.size, v.indices, v.values)
     }
 
-    def construct(args: Array[Object]) :Object = {
-      require(args.length == 3)
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
+      }
       new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
         args(2).asInstanceOf[Array[Double]])
     }
   }
 
   // Pickler for LabeledPoint
-  private[python] class LabeledPointPickler
-    extends BasePickler[LabeledPoint] {
+  private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
       saveObjects(out, pickler, point.label, point.features)
     }
 
-    def construct(args: Array[Object]) :Object = {
+    def construct(args: Array[Object]): Object = {
       if (args.length != 2) {
         throw new PickleException("should be 2")
       }
@@ -562,15 +564,14 @@ private[spark] object SerDe extends Serializable {
   }
 
   // Pickler for Rating
-  private[python] class RatingPickler
-    extends BasePickler[Rating] {
+  private[python] class RatingPickler extends BasePickler[Rating] {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val rating: Rating = obj.asInstanceOf[Rating]
       saveObjects(out, pickler, rating.user, rating.product, rating.rating)
     }
 
-    def construct(args: Array[Object]) :Object = {
+    def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }

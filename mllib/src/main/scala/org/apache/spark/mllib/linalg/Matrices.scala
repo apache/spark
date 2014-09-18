@@ -67,7 +67,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
 
   override def equals(o: Any) = o match {
     case that: DenseMatrix =>
-      that.numRows == numRows && that.numCols == numCols
+      that.numRows == numRows && that.numCols == numCols && values.equals(that.values)
     case _ => false
   }
 }

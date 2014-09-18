@@ -96,7 +96,7 @@ class DecisionTree(object):
                impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                minInfoGain=0.0):
         first = data.first()
-        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeleddPoint"
+        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         sc = data.context
         jrdd = data._to_java_object_rdd()
         cfiMap = MapConverter().convert(categoricalFeaturesInfo,

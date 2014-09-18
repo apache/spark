@@ -121,7 +121,7 @@ class DenseVector(Vector):
         >>> dense1.squared_distance(dense2)
         2.0
         >>> dense3 = [2., 1.]
-        >>> dense1.squared_distance(dense2)
+        >>> dense1.squared_distance(dense3)
         2.0
         >>> sparse1 = SparseVector(2, [0, 1], [2., 1.])
         >>> dense1.squared_distance(sparse1)
@@ -413,15 +413,20 @@ class Vectors(object):
         return str(vector)
 
 
-class Matrix(Vector):
+class Matrix(object):
     """ the Matrix """
+    def __init__(self, nRow, nCol):
+        self.nRow = nRow
+        self.nCol = nCol
+
+    def toArray(self):
+        raise NotImplementedError
 
 
 class DenseMatrix(Matrix):
     def __init__(self, nRow, nCol, values):
+        Matrix.__init__(self, nRow, nCol)
         assert len(values) == nRow * nCol
-        self.nRow = nRow
-        self.nCol = nCol
         self.values = values
 
     def __reduce__(self):
