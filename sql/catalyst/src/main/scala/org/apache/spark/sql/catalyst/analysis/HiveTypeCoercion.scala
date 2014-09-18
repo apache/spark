@@ -220,24 +220,33 @@ trait HiveTypeCoercion {
       case a: BinaryArithmetic if a.right.dataType == StringType =>
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
+      // we should cast all timestamp/date/string compare into string compare,
+      // even if both sides are of same type, as Hive use xxxwritable to compare.
       case p: BinaryPredicate if p.left.dataType == StringType
         && p.right.dataType == DateType =>
-        p.makeCopy(Array(Cast(p.left, DateType), p.right))
+        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
       case p: BinaryPredicate if p.left.dataType == DateType
         && p.right.dataType == StringType =>
-        p.makeCopy(Array(p.left, Cast(p.right, DateType)))
+        p.makeCopy(Array(Cast(p.left, StringType), p.right))
       case p: BinaryPredicate if p.left.dataType == StringType
         && p.right.dataType == TimestampType =>
-        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
+        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
       case p: BinaryPredicate if p.left.dataType == TimestampType
         && p.right.dataType == StringType =>
-        p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
+        p.makeCopy(Array(Cast(p.left, StringType), p.right))
       case p: BinaryPredicate if p.left.dataType == TimestampType
         && p.right.dataType == DateType =>
-        p.makeCopy(Array(Cast(p.left, DateType), p.right))
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
       case p: BinaryPredicate if p.left.dataType == DateType
         && p.right.dataType == TimestampType =>
-        p.makeCopy(Array(p.left, Cast(p.right, DateType)))
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
+      // same type
+      case p: BinaryPredicate if p.left.dataType == DateType
+        && p.right.dataType == DateType =>
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
+      case p: BinaryPredicate if p.left.dataType == TimestampType
+        && p.right.dataType == TimestampType =>
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
 
       case p: BinaryPredicate if p.left.dataType == StringType && p.right.dataType != StringType =>
         p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
@@ -245,11 +254,18 @@ trait HiveTypeCoercion {
         p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
 
       case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(a, b.map(Cast(_, DateType))))
+        i.makeCopy(Array(Cast(a, StringType), b))
       case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
+        i.makeCopy(Array(Cast(a, StringType), b))
       case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == TimestampType) =>
-        i.makeCopy(Array(a, b.map(Cast(_, DateType))))
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == DateType) =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == TimestampType) =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+
 
       case Sum(e) if e.dataType == StringType =>
         Sum(Cast(e, DoubleType))

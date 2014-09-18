@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.types._
 
 /** Cast the child expression to the target data type. */
@@ -101,7 +102,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => new Timestamp(b))
     case DateType =>
-      buildCast[Date](_, d => Timestamp.valueOf(dateToString(d) + " 00:00:00"))
+      buildCast[Date](_, d => new Timestamp(d.getTime))
     // TimestampWritable.decimalToTimestamp
     case DecimalType =>
       buildCast[BigDecimal](_, d => decimalToTimestamp(d))
@@ -154,15 +155,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // DateConverter
   private[this] def castToDate: Any => Any = child.dataType match {
     case StringType =>
-      buildCast[String](_, s => if (s.contains(" ")) {
-        try castToDate(castToTimestamp(s))
-        catch { case _: java.lang.IllegalArgumentException => null }
-      } else {
+      buildCast[String](_, s =>
         try Date.valueOf(s) catch { case _: java.lang.IllegalArgumentException => null }
-      })
+      )
     case TimestampType =>
-      buildCast[Timestamp](_, t => Date.valueOf(timestampToDateString(t)))
-    // TimestampWritable.decimalToDate
+      // throw valid precision more than seconds, according to Hive.
+      // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
+      buildCast[Timestamp](_, t => new Date(Math.floor(t.getTime / 1000.0).toInt * 1000))
+    // Hive throws this exception as a Semantic Exception
+    // It is never possible to compare result when hive return with exception, so we can return null
+    // NULL is more reasonable here, since the query itself obeys the grammar.
     case _ => _ => null
   }
 
