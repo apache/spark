@@ -183,6 +183,7 @@ public class TaskContext implements Serializable {
   }
 
   /**
+   * ::Internal API::
    * Marks the task as completed and triggers the listeners.
    */
   public void markTaskCompleted() throws TaskCompletionListenerException {
@@ -207,6 +208,7 @@ public class TaskContext implements Serializable {
   }
 
   /**
+   * ::Internal API::
    * Marks the task for interruption, i.e. cancellation.
    */
   public void markInterrupted() {
@@ -229,6 +231,7 @@ public class TaskContext implements Serializable {
     return runningLocally;
   }
 
+  /** ::Internal API:: */
   public TaskMetrics taskMetrics() {
     return taskMetrics;
   }
