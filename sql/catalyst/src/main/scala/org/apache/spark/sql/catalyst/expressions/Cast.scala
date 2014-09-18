@@ -161,7 +161,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Timestamp](_, t => new Date(Math.floor(t.getTime / 1000.0).toInt * 1000))
+      buildCast[Timestamp](_, t => new Date(Math.floor(t.getTime / 1000.0).toLong * 1000))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception, so we can return null
     // NULL is more reasonable here, since the query itself obeys the grammar.
