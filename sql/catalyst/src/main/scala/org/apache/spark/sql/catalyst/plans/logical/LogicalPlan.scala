@@ -95,6 +95,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver): Option[NamedExpression] = {
 
     val parts = name.split("\\.")
+
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
     // name.  Return these matches along with any remaining parts, which represent dotted access to
@@ -109,23 +110,60 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         }
 
       if (resolver(option.name, remainingParts.head)) {
-        (option, remainingParts.tail.toList) :: Nil
+        // Preserve the case of the user's attribute reference.
+        (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
       } else {
         Nil
       }
     }
 
     options.distinct match {
-      case Seq((a, Nil)) => Some(a) // One match, no nested fields, use it.
+      // One match, no nested fields, use it.
+      case Seq((a, Nil)) => Some(a)
+
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
+        val aliased =
+          Alias(
+            resolveNesting(nestedFields, a, resolver),
+            nestedFields.last)() // Preserve the case of the user's field access.
+        Some(aliased)
+
+      // No matches.
       case Seq() =>
         logTrace(s"Could not find $name in ${input.mkString(", ")}")
-        None         // No matches.
+        None
+
+      // More than one match.
       case ambiguousReferences =>
         throw new TreeNodeException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
+    }
+  }
+
+  /**
+   * Given a list of successive nested field accesses, and a based expression, attempt to resolve
+   * the actual field lookups on this expression.
+   */
+  private def resolveNesting(
+      nestedFields: List[String],
+      expression: Expression,
+      resolver: Resolver): Expression = {
+
+    (nestedFields, expression.dataType) match {
+      case (Nil, _) => expression
+      case (requestedField :: rest, StructType(fields)) =>
+        val actualField = fields.filter(f => resolver(f.name, requestedField))
+        actualField match {
+          case Seq() =>
+            sys.error(
+              s"No such struct field $requestedField in ${fields.map(_.name).mkString(", ")}")
+          case Seq(singleMatch) =>
+            resolveNesting(rest, GetField(expression, singleMatch.name), resolver)
+          case multipleMatches =>
+            sys.error(s"Ambiguous reference to fields ${multipleMatches.mkString(", ")}")
+        }
+      case (_, dt) => sys.error(s"Can't access nested field in type $dt")
     }
   }
 }

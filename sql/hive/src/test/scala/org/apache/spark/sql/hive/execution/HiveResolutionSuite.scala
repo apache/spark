@@ -36,6 +36,9 @@ class HiveResolutionSuite extends HiveComparisonTest {
   createQueryTest("database.table table.attr",
     "SELECT src.key FROM default.src ORDER BY key LIMIT 1")
 
+  createQueryTest("database.table table.attr case insensitive",
+    "SELECT SRC.Key FROM Default.Src ORDER BY key LIMIT 1")
+
   createQueryTest("alias.attr",
     "SELECT a.key FROM src a ORDER BY key LIMIT 1")
 
@@ -56,7 +59,10 @@ class HiveResolutionSuite extends HiveComparisonTest {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
       .registerTempTable("caseSensitivityTest")
 
-    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    val query = sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    assert(query.schema.fields.map(_.name) === Seq("a", "b", "A", "B", "a", "b", "A", "B"),
+      "The output schema did not preserve the case of the query.")
+    query.collect()
   }
 
   ignore("case insensitivity with scala reflection joins") {
