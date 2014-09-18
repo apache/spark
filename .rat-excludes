@@ -58,3 +58,4 @@ dist/*
 .*iws
 logs
 .*scalastyle-output.xml
+.*dependency-reduced-pom.xml
