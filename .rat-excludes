@@ -20,6 +20,7 @@ log4j.properties.template
 metrics.properties.template
 slaves
 spark-env.sh
+spark-env.cmd
 spark-env.sh.template
 log4j-defaults.properties
 bootstrap-tooltip.js

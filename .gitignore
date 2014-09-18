@@ -1,4 +1,6 @@
 *~
+*.#*
+*#*#
 *.swp
 *.ipr
 *.iml
@@ -16,6 +18,7 @@ third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
 conf/*.sh
+conf/*.cmd
 conf/*.properties
 conf/*.conf
 conf/*.xml
