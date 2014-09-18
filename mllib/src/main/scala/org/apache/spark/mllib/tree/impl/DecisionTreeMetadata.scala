@@ -147,7 +147,7 @@ private[tree] object DecisionTreeMetadata {
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
-      case "log2" => (math.log(numFeatures) / math.log(2)).ceil.toInt
+      case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
     }
 
