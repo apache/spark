@@ -88,7 +88,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
   /** The optimizer to solve the problem. */
-  def optimizer: Optimizer
+  def optimizer: Optimizer[Vector]
 
   /** Whether to add intercept (default: false). */
   protected var addIntercept: Boolean = false

@@ -134,10 +134,12 @@ class BLASSuite extends FunSuite {
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
 
     val B = new DenseMatrix(3, 2, Array(1.0, 0.0, 0.0, 0.0, 2.0, 1.0))
+    val sB = new SparseMatrix(3, 2, Array(0, 1, 3), Array(0, 1, 2), Array(1.0, 2.0, 1.0))
     val expected = new DenseMatrix(4, 2, Array(0.0, 1.0, 0.0, 0.0, 4.0, 0.0, 2.0, 3.0))
 
     assert(dA multiply B ~== expected absTol 1e-15)
     assert(sA multiply B ~== expected absTol 1e-15)
+    assert(dA multiply sB ~== expected absTol 1e-15)
 
     val C1 = new DenseMatrix(4, 2, Array(1.0, 0.0, 2.0, 1.0, 0.0, 0.0, 1.0, 0.0))
     val C2 = C1.copy
@@ -147,21 +149,37 @@ class BLASSuite extends FunSuite {
     val C6 = C1.copy
     val C7 = C1.copy
     val C8 = C1.copy
+    val C9 = C1.copy
+    val C10 = C1.copy
     val expected2 = new DenseMatrix(4, 2, Array(2.0, 1.0, 4.0, 2.0, 4.0, 0.0, 4.0, 3.0))
     val expected3 = new DenseMatrix(4, 2, Array(2.0, 2.0, 4.0, 2.0, 8.0, 0.0, 6.0, 6.0))
 
     gemm(1.0, dA, B, 2.0, C1)
     gemm(1.0, sA, B, 2.0, C2)
-    gemm(2.0, dA, B, 2.0, C3)
-    gemm(2.0, sA, B, 2.0, C4)
+    gemm(1.0, dA, sB, 2.0, C3)
+    gemm(2.0, dA, B, 2.0, C4)
+    gemm(2.0, sA, B, 2.0, C5)
     assert(C1 ~== expected2 absTol 1e-15)
     assert(C2 ~== expected2 absTol 1e-15)
-    assert(C3 ~== expected3 absTol 1e-15)
+    assert(C3 ~== expected2 absTol 1e-15)
     assert(C4 ~== expected3 absTol 1e-15)
+    assert(C5 ~== expected3 absTol 1e-15)
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
         gemm(true, false, 1.0, dA, B, 2.0, C1)
+      }
+    }
+
+    withClue("not supported") {
+      intercept[Exception] {
+        gemm(false, false, 1.0, sA, sB, 2.0, C1)
+      }
+    }
+
+    withClue("not supported") {
+      intercept[Exception] {
+        sA multiply sB
       }
     }
 
@@ -172,15 +190,24 @@ class BLASSuite extends FunSuite {
 
     assert(dAT transposeMultiply B ~== expected absTol 1e-15)
     assert(sAT transposeMultiply B ~== expected absTol 1e-15)
+    assert(dAT transposeMultiply sB ~== expected absTol 1e-15)
 
-    gemm(true, false, 1.0, dAT, B, 2.0, C5)
-    gemm(true, false, 1.0, sAT, B, 2.0, C6)
-    gemm(true, false, 2.0, dAT, B, 2.0, C7)
-    gemm(true, false, 2.0, sAT, B, 2.0, C8)
-    assert(C5 ~== expected2 absTol 1e-15)
+    gemm(true, false, 1.0, dAT, B, 2.0, C6)
+    gemm(true, false, 1.0, sAT, B, 2.0, C7)
+    gemm(true, false, 1.0, dAT, sB, 2.0, C8)
+    gemm(true, false, 2.0, dAT, B, 2.0, C9)
+    gemm(true, false, 2.0, sAT, B, 2.0, C10)
     assert(C6 ~== expected2 absTol 1e-15)
-    assert(C7 ~== expected3 absTol 1e-15)
-    assert(C8 ~== expected3 absTol 1e-15)
+    assert(C7 ~== expected2 absTol 1e-15)
+    assert(C8 ~== expected2 absTol 1e-15)
+    assert(C9 ~== expected3 absTol 1e-15)
+    assert(C10 ~== expected3 absTol 1e-15)
+
+    withClue("not supported") {
+      intercept[Exception] {
+        gemm(true, false, 1.0, sAT, sB, 2.0, C1)
+      }
+    }
   }
 
   test("gemv") {
