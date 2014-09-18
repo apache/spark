@@ -440,6 +440,7 @@ _type_mappings = {
     float: DoubleType,
     str: StringType,
     unicode: StringType,
+    bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.datetime: TimestampType,
     datetime.date: TimestampType,
@@ -685,19 +686,21 @@ def _infer_schema_type(obj, dataType):
         raise ValueError("Unexpected dataType: %s" % dataType)
 
 
+# including subclasses
 _acceptable_types = {
-    BooleanType: (bool,),
+    BooleanType: bool,
     ByteType: (int, long),
     ShortType: (int, long),
     IntegerType: (int, long),
-    LongType: (long,),
-    FloatType: (float,),
-    DoubleType: (float,),
-    DecimalType: (decimal.Decimal,),
+    LongType: (int, long),
+    FloatType: float,
+    DoubleType: float,
+    DecimalType: decimal.Decimal,
     StringType: (str, unicode),
-    TimestampType: (datetime.datetime,),
+    BinaryType: bytearray,
+    TimestampType: datetime.datetime,
     ArrayType: (list, tuple, array),
-    MapType: (dict,),
+    MapType: dict,
     StructType: (tuple, list),
 }
 
@@ -728,10 +731,9 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    if _type not in _acceptable_types:
-        return
+    assert _type in _acceptable_types, "unkown datatype: %s" % dataType
 
-    if type(obj) not in _acceptable_types[_type]:
+    if not isinstance(obj, _acceptable_types[_type]):
         raise TypeError("%s can not accept abject in type %s"
                         % (dataType, type(obj)))
 
