@@ -17,8 +17,6 @@
 
 __all__ = ["ResultIterable"]
 
-import collections
-
 
 class ResultIterable(object):
 
