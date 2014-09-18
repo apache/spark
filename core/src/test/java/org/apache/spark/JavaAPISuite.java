@@ -140,11 +140,10 @@ public class JavaAPISuite implements Serializable {
   public void sample() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 11);
-    // expected 2 but of course result varies randomly a bit
-    Assert.assertEquals(1, sample20.count());
-    JavaRDD<Integer> sample20NoReplacement = rdd.sample(false, 0.2, 11);
-    Assert.assertEquals(2, sample20NoReplacement.count());
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 3);
+    Assert.assertEquals(2, sample20.count());
+    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 5);
+    Assert.assertEquals(2, sample20WithoutReplacement.count());
   }
 
   @Test
