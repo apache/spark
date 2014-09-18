@@ -657,7 +657,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Maximum number of retries when binding to a port before giving up.
+    Default maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>
