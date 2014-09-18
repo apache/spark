@@ -406,8 +406,6 @@ object VertexRDD {
    * @param edges the [[EdgeRDD]] that these vertices may be joined with
    * @param defaultVal the vertex attribute to use when creating missing vertices
    * @param mergeFunc the commutative, associative duplicate vertex attribute merge function
-   * note that all vertices with default value created upon construction in VertexPartition
-   * so it will appear as b in (a, b) pair for mergeFunc.
    */
   def apply[VD: ClassTag](
       vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD, mergeFunc: (VD, VD) => VD
