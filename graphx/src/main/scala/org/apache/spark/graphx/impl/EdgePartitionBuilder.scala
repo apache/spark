@@ -48,8 +48,8 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     // Sort the three arrays in parallel by (srcId, dstId)
     val arrays = Array[Object](srcIdsTrim, dstIdsTrim, dataTrim)
     val sorter = ParallelSorter.create(arrays)
-    sorter.quickSort(1, 0, srcIdsTrim.length)
-    sorter.mergeSort(0, 0, srcIdsTrim.length)
+    sorter.quickSort(1, 0, srcIdsTrim.length) // necessary for groupEdges
+    sorter.mergeSort(0, 0, srcIdsTrim.length) // preserves dstId sort order
 
     val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
