@@ -356,7 +356,6 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
-    assert(metrics1.shuffleFinishTime === metrics2.shuffleFinishTime)
     assert(metrics1.remoteBlocksFetched === metrics2.remoteBlocksFetched)
     assert(metrics1.localBlocksFetched === metrics2.localBlocksFetched)
     assert(metrics1.fetchWaitTime === metrics2.fetchWaitTime)
@@ -568,7 +567,6 @@ class JsonProtocolSuite extends FunSuite {
       t.inputMetrics = Some(inputMetrics)
     } else {
       val sr = new ShuffleReadMetrics
-      sr.shuffleFinishTime = b + c
       sr.remoteBytesRead = b + d
       sr.localBlocksFetched = e
       sr.fetchWaitTime = a + d
