@@ -59,8 +59,8 @@ trait YarnRMClient {
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId
 
-  /** Returns the RM's proxy host and port. */
-  def getProxyHostAndPort(conf: YarnConfiguration): String
+  /** Returns the configuration for the AmIpFilter to add to the Spark UI. */
+  def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String): Map[String, String]
 
   /** Returns the maximum number of attempts to register the AM. */
   def getMaxRegAttempts(conf: YarnConfiguration): Int
