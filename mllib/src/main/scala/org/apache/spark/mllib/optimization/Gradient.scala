@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.optimization
 
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, gemm, scal}
@@ -190,7 +192,7 @@ abstract class MultiModelGradient extends Serializable {
   def compute(data: Matrix, label: DenseMatrix,
                        weights: DenseMatrix, cumGradient: DenseMatrix): Matrix
 }
-
+/*
 /**
  * :: DeveloperApi ::
  * Compute gradient and loss for a logistic loss function, as used in binary classification.
@@ -207,7 +209,7 @@ class MultiModelLogisticGradient extends MultiModelGradient {
   }
 
   override def compute(data: Matrix, label: DenseMatrix,
-                       weights: DenseMatrix): (DenseMatrix, Matrix) = {
+                       weights: DenseMatrix): (DenseMatrix, Vector) = {
     val margin = data transposeMultiply weights
     val gradient = DenseMatrix.zeros(weights.numRows, weights.numCols)
 
@@ -235,7 +237,7 @@ class MultiModelLogisticGradient extends MultiModelGradient {
   override def compute(data: Matrix,
                        label: DenseMatrix,
                        weights: DenseMatrix,
-                       cumGradient: DenseMatrix): Matrix = {
+                       cumGradient: DenseMatrix): Vector = {
     val margin = data transposeMultiply weights
     gemm(false, false, 1.0, data, sigmoid(margin).elementWiseOperateOnColumnsInPlace(_ - _, label),
       1.0, cumGradient)
@@ -267,7 +269,7 @@ class MultiModelLogisticGradient extends MultiModelGradient {
 @DeveloperApi
 class MultiModelLeastSquaresGradient extends MultiModelGradient {
   override def compute(data: Matrix, label: DenseMatrix,
-                       weights: DenseMatrix): (DenseMatrix, Matrix) = {
+                       weights: DenseMatrix): (DenseMatrix, Vector) = {
 
     val diff = (data transposeMultiply weights).elementWiseOperateOnColumnsInPlace(_ - _, label)
 
@@ -292,7 +294,7 @@ class MultiModelLeastSquaresGradient extends MultiModelGradient {
   override def compute(data: Matrix,
                        label: DenseMatrix,
                        weights: DenseMatrix,
-                       cumGradient: DenseMatrix): Matrix = {
+                       cumGradient: DenseMatrix): Vector = {
     val diff = (data transposeMultiply weights).elementWiseOperateOnColumnsInPlace(_ - _, label)
 
     gemm(false, false, 2.0, data, diff, 1.0, cumGradient)
@@ -308,7 +310,7 @@ class MultiModelLeastSquaresGradient extends MultiModelGradient {
     }
   }
 }
-
+*/
 
 /**
  * :: DeveloperApi ::
@@ -319,15 +321,16 @@ class MultiModelLeastSquaresGradient extends MultiModelGradient {
 @DeveloperApi
 class MultiModelHingeGradient extends MultiModelGradient {
   override def compute(data: Matrix, label: DenseMatrix,
-                       weights: DenseMatrix): (DenseMatrix, Matrix) = {
+                       weights: DenseMatrix): (DenseMatrix, Vector) = {
 
-    val dotProduct = data transposeMultiply weights
+    val dotProduct = (data transposeMultiply weights).toBreeze
+    val brzData = data.toBreeze
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
-    val labelScaled = new DenseMatrix(1, label.numRows, label.map(_ * 2 - 1.0).values)
+    val brzScaledLabels = new BDM[Double](1, label.numRows, label.values.map(_ * 2 - 1.0))
 
-    dotProduct.elementWiseOperateOnColumnsInPlace(_ * _, labelScaled)
-
+    dotProduct *= brzScaledLabels
+    brzScaledLabels.
     val gradientMultiplier = data.elementWiseOperateOnRows(_ * _, labelScaled.negInPlace)
     val gradient = DenseMatrix.zeros(weights.numRows, weights.numCols)
     val activeExamples = dotProduct.compare(1.0, _ < _) // Examples where the hinge is active
@@ -349,7 +352,7 @@ class MultiModelHingeGradient extends MultiModelGradient {
   }
 
   override def compute(data: Matrix, label: DenseMatrix,
-                       weights: DenseMatrix, cumGradient: DenseMatrix): Matrix = {
+                       weights: DenseMatrix, cumGradient: DenseMatrix): Vector = {
 
     val dotProduct = data transposeMultiply weights
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
@@ -375,3 +378,31 @@ class MultiModelHingeGradient extends MultiModelGradient {
     }
   }
 }
+/*
+override def compute(data: Matrix, label: DenseMatrix,
+                       weights: DenseMatrix, cumGradient: DenseMatrix): Vector = {
+
+    val dotProduct = data transposeMultiply weights
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Therefore the gradient is -(2y - 1)*x
+    val labelScaled = new DenseMatrix(1, label.numRows, label.map(_ * 2 - 1.0).values)
+    dotProduct.elementWiseOperateOnColumnsInPlace(_ * _, labelScaled)
+
+    val gradientMultiplier = data.elementWiseOperateOnRows(_ * _, labelScaled.negInPlace)
+
+    val activeExamples = dotProduct.compare(1.0, _ < _) // Examples where the hinge is active
+
+    gemm(false, false, 1.0, gradientMultiplier, activeExamples, 1.0, cumGradient)
+
+    val loss = activeExamples.elementWiseOperateInPlace(_ * _, dotProduct.update(1 - _))
+
+    if (data.isInstanceOf[DenseMatrix]) {
+      val numFeatures = data.numRows
+      val zeroEntries = data.compare(0.0, _ == _)
+      val shouldSkip = zeroEntries.colSums.compareInPlace(numFeatures, _ == _)
+      loss.colSums(false, shouldSkip)
+    } else {
+      loss.colSums
+    }
+  }
+ */

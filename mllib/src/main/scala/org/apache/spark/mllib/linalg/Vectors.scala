@@ -72,6 +72,12 @@ sealed trait Vector extends Serializable {
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
+
+  /** Maps all the values in the vector. Generates a new vector. */
+  private[mllib] def map(f: Double => Double): Vector
+
+  /** Updates all the values in the vector. In Place. */
+  private[mllib] def update(f: Double => Double): Vector
 }
 
 /**
@@ -186,6 +192,52 @@ object Vectors {
         sys.error("Unsupported Breeze vector type: " + v.getClass.getName)
     }
   }
+
+  /**
+   * Appends a sequence of vectors together. Preserves sparsity if and only if only vecs is composed
+   * of SparseVectors only.
+   * @param vecs sequence of vectors
+   * @return a single long `Vector` composed of the vectors that were appended to each other.
+   */
+  private[mllib] def append(vecs: Seq[Vector]): Vector = {
+    if (vecs.size == 1) {
+      return vecs(0)
+    }
+    var isDense = false
+    var isSparse = false
+    var totalLength = 0
+    val lengths: Seq[(Int, Int)] = vecs.map {
+        case sparse: SparseVector =>
+          isSparse = true
+          totalLength += sparse.size
+          (totalLength, sparse.indices.length)
+        case dense: DenseVector =>
+          isDense = true
+          totalLength += dense.size
+          (totalLength, dense.size)
+    }
+    if (isSparse && !isDense) {
+      val allIndices: Seq[Int] = vecs.flatMap(_.asInstanceOf[SparseVector].indices)
+      var vectorCounter = 0
+      var elementCounter = 0 // The count inside the vector
+      val adjustedIndices = allIndices.map { p =>
+        // less than equal, in case Vector is empty
+        while (lengths(vectorCounter)._2 <= elementCounter + 1) {
+          vectorCounter += 1
+          elementCounter = -1
+        }
+        elementCounter += 1
+        if (elementCounter != 0) lengths(vectorCounter)._1 + p else lengths(vectorCounter - 1)._2
+      }.toArray
+      new SparseVector(totalLength, adjustedIndices,
+        vecs.flatMap(_.asInstanceOf[SparseMatrix].values).toArray)
+    } else if (!isSparse && !isDense) {
+      throw new IllegalArgumentException("The supplied vectors are neither in SparseVector or" +
+        " DenseVector format!")
+    } else {
+      new DenseVector(vecs.flatMap(_.toArray).toArray)
+    }
+  }
 }
 
 /**
@@ -205,6 +257,19 @@ class DenseVector(val values: Array[Double]) extends Vector {
 
   override def copy: DenseVector = {
     new DenseVector(values.clone())
+  }
+
+  private[mllib] def map(f: Double => Double): Vector = {
+    new DenseVector(values.map(f))
+  }
+
+  private[mllib] def update(f: Double => Double): Vector = {
+    var i = 0
+    while (i < size) {
+      values(i) = f(values(i))
+      i += 1
+    }
+    this
   }
 }
 
@@ -241,4 +306,17 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  private[mllib] def map(f: Double => Double): Vector = {
+    new SparseVector(size, indices, values.map(f))
+  }
+
+  private[mllib] def update(f: Double => Double): Vector = {
+    var i = 0
+    while (i < size) {
+      values(i) = f(values(i))
+      i += 1
+    }
+    this
+  }
 }

@@ -155,4 +155,15 @@ class VectorsSuite extends FunSuite {
         throw new RuntimeException(s"copy returned ${dvCopy.getClass} on ${dv.getClass}.")
     }
   }
+
+  test("append") {
+    val sparseVecs: Seq[Vector] = Seq(new SparseVector(2, Array.empty[Int], Array.empty[Double]),
+      new SparseVector(1, Array.empty[Int], Array.empty[Double]),
+      new SparseVector(2, Array(0), Array(2.0)),
+      new SparseVector(3, Array.empty[Int], Array.empty[Double]),
+      new SparseVector(5, Array(1, 4), Array(1.0, 2.0))
+    )
+    val sparseCollection = Vectors.append(sparseVecs)
+    assert(sparseCollection === new SparseVector(13, Array(3, 9, 12), Array(2.0, 1.0, 2.0)))
+  }
 }

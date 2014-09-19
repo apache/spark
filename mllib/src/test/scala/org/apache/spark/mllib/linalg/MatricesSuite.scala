@@ -112,4 +112,8 @@ class MatricesSuite extends FunSuite {
     assert(sparseMat(0, 1) === 10.0)
     assert(sparseMat.values(2) === 10.0)
   }
+
+  test("element-wise operations") {
+
+  }
 }

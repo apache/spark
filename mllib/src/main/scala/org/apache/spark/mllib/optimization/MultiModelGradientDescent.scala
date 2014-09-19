@@ -177,7 +177,7 @@ object MultiModelGradientDescent extends Logging {
     if (numExamples == 0) {
 
       logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
-      return (Matrices.horzCat(weights), stochasticLossHistory.toArray)
+      return (Matrices.horzcat(weights), stochasticLossHistory.toArray)
 
     }
     val stepSizeMatrix = new DenseMatrix(1, numModels,
@@ -193,8 +193,8 @@ object MultiModelGradientDescent extends Logging {
       if (useSparse) {
         data.context.broadcast(Matrices.getSparsityData(data, batchSize))
       } else {
-        val emptyData: Array[(Int, Int)] = (0 until data.partitions.length).map { i =>
-          (i, -1)}.toArray
+        val emptyData: Map[Int, Int] = (0 until data.partitions.length).map { i =>
+          (i, -1)}.toMap
         data.context.broadcast(emptyData)
       }
     val points = Matrices.fromRDD(data, bcMetaData.value, batchSize, buildSparseThreshold)
@@ -229,7 +229,7 @@ object MultiModelGradientDescent extends Logging {
             (grad1.zip(grad2).map(r => r._1.elementWiseOperateInPlace(_ + _, r._2)),
               loss1.zip(loss2).map(r => r._1.elementWiseOperateInPlace(_ + _, r._2)))
           })
-      stochasticLossHistory.append(Vectors.dense(Matrices.horzCat(updaterCounter.map { i =>
+      stochasticLossHistory.append(Vectors.dense(Matrices.horzcat(updaterCounter.map { i =>
         lossSum(i).elementWiseOperateScalarInPlace(_ / _, miniBatchSize).
         elementWiseOperateOnRowsInPlace(_ + _, regVal(i))
       }).toArray))
@@ -241,7 +241,7 @@ object MultiModelGradientDescent extends Logging {
       regVal = update.map(_._2)
 
       if (i == orderedIters(iterIndexCounter)){
-        finalWeights = Matrices.horzCat(Seq(finalWeights) ++ weights)
+        finalWeights = Matrices.horzcat(Seq(finalWeights) ++ weights)
         iterIndexCounter += 1
       }
     }

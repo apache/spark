@@ -88,152 +88,126 @@ sealed trait Matrix extends Serializable {
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
+  /** Maps all the values in the matrix. Preserves shape. Generates a new matrix. */
   private[mllib] def map(f: Double => Double): Matrix
 
+  /** Updates all the values in the matrix. Preserves shape. In Place. */
   private[mllib] def update(f: Double => Double): Matrix
 
+  /** Applies an operator element-wise with another matrix on all the columns of the calling matrix.
+    * The number of rows of the calling matrix and `y` should be equal. Operation is in place. */
   private[mllib] def elementWiseOperateOnColumnsInPlace(f: (Double, Double) => Double,
                                                         y: Matrix): Matrix
 
+  /** Applies an operator element-wise with another matrix on all the rows of the calling matrix.
+    * The number of columns of the calling matrix and `y` should be equal. Operation is in place. */
   private[mllib] def elementWiseOperateOnRowsInPlace(f: (Double, Double) => Double,
                                                      y: Matrix): Matrix
 
+  /** Applies an operator element-wise with another matrix. The shape of the calling matrix and `y`
+    * should be equal. Operation is in place. */
   private[mllib] def elementWiseOperateInPlace(f: (Double, Double) => Double, y: Matrix): Matrix
 
+  /** Applies an operator element-wise with a scalar. Operation is in place. */
   private[mllib] def elementWiseOperateScalarInPlace(f: (Double, Double) => Double,
                                                      y: Double): Matrix
 
+  /** Applies an operator element-wise with another matrix. Operation is in place. */
   private[mllib] def operateInPlace(f: (Double, Double) => Double, y: Matrix): Matrix
 
+/** Applies an operator element-wise with another matrix on all the columns of the calling matrix.
+  * The number of rows of the calling matrix and `y` should be equal. Returns new matrix. */
   private[mllib] def elementWiseOperateOnColumns(f: (Double, Double) => Double, y: Matrix): Matrix
 
+  /** Applies an operator element-wise with another matrix on all the rows of the calling matrix.
+    * The number of columns of the calling matrix and `y` should be equal. Returns new matrix. */
   private[mllib] def elementWiseOperateOnRows(f: (Double, Double) => Double, y: Matrix): Matrix
 
+  /** Applies an operator element-wise with another matrix. The shape of the calling matrix and `y`
+    * should be equal. Returns new matrix. */
   private[mllib] def elementWiseOperate(f: (Double, Double) => Double, y: Matrix): Matrix
 
+  /** Applies an operator element-wise with a scalar. Returns new matrix. */
   private[mllib] def elementWiseOperateScalar(f: (Double, Double) => Double, y: Double): Matrix
 
+  /** Applies an operator element-wise with another matrix. Returns new matrix. */
   private[mllib] def operate(f: (Double, Double) => Double, y: Matrix): Matrix
 
+  /** Element-wise multiplication of the calling matrix with `Matrix` y. Operation is in place. */
   private[mllib] def *=(y: Matrix) = operateInPlace(_ * _, y)
 
+  /** Element-wise multiplication of the calling matrix with `Matrix` y. Returns new matrix. */
   private[mllib] def *(y: Matrix) = operate(_ * _, y)
 
+  /** Element-wise addition of the calling matrix with `Matrix` y. Operation is in place. */
   private[mllib] def +=(y: Matrix) = operateInPlace(_ + _, y)
 
+  /** Element-wise addition of the calling matrix with `Matrix` y. Returns new matrix. */
   private[mllib] def +(y: Matrix) = operate(_ + _, y)
 
+  /** Element-wise subtraction of `Matrix` y from the calling matrix. Operation is in place. */
   private[mllib] def -=(y: Matrix) = operateInPlace(_ - _, y)
 
+  /** Element-wise subtraction of `Matrix` y from the calling matrix. Returns new matrix. */
   private[mllib] def -(y: Matrix) = operate(_ - _, y)
 
+  /** Element-wise division of the calling matrix by `Matrix` y. Operation is in place. */
   private[mllib] def /=(y: Matrix) = operateInPlace(_ / _, y)
 
+  /** Element-wise division of the calling matrix by `Matrix` y. Returns new matrix. */
   private[mllib] def /(y: Matrix) = operate(_ / _, y)
 
+  /** Element-wise multiplication of the calling matrix with the scalar y. Operation is in place. */
   private[mllib] def *=(y: Double) = elementWiseOperateScalarInPlace(_ * _, y)
 
-  private[mllib] def +=(y: Double) = elementWiseOperateScalarInPlace(_ + _, y)
-
-  private[mllib] def -=(y: Double) = elementWiseOperateScalarInPlace(_ - _, y)
-
-  private[mllib] def /=(y: Double) = elementWiseOperateScalarInPlace(_ / _, y)
-
+  /** Element-wise multiplication of the calling matrix with the scalar y. Returns new matrix. */
   private[mllib] def *(y: Double) = elementWiseOperateScalar(_ * _, y)
 
+  /** Element-wise addition of the scalar y on the calling matrix. Operation is in place. */
+  private[mllib] def +=(y: Double) = elementWiseOperateScalarInPlace(_ + _, y)
+
+  /** Element-wise addition of the scalar y on the calling matrix. Returns new matrix. */
   private[mllib] def +(y: Double) = elementWiseOperateScalar(_ + _, y)
 
+  /** Element-wise subtraction of the scalar y from the calling matrix. Operation is in place. */
+  private[mllib] def -=(y: Double) = elementWiseOperateScalarInPlace(_ - _, y)
+
+  /** Element-wise subtraction of the scalar y from the calling matrix. Returns new matrix. */
   private[mllib] def -(y: Double) = elementWiseOperateScalar(_ - _, y)
 
+  /** Element-wise division of the calling matrix with the scalar y. Operation is in place. */
+  private[mllib] def /=(y: Double) = elementWiseOperateScalarInPlace(_ / _, y)
+
+  /** Element-wise division of the calling matrix with the scalar y. Returns new matrix. */
   private[mllib] def /(y: Double) = elementWiseOperateScalar(_ / _, y)
 
+  /** Multiply all elements with -1. Returns new matrix. */
   private[mllib] def neg: Matrix
 
+  /** Multiply all elements with -1 in place. */
   private[mllib] def negInPlace: Matrix
 
-  /** Less-than-or-equal-to check. Outputs binary `DenseMatrix` */
+  /** Compare elements in this matrix with `v`, such as less than or greater than. Outputs binary
+    * `DenseMatrix` */
   private[mllib] def compare(v: Double, f: (Double, Double) => Boolean): DenseMatrix
 
   /** Returns the p-th norm for each column */
-  private[mllib] def colNorms(p: Double): Matrix
+  private[mllib] def colNorms(p: Double): DenseMatrix
 
+  /** Sum the columns in this matrix. */
   private[mllib] def colSums: DenseMatrix = colSums(false)
 
-  private[mllib] def colSums(absolute: Boolean, skipRows: DenseMatrix = null): DenseMatrix = {
-    val sums = new DenseMatrix(1, numCols, Array.fill(numCols)(0.0))
-    var j = 0
-    this match {
-      case sparse: SparseMatrix =>
-        while (j < numCols){
-          var i = sparse.colPtrs(j)
-          val indEnd = sparse.colPtrs(j + 1)
-          while (i < indEnd){
-            var v = sparse.values(i)
-            if (absolute) v = math.abs(v)
-            sums.values(j) += v
-            i += 1
-          }
-          j += 1
-        }
-      case dense: DenseMatrix =>
-        while (j < numCols){
-          var i = 0
-          while (i < numRows){
-            if (skipRows == null) {
-              var v = dense.values(index(i, j))
-              if (absolute) v = math.abs(v)
-              sums.values(j) += v
-            } else {
-              if (skipRows(i) != 1.0) {
-                var v = dense.values(index(i, j))
-                if (absolute) v = math.abs(v)
-                sums.values(j) += v
-              }
-            }
+  /** Sum the columns in this matrix. Can specify rows to skip using a binary matrix and
+    * whether to take absolute values of elements. */
+  private[mllib] def colSums(absolute: Boolean, skipRows: DenseMatrix = null): DenseMatrix
 
-            i += 1
-          }
-          j += 1
-        }
-    }
-    sums
-  }
+  /** Sum the rows in this matrix. */
+  private[mllib] def rowSums: Vector = rowSums(false)
 
-  private[mllib] def rowSums: DenseMatrix = rowSums(false)
-
-  private[mllib] def rowSums(absolute: Boolean): DenseMatrix = {
-    val sums = new DenseMatrix(numRows, 1, Array.fill(numRows)(0.0))
-    var j = 0
-    this match {
-      case sparse: SparseMatrix =>
-        while (j < numCols){
-          var i = sparse.colPtrs(j)
-          val indEnd = sparse.colPtrs(j + 1)
-          while (i < indEnd){
-            var v = sparse.values(i)
-            if (absolute) v = math.abs(v)
-            sums.values(sparse.rowIndices(i)) += v
-            i += 1
-          }
-          j += 1
-        }
-      case dense: DenseMatrix =>
-        while (j < numCols){
-          var i = 0
-          while (i < numRows){
-            var v = dense.values(index(i, j))
-            if (absolute) v = math.abs(v)
-            sums.values(i) += v
-            i += 1
-          }
-          j += 1
-        }
-    }
-    sums
-  }
+  /** Sum the rows in this matrix. Can specify columns to skip using a binary matrix and
+    * whether to take absolute values of elements. */
+  private[mllib] def rowSums(absolute: Boolean, skipCols: DenseVector = null): Vector
 }
-
-
 
 /**
  * Column-majored dense matrix.
@@ -278,9 +252,9 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     val len = y_vals.length
     require(y_vals.length == numRows)
     var j = 0
-    while (j < numCols){
+    while (j < numCols) {
       var i = 0
-      while (i < len){
+      while (i < len) {
         val idx = index(i, j)
         values(idx) = f(values(idx), y_vals(i))
         i += 1
@@ -296,9 +270,9 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     val y_vals = y.toArray
     require(y_vals.length == numCols)
     var j = 0
-    while (j < numCols){
+    while (j < numCols) {
       var i = 0
-      while (i < numRows){
+      while (i < numRows) {
         val idx = index(i, j)
         values(idx) = f(values(idx), y_vals(j))
         i += 1
@@ -308,22 +282,26 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     this
   }
 
-  private[mllib] def elementWiseOperateInPlace(f: (Double, Double) => Double, y: Matrix): DenseMatrix =  {
+  private[mllib] def elementWiseOperateInPlace(
+      f: (Double, Double) => Double,
+      y: Matrix): DenseMatrix =  {
     val y_val = y.toArray
     val len = values.length
     require(y_val.length == values.length)
     var j = 0
-    while (j < len){
+    while (j < len) {
       values(j) = f(values(j), y_val(j))
       j += 1
     }
     this
   }
 
-  private[mllib] def elementWiseOperateScalarInPlace(f: (Double, Double) => Double, y: Double): DenseMatrix =  {
+  private[mllib] def elementWiseOperateScalarInPlace(
+      f: (Double, Double) => Double,
+      y: Double): DenseMatrix =  {
     var j = 0
     val len = values.length
-    while (j < len){
+    while (j < len) {
       values(j) = f(values(j), y)
       j += 1
     }
@@ -331,29 +309,33 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   }
 
   private[mllib] def operateInPlace(f: (Double, Double) => Double, y: Matrix): DenseMatrix = {
-    if (y.numCols==1 || y.numRows == 1){
+    if (y.numCols==1 || y.numRows == 1) {
       require(numCols != numRows, "Operation is ambiguous. Please use elementWiseOperateOnRows " +
         "or elementWiseOperateOnColumns instead")
     }
-    if (y.numCols == 1 && y.numRows == 1){
+    if (y.numCols == 1 && y.numRows == 1) {
       elementWiseOperateScalarInPlace(f, y.toArray(0))
     } else {
       if (y.numCols==1) {
         elementWiseOperateOnColumnsInPlace(f, y)
-      }else if (y.numRows==1){
+      } else if (y.numRows==1) {
         elementWiseOperateOnRowsInPlace(f, y)
-      }else{
+      } else{
         elementWiseOperateInPlace(f, y)
       }
     }
   }
 
-  private[mllib] def elementWiseOperateOnColumns(f: (Double, Double) => Double, y: Matrix): DenseMatrix = {
+  private[mllib] def elementWiseOperateOnColumns(
+      f: (Double, Double) => Double,
+      y: Matrix): DenseMatrix = {
     val dup = this.copy
     dup.elementWiseOperateOnColumnsInPlace(f, y)
   }
 
-  private[mllib] def elementWiseOperateOnRows(f: (Double, Double) => Double, y: Matrix): DenseMatrix = {
+  private[mllib] def elementWiseOperateOnRows(
+      f: (Double, Double) => Double,
+      y: Matrix): DenseMatrix = {
     val dup = this.copy
     dup.elementWiseOperateOnRowsInPlace(f, y)
   }
@@ -363,7 +345,9 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     dup.elementWiseOperateInPlace(f, y)
   }
 
-  private[mllib] def elementWiseOperateScalar(f: (Double, Double) => Double, y: Double): DenseMatrix =  {
+  private[mllib] def elementWiseOperateScalar(
+      f: (Double, Double) => Double,
+      y: Double): DenseMatrix =  {
     val dup = this.copy
     dup.elementWiseOperateScalarInPlace(f, y)
   }
@@ -385,31 +369,72 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     this
   }
 
-  def colNorms(p: Double): DenseMatrix = {
-    if (p==1.0) return colSums(true)
-    val sums = new DenseMatrix(1, numCols, Array.fill(numCols)(0.0))
+  private[mllib] def colSums(absolute: Boolean, skipRows: DenseMatrix = null): DenseMatrix = {
+    val sums = new DenseMatrix(1, numCols, new Array[Double](numCols))
     var j = 0
-    while (j < numCols){
+    while (j < numCols) {
       var i = 0
-      while (i < numRows){
-        val idx = index(i, j)
-        sums.update(0,j, sums(j) + math.pow(values(idx),p))
+      while (i < numRows) {
+        if (skipRows == null) {
+          var v = values(index(i, j))
+          if (absolute) v = math.abs(v)
+          sums.values(j) += v
+        } else {
+          if (skipRows(i) != 1.0) {
+            var v = values(index(i, j))
+            if (absolute) v = math.abs(v)
+            sums.values(j) += v
+          }
+        }
         i += 1
       }
       j += 1
     }
-    j = 0
-    while (j < numCols){
-      sums.update(0, j, math.pow(sums(j), 1/p))
+    sums
+  }
+
+  /** Sum the rows in this matrix. Can specify columns to skip using a binary matrix and
+    * whether to take absolute values of elements. */
+  private[mllib] def rowSums(absolute: Boolean, skipCols: DenseVector = null): DenseVector = {
+    val sums = new DenseVector(new Array[Double](numRows))
+    var j = 0
+    while (j < numCols) {
+      if (skipCols(j) != 0.0) {
+        var i = 0
+        while (i < numRows) {
+          var v = values(index(i, j))
+          if (absolute) v = math.abs(v)
+          sums.values(i) += v
+          i += 1
+        }
+      }
       j += 1
     }
+    sums
+  }
+
+  def colNorms(p: Double): DenseMatrix = {
+    if (p == 1.0) return colSums(true)
+    val sums = new DenseMatrix(1, numCols, new Array[Double](numCols))
+    var j = 0
+    while (j < numCols) {
+      var i = 0
+      while (i < numRows) {
+        val idx = index(i, j)
+        val power = if (p == 2.0) values(idx) * values(idx) else math.pow(values(idx), p)
+        sums.values(j) += power
+        i += 1
+      }
+      j += 1
+    }
+    if (p == 2.0) sums.update(math.sqrt) else sums.update(math.pow(_, 1 / p))
     sums
   }
 
   private[mllib] def negInPlace: DenseMatrix = {
     var j = 0
     val len = values.length
-    while (j < len){
+    while (j < len) {
       values(j) *= -1
       j += 1
     }
@@ -424,7 +449,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   private[mllib] def compareInPlace(v: Double, f: (Double, Double) => Boolean): DenseMatrix = {
     var j = 0
     val len = values.length
-    while (j < len){
+    while (j < len) {
       values(j) = if (f(values(j), v)) 1.0 else 0.0
       j += 1
     }
@@ -471,7 +496,7 @@ object DenseMatrix {
   def eye(n: Int): DenseMatrix = {
     val identity = DenseMatrix.zeros(n, n)
     var i = 0
-    while (i < n){
+    while (i < n) {
       identity.update(i, i, 1.0)
       i += 1
     }
@@ -582,7 +607,7 @@ class SparseMatrix(
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
-    if (ind == -1){
+    if (ind == -1) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
         "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
@@ -592,15 +617,19 @@ class SparseMatrix(
 
   override def copy = new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
 
-  private[mllib] def elementWiseOperateOnColumnsInPlace(f: (Double, Double) => Double, y: Matrix): Matrix = {
+  /** Note: If `f` is not a multiplication or division operation, the operation will not be in place
+    * and a `DenseMatrix` will be returned. */
+  private[mllib] def elementWiseOperateOnColumnsInPlace(
+      f: (Double, Double) => Double,
+      y: Matrix): Matrix = {
     if (isMultiplication(f) || isDivision(f)) {
       val y_vals = y.toArray
       require(y_vals.length == numRows)
       var j = 0
-      while (j < numCols){
+      while (j < numCols) {
         var i = colPtrs(j)
         val indEnd = colPtrs(j + 1)
-        while (i < indEnd){
+        while (i < indEnd) {
           values(i) = f(values(i), y_vals(rowIndices(i)))
           i += 1
         }
@@ -613,6 +642,8 @@ class SparseMatrix(
     }
   }
 
+  /** Note: If `f` is not a multiplication or division operation, the operation will not be in place
+    * and a `DenseMatrix` will be returned. */
   private[mllib] def elementWiseOperateOnRowsInPlace(
       f: (Double, Double) => Double,
       y: Matrix): Matrix = {
@@ -620,10 +651,10 @@ class SparseMatrix(
       val y_vals = y.toArray
       require(y_vals.length == numCols)
       var j = 0
-      while (j < numCols){
+      while (j < numCols) {
         var i = colPtrs(j)
         val indEnd = colPtrs(j + 1)
-        while (i < indEnd){
+        while (i < indEnd) {
           values(i) = f(values(i), y_vals(j))
           i += 1
         }
@@ -636,6 +667,8 @@ class SparseMatrix(
     }
   }
 
+  /** Note: If `f` is not a multiplication or division operation, the operation will not be in place
+    * and a `DenseMatrix` will be returned. */
   private[mllib] def elementWiseOperateInPlace(
       f: (Double, Double) => Double,
       y: Matrix): Matrix =  {
@@ -643,7 +676,7 @@ class SparseMatrix(
     require(y.numRows == numRows)
     if (isMultiplication(f) || isDivision(f)) {
       var j = 0
-      while (j < numCols){
+      while (j < numCols) {
         var i = colPtrs(j)
         val indEnd = colPtrs(j + 1)
         while (i < indEnd) {
@@ -659,13 +692,15 @@ class SparseMatrix(
     }
   }
 
+  /** Note: If `f` is not a multiplication or division operation, the operation will not be in place
+    * and a `DenseMatrix` will be returned. */
   private[mllib] def elementWiseOperateScalarInPlace(
       f: (Double, Double) => Double,
       y: Double): Matrix =  {
     if (isMultiplication(f) || isDivision(f)) {
       var j = 0
       val len = values.length
-      while (j < len){
+      while (j < len) {
         values(j) = f(values(j), y)
         j += 1
       }
@@ -690,6 +725,8 @@ class SparseMatrix(
     true
   }
 
+  /** Note: If `f` is not a multiplication or division operation, the operation will not be in place
+    * and a `DenseMatrix` will be returned. */
   private[mllib] def operateInPlace(f: (Double, Double) => Double, y: Matrix): Matrix = {
     if (y.numCols==1 || y.numRows == 1) {
       require(numCols != numRows, "Operation is ambiguous. Please use elementWiseMultiplyRows " +
@@ -700,9 +737,9 @@ class SparseMatrix(
     } else {
       if (y.numCols == 1) {
         elementWiseOperateOnColumnsInPlace(f, y)
-      }else if (y.numRows == 1){
+      } else if (y.numRows == 1) {
         elementWiseOperateOnRowsInPlace(f, y)
-      }else{
+      } else{
         elementWiseOperateInPlace(f, y)
       }
     }
@@ -711,28 +748,37 @@ class SparseMatrix(
   private[mllib] def elementWiseOperateOnColumns(
       f: (Double, Double) => Double,
       y: Matrix): Matrix = {
-    val dup = y match {
-      case sy: SparseMatrix => this.copy
-      case dy: DenseMatrix => this.toDense
+    if (isMultiplication(f) || isDivision(f)) {
+      val dup = this.copy
+      dup.elementWiseOperateOnColumnsInPlace(f, y)
+    } else {
+      val dup = this.toDense
+      dup.elementWiseOperateOnColumnsInPlace(f, y)
     }
-    dup.elementWiseOperateOnColumnsInPlace(f, y)
   }
+
   private[mllib] def elementWiseOperateOnRows(
       f: (Double, Double) => Double,
       y: Matrix): Matrix = {
-    val dup = y match {
-      case sy: SparseMatrix => this.copy
-      case dy: DenseMatrix => this.toDense
+    if (isMultiplication(f) || isDivision(f)) {
+      val dup = this.copy
+      dup.elementWiseOperateOnRowsInPlace(f, y)
+    } else {
+      val dup = this.toDense
+      dup.elementWiseOperateOnRowsInPlace(f, y)
     }
-    dup.elementWiseOperateOnRowsInPlace(f, y)
   }
+
   private[mllib] def elementWiseOperate(f: (Double, Double) => Double, y: Matrix): Matrix =  {
-    val dup = y match {
-      case sy: SparseMatrix => this.copy
-      case dy: DenseMatrix => this.toDense
+    if (isMultiplication(f) || isDivision(f)) {
+      val dup = this.copy
+      dup.elementWiseOperateInPlace(f, y)
+    } else {
+      val dup = this.toDense
+      dup.elementWiseOperateInPlace(f, y)
     }
-    dup.elementWiseOperateInPlace(f, y)
   }
+
   private[mllib] def elementWiseOperateScalar(f: (Double, Double) => Double, y: Double): Matrix =  {
     if (isMultiplication(f) || isDivision(f)) {
       val dup = this.copy
@@ -744,14 +790,16 @@ class SparseMatrix(
   }
 
   private[mllib] def operate(f: (Double, Double) => Double, y: Matrix): Matrix = {
-    val dup = y match {
-      case sy: SparseMatrix => this.copy
-      case dy: DenseMatrix => this.toDense
+    if (isMultiplication(f) || isDivision(f)) {
+      val dup = this.copy
+      dup.operateInPlace(f, y)
+    } else {
+      val dup = this.toDense
+      dup.operateInPlace(f, y)
     }
-    dup.operateInPlace(f, y)
   }
 
-  def map(f: Double => Double) =
+  def map(f: Double => Double): SparseMatrix =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))
 
   def update(f: Double => Double): SparseMatrix = {
@@ -764,27 +812,82 @@ class SparseMatrix(
     this
   }
 
-  def colNorms(p: Double): DenseMatrix = {
-    if (p==1.0) return colSums(true)
-    val sums = new DenseMatrix(1, numCols, Array.fill(numCols)(0.0))
+  private[mllib] def colSums(absolute: Boolean, skipRows: DenseMatrix = null): DenseMatrix = {
+    val sums = new DenseMatrix(1, numCols, new Array[Double](numCols))
     var j = 0
-    while (j < numCols){
+    if (skipRows == null) {
+      while (j < numCols) {
+        var i = colPtrs(j)
+        val indEnd = colPtrs(j + 1)
+        while (i < indEnd) {
+          var v = values(i)
+          if (absolute) v = math.abs(v)
+          sums.values(j) += v
+          i += 1
+        }
+        j += 1
+      }
+    } else {
+      while (j < numCols) {
+        var i = colPtrs(j)
+        val indEnd = colPtrs(j + 1)
+        while (i < indEnd) {
+          if (skipRows(rowIndices(i)) != 0) {
+            var v = values(i)
+            if (absolute) v = math.abs(v)
+            sums.values(j) += v
+          }
+          i += 1
+        }
+        j += 1
+      }
+    }
+    sums
+  }
+
+  /** Sum the rows in this matrix. Can specify columns to skip using a binary matrix and
+    * whether to take absolute values of elements. */
+  private[mllib] def rowSums(absolute: Boolean, skipCols: DenseVector = null): DenseVector = {
+    val sums = new DenseVector(new Array[Double](numRows))
+    var j = 0
+    while (j < numCols) {
+      if (skipCols(j) != 0.0) {
+        var i = colPtrs(j)
+        val indEnd = colPtrs(j + 1)
+        while (i < indEnd) {
+          var v = values(i)
+          if (absolute) v = math.abs(v)
+          sums.values(rowIndices(i)) += v
+          i += 1
+        }
+      }
+      j += 1
+    }
+    sums
+  }
+
+  def colNorms(p: Double): DenseMatrix = {
+    if (p == 1.0) return colSums(true)
+    val sums = new DenseMatrix(1, numCols, new Array[Double](numCols))
+    var j = 0
+    while (j < numCols) {
       var i = colPtrs(j)
       val indEnd = colPtrs(j + 1)
-      while (i < indEnd){
-        sums.values(j) += math.pow(values(i),p)
+      while (i < indEnd) {
+        val power = if (p == 2.0) values(i) * values(i) else math.pow(values(i), p)
+        sums.values(j) += power
         i += 1
       }
       j += 1
     }
-    sums.update(math.pow(_, 1/p))
+    if (p == 2.0) sums.update(math.sqrt) else sums.update(math.pow(_, 1 / p))
     sums
   }
 
   private[mllib] def negInPlace: SparseMatrix = {
     var j = 0
     val len = values.length
-    while (j < len){
+    while (j < len) {
       values(j) *= -1
       j += 1
     }
@@ -801,6 +904,7 @@ class SparseMatrix(
     copy.compareInPlace(v, f)
   }
 
+  /** Generate a dense copy of this matrix */
   def toDense: DenseMatrix = new DenseMatrix(numRows, numCols, this.toArray)
 }
 
@@ -815,7 +919,19 @@ object SparseMatrix {
     new SparseMatrix(n, n, (0 to n).toArray, (0 until n).toArray, Array.fill(n)(1.0))
   }
 
-  private def genRand(numRows: Int, numCols: Int, raw: Array[Double], nonZero: Int): SparseMatrix = {
+  /**
+   * Given the values of a column majored `DenseMatrix`, output the sparse version
+   * @param numRows number of rows of the matrix
+   * @param numCols number of columns of the matrix
+   * @param raw the values of the `DenseMatrix`
+   * @param nonZero number of non-zero elements in `raw`
+   * @return the sparsified version of the dense matrix
+   */
+  private def sparsifyFromDenseArray(
+      numRows: Int,
+      numCols: Int,
+      raw: Array[Double],
+      nonZero: Int): SparseMatrix = {
     val sparseA: ArrayBuffer[Double] = new ArrayBuffer(nonZero)
 
     val sCols: ArrayBuffer[Int] = new ArrayBuffer(numCols + 1)
@@ -831,7 +947,7 @@ object SparseMatrix {
       if ( v != 0.0) {
         sRows.append(r)
         sparseA.append(v)
-        while (c != lastCol){
+        while (c != lastCol) {
           sCols.append(nnz)
           lastCol += 1
         }
@@ -870,7 +986,7 @@ object SparseMatrix {
         nnz += 1
       }
     }
-    genRand(numRows, numCols, rawA, nnz)
+    sparsifyFromDenseArray(numRows, numCols, rawA, nnz)
   }
 
   /**
@@ -886,7 +1002,6 @@ object SparseMatrix {
       numCols: Int,
       density: Double,
       seed: Long = Utils.random.nextLong()): SparseMatrix = {
-
     require(density > 0.0 && density < 1.0, "density must be a double in the range " +
       s"0.0 < d < 1.0. Currently, density: $density")
     val rand = new XORShiftRandom(seed)
@@ -900,11 +1015,11 @@ object SparseMatrix {
         nnz += 1
       }
     }
-    genRand(numRows, numCols, rawA, nnz)
+    sparsifyFromDenseArray(numRows, numCols, rawA, nnz)
   }
 
   /**
-   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
+   * Generate a diagonal matrix in `SparseMatrix` format from the supplied values.
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero `values`
    *         on the diagonal
@@ -1100,7 +1215,7 @@ object Matrices {
    * @param matrices sequence of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
-  private[mllib] def horzCat(matrices: Seq[Matrix]): Matrix = {
+  private[mllib] def horzcat(matrices: Seq[Matrix]): Matrix = {
     if (matrices.size == 1) {
       return matrices(0)
     }
@@ -1134,31 +1249,43 @@ object Matrices {
     } else if (!isSparse && !isDense) {
       throw new IllegalArgumentException("The supplied matrices are neither in SparseMatrix or" +
         " DenseMatrix format!")
-    }else {
+    } else {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray).toArray)
     }
   }
-  // partitionMetaData correspond to the index of the partition and the max number of non-zeros
-  // in that partition so that we can preallocate a memory efficient buffer
+
+  /**
+   * Batches LabeledPoint examples into matrices so that efficient matrix multiplication methods
+   * can be used to speed up gradient calculation and weight updates in optimization methods such as
+   * Gradient Descent and L-BFGS.
+   * @param rows RDD of labels (Double) and feature vectors (Vector)
+   * @param partitionMetaData Map of a partition to the max number of non-zeros in that partition
+   *                          so that we can preallocate a memory efficient buffer
+   * @param batchSize the number of examples to be batched together
+   * @param buildSparseThreshold the density threshold of a matrix where either a `SparseMatrix` or
+   *                             a `DenseMatrix` is constructed
+   * @param generateOnTheFly whether to allocate a memory buffer so that matrices can be generated
+   *                         on the fly or to compute a cacheable RDD.
+   * @return an RDD of the batched labels (`DenseMatrix`) and the feature vectors (`Matrix`)
+   */
   private[mllib] def fromRDD(
       rows: RDD[(Double, Vector)],
-      partitionMetaData: Array[(Int, Int)],
+      partitionMetaData: Map[Int, Int],
       batchSize : Int,
       buildSparseThreshold: Double,
       generateOnTheFly: Boolean = true): RDD[(DenseMatrix, Matrix)] = {
 
-    if (!generateOnTheFly){
+    if (!generateOnTheFly) {
       rows.mapPartitions { iter =>
         iter.grouped(batchSize)
       }.map(fromSeq(_, batchSize))
-    }else {
+    } else {
       val numFeatures = rows.first()._2.size
 
       rows.mapPartitionsWithIndex{ case (ind, iter) =>
-        val findPartition = partitionMetaData.find(_._1 == ind)
+        val nnz = partitionMetaData(ind)
         val matrixBuffer =
-          if (findPartition.get._2 != -1) {
-            val nnz = findPartition.get._2
+          if (nnz != -1) {
             val density = nnz * 1.0 / (numFeatures * batchSize)
             if (density <= buildSparseThreshold) {
               (DenseMatrix.zeros(batchSize, 1), new SparseMatrix(numFeatures, batchSize,
@@ -1174,11 +1301,17 @@ object Matrices {
     }
   }
 
-  // Collects data on the maximum number of non-zero elements in a partition for each
-  // batch of matrices
+  /**
+   * Collects data on the maximum number of non-zero elements in a partition for each batch of
+   * matrices
+   * @param rows RDD of labels (Double) and feature vectors (Vector)
+   * @param batchSize the number of examples to be batched together
+   * @return a mapping of partitions to the maximum number of non-zero elements observed in that
+   *         partition
+   */
   private[mllib] def getSparsityData(
       rows: RDD[(Double, Vector)],
-      batchSize : Int = 64): Array[(Int, Int)] = {
+      batchSize : Int = 64): Map[Int, Int] = {
     val numFeatures = rows.first()._2.size
 
     val partitionMetaData = rows.mapPartitionsWithIndex { case (ind, iter) =>
@@ -1196,9 +1329,16 @@ object Matrices {
 
       Iterator((ind, partitionMaxNNZ))
     }
-    partitionMetaData.collect()
+    partitionMetaData.collect().toMap
   }
 
+  /**
+   * Constructs matrices from a batch of examples. Allocates memory for each batch, therefore the
+   * resulting RDD will be cacheable.
+   * @param rows Sequence of labels (Double) and feature vectors (Vector)
+   * @param batchSize the number of examples to be batched together
+   * @return a tuple of the batched labels (`DenseMatrix`) and the feature vectors (`Matrix`)
+   */
   private def fromSeq(rows: Seq[(Double, Vector)], batchSize: Int) : (DenseMatrix, Matrix) = {
     val numExamples = rows.length
     val numFeatures = rows(0)._2.size
@@ -1209,6 +1349,13 @@ object Matrices {
     (matrixBuffer, labelBuffer)
   }
 
+  /**
+   * Constructs matrices from a batch of examples into a pre-allocated buffer. The RDD generated
+   * using this method is not cacheable. Used for on-the-fly matrix generation.
+   * @param rows Sequence of labels (Double) and feature vectors (Vector)
+   * @param batchSize the number of examples to be batched together
+   * @return a tuple of the batched labels (`DenseMatrix`) and the feature vectors (`Matrix`)
+   */
   private def fromSeqIntoBuffer(
       rows: Seq[(Double, Vector)],
       buffer: (DenseMatrix, Matrix),
@@ -1220,6 +1367,17 @@ object Matrices {
     (metadata, buffer)
   }
 
+  /**
+   * Unrolls a sequence of label, feature vector pairs into matrices. For speed, the transpose of
+   * the feature vectors is generated.
+   * @param vals Sequence of labels (Double) and feature vectors (Vector)
+   * @param matrixInto The `Matrix` to unroll the feature vectors into
+   * @param labelsInto The `DenseMatrix` to unroll the labels into
+   * @param batchSize The number of examples that were supposed to be batched. Usually will equal
+   *                  the size of `vals`, except maybe for the last group of examples. Required to
+   *                  clear previous data.
+   * @return The number of non-zeros in this batch of feature vectors
+   */
   private def flattenMatrix(
       vals: Seq[(Double, Vector)],
       matrixInto: Matrix,
@@ -1259,11 +1417,12 @@ object Matrices {
           }
           i += 1
         }
+        // Make sure that existing values already in further down the array won't be used.
         while (i < batchSize) {
           intoSparse.colPtrs(i) = nnz
           i += 1
         }
-      case intoDense: DenseMatrix =>
+      case intoDense: DenseMatrix => // Have to loop over all values to clear existing ones
         for (r <- vals) {
           labelsInto.values(i) = r._1
           val startIndex = numFeatures * i

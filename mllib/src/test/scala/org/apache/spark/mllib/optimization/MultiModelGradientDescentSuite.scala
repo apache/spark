@@ -197,7 +197,7 @@ class MultiModelGradientDescentSuite extends FunSuite with LocalSparkContext wit
       (weightsGD2, loss)
     }
 
-    val res2 = Matrices.horzCat(forLoop.map(v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
+    val res2 = Matrices.horzcat(forLoop.map(v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
       forLoop2.map(v => new DenseMatrix(v._1.size, 1, v._1.toArray)))
 
     val (weightsMMGD, mmLoss) = MultiModelGradientDescent.runMiniBatchMMSGD(
@@ -253,7 +253,7 @@ class MultiModelGradientDescentSuite extends FunSuite with LocalSparkContext wit
       (weightsGD, loss)
     }
 
-    val res = Matrices.horzCat(forLoop.map(v => new DenseMatrix(v._1.size, 1, v._1.toArray)))
+    val res = Matrices.horzcat(forLoop.map(v => new DenseMatrix(v._1.size, 1, v._1.toArray)))
 
     val (weightsMMGD, mmLoss) = MultiModelGradientDescent.runMiniBatchMMSGD(
       sparseRDD,
@@ -319,7 +319,7 @@ class MultiModelGradientDescentSuite extends FunSuite with LocalSparkContext wit
         Vectors.dense(initialWeights.clone()))
       (weightsGD2, loss)
     }
-    val res = Matrices.horzCat(forLoop.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
+    val res = Matrices.horzcat(forLoop.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
       forLoop2.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)))
 
     val (weightsMMGD, mmLoss) = MultiModelGradientDescent.runMiniBatchMMSGD(
@@ -396,7 +396,7 @@ class MultiModelGradientDescentSuite extends FunSuite with LocalSparkContext wit
       (weightsGD2, loss)
     }
 
-    val res = Matrices.horzCat(forLoop1.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
+    val res = Matrices.horzcat(forLoop1.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)) ++
       forLoop2.map( v => new DenseMatrix(v._1.size, 1, v._1.toArray)))
 
     val (weightsMMGD, mmLoss) = MultiModelGradientDescent.runMiniBatchMMSGD(

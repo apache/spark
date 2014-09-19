@@ -326,10 +326,12 @@ object BLAS extends Serializable with Logging {
     val Arows = if (!transA) A.rowIndices else A.colPtrs
     val Acols = if (!transA) A.colPtrs else A.rowIndices
 
-    // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (transA){
+    if (transA) {
+      // Naive matrix multiplication by using only non-zeros in A. This is the optimal
+      // multiplication setting for sparse matrices.
       var colCounterForB = 0
       if (!transB) { // Expensive to put the check inside the loop
+        // Loop through columns of B as you multiply each column with the rows of A
         while (colCounterForB < nB) {
           var rowCounterForA = 0
           val Cstart = colCounterForB * mA
@@ -349,6 +351,8 @@ object BLAS extends Serializable with Logging {
           colCounterForB += 1
         }
       } else {
+        // Loop through columns of B as you multiply each column with the rows of A. Not as
+        // efficient as you have to jump through the values of B, because B is column major.
         while (colCounterForB < nB) {
           var rowCounter = 0
           val Cstart = colCounterForB * mA
@@ -368,12 +372,12 @@ object BLAS extends Serializable with Logging {
         }
       }
     } else {
-      // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
+      // B, and added to C. Each value of C gets updated multiple times therefore scale C first.
+      if (beta != 0.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
-      // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
-      // B, and added to C.
+
       var colCounterForB = 0 // the column to be updated in C
       if (!transB) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
@@ -384,7 +388,7 @@ object BLAS extends Serializable with Logging {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = B.values(Bstart + colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               C.values(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -396,11 +400,11 @@ object BLAS extends Serializable with Logging {
         while (colCounterForB < nB) {
           var colCounterForA = 0 // The column of A to multiply with the row of B
           val Cstart = colCounterForB * mA
-          while (colCounterForA < kA){
+          while (colCounterForA < kA) {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = B(colCounterForB, colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               C.values(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -438,9 +442,11 @@ object BLAS extends Serializable with Logging {
     val Brows = if (!transB) B.rowIndices else B.colPtrs
     val Bcols = if (!transB) B.colPtrs else B.rowIndices
 
-    if (transA){
+    if (transA) {
+      // Easy to loop over rows of A, since A was column major and we are using its transpose
       var colCounterForB = 0
-      if (!transB){ // Expensive to put the check inside the loop
+      if (!transB) { // Expensive to put the check inside the loop
+        // Naive matrix multiplication using only non-zero elements in B
         while (colCounterForB < nB) {
           var rowCounterForA = 0
           val Cstart = colCounterForB * mA
@@ -460,6 +466,11 @@ object BLAS extends Serializable with Logging {
           colCounterForB += 1
         }
       } else {
+        // Scale matrix first if `beta` is not equal to 0.0 as we update values of C multiple times.
+        if (beta != 0.0) {
+          nativeBLAS.dscal(C.values.length, beta, C.values, 1)
+        }
+        // Loop over values of A as you pick the non-zero values in B and add it to C.
         var rowCounterForA = 0
         while (rowCounterForA < mA) {
           var colCounterForA = 0
@@ -467,7 +478,7 @@ object BLAS extends Serializable with Logging {
           while (colCounterForA < kA) {
             var i = Brows(colCounterForA)
             val indEnd = Brows(colCounterForA + 1)
-            while (i < indEnd){
+            while (i < indEnd) {
               val Cindex = Bcols(i) * mA + rowCounterForA
               C.values(Cindex) += A.values(Astart + colCounterForA) * Bvals(i) * alpha
               i += 1
@@ -479,11 +490,10 @@ object BLAS extends Serializable with Logging {
       }
     } else {
       // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      if (beta != 0.0) {
         nativeBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       if (!transB) { // Expensive to put the check inside the loop
-
         // Loop over the columns of B, pick non-zero row in B, select corresponding column in A,
         // and update the whole column in C by looping over rows in A.
         var colCounterForB = 0 // the column to be updated in C
@@ -495,7 +505,7 @@ object BLAS extends Serializable with Logging {
             val Bval = Bvals(i)
             val Cstart = colCounterForB * mA
             val Astart = mA * Brows(i)
-            while (rowCounterForA < mA){
+            while (rowCounterForA < mA) {
               C.values(Cstart + rowCounterForA) += A.values(Astart + rowCounterForA) * Bval * alpha
               rowCounterForA += 1
             }
@@ -504,6 +514,7 @@ object BLAS extends Serializable with Logging {
           colCounterForB += 1
         }
       } else {
+        // Multiply columns of A with the rows of B and add to C.
         var colCounterForA = 0
         while (colCounterForA < kA) {
           var rowCounterForA = 0
@@ -511,7 +522,7 @@ object BLAS extends Serializable with Logging {
           val indEnd = Brows(colCounterForA + 1)
           while (rowCounterForA < mA) {
             var i = Brows(colCounterForA)
-            while (i < indEnd){
+            while (i < indEnd) {
               val Cindex = Bcols(i) * mA + rowCounterForA
               C.values(Cindex) += A.values(Astart + rowCounterForA) * Bvals(i) * alpha
               i += 1
@@ -615,14 +626,14 @@ object BLAS extends Serializable with Logging {
     val Arows = if (!trans) A.rowIndices else A.colPtrs
     val Acols = if (!trans) A.colPtrs else A.rowIndices
 
-    // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (trans){
+    if (trans) {
+      // Since A is column majored, the transpose allows easy access to the column indices in A'.
       var rowCounter = 0
-      while (rowCounter < mA){
+      while (rowCounter < mA) {
         var i = Arows(rowCounter)
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
-        while(i < indEnd){
+        while(i < indEnd) {
           sum += Avals(i) * x.values(Acols(i))
           i += 1
         }
@@ -630,17 +641,17 @@ object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      // Scale vector first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      // Scale vector first if `beta` is not equal to 0.0 as values in y are updated multiple times
+      if (beta != 0.0) {
         scal(beta, y)
       }
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
-      while (colCounterForA < nA){
+      while (colCounterForA < nA) {
         var i = Acols(colCounterForA)
         val indEnd = Acols(colCounterForA + 1)
         val xVal = x.values(colCounterForA) * alpha
-        while (i < indEnd){
+        while (i < indEnd) {
           val rowIndex = Arows(i)
           y.values(rowIndex) += Avals(i) * xVal
           i += 1
