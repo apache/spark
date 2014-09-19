@@ -75,3 +75,8 @@ case class DescribeCommand(
     AttributeReference("data_type", StringType, nullable = false)(),
     AttributeReference("comment", StringType, nullable = false)())
 }
+
+/**
+ * Returned for the "CACHE TABLE tableName AS SELECT .." command.
+ */
+case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan) extends Command
