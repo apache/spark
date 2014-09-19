@@ -127,6 +127,8 @@ echo "========================================================================="
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
   #+ to quit or retry. This echo is there to make it not block.
+  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a 
+  #+ single argument!
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   echo -e "q\n" \
@@ -159,10 +161,13 @@ echo "========================================================================="
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
   #+ to quit or retry. This echo is there to make it not block.
+  # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a 
+  #+ single argument!
+  #+ "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   echo -e "q\n" \
-    | sbt/sbt "$SBT_MAVEN_PROFILES_ARGS" "${SBT_MAVEN_TEST_ARGS[@]}" \
+    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
