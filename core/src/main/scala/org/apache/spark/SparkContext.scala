@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.language.implicitConversions
-
 import java.io._
 import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
@@ -37,7 +36,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 import akka.actor.Props
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -51,6 +49,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import org.apache.spark.executor.TaskMetrics
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -306,9 +305,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
-  if (taskScheduler != null) {
-    taskScheduler.start()
-  }
+  taskScheduler.start()
 
   val applicationId: String = taskScheduler.applicationId()
   conf.set("spark.app.id", applicationId)
@@ -433,9 +430,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   // Post init
-  if (taskScheduler != null){
-    taskScheduler.postStartHook()
-  }
+  taskScheduler.postStartHook()
 
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
@@ -1282,7 +1277,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
+    listenerBus.post(SparkListenerApplicationStart(appName, taskScheduler.applicationId(),
       startTime, sparkUser))
   }
 
@@ -1293,15 +1288,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
-    if (taskScheduler != null) {
-      val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
-      val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails =
-        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
-      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
-      listenerBus.post(environmentUpdate)
-    }
+    val schedulingMode = getSchedulingMode.toString
+    val addedJarPaths = addedJars.keys.toSeq
+    val addedFilePaths = addedFiles.keys.toSeq
+    val environmentDetails =
+      SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+    val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
+    listenerBus.post(environmentUpdate)
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
@@ -1628,13 +1621,30 @@ object SparkContext extends Logging {
         logInfo("Will use custom job execution context " + sparkUrl)
         sc.executionContext = Class.forName(sparkUrl).newInstance().
             asInstanceOf[JobExecutionContext]
-        null
+        new NoOpTaskScheduler
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
 }
-
+/**
+ * No-op implementation of TaskScheduler which is used in cases where 
+ * execution of Spark DAG is delegate to an external execution environment,
+ * thus not relying on DAGScheduler nor TaskScheduler
+ */
+private class NoOpTaskScheduler extends TaskScheduler {
+  def rootPool: Pool = throw new UnsupportedOperationException("This method must never " +
+                "be called in the context of this TaskScheduler")
+  def schedulingMode: SchedulingMode.SchedulingMode = SchedulingMode.NONE
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def submitTasks(taskSet: TaskSet): Unit = {}
+  def cancelTasks(stageId: Int, interruptThread: Boolean) = {}
+  def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
+  def defaultParallelism(): Int = 1
+  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+    blockManagerId: BlockManagerId): Boolean = true
+}
 /**
  * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
  * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.

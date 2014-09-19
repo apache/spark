@@ -31,7 +31,8 @@ import org.apache.spark.annotation.DeveloperApi
  * Primarily used to facilitate the use of native features of Hadoop related to large scale
  * batch and ETL jobs.
  *
- * To enable it specify your implementation via master URL (e.g., "execution-context:foo.bar.MyImplementation").
+ * To enable it specify your implementation via master URL 
+ * (e.g., "execution-context:foo.bar.MyImplementation").
  * 
  * Implementation must provide default no-arg constructor
  */
