@@ -686,8 +686,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val broadcastHashJoin = query.collect { case join: BroadcastHashJoin => join }
     val shuffledHashJoin = query.collect { case join: ShuffledHashJoin => join }
 
-    println(query)
-
     assert(shuffledHashJoin.isEmpty, "Should not use shuffled hash join")
     assert(broadcastHashJoin.nonEmpty, "Should use broadcast hash join")
   }
