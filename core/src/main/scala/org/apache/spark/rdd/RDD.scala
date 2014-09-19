@@ -220,9 +220,7 @@ abstract class RDD[T: ClassTag](
    *
    * @return The number of partitions in this RDD
    */
-  def getNumPartitions: Int = {
-    partitions.size
-  }
+  def getNumPartitions: Int = partitions.size
 
   /**
    * Get the preferred locations of a partition (as hostnames), taking into account whether the
