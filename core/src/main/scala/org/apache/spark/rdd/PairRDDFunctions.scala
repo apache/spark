@@ -873,7 +873,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
 
-    // Useful on EMR where direct output committer is set by default
+    // Use configured output committer if already set
     if (conf.getOutputCommitter == null) {
       hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
     }

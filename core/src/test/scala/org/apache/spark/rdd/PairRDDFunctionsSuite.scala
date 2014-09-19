@@ -484,11 +484,13 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("saveAsHadoopFile should respect configured output committers") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
-    val conf = new JobConf(sc.hadoopConfiguration)
+    val conf = new JobConf()
     conf.setOutputCommitter(classOf[FakeOutputCommitter])
+
+    FakeOutputCommitter.ran = false
     pairs.saveAsHadoopFile("ignored", pairs.keyClass, pairs.valueClass, classOf[FakeOutputFormat], conf)
-    val ran = sys.props.remove("mapred.committer.ran")
-    assert(ran.isDefined, "OutputCommitter was never called")
+
+    assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
   test("lookup") {
@@ -652,11 +654,18 @@ class FakeOutputCommitter() extends OutputCommitter() {
   override def setupTask(taskContext: TaskAttemptContext): Unit = ()
 
   override def commitTask(taskContext: TaskAttemptContext): Unit = {
-    sys.props("mapred.committer.ran") = "true"
+    FakeOutputCommitter.ran = true
     ()
   }
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = ()
+}
+
+/*
+ * Used to communicate state between the test harness and the OutputCommitter.
+ */
+object FakeOutputCommitter {
+  var ran = false
 }
 
 class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
