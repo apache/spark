@@ -24,6 +24,9 @@ cd "$FWDIR"
 # Remove work directory
 rm -rf ./work
 
+# Remove this!
+AMPLAB_JENKINS_BUILD_PROFILE="hadoop1.0"
+
 # Build against the right verison of Hadoop.
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
