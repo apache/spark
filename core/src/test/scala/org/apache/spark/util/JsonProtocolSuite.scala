@@ -804,7 +804,6 @@ class JsonProtocolSuite extends FunSuite {
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Read Metrics": {
-      |      "Shuffle Finish Time": 900,
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
