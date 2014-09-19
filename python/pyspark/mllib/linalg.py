@@ -173,7 +173,7 @@ class SparseVector(object):
             arr[self.indices[i]] = self.values[i]
         return arr
 
-    def __str__(self):
+    def __repr__(self):
         inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
         vals = "[" + ",".join([str(v) for v in self.values]) + "]"
         return "(" + ",".join((str(self.size), inds, vals)) + ")"

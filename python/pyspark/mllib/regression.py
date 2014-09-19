@@ -46,7 +46,7 @@ class LabeledPoint(object):
         else:
             raise TypeError("Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
 
-    def __str__(self):
+    def __repr__(self):
         return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
 
 
@@ -65,6 +65,9 @@ class LinearModel(object):
     @property
     def intercept(self):
         return self._intercept
+
+    def __repr__(self):
+        return "(weights=%s, intercept=%s)" % (Vectors.stringify(self._coeff), self._intercept)
 
 
 class LinearRegressionModelBase(LinearModel):
