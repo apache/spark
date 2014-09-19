@@ -33,6 +33,14 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.2") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx")
+          ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector")
+
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

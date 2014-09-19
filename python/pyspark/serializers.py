@@ -110,6 +110,9 @@ class Serializer(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __repr__(self):
+        return "<%s object>" % self.__class__.__name__
+
 
 class FramedSerializer(Serializer):
 
@@ -144,6 +147,8 @@ class FramedSerializer(Serializer):
 
     def _read_with_length(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
         obj = stream.read(length)
         if obj == "":
             raise EOFError
@@ -355,7 +360,8 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return cPickle.dumps(obj, 2)
 
-    loads = cPickle.loads
+    def loads(self, obj):
+        return cPickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -374,8 +380,11 @@ class MarshalSerializer(FramedSerializer):
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
 
-    dumps = marshal.dumps
-    loads = marshal.loads
+    def dumps(self, obj):
+        return marshal.dumps(obj)
+
+    def loads(self, obj):
+        return marshal.loads(obj)
 
 
 class AutoSerializer(FramedSerializer):
@@ -429,18 +438,24 @@ class UTF8Deserializer(Serializer):
     Deserializes streams written by String.getBytes.
     """
 
+    def __init__(self, use_unicode=False):
+        self.use_unicode = use_unicode
+
     def loads(self, stream):
         length = read_int(stream)
-        return stream.read(length).decode('utf8')
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
+        s = stream.read(length)
+        return s.decode("utf-8") if self.use_unicode else s
 
     def load_stream(self, stream):
-        while True:
-            try:
+        try:
+            while True:
                 yield self.loads(stream)
-            except struct.error:
-                return
-            except EOFError:
-                return
+        except struct.error:
+            return
+        except EOFError:
+            return
 
 
 def read_long(stream):

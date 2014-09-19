@@ -26,13 +26,11 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-
 import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
-import org.scalatest.time.SpanSugar._
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
-import org.apache.spark.streaming.util.ManualClock
+import org.scalatest.time.SpanSugar._
 
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
 

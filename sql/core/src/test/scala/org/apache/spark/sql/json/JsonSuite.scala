@@ -581,4 +581,62 @@ class JsonSuite extends QueryTest {
       "this is a simple string.") :: Nil
     )
   }
+
+  test("SPARK-2096 Correctly parse dot notations") {
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
+      (true, "str1") :: Nil
+    )
+    checkAnswer(
+      sql(
+        """
+          |select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1]
+          |from jsonTable
+        """.stripMargin),
+      ("str2", 6) :: Nil
+    )
+  }
+
+  test("SPARK-3390 Complex arrays") {
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql(
+        """
+          |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
+          |from jsonTable
+        """.stripMargin),
+      (5, 7, 8) :: Nil
+    )
+    checkAnswer(
+      sql(
+        """
+          |select arrayOfArray2[0][0][0].inner1, arrayOfArray2[1][0],
+          |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
+          |from jsonTable
+        """.stripMargin),
+      ("str1", Nil, "str4", 2) :: Nil
+    )
+  }
+
+  test("SPARK-3308 Read top level JSON arrays") {
+    val jsonSchemaRDD = jsonRDD(jsonArray)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql(
+        """
+          |select a, b, c
+          |from jsonTable
+        """.stripMargin),
+      ("str_a_1", null, null) ::
+      ("str_a_2", null, null) ::
+      (null, "str_b_3", null) ::
+      ("str_a_4", "str_b_4", "str_c_4") ::Nil
+    )
+  }
 }
