@@ -484,7 +484,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     val c4 = 'a.double.at(3)
 
     checkEvaluation(UnaryMinus(c1), -1.1, row)
-    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0))
+    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0)
     checkEvaluation(Add(c1, c4), null, row)
     checkEvaluation(Add(c1, c2), 3.1, row)
     checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
