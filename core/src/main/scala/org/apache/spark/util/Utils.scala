@@ -906,7 +906,7 @@ private[spark] object Utils extends Logging {
     for (el <- trace) {
       if (insideSpark) {
         if (!classFilterFunc(el.getClassName)) {
-            lastSparkMethod = if (el.getMethodName == "<init>") {
+          lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
           } else {

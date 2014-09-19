@@ -253,16 +253,6 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.setGraph(graph))
   }
 
-  /* Set the custom RDD creation site as this thread's local property. */
-  private def setRDDCreationSite(creationSite: CallSite): Unit = {
-
-  }
-
-  /* Get the custom RDD creation site set as this thread's local property. */
-  private def getRDDCreationSite(): CallSite = {
-    ssc.sparkContext.getCallSite()
-  }
-
   private[streaming] def remember(duration: Duration) {
     if (duration != null && duration > rememberDuration) {
       rememberDuration = duration
