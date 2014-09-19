@@ -18,10 +18,12 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.IOException
+import java.util.{List => JList}
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConversions._
+import scala.util._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -34,10 +36,11 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{JsonProtocol, SignalLogger, Utils}
 
 
 /**
@@ -130,14 +133,11 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private def addAmIpFilter() {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     System.setProperty("spark.ui.filters", amFilter)
-    val proxy = WebAppUtils.getProxyHostAndPort(conf)
-    val parts : Array[String] = proxy.split(":")
-    val uriBase = "http://" + proxy +
-      System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-
-    val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
+    val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+    val params = getAmIpFilterParams(yarnConf, proxyBase)
     System.setProperty(
-      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
+      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.jsonParams",
+      compact(JsonProtocol.mapToJson(params)))
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
@@ -328,6 +328,33 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     } catch {
       case ioe: IOException =>
         logError("Failed to cleanup staging dir " + stagingDirPath, ioe)
+    }
+  }
+
+  private def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String) = {
+    // Figure out which scheme Yarn is using. Note the method seems to have been added after 2.2,
+    // so not all stable releases have it.
+    val prefix = Try(classOf[WebAppUtils].getMethod("getHttpSchemePrefix", classOf[Configuration])
+        .invoke(null, conf).asInstanceOf[String]).getOrElse("http://")
+
+    // If running a new enough Yarn, use the HA-aware API for retrieving the RM addresses.
+    val method = Try(classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
+      classOf[Configuration]))
+    method match {
+      case Success(proxiesMethod) =>
+        val proxies = proxiesMethod.invoke(null, conf).asInstanceOf[JList[String]]
+        val hosts = proxies.map { proxy => proxy.split(":")(0) }
+        val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
+        Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
+
+      case Failure(e: NoSuchMethodException) =>
+        val proxy = WebAppUtils.getProxyHostAndPort(conf)
+        val parts = proxy.split(":")
+        val uriBase = prefix + proxy + proxyBase
+        Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
+
+      case Failure(e) =>
+        throw e
     }
   }
 

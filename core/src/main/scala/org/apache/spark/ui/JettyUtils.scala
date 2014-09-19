@@ -31,10 +31,10 @@ import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
-import org.json4s.jackson.JsonMethods.{pretty, render}
+import org.json4s.jackson.JsonMethods.{parse, pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -148,14 +148,21 @@ private[spark] object JettyUtils extends Logging {
           holder.setClassName(filter)
           // Get any parameters for each filter
           val paramName = "spark." + filter + ".params"
-          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
-          params.foreach {
+          val params = conf.get(paramName, "").split(',').map(_.trim()).foreach {
             case param : String =>
               if (!param.isEmpty) {
                 val parts = param.split("=")
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
              }
           }
+
+          // Process json-encoded params if defined.
+          conf.getOption("spark." + filter + ".jsonParams").foreach { json =>
+            JsonProtocol.mapFromJson(parse(json)).foreach { case (k, v) =>
+              holder.setInitParameter(k, v)
+            }
+          }
+
           val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
           handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }

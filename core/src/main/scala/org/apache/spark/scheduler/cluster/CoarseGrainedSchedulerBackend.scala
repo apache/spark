@@ -26,11 +26,12 @@ import scala.concurrent.duration._
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, JsonProtocol, SerializableBuffer, AkkaUtils, Utils}
 import org.apache.spark.ui.JettyUtils
 
 /**
@@ -283,15 +284,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   // Add filters to the SparkUI
-  def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
+  def addWebUIFilter(filterName: String, filterParams: Map[String, String], proxyBase: String) {
     if (proxyBase != null && proxyBase.nonEmpty) {
       System.setProperty("spark.ui.proxyBase", proxyBase)
     }
 
-    if (Seq(filterName, filterParams).forall(t => t != null && t.nonEmpty)) {
+    val hasFilter = (filterName != null && filterName.nonEmpty &&
+      filterParams != null && filterParams.nonEmpty)
+    if (hasFilter) {
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
-      conf.set(s"spark.$filterName.params", filterParams)
+      conf.set(s"spark.$filterName.jsonParams", compact(JsonProtocol.mapToJson(filterParams)))
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }
