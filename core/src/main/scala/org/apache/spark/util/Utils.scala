@@ -47,14 +47,16 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
 
+private[spark] object CallSite {
+  val SHORT_FORM = "callSite.short"
+  val LONG_FORM = "callSite.long"
+}
+
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
   val random = new Random()
-
-  private[spark] val CALL_SITE_SHORT: String = "callSite.short"
-  private[spark] val CALL_SITE_LONG: String = "callSite.long"
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -854,24 +856,27 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /**
-   * A regular expression to match classes of the "core" Spark API that we want to skip when
-   * finding the call site of a method.
-   */
-  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
-  val SCALA_CLASS_REGEX = """^scala""".r
-
-  private def defaultRegexFunc(className: String): Boolean = {
-    SPARK_CLASS_REGEX.findFirstIn(className).isDefined ||
-    SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+  /** Default filtering function for finding call sites using `getCallSite`. */
+  private def defaultCallSiteFilterFunc(className: String): Boolean = {
+    // A regular expression to match classes of the "core" Spark API that we want to skip when
+    // finding the call site of a method.
+    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SCALA_CLASS_REGEX = """^scala""".r
+    val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
+    val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+    // If the class neither belongs to Spark nor is a simple Scala class, then it is a
+    // user-defined class
+    !isSparkClass && !isScalaClass
   }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
+   *
+   * @param classFilterFunc Function that returns true if the given class belongs to user code
    */
-  def getCallSite(regexFunc: String => Boolean = defaultRegexFunc(_)): CallSite = {
+  def getCallSite(classFilterFunc: String => Boolean = defaultCallSiteFilterFunc): CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot { ste:StackTraceElement =>
         // When running under some profilers, the current stack trace might contain some bogus
@@ -892,7 +897,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (insideSpark) {
-        if (regexFunc(el.getClassName)) {
+        if (!classFilterFunc(el.getClassName)) {
             lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)

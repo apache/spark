@@ -441,9 +441,7 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
-    sc.setCallSite(
-      Utils.getCallSite(org.apache.spark.streaming.util.Utils.streamingRegexFunc).shortForm
-    )
+    sparkContext.setCallSite(DStream.getCallSite())
     scheduler.start()
     state = Started
   }
