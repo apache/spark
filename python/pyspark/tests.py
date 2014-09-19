@@ -434,6 +434,12 @@ class TestRDDFunctions(PySparkTestCase):
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
 
+    def test_large_closure(self):
+        N = 1000000
+        data = [float(i) for i in xrange(N)]
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(data)).sum()
+        self.assertEquals(N, m)
+
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
         b = self.sc.parallelize(range(100, 105))

@@ -27,7 +27,7 @@ import warnings
 from array import array
 from operator import itemgetter
 
-from pyspark.rdd import RDD, PipelinedRDD
+from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -975,7 +975,11 @@ class SQLContext(object):
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
-        pickled_command = CloudPickleSerializer().dumps(command)
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if pickled_command > (1 << 20):  # 1M
+            broadcast = self._sc.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
             self._sc._gateway._gateway_client)
