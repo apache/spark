@@ -37,7 +37,9 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
-          )
+          ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector")
 
         case v if v.startsWith("1.1") =>
           Seq(
