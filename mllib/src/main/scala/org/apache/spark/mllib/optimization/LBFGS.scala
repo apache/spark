@@ -38,7 +38,7 @@ import org.apache.spark.rdd.RDD
  */
 @DeveloperApi
 class LBFGS(private var gradient: Gradient, private var updater: Updater)
-  extends Optimizer with Logging {
+  extends Optimizer[Vector] with Logging {
 
   private var numCorrections = 10
   private var convergenceTol = 1E-4
