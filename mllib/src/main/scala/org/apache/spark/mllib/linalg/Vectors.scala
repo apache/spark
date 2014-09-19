@@ -33,7 +33,7 @@ import org.apache.spark.SparkException
  *
  * Note: Users should not implement this interface.
  */
-trait Vector extends Serializable {
+sealed trait Vector extends Serializable {
 
   /**
    * Size of the vector.

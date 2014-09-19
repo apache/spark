@@ -434,6 +434,12 @@ class TestRDDFunctions(PySparkTestCase):
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
 
+    def test_large_closure(self):
+        N = 1000000
+        data = [float(i) for i in xrange(N)]
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(data)).sum()
+        self.assertEquals(N, m)
+
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
         b = self.sc.parallelize(range(100, 105))
@@ -587,6 +593,14 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
+    def test_distinct(self):
+        rdd = self.sc.parallelize((1, 2, 3)*10, 10)
+        self.assertEquals(rdd.getNumPartitions(), 10)
+        self.assertEquals(rdd.distinct().count(), 3)
+        result = rdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
+
 
 class TestSQL(PySparkTestCase):
 
@@ -635,6 +649,15 @@ class TestSQL(PySparkTestCase):
         srdd = self.sqlCtx.sql("select foo from temp")
         srdd.count()
         srdd.collect()
+
+    def test_distinct(self):
+        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        self.assertEquals(srdd.getNumPartitions(), 10)
+        self.assertEquals(srdd.distinct().count(), 3)
+        result = srdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
 
 
 class TestIO(PySparkTestCase):

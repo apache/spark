@@ -1,4 +1,6 @@
 *~
+*.#*
+*#*#
 *.swp
 *.ipr
 *.iml
@@ -15,11 +17,11 @@ out/
 third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
-conf/spark-env.sh
-conf/streaming-env.sh
-conf/log4j.properties
-conf/spark-defaults.conf
-conf/hive-site.xml
+conf/*.sh
+conf/*.cmd
+conf/*.properties
+conf/*.conf
+conf/*.xml
 docs/_site
 docs/api
 target/
@@ -50,7 +52,6 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
-conf/*.conf
 scalastyle-output.xml
 
 # For Hive

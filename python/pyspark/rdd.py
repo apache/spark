@@ -301,7 +301,7 @@ class RDD(object):
             return ifilter(f, iterator)
         return self.mapPartitions(func, True)
 
-    def distinct(self):
+    def distinct(self, numPartitions=None):
         """
         Return a new RDD containing the distinct elements in this RDD.
 
@@ -309,7 +309,7 @@ class RDD(object):
         [1, 2, 3]
         """
         return self.map(lambda x: (x, None)) \
-                   .reduceByKey(lambda x, _: x) \
+                   .reduceByKey(lambda x, _: x, numPartitions) \
                    .map(lambda (x, _): x)
 
     def sample(self, withReplacement, fraction, seed=None):
@@ -2061,8 +2061,12 @@ class PipelinedRDD(RDD):
             self._jrdd_deserializer = NoOpSerializer()
         command = (self.func, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
+        # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
+        if pickled_command > (1 << 20):  # 1M
+            broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
