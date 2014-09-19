@@ -51,12 +51,13 @@ private[hive] abstract class HiveFunctionRegistry
       val function = functionInfo.getFunctionClass.newInstance().asInstanceOf[UDF]
       val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
 
-      lazy val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
+      val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
 
       HiveSimpleUdf(
         functionClassName,
         children.zip(expectedDataTypes).map {
           case (e, NullType) => e
+          case (e, t) if (e.dataType == t) => e
           case (e, t) => Cast(e, t)
         }
       )
