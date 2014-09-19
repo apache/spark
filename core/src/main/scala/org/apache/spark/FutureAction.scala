@@ -88,7 +88,7 @@ trait FutureAction[T] extends Future[T] {
    * Returns the job IDs run by the underlying async operation.
    *
    * This returns the current snapshot of the job list. Certain operations may run multiple
-   * job, so multiple calls to this method may return different lists.
+   * jobs, so multiple calls to this method may return different lists.
    */
   def jobIds: Seq[Int]
 
