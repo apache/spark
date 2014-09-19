@@ -250,7 +250,7 @@ The [`spark-submit` script](submitting-applications.html) provides the most stra
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
 supports two deploy modes. In `client` mode, the driver is launched in the same process as the
 client that submits the application. In `cluster` mode, however, the driver is launched from one
-of the Worker processes inside the cluster, and the client process can exit as soon as it fulfills
+of the Worker processes inside the cluster, and the client process exits as soon as it fulfills
 its responsibility of submitting the application without waiting for the application to finish.
 
 If your application is launched through Spark submit, then the application jar is automatically
