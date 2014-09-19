@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.{ShuffledHashJoin, BroadcastHashJoin}
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
@@ -649,28 +650,45 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (3, null) ::
       (4, 2147483644) :: Nil)
   }
-  
+
   test("SPARK-3423 BETWEEN") {
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
       Seq((5, "5"), (6, "6"), (7, "7"))
     )
-    
+
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
       Seq((7, "7"))
     )
-    
+
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Seq()
     )
   }
-    
+
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
+  }
+
+  test("Limit sizeInBytes estimation") {
+    // Using a threshold that is guaranteed greater than the tiny table used below
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 8192.toString)
+
+    table("testData").limit(1).registerTempTable("tiny")
+    val query = sql("SELECT a.key, b.value FROM testData a INNER JOIN tiny b ON a.key = b.key")
+      .queryExecution.executedPlan
+
+    val broadcastHashJoin = query.collect { case join: BroadcastHashJoin => join }
+    val shuffledHashJoin = query.collect { case join: ShuffledHashJoin => join }
+
+    println(query)
+
+    assert(shuffledHashJoin.isEmpty, "Should not use shuffled hash join")
+    assert(broadcastHashJoin.nonEmpty, "Should use broadcast hash join")
   }
 }
