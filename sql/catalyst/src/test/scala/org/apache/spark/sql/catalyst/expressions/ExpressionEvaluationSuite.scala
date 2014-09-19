@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalautils.TripleEqualsSupport.Spreada
+import org.scalautils.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
 
