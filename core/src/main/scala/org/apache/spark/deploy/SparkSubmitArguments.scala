@@ -56,6 +56,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var isPython: Boolean = false
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+  val defaultSparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   parseOpts(args.toList)
   mergeSparkProperties()
@@ -108,6 +109,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
 
     val properties = getDefaultSparkProperties
+    defaultSparkProperties.putAll(properties)
     properties.putAll(sparkProperties)
 
     // Use properties file as fallback for values which have a direct analog to
@@ -213,7 +215,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  verbose                 $verbose
     |
     |Default properties from $propertiesFile:
-    |${getDefaultSparkProperties.mkString("  ", "\n  ", "\n")}
+    |${defaultSparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
