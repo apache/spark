@@ -92,7 +92,8 @@ private[yarn] class YarnAllocationHandler(
 
   // Additional memory overhead - in mb.
   private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((YarnAllocationHandler.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, YarnAllocationHandler.MEMORY_OVERHEAD_MIN))
+    math.max((YarnAllocationHandler.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, 
+    YarnAllocationHandler.MEMORY_OVERHEAD_MIN))
 
   // Number of container requests that have been sent to, but not yet allocated by the
   // ApplicationMaster.
