@@ -19,12 +19,24 @@
 Python package for statistical functions in MLlib.
 """
 
-from pyspark.mllib._common import \
-    _get_unmangled_double_vector_rdd, _get_unmangled_rdd, \
-    _serialize_double, _deserialize_double_matrix, _deserialize_double_vector
+from functools import wraps
+
+from pyspark import PickleSerializer
 
 
 __all__ = ['MultivariateStatisticalSummary', 'Statistics']
+
+
+def serialize(f):
+    ser = PickleSerializer()
+
+    @wraps(f)
+    def func(self):
+        jvec = f(self)
+        bytes = self._sc._jvm.SerDe.dumps(jvec)
+        return ser.loads(str(bytes)).toArray()
+
+    return func
 
 
 class MultivariateStatisticalSummary(object):
@@ -44,33 +56,38 @@ class MultivariateStatisticalSummary(object):
     def __del__(self):
         self._sc._gateway.detach(self._java_summary)
 
+    @serialize
     def mean(self):
-        return _deserialize_double_vector(self._java_summary.mean())
+        return self._java_summary.mean()
 
+    @serialize
     def variance(self):
-        return _deserialize_double_vector(self._java_summary.variance())
+        return self._java_summary.variance()
 
     def count(self):
         return self._java_summary.count()
 
+    @serialize
     def numNonzeros(self):
-        return _deserialize_double_vector(self._java_summary.numNonzeros())
+        return self._java_summary.numNonzeros()
 
+    @serialize
     def max(self):
-        return _deserialize_double_vector(self._java_summary.max())
+        return self._java_summary.max()
 
+    @serialize
     def min(self):
-        return _deserialize_double_vector(self._java_summary.min())
+        return self._java_summary.min()
 
 
 class Statistics(object):
 
     @staticmethod
-    def colStats(X):
+    def colStats(rdd):
         """
         Computes column-wise summary statistics for the input RDD[Vector].
 
-        >>> from linalg import Vectors
+        >>> from pyspark.mllib.linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([2, 0, 0, -2]),
         ...                       Vectors.dense([4, 5, 0,  3]),
         ...                       Vectors.dense([6, 7, 0,  8])])
@@ -88,9 +105,9 @@ class Statistics(object):
         >>> cStats.min()
         array([ 2.,  0.,  0., -2.])
         """
-        sc = X.ctx
-        Xser = _get_unmangled_double_vector_rdd(X)
-        cStats = sc._jvm.PythonMLLibAPI().colStats(Xser._jrdd)
+        sc = rdd.ctx
+        jrdd = rdd._to_java_object_rdd()
+        cStats = sc._jvm.PythonMLLibAPI().colStats(jrdd)
         return MultivariateStatisticalSummary(sc, cStats)
 
     @staticmethod
@@ -117,7 +134,7 @@ class Statistics(object):
         >>> from math import isnan
         >>> isnan(Statistics.corr(x, zeros))
         True
-        >>> from linalg import Vectors
+        >>> from pyspark.mllib.linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]),
         ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
         >>> pearsonCorr = Statistics.corr(rdd)
@@ -144,18 +161,16 @@ class Statistics(object):
         # check if y is used to specify the method name instead.
         if type(y) == str:
             raise TypeError("Use 'method=' to specify method name.")
+
+        jx = x._to_java_object_rdd()
         if not y:
-            try:
-                Xser = _get_unmangled_double_vector_rdd(x)
-            except TypeError:
-                raise TypeError("corr called on a single RDD not consisted of Vectors.")
-            resultMat = sc._jvm.PythonMLLibAPI().corr(Xser._jrdd, method)
-            return _deserialize_double_matrix(resultMat)
+            resultMat = sc._jvm.PythonMLLibAPI().corr(jx, method)
+            bytes = sc._jvm.SerDe.dumps(resultMat)
+            ser = PickleSerializer()
+            return ser.loads(str(bytes)).toArray()
         else:
-            xSer = _get_unmangled_rdd(x, _serialize_double)
-            ySer = _get_unmangled_rdd(y, _serialize_double)
-            result = sc._jvm.PythonMLLibAPI().corr(xSer._jrdd, ySer._jrdd, method)
-            return result
+            jy = y._to_java_object_rdd()
+            return sc._jvm.PythonMLLibAPI().corr(jx, jy, method)
 
 
 def _test():
