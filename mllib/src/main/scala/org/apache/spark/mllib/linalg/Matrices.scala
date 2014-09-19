@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
+import java.util.Arrays
+
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
 
 import org.apache.spark.util.random.XORShiftRandom
-
-import java.util.Arrays
 
 /**
  * Trait for a local matrix.
@@ -105,6 +105,12 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
 
   override def toArray: Array[Double] = values
+
+  override def equals(o: Any) = o match {
+    case m: DenseMatrix =>
+      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
+    case _ => false
+  }
 
   private[mllib] def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 
