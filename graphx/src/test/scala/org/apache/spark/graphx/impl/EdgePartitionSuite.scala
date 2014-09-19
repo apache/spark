@@ -72,8 +72,9 @@ class EdgePartitionSuite extends FunSuite {
 
   test("groupEdges") {
     val edges = List(
-      Edge(0, 1, 1), Edge(1, 2, 2), Edge(2, 0, 4), Edge(0, 1, 8), Edge(1, 2, 16), Edge(2, 0, 32))
-    val groupedEdges = List(Edge(0, 1, 9), Edge(1, 2, 18), Edge(2, 0, 36))
+      Edge(0, 1, 1), Edge(1, 2, 2), Edge(1, 3, 1), Edge(2, 0, 4), Edge(0, 1, 8), Edge(1, 2, 16),
+      Edge(2, 0, 32))
+    val groupedEdges = List(Edge(0, 1, 9), Edge(1, 2, 18), Edge(1, 3, 1), Edge(2, 0, 36))
     val builder = new EdgePartitionBuilder[Int, Nothing]
     for (e <- edges) {
       builder.add(e.srcId, e.dstId, e.attr)
