@@ -165,32 +165,6 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
-/**
- * Converts the schema of `child` to all lowercase, together with LowercaseAttributeReferences
- * this allows for optional case insensitive attribute resolution.  This node can be elided after
- * analysis.
- */
-case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
-  protected def lowerCaseSchema(dataType: DataType): DataType = dataType match {
-    case StructType(fields) =>
-      StructType(fields.map(f =>
-        StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable)))
-    case ArrayType(elemType, containsNull) => ArrayType(lowerCaseSchema(elemType), containsNull)
-    case otherType => otherType
-  }
-
-  override val output = child.output.map {
-    case a: AttributeReference =>
-      AttributeReference(
-        a.name.toLowerCase,
-        lowerCaseSchema(a.dataType),
-        a.nullable)(
-        a.exprId,
-        a.qualifiers)
-    case other => other
-  }
-}
-
 case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)
     extends UnaryNode {
 
