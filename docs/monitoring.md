@@ -129,12 +129,35 @@ follows:
     <td>false</td>
     <td>
       Specifies whether acls should be checked to authorize users viewing the applications.
-      If enabled, access control checks are made regardless of what the individual application had 
+      If enabled, access control checks are made regardless of what the individual application had
       set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
-      will always have authorization to view their own application and any users specified via 
+      will always have authorization to view their own application and any users specified via
       <code>spark.ui.view.acls</code> when the application was run will also have authorization
-      to view that application. 
-      If disabled, no access control checks are made. 
+      to view that application.
+      If disabled, no access control checks are made.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.enable</td>
+    <td>false</td>
+    <td>
+      Specifies whether job history cleaner should check for files to delete.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.interval-s</td>
+    <td>86400</td>
+    <td>
+      How often the job history cleaner checks for files to delete, in seconds. Defaults to 864000 (one day).
+      Files are only deleted if they are older than spark.history.fs.maxAge-s.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.maxAge-s</td>
+    <td>604800</td>
+    <td>
+      Job history files older than this many seconds will be deleted when the history cleaner runs.
+      Defaults to 604800 (1 week).
     </td>
   </tr>
 </table>

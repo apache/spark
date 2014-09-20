@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.FileNotFoundException
+import java.io.{IOException, FileNotFoundException}
 
 import scala.collection.mutable
 
@@ -34,9 +34,19 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private val NOT_STARTED = "<Not Started>"
 
+  //one day
+  private val DEFAULT_SPARK_HISTORY_FS_CLEANER_INTERVAL_S = 1 * 24 * 60 * 60
+
+  //one week
+  private val DEFAULT_SPARK_HISTORY_FS_MAXAGE_S = 7 * 24 * 60 * 60
+
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
+
+  // Interval between each cleaner checks for event logs to delete
+  private val CLEAN_INTERVAL_MS = conf.getLong("spark.history.fs.cleaner.interval-s",
+    DEFAULT_SPARK_HISTORY_FS_CLEANER_INTERVAL_S) * 1000
 
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
   private val resolvedLogDir = Option(logDir)
@@ -53,6 +63,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
   private var lastModifiedTime = -1L
+
+  // A timestamp of when the disk was last accessed to check for event log to delete
+  private var lastLogCleanTimeMs = -1L
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -83,6 +96,25 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
+  /**
+   * A background thread that periodically cleans event logs on disk.
+   *
+   * TODO: Add a mechanism to delete manually.
+   */
+  private val logCleaningThread = new Thread("LogCleaningThread") {
+    override def run() = Utils.logUncaughtExceptions {
+      while (true) {
+        val now = System.currentTimeMillis()
+        if (now - lastLogCleanTimeMs > CLEAN_INTERVAL_MS) {
+          Thread.sleep(CLEAN_INTERVAL_MS)
+        } else {
+          Thread.sleep(lastLogCleanTimeMs + CLEAN_INTERVAL_MS - now)
+        }
+        cleanLogs()
+      }
+    }
+  }
+
   initialize()
 
   private def initialize() {
@@ -100,6 +132,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     checkForLogs()
     logCheckingThread.setDaemon(true)
     logCheckingThread.start()
+
+    //start cleaner thread if spark.history.fs.cleaner.enable is true
+    if(conf.getBoolean("spark.history.fs.cleaner.enable", false)) {
+      logCleaningThread.setDaemon(true)
+      logCleaningThread.start()
+    }
   }
 
   override def getListing() = applications.values
@@ -211,6 +249,32 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
+    }
+  }
+
+  /**
+   *  Deleting apps if setting cleaner.
+   */
+  private def cleanLogs() = {
+    lastLogCleanTimeMs = System.currentTimeMillis()
+    logDebug("Cleaning logs. Time is now %d.".format(lastLogCleanTimeMs))
+    try {
+      val logStatus = fs.listStatus(new Path(resolvedLogDir))
+      val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+      val maxAge = conf.getLong("spark.history.fs.maxAge-s",
+        DEFAULT_SPARK_HISTORY_FS_MAXAGE_S) * 1000
+
+      // scan all logs from the log directory.
+      // Only directories older than this many seconds will be deleted .
+      logDirs.foreach { dir =>
+        //history file older than this many seconds will be deleted when the history cleaner runs.
+        if (System.currentTimeMillis() - getModificationTime(dir) > maxAge) {
+          fs.delete(dir.getPath, true)
+        }
+      }
+    } catch {
+      case t: FileNotFoundException => logError("FileNotFoundException in cleaning logs", t)
+      case t: IOException => logError("IOException in cleaning logs", t)
     }
   }
 
