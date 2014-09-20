@@ -137,11 +137,11 @@ cost you any EC2 cycles, but ***will*** continue to cost money for EBS
 storage.
 
 - To stop one of your clusters, go into the `ec2` directory and run
-`./spark-ec2 stop <cluster-name>`.
+`./spark-ec2 --region=<EC2_REGION> stop <cluster-name>`.
 - To restart it later, run
-`./spark-ec2 -i <key-file> start <cluster-name>`.
+`./spark-ec2 -i <key-file> --region=<EC2_REGION> start <cluster-name>`.
 - To ultimately destroy the cluster and stop consuming EBS space, run
-`./spark-ec2 destroy <cluster-name>` as described in the previous
+`./spark-ec2 --region=<EC2_REGION> destroy <cluster-name>` as described in the previous
 section.
 
 # Limitations
