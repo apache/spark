@@ -107,7 +107,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       }
     }
 
-    val properties = defaultSparkProperties.clone()
+    val properties = new HashMap[String, String]()
+    properties.putAll(defaultSparkProperties)
     properties.putAll(sparkProperties)
 
     // Use properties file as fallback for values which have a direct analog to
