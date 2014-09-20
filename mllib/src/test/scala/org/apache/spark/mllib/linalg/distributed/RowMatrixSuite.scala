@@ -102,17 +102,17 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       (0.0, 0.0, 78.0),
       (0.0, 0.0, 0.0))
 
-    for(i <- 0 until n) for(j <- 0 until n) {
+    for (i <- 0 until n; j <- 0 until n) {
       expected(i, j) /= (colMags(i) * colMags(j))
     }
 
     for (mat <- Seq(denseMat, sparseMat)) {
-      val G = mat.similarColumns(0.1).toBreeze()
-      for(i <- 0 until n) for(j <- 0 until n) {
+      val G = mat.similarColumns(0.11).toBreeze()
+      for (i <- 0 until n; j <- 0 until n) {
         if (expected(i, j) > 0) {
           val actual = expected(i, j)
           val estimate = G(i, j)
-          assert(math.abs(actual - estimate) / actual < 0.1,
+          assert(math.abs(actual - estimate) / actual < 0.2,
             s"Similarities not close enough: $actual vs $estimate")
         }
       }
