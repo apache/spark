@@ -138,7 +138,7 @@ import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second
-val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
+SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 JavaStreamingContext jssc = new JavaStreamingContext(conf, new Duration(1000))
 {% endhighlight %}
 
