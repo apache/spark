@@ -114,12 +114,14 @@ object GraphGenerators {
     // Z ~ N(0, 1)
     var X: Double = maxVal
 
-    while (X >= maxVal) {
+    while (round(X) >= maxVal) {
       val Z = rand.nextGaussian()
       X = math.exp(mu + sigma*Z)
     }
-    math.floor(X).toInt
+    round(X)
   }
+
+  private def round(x: Double): Int = math.round(x.toFloat)
 
   /**
    * A random graph generator using the R-MAT model, proposed in
