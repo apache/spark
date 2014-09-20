@@ -674,19 +674,4 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
   }
-
-  test("Limit sizeInBytes estimation") {
-    // Using a threshold that is guaranteed greater than the tiny table used below
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 8192.toString)
-
-    table("testData").limit(1).registerTempTable("tiny")
-    val query = sql("SELECT a.key, b.value FROM testData a INNER JOIN tiny b ON a.key = b.key")
-      .queryExecution.executedPlan
-
-    val broadcastHashJoin = query.collect { case join: BroadcastHashJoin => join }
-    val shuffledHashJoin = query.collect { case join: ShuffledHashJoin => join }
-
-    assert(shuffledHashJoin.isEmpty, "Should not use shuffled hash join")
-    assert(broadcastHashJoin.nonEmpty, "Should use broadcast hash join")
-  }
 }
