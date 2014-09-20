@@ -23,32 +23,13 @@ import akka.actor._
 import akka.testkit.TestActorRef
 import org.scalatest.FunSuite
 
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.scheduler.{DetailedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
 
 class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   private val conf = new SparkConf
-  test("compressSize") {
-    assert(MapOutputTracker.compressSize(0L) === 0)
-    assert(MapOutputTracker.compressSize(1L) === 1)
-    assert(MapOutputTracker.compressSize(2L) === 8)
-    assert(MapOutputTracker.compressSize(10L) === 25)
-    assert((MapOutputTracker.compressSize(1000000L) & 0xFF) === 145)
-    assert((MapOutputTracker.compressSize(1000000000L) & 0xFF) === 218)
-    // This last size is bigger than we can encode in a byte, so check that we just return 255
-    assert((MapOutputTracker.compressSize(1000000000000000000L) & 0xFF) === 255)
-  }
-
-  test("decompressSize") {
-    assert(MapOutputTracker.decompressSize(0) === 0)
-    for (size <- Seq(2L, 10L, 100L, 50000L, 1000000L, 1000000000L)) {
-      val size2 = MapOutputTracker.decompressSize(MapOutputTracker.compressSize(size))
-      assert(size2 >= 0.99 * size && size2 <= 1.11 * size,
-        "size " + size + " decompressed to " + size2 + ", which is out of range")
-    }
-  }
 
   test("master start and stop") {
     val actorSystem = ActorSystem("test")
@@ -65,13 +46,13 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
       actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
     tracker.registerShuffle(10, 2)
     assert(tracker.containsShuffle(10))
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val compressedSize10000 = MapOutputTracker.compressSize(10000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    val size10000 = MapOutputTracker.decompressSize(compressedSize10000)
-    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000),
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val compressedSize10000 = MapStatus.compressSize(10000L)
+    val size1000 = MapStatus.decompressSize(compressedSize1000)
+    val size10000 = MapStatus.decompressSize(compressedSize10000)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
         Array(compressedSize1000, compressedSize10000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000),
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(compressedSize10000, compressedSize1000)))
     val statuses = tracker.getServerStatuses(10, 0)
     assert(statuses.toSeq === Seq((BlockManagerId("a", "hostA", 1000), size1000),
@@ -84,11 +65,11 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
     tracker.registerShuffle(10, 2)
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val compressedSize10000 = MapOutputTracker.compressSize(10000L)
-    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000),
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val compressedSize10000 = MapStatus.compressSize(10000L)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
       Array(compressedSize1000, compressedSize10000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000),
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(compressedSize10000, compressedSize1000)))
     assert(tracker.containsShuffle(10))
     assert(tracker.getServerStatuses(10, 0).nonEmpty)
@@ -103,11 +84,11 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     tracker.trackerActor =
       actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
     tracker.registerShuffle(10, 2)
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val compressedSize10000 = MapOutputTracker.compressSize(10000L)
-    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000),
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val compressedSize10000 = MapStatus.compressSize(10000L)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
         Array(compressedSize1000, compressedSize1000, compressedSize1000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000),
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(compressedSize10000, compressedSize1000, compressedSize1000)))
 
     // As if we had two simultaneous fetch failures
@@ -142,9 +123,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val size1000 = MapStatus.decompressSize(compressedSize1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
@@ -173,8 +154,8 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
     // Frame size should be ~123B, and no exception should be thrown
     masterTracker.registerShuffle(10, 1)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("88", "mph", 1000), Array.fill[Byte](10)(0)))
+    masterTracker.registerMapOutput(10, 0, MapStatus(
+      BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0)))
     masterActor.receive(GetMapOutputStatuses(10))
   }
 
@@ -194,8 +175,8 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     // being sent.
     masterTracker.registerShuffle(20, 100)
     (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new MapStatus(
-        BlockManagerId("999", "mps", 1000), Array.fill[Byte](4000000)(0)))
+      masterTracker.registerMapOutput(20, i, new DetailedMapStatus(
+        BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
     }
     intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
   }

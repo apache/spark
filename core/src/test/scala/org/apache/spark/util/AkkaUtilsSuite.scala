@@ -106,9 +106,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val size1000 = MapStatus.decompressSize(compressedSize1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
@@ -157,9 +157,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
+    val compressedSize1000 = MapStatus.compressSize(1000L)
+    val size1000 = MapStatus.decompressSize(compressedSize1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
