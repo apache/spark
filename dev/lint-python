@@ -18,10 +18,10 @@
 #
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
+SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 
-cd $SPARK_ROOT_DIR
+cd "$SPARK_ROOT_DIR"
 
 # Get pep8 at runtime so that we don't rely on it being installed on the build server.
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
@@ -30,6 +30,7 @@ cd $SPARK_ROOT_DIR
 #+  - Download this from a more reliable source. (GitHub raw can be flaky, apparently. (?))
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8.py"
 PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/pep8.py"
+PEP8_PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/"
 
 curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
 curl_status=$?
@@ -44,7 +45,7 @@ fi
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python $PEP8_SCRIPT_PATH ./python > "$PEP8_REPORT_PATH"
+python "$PEP8_SCRIPT_PATH" $PEP8_PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
 pep8_status=${PIPESTATUS[0]} #$?
 
 if [ $pep8_status -ne 0 ]; then
@@ -54,7 +55,7 @@ else
     echo "PEP 8 checks passed."
 fi
 
-rm -f "$PEP8_REPORT_PATH"
+rm "$PEP8_REPORT_PATH"
 rm "$PEP8_SCRIPT_PATH"
 
 exit $pep8_status

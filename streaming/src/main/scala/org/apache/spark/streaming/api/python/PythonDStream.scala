@@ -34,7 +34,6 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
 
 
-
 class PythonDStream[T: ClassTag](
     parent: DStream[T],
     command: Array[Byte],
@@ -43,8 +42,8 @@ class PythonDStream[T: ClassTag](
     preservePartitoning: Boolean,
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
-    accumulator: Accumulator[JList[Array[Byte]]]
-  ) extends DStream[Array[Byte]](parent.ssc) {
+    accumulator: Accumulator[JList[Array[Byte]]])
+  extends DStream[Array[Byte]](parent.ssc) {
 
   override def dependencies = List(parent)
 

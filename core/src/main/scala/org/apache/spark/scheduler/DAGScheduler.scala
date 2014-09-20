@@ -164,7 +164,7 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, Int, TaskMetrics)], // (taskId, stageId, metrics)
+      taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     implicit val timeout = Timeout(600 seconds)
@@ -241,9 +241,9 @@ class DAGScheduler(
       callSite: CallSite)
     : Stage =
   {
+    val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage =
-      new Stage(id, rdd, numTasks, shuffleDep, getParentStages(rdd, jobId), jobId, callSite)
+    val stage = new Stage(id, rdd, numTasks, shuffleDep, parentStages, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -507,11 +507,16 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties = null)
   {
+    val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
-      case JobSucceeded => {}
+      case JobSucceeded => {
+        logInfo("Job %d finished: %s, took %f s".format
+          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+      }
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite.shortForm)
+        logInfo("Job %d failed: %s, took %f s".format
+          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
         throw exception
     }
   }
@@ -677,7 +682,10 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
-    listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
+    // Note that there is a chance that this task is launched after the stage is cancelled.
+    // In that case, we wouldn't have the stage anymore in stageIdToStage.
+    val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
+    listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
     submitWaitingStages()
   }
 
@@ -695,8 +703,8 @@ class DAGScheduler(
       // is in the process of getting stopped.
       val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
       runningStages.foreach { stage =>
-        stage.info.stageFailed(stageFailedMessage)
-        listenerBus.post(SparkListenerStageCompleted(stage.info))
+        stage.latestInfo.stageFailed(stageFailedMessage)
+        listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
     }
@@ -781,7 +789,16 @@ class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
-    var tasks = ArrayBuffer[Task[_]]()
+
+    // First figure out the indexes of partition ids to compute.
+    val partitionsToCompute: Seq[Int] = {
+      if (stage.isShuffleMap) {
+        (0 until stage.numPartitions).filter(id => stage.outputLocs(id) == Nil)
+      } else {
+        val job = stage.resultOfJob.get
+        (0 until job.numPartitions).filter(id => !job.finished(id))
+      }
+    }
 
     val properties = if (jobIdToActiveJob.contains(jobId)) {
       jobIdToActiveJob(stage.jobId).properties
@@ -795,7 +812,8 @@ class DAGScheduler(
     // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
-    listenerBus.post(SparkListenerStageSubmitted(stage.info, properties))
+    stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
+    listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
     // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
@@ -826,20 +844,19 @@ class DAGScheduler(
         return
     }
 
-    if (stage.isShuffleMap) {
-      for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
-        val locs = getPreferredLocs(stage.rdd, p)
-        val part = stage.rdd.partitions(p)
-        tasks += new ShuffleMapTask(stage.id, taskBinary, part, locs)
+    val tasks: Seq[Task[_]] = if (stage.isShuffleMap) {
+      partitionsToCompute.map { id =>
+        val locs = getPreferredLocs(stage.rdd, id)
+        val part = stage.rdd.partitions(id)
+        new ShuffleMapTask(stage.id, taskBinary, part, locs)
       }
     } else {
-      // This is a final stage; figure out its job's missing partitions
       val job = stage.resultOfJob.get
-      for (id <- 0 until job.numPartitions if !job.finished(id)) {
+      partitionsToCompute.map { id =>
         val p: Int = job.partitions(id)
         val part = stage.rdd.partitions(p)
         val locs = getPreferredLocs(stage.rdd, p)
-        tasks += new ResultTask(stage.id, taskBinary, part, locs, id)
+        new ResultTask(stage.id, taskBinary, part, locs, id)
       }
     }
 
@@ -869,11 +886,11 @@ class DAGScheduler(
       logDebug("New pending tasks: " + stage.pendingTasks)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stage.info.submissionTime = Some(clock.getTime())
+      stage.latestInfo.submissionTime = Some(clock.getTime())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should post
       // SparkListenerStageCompleted here in case there are no tasks to run.
-      listenerBus.post(SparkListenerStageCompleted(stage.info))
+      listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
       runningStages -= stage
@@ -892,8 +909,9 @@ class DAGScheduler(
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
-      listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-        event.taskMetrics))
+      val attemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
+      listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
+        event.taskInfo, event.taskMetrics))
     }
 
     if (!stageIdToStage.contains(task.stageId)) {
@@ -902,14 +920,19 @@ class DAGScheduler(
     }
     val stage = stageIdToStage(task.stageId)
 
-    def markStageAsFinished(stage: Stage) = {
-      val serviceTime = stage.info.submissionTime match {
+    def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
+      val serviceTime = stage.latestInfo.submissionTime match {
         case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
         case _ => "Unknown"
       }
-      logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-      stage.info.completionTime = Some(clock.getTime())
-      listenerBus.post(SparkListenerStageCompleted(stage.info))
+      if (errorMessage.isEmpty) {
+        logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
+        stage.latestInfo.completionTime = Some(clock.getTime())
+      } else {
+        stage.latestInfo.stageFailed(errorMessage.get)
+        logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
+      }
+      listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       runningStages -= stage
     }
     event.reason match {
@@ -924,7 +947,7 @@ class DAGScheduler(
                 val name = acc.name.get
                 val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
                 val stringValue = Accumulators.stringifyValue(acc.value)
-                stage.info.accumulables(id) = AccumulableInfo(id, name, stringValue)
+                stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
                 event.taskInfo.accumulables +=
                   AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
               }
@@ -935,8 +958,8 @@ class DAGScheduler(
               logError(s"Failed to update accumulators for $task", e)
           }
         }
-        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-          event.taskMetrics))
+        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
+          event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
         task match {
           case rt: ResultTask[_, _] =>
@@ -1027,30 +1050,39 @@ class DAGScheduler(
         stage.pendingTasks += task
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
-        // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
-        logInfo("Marking " + failedStage + " (" + failedStage.name +
-          ") for resubmision due to a fetch failure")
-        // Mark the map whose fetch failed as broken in the map stage
         val mapStage = shuffleToMapStage(shuffleId)
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+
+        // It is likely that we receive multiple FetchFailed for a single stage (because we have
+        // multiple tasks running concurrently on different executors). In that case, it is possible
+        // the fetch failure has already been handled by the scheduler.
+        if (runningStages.contains(failedStage)) {
+          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+            s"due to a fetch failure from $mapStage (${mapStage.name})")
+          markStageAsFinished(failedStage, Some("Fetch failure"))
+          runningStages -= failedStage
         }
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
-          "); marking it for resubmission")
+
         if (failedStages.isEmpty && eventProcessActor != null) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled. eventProcessActor may be
           // null during unit tests.
+          // TODO: Cancel running tasks in the stage
           import env.actorSystem.dispatcher
+          logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+            s"$failedStage (${failedStage.name}) due to fetch failure")
           env.actorSystem.scheduler.scheduleOnce(
             RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
         }
         failedStages += failedStage
         failedStages += mapStage
+
+        // Mark the map whose fetch failed as broken in the map stage
+        if (mapId != -1) {
+          mapStage.removeOutputLoc(mapId, bmAddress)
+          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
+
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
@@ -1142,7 +1174,7 @@ class DAGScheduler(
     }
     val dependentJobs: Seq[ActiveJob] =
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
-    failedStage.info.completionTime = Some(clock.getTime())
+    failedStage.latestInfo.completionTime = Some(clock.getTime())
     for (job <- dependentJobs) {
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
     }
@@ -1182,8 +1214,8 @@ class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-              stage.info.stageFailed(failureReason)
-              listenerBus.post(SparkListenerStageCompleted(stage.info))
+              stage.latestInfo.stageFailed(failureReason)
+              listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
             } catch {
               case e: UnsupportedOperationException =>
                 logInfo(s"Could not cancel tasks for stage $stageId", e)

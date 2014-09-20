@@ -21,7 +21,10 @@ import platform
 import shutil
 import warnings
 import gc
+import itertools
+import random
 
+import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 try:
@@ -52,6 +55,22 @@ except ImportError:
                 return rss >> 20
             # TODO: support windows
         return 0
+
+
+def _get_local_dirs(sub):
+    """ Get all the directories """
+    path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
+    dirs = path.split(",")
+    if len(dirs) > 1:
+        # different order in different processes and instances
+        rnd = random.Random(os.getpid() + id(dirs))
+        random.shuffle(dirs, rnd.random)
+    return [os.path.join(d, "python", str(os.getpid()), sub) for d in dirs]
+
+
+# global stats
+MemoryBytesSpilled = 0L
+DiskBytesSpilled = 0L
 
 
 class Aggregator(object):
@@ -196,7 +215,7 @@ class ExternalMerger(Merger):
         # default serializer is only used for tests
         self.serializer = serializer or \
             BatchedSerializer(PickleSerializer(), 1024)
-        self.localdirs = localdirs or self._get_dirs()
+        self.localdirs = localdirs or _get_local_dirs(str(id(self)))
         # number of partitions when spill data into disks
         self.partitions = partitions
         # check the memory after # of items merged
@@ -211,13 +230,6 @@ class ExternalMerger(Merger):
         self.spills = 0
         # randomize the hash of key, id(o) is the address of o (aligned by 8)
         self._seed = id(self) + 7
-
-    def _get_dirs(self):
-        """ Get all the directories """
-        path = os.environ.get("SPARK_LOCAL_DIR", "/tmp")
-        dirs = path.split(",")
-        return [os.path.join(d, "python", str(os.getpid()), str(id(self)))
-                for d in dirs]
 
     def _get_spill_dir(self, n):
         """ Choose one directory for spill by number n """
@@ -306,10 +318,12 @@ class ExternalMerger(Merger):
 
         It will dump the data in batch for better performance.
         """
+        global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
 
+        used_memory = get_used_memory()
         if not self.pdata:
             # The data has not been partitioned, it will iterator the
             # dataset once, write them into different files, has no
@@ -327,6 +341,7 @@ class ExternalMerger(Merger):
                 self.serializer.dump_stream([(k, v)], streams[h])
 
             for s in streams:
+                DiskBytesSpilled += s.tell()
                 s.close()
 
             self.data.clear()
@@ -339,9 +354,11 @@ class ExternalMerger(Merger):
                     # dump items in batch
                     self.serializer.dump_stream(self.pdata[i].iteritems(), f)
                 self.pdata[i].clear()
+                DiskBytesSpilled += os.path.getsize(p)
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
+        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
 
     def iteritems(self):
         """ Return all merged items as iterator """
@@ -432,6 +449,77 @@ class ExternalMerger(Merger):
             for j in range(self.spills):
                 path = self._get_spill_dir(j)
                 os.remove(os.path.join(path, str(i)))
+
+
+class ExternalSorter(object):
+    """
+    ExtenalSorter will divide the elements into chunks, sort them in
+    memory and dump them into disks, finally merge them back.
+
+    The spilling will only happen when the used memory goes above
+    the limit.
+
+    >>> sorter = ExternalSorter(1)  # 1M
+    >>> import random
+    >>> l = range(1024)
+    >>> random.shuffle(l)
+    >>> sorted(l) == list(sorter.sorted(l))
+    True
+    >>> sorted(l) == list(sorter.sorted(l, key=lambda x: -x, reverse=True))
+    True
+    """
+    def __init__(self, memory_limit, serializer=None):
+        self.memory_limit = memory_limit
+        self.local_dirs = _get_local_dirs("sort")
+        self.serializer = serializer or BatchedSerializer(PickleSerializer(), 1024)
+
+    def _get_path(self, n):
+        """ Choose one directory for spill by number n """
+        d = self.local_dirs[n % len(self.local_dirs)]
+        if not os.path.exists(d):
+            os.makedirs(d)
+        return os.path.join(d, str(n))
+
+    def sorted(self, iterator, key=None, reverse=False):
+        """
+        Sort the elements in iterator, do external sort when the memory
+        goes above the limit.
+        """
+        global MemoryBytesSpilled, DiskBytesSpilled
+        batch = 10
+        chunks, current_chunk = [], []
+        iterator = iter(iterator)
+        while True:
+            # pick elements in batch
+            chunk = list(itertools.islice(iterator, batch))
+            current_chunk.extend(chunk)
+            if len(chunk) < batch:
+                break
+
+            used_memory = get_used_memory()
+            if used_memory > self.memory_limit:
+                # sort them inplace will save memory
+                current_chunk.sort(key=key, reverse=reverse)
+                path = self._get_path(len(chunks))
+                with open(path, 'w') as f:
+                    self.serializer.dump_stream(current_chunk, f)
+                chunks.append(self.serializer.load_stream(open(path)))
+                current_chunk = []
+                gc.collect()
+                MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+                DiskBytesSpilled += os.path.getsize(path)
+
+            elif not chunks:
+                batch = min(batch * 2, 10000)
+
+        current_chunk.sort(key=key, reverse=reverse)
+        if not chunks:
+            return current_chunk
+
+        if current_chunk:
+            chunks.append(iter(current_chunk))
+
+        return heapq.merge(chunks, key=key, reverse=reverse)
 
 
 if __name__ == "__main__":

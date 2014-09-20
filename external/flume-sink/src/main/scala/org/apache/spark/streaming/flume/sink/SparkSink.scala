@@ -53,7 +53,6 @@ import org.apache.flume.sink.AbstractSink
  *
  */
 
-private[flume]
 class SparkSink extends AbstractSink with Logging with Configurable {
 
   // Size of the pool to use for holding transaction processors.

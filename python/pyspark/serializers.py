@@ -68,6 +68,7 @@ import sys
 import types
 import collections
 import zlib
+import itertools
 
 from pyspark import cloudpickle
 
@@ -110,6 +111,9 @@ class Serializer(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __repr__(self):
+        return "<%s object>" % self.__class__.__name__
+
 
 class FramedSerializer(Serializer):
 
@@ -144,6 +148,8 @@ class FramedSerializer(Serializer):
 
     def _read_with_length(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
         obj = stream.read(length)
         if obj == "":
             raise EOFError
@@ -209,6 +215,41 @@ class BatchedSerializer(Serializer):
         return "BatchedSerializer<%s>" % str(self.serializer)
 
 
+class AutoBatchedSerializer(BatchedSerializer):
+    """
+    Choose the size of batch automatically based on the size of object
+    """
+
+    def __init__(self, serializer, bestSize=1 << 20):
+        BatchedSerializer.__init__(self, serializer, -1)
+        self.bestSize = bestSize
+
+    def dump_stream(self, iterator, stream):
+        batch, best = 1, self.bestSize
+        iterator = iter(iterator)
+        while True:
+            vs = list(itertools.islice(iterator, batch))
+            if not vs:
+                break
+
+            bytes = self.serializer.dumps(vs)
+            write_int(len(bytes), stream)
+            stream.write(bytes)
+
+            size = len(bytes)
+            if size < best:
+                batch *= 2
+            elif size > best * 10 and batch > 1:
+                batch /= 2
+
+    def __eq__(self, other):
+        return (isinstance(other, AutoBatchedSerializer) and
+                other.serializer == self.serializer)
+
+    def __str__(self):
+        return "BatchedSerializer<%s>" % str(self.serializer)
+
+
 class CartesianDeserializer(FramedSerializer):
 
     """
@@ -255,6 +296,9 @@ class PairDeserializer(CartesianDeserializer):
 
     def load_stream(self, stream):
         for (keys, vals) in self.prepare_keys_values(stream):
+            if len(keys) != len(vals):
+                raise ValueError("Can not deserialize RDD with different number of items"
+                                 " in pair: (%d, %d)" % (len(keys), len(vals)))
             for pair in izip(keys, vals):
                 yield pair
 
@@ -352,7 +396,8 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return cPickle.dumps(obj, 2)
 
-    loads = cPickle.loads
+    def loads(self, obj):
+        return cPickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -371,8 +416,11 @@ class MarshalSerializer(FramedSerializer):
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
 
-    dumps = marshal.dumps
-    loads = marshal.loads
+    def dumps(self, obj):
+        return marshal.dumps(obj)
+
+    def loads(self, obj):
+        return marshal.loads(obj)
 
 
 class AutoSerializer(FramedSerializer):
@@ -406,7 +454,7 @@ class AutoSerializer(FramedSerializer):
 
 class CompressedSerializer(FramedSerializer):
     """
-    compress the serialized data
+    Compress the serialized data
     """
 
     def __init__(self, serializer):
@@ -426,18 +474,24 @@ class UTF8Deserializer(Serializer):
     Deserializes streams written by String.getBytes.
     """
 
+    def __init__(self, use_unicode=False):
+        self.use_unicode = use_unicode
+
     def loads(self, stream):
         length = read_int(stream)
-        return stream.read(length).decode('utf8')
+        if length == SpecialLengths.END_OF_DATA_SECTION:
+            raise EOFError
+        s = stream.read(length)
+        return s.decode("utf-8") if self.use_unicode else s
 
     def load_stream(self, stream):
-        while True:
-            try:
+        try:
+            while True:
                 yield self.loads(stream)
-            except struct.error:
-                return
-            except EOFError:
-                return
+        except struct.error:
+            return
+        except EOFError:
+            return
 
 
 def read_long(stream):

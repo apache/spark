@@ -23,16 +23,14 @@ import sys
 import time
 import socket
 import traceback
-# CloudPickler needs to be imported so that depicklers are registered using the
-# copy_reg module.
+
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
-from pyspark.cloudpickle import CloudPickler
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     CompressedSerializer
-
+from pyspark import shuffle
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -52,6 +50,11 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             return
 
+        # initialize global state
+        shuffle.MemoryBytesSpilled = 0
+        shuffle.DiskBytesSpilled = 0
+        _accumulatorRegistry.clear()
+
         # fetch name of workdir
         spark_files_dir = utf8_deserializer.loads(infile)
         SparkFiles._root_directory = spark_files_dir
@@ -69,10 +72,17 @@ def main(infile, outfile):
         ser = CompressedSerializer(pickleSer)
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
-            value = ser._read_with_length(infile)
-            _broadcastRegistry[bid] = Broadcast(bid, value)
+            if bid >= 0:
+                value = ser._read_with_length(infile)
+                _broadcastRegistry[bid] = Broadcast(bid, value)
+            else:
+                bid = - bid - 1
+                _broadcastRegistry.pop(bid)
 
-        command = ser._read_with_length(infile)
+        _accumulatorRegistry.clear()
+        command = pickleSer._read_with_length(infile)
+        if isinstance(command, Broadcast):
+            command = pickleSer.loads(command.value)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
@@ -92,6 +102,9 @@ def main(infile, outfile):
         exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
+    write_long(shuffle.MemoryBytesSpilled, outfile)
+    write_long(shuffle.DiskBytesSpilled, outfile)
+
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
     write_int(len(_accumulatorRegistry), outfile)

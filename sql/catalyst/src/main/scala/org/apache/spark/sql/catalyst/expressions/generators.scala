@@ -47,8 +47,6 @@ abstract class Generator extends Expression {
 
   override def nullable = false
 
-  override def references = children.flatMap(_.references).toSet
-
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
    * that rule application does not change the output schema of a generator.

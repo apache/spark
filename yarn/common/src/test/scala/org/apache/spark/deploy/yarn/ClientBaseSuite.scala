@@ -38,6 +38,7 @@ import org.scalatest.Matchers
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
+import scala.reflect.ClassTag
 import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkConf}
@@ -200,9 +201,10 @@ class ClientBaseSuite extends FunSuite with Matchers {
 
 
     val knownDefMRAppCP: Seq[String] =
-      getFieldValue[String, Seq[String]](classOf[MRJobConfig],
-                                         "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
-                                         Seq[String]())(a => a.split(","))
+      getFieldValue2[String, Array[String], Seq[String]](
+        classOf[MRJobConfig],
+        "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
+        Seq[String]())(a => a.split(","))(a => a.toSeq)
 
     val knownYARNAppCP = Some(Seq("/known/yarn/path"))
 
@@ -232,14 +234,22 @@ class ClientBaseSuite extends FunSuite with Matchers {
   def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
     Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
 
+  def getFieldValue2[A: ClassTag, A1: ClassTag, B](
+        clazz: Class[_],
+        field: String,
+        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B) : B = {
+    Try(clazz.getField(field)).map(_.get(null)).map {
+      case v: A => mapTo(v)
+      case v1: A1 => mapTo1(v1)
+      case _ => defaults
+    }.toOption.getOrElse(defaults)
+  }
+
   private class DummyClient(
       val args: ClientArguments,
       val conf: Configuration,
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
-
-    override def calculateAMMemory(newApp: GetNewApplicationResponse): Int =
-      throw new UnsupportedOperationException()
 
     override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit =
       throw new UnsupportedOperationException()

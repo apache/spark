@@ -17,34 +17,25 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, DataOutputStream}
-
 import org.apache.spark.{MapOutputTracker, SparkEnv, Logging, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{IndexShuffleBlockManager, ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
+    shuffleBlockManager: IndexShuffleBlockManager,
     handle: BaseShuffleHandle[K, V, C],
     mapId: Int,
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
   private val dep = handle.dependency
-  private val numPartitions = dep.partitioner.numPartitions
 
   private val blockManager = SparkEnv.get.blockManager
-  private val ser = Serializer.getSerializer(dep.serializer.orNull)
-
-  private val conf = SparkEnv.get.conf
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   private var sorter: ExternalSorter[K, V, _] = null
-  private var outputFile: File = null
-  private var indexFile: File = null
 
   // Are we in the process of stopping? Because map tasks can call stop() with success = true
   // and then call stop() with success = false if they get an exception, we want to make sure
@@ -74,17 +65,10 @@ private[spark] class SortShuffleWriter[K, V, C](
       sorter.insertAll(records)
     }
 
-    // Create a single shuffle file with reduce ID 0 that we'll write all results to. We'll later
-    // serve different ranges of this file using an index file that we create at the end.
-    val blockId = ShuffleBlockId(dep.shuffleId, mapId, 0)
-
-    outputFile = blockManager.diskBlockManager.getFile(blockId)
-    indexFile = blockManager.diskBlockManager.getFile(blockId.name + ".index")
-
-    val partitionLengths = sorter.writePartitionedFile(blockId, context)
-
-    // Register our map output with the ShuffleBlockManager, which handles cleaning it over time
-    blockManager.shuffleBlockManager.addCompletedMap(dep.shuffleId, mapId, numPartitions)
+    val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
+    val blockId = shuffleBlockManager.consolidateId(dep.shuffleId, mapId)
+    val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
+    shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
 
     mapStatus = new MapStatus(blockManager.blockManagerId,
       partitionLengths.map(MapOutputTracker.compressSize))
@@ -100,13 +84,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (success) {
         return Option(mapStatus)
       } else {
-        // The map task failed, so delete our output file if we created one
-        if (outputFile != null) {
-          outputFile.delete()
-        }
-        if (indexFile != null) {
-          indexFile.delete()
-        }
+        // The map task failed, so delete our output data.
+        shuffleBlockManager.removeDataByMap(dep.shuffleId, mapId)
         return None
       }
     } finally {
