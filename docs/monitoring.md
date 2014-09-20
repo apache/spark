@@ -135,8 +135,8 @@ follows:
       <code>spark.ui.view.acls</code> when the application was run will also have authorization
       to view that application. 
       If disabled, no access control checks are made. 
-    </td> 
-  </tr>  
+    </td>  
+  </tr>   
   <tr>
     <td>spark.history.fs.cleaner.enable</td>
     <td>false</td>
