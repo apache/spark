@@ -133,9 +133,9 @@ follows:
       set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
       will always have authorization to view their own application and any users specified via 
       <code>spark.ui.view.acls</code> when the application was run will also have authorization
-      to view that application.
-      If disabled, no access control checks are made.
-    </td>
+      to view that application. 
+      If disabled, no access control checks are made. 
+      </td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.enable</td>
