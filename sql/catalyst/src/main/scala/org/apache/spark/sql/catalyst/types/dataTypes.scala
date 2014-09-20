@@ -122,6 +122,16 @@ object NativeType {
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
+
+  val defaultSizeOf: Map[NativeType, Int] = Map(
+    IntegerType -> 4,
+    BooleanType -> 1,
+    LongType -> 8,
+    DoubleType -> 8,
+    FloatType -> 4,
+    ShortType -> 2,
+    ByteType -> 1,
+    StringType -> 4096)
 }
 
 trait PrimitiveType extends DataType {

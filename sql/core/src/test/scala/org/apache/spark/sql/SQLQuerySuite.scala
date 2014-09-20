@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.{ShuffledHashJoin, BroadcastHashJoin}
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
@@ -649,24 +650,24 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (3, null) ::
       (4, 2147483644) :: Nil)
   }
-  
+
   test("SPARK-3423 BETWEEN") {
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
       Seq((5, "5"), (6, "6"), (7, "7"))
     )
-    
+
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
       Seq((7, "7"))
     )
-    
+
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Seq()
     )
   }
-    
+
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
