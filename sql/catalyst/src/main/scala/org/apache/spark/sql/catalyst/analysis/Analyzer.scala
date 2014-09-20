@@ -40,7 +40,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   // TODO: pass this in as a parameter.
   val fixedPoint = FixedPoint(100)
 
-  val batches: Seq[Batch] = Seq(
+  /**
+   * Override to provide additional rules for the "Resolution" batch.
+   */
+  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+
+  lazy val batches: Seq[Batch] = Seq(
     Batch("MultiInstanceRelations", Once,
       NewRelationInstances),
     Batch("CaseInsensitiveAttributeReferences", Once,
@@ -54,8 +59,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
-      UnresolvedHavingClauseAttributes :: 
-      typeCoercionRules :_*),
+      UnresolvedHavingClauseAttributes ::
+      typeCoercionRules ++
+      extendedRules : _*),
     Batch("Check Analysis", Once,
       CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
@@ -63,7 +69,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   )
 
   /**
-   * Makes sure all attributes have been resolved.
+   * Makes sure all attributes and logical plans have been resolved.
    */
   object CheckResolution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = {
@@ -71,6 +77,13 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case p if p.expressions.exists(!_.resolved) =>
           throw new TreeNodeException(p,
             s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+        case p if !p.resolved && p.childrenResolved =>
+          throw new TreeNodeException(p, "Unresolved plan found")
+      } match {
+        // As a backstop, use the root node to check that the entire plan tree is resolved.
+        case p if !p.resolved =>
+          throw new TreeNodeException(p, "Unresolved plan in tree")
+        case p => p
       }
     }
   }
@@ -132,7 +145,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolveChildren)
-        val requiredAttributes = resolved.collect { case a: Attribute => a }.toSet
+        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
@@ -152,8 +165,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         )
 
         logDebug(s"Grouping expressions: $groupingRelation")
-        val resolved = unresolved.flatMap(groupingRelation.resolve).toSet
-        val missingInAggs = resolved -- a.outputSet
+        val resolved = unresolved.flatMap(groupingRelation.resolve)
+        val missingInAggs = resolved.filterNot(a.outputSet.contains)
         logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
         if (missingInAggs.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.

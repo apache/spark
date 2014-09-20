@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
 
 /**
@@ -44,10 +45,13 @@ import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
 private[spark] class EventLoggingListener(
     appName: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration())
+    hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
+
+  def this(appName: String, sparkConf: SparkConf) =
+    this(appName, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
@@ -83,7 +87,7 @@ private[spark] class EventLoggingListener(
         sparkConf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
       logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
     }
-    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
+    logger.newFile(SPARK_VERSION_PREFIX + SPARK_VERSION)
     logger.newFile(LOG_PREFIX + logger.fileIndex)
   }
 

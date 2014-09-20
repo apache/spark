@@ -20,8 +20,10 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Locale, Random, UUID}
+import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+
+import org.apache.log4j.PropertyConfigurator
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -34,6 +36,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -51,11 +54,6 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
  */
 private[spark] object Utils extends Logging {
   val random = new Random()
-
-  def sparkBin(sparkHome: String, which: String): File = {
-    val suffix = if (isWindows) ".cmd" else ""
-    new File(sparkHome + File.separator + "bin", which + suffix)
-  }
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -160,30 +158,6 @@ private[spark] object Utils extends Logging {
       bb.get(bbval)
       out.write(bbval)
     }
-  }
-
-  def isAlpha(c: Char): Boolean = {
-    (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-  }
-
-  /** Split a string into words at non-alphabetic characters */
-  def splitWords(s: String): Seq[String] = {
-    val buf = new ArrayBuffer[String]
-    var i = 0
-    while (i < s.length) {
-      var j = i
-      while (j < s.length && isAlpha(s.charAt(j))) {
-        j += 1
-      }
-      if (j > i) {
-        buf += s.substring(i, j)
-      }
-      i = j
-      while (i < s.length && !isAlpha(s.charAt(i))) {
-        i += 1
-      }
-    }
-    buf
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
@@ -347,7 +321,8 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager) {
+  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
+    hadoopConf: Configuration) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
@@ -419,7 +394,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val fs = getHadoopFileSystem(uri)
+        val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -449,12 +424,71 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
-   * return a single directory, even though the spark.local.dir property might be a list of
-   * multiple paths.
+   * Get the path of a temporary directory.  Spark's local directories can be configured through
+   * multiple settings, which are used with the following precedence:
+   *
+   *   - If called from inside of a YARN container, this will return a directory chosen by YARN.
+   *   - If the SPARK_LOCAL_DIRS environment variable is set, this will return a directory from it.
+   *   - Otherwise, if the spark.local.dir is set, this will return a directory from it.
+   *   - Otherwise, this will return java.io.tmpdir.
+   *
+   * Some of these configuration options might be lists of multiple paths, but this method will
+   * always return a single directory.
    */
   def getLocalDir(conf: SparkConf): String = {
-    conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
+    getOrCreateLocalRootDirs(conf)(0)
+  }
+
+  private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
+    // These environment variables are set by YARN.
+    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
+    // For Hadoop 2.X, we check for CONTAINER_ID.
+    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+  }
+
+  /**
+   * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
+   * and returns only the directories that exist / could be created.
+   *
+   * If no directories could be created, this will return an empty list.
+   */
+  private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+    val confValue = if (isRunningInYarnContainer(conf)) {
+      // If we are in yarn mode, systems can have different disk layouts so we must set it
+      // to what Yarn on this system said was available.
+      getYarnLocalDirs(conf)
+    } else {
+      Option(conf.getenv("SPARK_LOCAL_DIRS")).getOrElse(
+        conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
+    }
+    val rootDirs = confValue.split(',')
+    logDebug(s"Getting/creating local root dirs at '$confValue'")
+
+    rootDirs.flatMap { rootDir =>
+      val localDir: File = new File(rootDir)
+      val foundLocalDir = localDir.exists || localDir.mkdirs()
+      if (!foundLocalDir) {
+        logError(s"Failed to create local root dir in $rootDir.  Ignoring this directory.")
+        None
+      } else {
+        Some(rootDir)
+      }
+    }
+  }
+
+  /** Get the Yarn approved local directories. */
+  private def getYarnLocalDirs(conf: SparkConf): String = {
+    // Hadoop 0.23 and 2.x have different Environment variable names for the
+    // local dirs, so lets check both. We assume one of the 2 is set.
+    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
+    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
+      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
+      .getOrElse(""))
+
+    if (localDirs.isEmpty) {
+      throw new Exception("Yarn Local dirs can't be empty")
+    }
+    localDirs
   }
 
   /**
@@ -496,7 +530,12 @@ private[spark] object Utils extends Logging {
       if (address.isLoopbackAddress) {
         // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
         // a better address using the local network interfaces
-        for (ni <- NetworkInterface.getNetworkInterfaces) {
+        // getNetworkInterfaces returns ifs in reverse order compared to ifconfig output order
+        // on unix-like system. On windows, it returns in index order.
+        // It's more proper to pick ip address following system output order.
+        val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.toList
+        val reOrderedNetworkIFs = if (isWindows) activeNetworkIFs else activeNetworkIFs.reverse
+        for (ni <- reOrderedNetworkIFs) {
           for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
                !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
             // We've found an address that looks reasonable!
@@ -772,14 +811,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a command in the current working directory, throwing an exception if it completes
-   * with an exit code other than 0.
-   */
-  def execute(command: Seq[String]) {
-    execute(command, new File("."))
-  }
-
-  /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
   def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
@@ -810,6 +841,7 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
+      logError(s"Process $command exited with code $exitCode: ${output}")
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
     output.toString
@@ -840,8 +872,8 @@ private[spark] object Utils extends Logging {
    */
   def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot { ste:StackTraceElement => 
-        // When running under some profilers, the current stack trace might contain some bogus 
+      .filterNot { ste:StackTraceElement =>
+        // When running under some profilers, the current stack trace might contain some bogus
         // frames. This is intended to ensure that we don't crash in these situations by
         // ignoring any frames that we can't examine.
         (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
@@ -1157,15 +1189,15 @@ private[spark] object Utils extends Logging {
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: URI): FileSystem = {
-    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  def getHadoopFileSystem(path: URI, conf: Configuration): FileSystem = {
+    FileSystem.get(path, conf)
   }
 
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
-  def getHadoopFileSystem(path: String): FileSystem = {
-    getHadoopFileSystem(new URI(path))
+  def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
+    getHadoopFileSystem(new URI(path), conf)
   }
 
   /**
@@ -1242,7 +1274,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** 
+  /**
    * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.
@@ -1350,15 +1382,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Default number of retries in binding to a port.
+   * Default maximum number of retries when binding to a port before giving up.
    */
   val portMaxRetries: Int = {
     if (sys.props.contains("spark.testing")) {
       // Set a higher number of retries for tests...
-      sys.props.get("spark.ports.maxRetries").map(_.toInt).getOrElse(100)
+      sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(100)
     } else {
       Option(SparkEnv.get)
-        .flatMap(_.conf.getOption("spark.ports.maxRetries"))
+        .flatMap(_.conf.getOption("spark.port.maxRetries"))
         .map(_.toInt)
         .getOrElse(16)
     }
@@ -1420,4 +1452,39 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * config a log4j properties used for testsuite
+   */
+  def configTestLog4j(level: String): Unit = {
+    val pro = new Properties()
+    pro.put("log4j.rootLogger", s"$level, console")
+    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
+    pro.put("log4j.appender.console.target", "System.err")
+    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
+    pro.put("log4j.appender.console.layout.ConversionPattern",
+      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
+    PropertyConfigurator.configure(pro)
+  }
+
+}
+
+/**
+ * A utility class to redirect the child process's stdout or stderr.
+ */
+private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: String)
+  extends Thread(name) {
+
+  setDaemon(true)
+  override def run() {
+    scala.util.control.Exception.ignoring(classOf[IOException]) {
+      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+      val buf = new Array[Byte](1024)
+      var len = in.read(buf)
+      while (len != -1) {
+        out.write(buf, 0, len)
+        out.flush()
+        len = in.read(buf)
+      }
+    }
+  }
 }

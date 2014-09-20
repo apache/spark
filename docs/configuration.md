@@ -207,11 +207,31 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.worker.reuse</code></td>
+  <td>true</td>
+  <td>
+    Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
+    does not need to fork() a Python process for every tasks. It will be very useful
+    if there is large broadcast, then the broadcast will not be needed to transfered
+    from JVM to Python worker for every task.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
     Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
     process. The user can specify multiple of these and to set multiple environment variables. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
   </td>
 </tr>
 </table>
@@ -283,12 +303,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.manager</code></td>
-  <td>HASH</td>
+  <td>sort</td>
   <td>
-    Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
-    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
-    memory-efficient in environments with small executors, such as YARN. To use that, change
-    this value to <code>SORT</code>.
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
+    the default option starting in 1.2.
   </td>
 </tr>
 <tr>
@@ -501,10 +520,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
-  <td>false</td>
+  <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver.
+    the driver, in seconds.
   </td>
 </tr>
 <tr>
@@ -638,7 +657,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Maximum number of retries when binding to a port before giving up.
+    Default maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>

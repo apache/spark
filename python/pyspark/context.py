@@ -20,7 +20,6 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
-from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -33,8 +32,12 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
+from pyspark.traceback_utils import CallSite, first_spark_call
 
 from py4j.java_collections import ListConverter
+
+
+__all__ = ['SparkContext']
 
 
 # These are special default configs for PySpark, they will overwrite
@@ -50,7 +53,7 @@ class SparkContext(object):
 
     """
     Main entry point for Spark functionality. A SparkContext represents the
-    connection to a Spark cluster, and can be used to create L{RDD}s and
+    connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
     """
 
@@ -96,11 +99,7 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        if rdd._extract_concise_traceback() is not None:
-            self._callsite = rdd._extract_concise_traceback()
-        else:
-            tempNamedTuple = namedtuple("Callsite", "function file linenum")
-            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
+        self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
@@ -211,6 +210,8 @@ class SparkContext(object):
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
+                SparkContext._jvm.SerDeUtil.initialize()
+                SparkContext._jvm.SerDe.initialize()
 
             if instance:
                 if (SparkContext._active_spark_context and
@@ -228,6 +229,20 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+    def __enter__(self):
+        """
+        Enable 'with SparkContext(...) as sc: app(sc)' syntax.
+        """
+        return self
+
+    def __exit__(self, type, value, trace):
+        """
+        Enable 'with SparkContext(...) as sc: app' syntax.
+
+        Specifically stop the context on exit of the with block.
+        """
+        self.stop()
 
     @classmethod
     def setSystemProperty(cls, key, value):
@@ -314,11 +329,15 @@ class SparkContext(object):
         return RDD(self._jsc.objectFile(name, minPartitions), self,
                    BatchedSerializer(PickleSerializer()))
 
-    def textFile(self, name, minPartitions=None):
+    def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         >>> path = os.path.join(tempdir, "sample-text.txt")
         >>> with open(path, "w") as testFile:
@@ -329,15 +348,19 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
-                   UTF8Deserializer())
+                   UTF8Deserializer(use_unicode))
 
-    def wholeTextFiles(self, path, minPartitions=None):
+    def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+
+        If use_unicode is False, the strings will be kept as `str` (encoding
+        as `utf-8`), which is faster and smaller than unicode. (Added in
+        Spark 1.2)
 
         For example, if you have the following files::
 
@@ -369,7 +392,7 @@ class SparkContext(object):
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
-                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
+                   PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)))
 
     def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()
@@ -568,8 +591,6 @@ class SparkContext(object):
         L{Broadcast<pyspark.broadcast.Broadcast>}
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
-
-        :keep: Keep the `value` in driver or not.
         """
         ser = CompressedSerializer(PickleSerializer())
         # pass large object by py4j is very slow and need much memory
@@ -608,8 +629,8 @@ class SparkContext(object):
         FTP URI.
 
         To access the file in Spark jobs, use
-        L{SparkFiles.get(path)<pyspark.files.SparkFiles.get>} to find its
-        download location.
+        L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
+        filename to find its download location.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
