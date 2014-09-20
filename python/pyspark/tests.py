@@ -1107,7 +1107,7 @@ class TestOutputFormat(PySparkTestCase):
     def test_unbatched_save_and_read(self):
         basepath = self.tempdir.name
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
+        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
         unbatched_sequence = sorted(self.sc.sequenceFile(
@@ -1153,7 +1153,7 @@ class TestOutputFormat(PySparkTestCase):
         basepath = self.tempdir.name
         # non-batch-serialized RDD[[(K, V)]] should be rejected
         data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
-        rdd = self.sc.parallelize(data, numSlices=len(data))
+        rdd = self.sc.parallelize(data, len(data))
         self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
             basepath + "/malformed/sequence"))
 
