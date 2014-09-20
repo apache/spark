@@ -246,7 +246,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.queryExecution.analyzed)
+    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
   }
 
   /**

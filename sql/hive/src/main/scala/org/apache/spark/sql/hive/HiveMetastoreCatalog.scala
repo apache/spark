@@ -129,14 +129,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(
-                 LowerCaseSchema(table: MetastoreRelation), _, child, _) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(
-                 LowerCaseSchema(
                    InMemoryRelation(_, _, _,
-                     HiveTableScan(_, table, _))), _, child, _) =>
+                     HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 

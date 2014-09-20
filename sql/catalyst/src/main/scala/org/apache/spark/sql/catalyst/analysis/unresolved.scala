@@ -54,6 +54,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
+  override def withName(newName: String) = UnresolvedAttribute(name)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
   override def eval(input: Row = null): EvaluatedType =
@@ -97,13 +98,14 @@ case class Star(
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
+  override def withName(newName: String) = this
 
-  def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
+  def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = {
     val expandedAttributes: Seq[Attribute] = table match {
       // If there is no table specified, use all input attributes.
       case None => input
       // If there is a table, pick out attributes that are part of this table.
-      case Some(t) => input.filter(_.qualifiers contains t)
+      case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
       case (n: NamedExpression, _) => n
