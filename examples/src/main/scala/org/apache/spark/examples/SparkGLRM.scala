@@ -35,13 +35,15 @@ object SparkGLRM {
   // Number of users
   var U = 1000000
   // Number of nonzeros per row
-  var NNZ = 1000
+  var NNZ = 10
   // Number of features
   var rank = 2
   // Number of iterations
   var ITERATIONS = 2
   // Regularization parameter
   var REG = 10000
+  // Num of chunks
+  var NUMCHUNKS = 2
 
 
 
@@ -98,7 +100,7 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val R = sc.parallelize(0 until M).flatMap{i =>
+    val R = sc.parallelize(0 until M, NUMCHUNKS).flatMap{i =>
       val inds = new scala.collection.mutable.TreeSet[Int]()
       while (inds.size < NNZ) {
         inds += scala.util.Random.nextInt(U)
