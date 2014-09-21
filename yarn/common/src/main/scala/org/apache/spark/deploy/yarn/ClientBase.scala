@@ -389,7 +389,7 @@ trait ClientBase extends Logging {
     }
 
     // For log4j configuration to reference
-    javaOpts += "-D=spark.yarn.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR
+    javaOpts += "-D=spark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR
 
     val userClass =
       if (args.userClass != null) {

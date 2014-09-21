@@ -205,6 +205,8 @@ Note that for the first option, both executors and the application master will s
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
 to the same log file).
 
+For a streaming application to operate 24/7, user can use RollingFileAppender in log4j.properties to avoid disk overflow of single log file. And to locate log files in YARN container log directory, configure RollingFileAppender's file location as "${spark.yarn.app.container.log.dir}/spark.log". So these log files can be viewed on YARN's container page during running. And logs will be copied to HDFS after job finished if log aggregation is turned on.
+
 # Important notes
 
 - Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
