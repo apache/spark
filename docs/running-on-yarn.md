@@ -50,13 +50,6 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.scheduler.reporterThread.maxFailures</code></td>
-  <td>5</td>
-  <td>
-    The number of max failures in a row. Reporter thread which checks failed executor give up when the number of attempts reach this number.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.max.executor.failures</code></td>
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
