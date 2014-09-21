@@ -124,7 +124,6 @@ class UISuite extends FunSuite {
       case Failure(e) =>
       // Either case server port is busy hence setup for test complete
     }
-    //keytool -export -keystore core/src/test/resources/spark.keystore -alias spark -file /home/wf/code/spark2/core/src/test/resources/spark.cer -storepass 123456
 
     val sparkConf = new SparkConf()
       .set("spark.ui.https.enabled", "true")
