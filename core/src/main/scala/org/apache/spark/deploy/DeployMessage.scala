@@ -39,8 +39,7 @@ private[deploy] object DeployMessages {
       port: Int,
       cores: Int,
       memory: Int,
-      workerWebUiUrl: String,
-      publicAddress: String)
+      workerWebUiUrl: String)
     extends DeployMessage {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)

@@ -124,8 +124,10 @@ class UISuite extends FunSuite {
       case Failure(e) =>
       // Either case server port is busy hence setup for test complete
     }
+    //keytool -export -keystore core/src/test/resources/spark.keystore -alias spark -file /home/wf/code/spark2/core/src/test/resources/spark.cer -storepass 123456
+
     val sparkConf = new SparkConf()
-      .set("spark.http.policy", "https")
+      .set("spark.ui.https.enabled", "true")
       .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
     val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf)
@@ -154,7 +156,7 @@ class UISuite extends FunSuite {
 
   test("jetty with https binds to port 0 correctly") {
     val sparkConf = new SparkConf()
-      .set("spark.http.policy", "https")
+      .set("spark.ui.https.enabled", "true")
       .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
     val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), sparkConf)

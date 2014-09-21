@@ -30,13 +30,13 @@ import org.eclipse.jetty.server.{Connector, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.server.nio.SelectChannelConnector
+import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
-import org.eclipse.jetty.server.nio.SelectChannelConnector
-import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -212,11 +212,10 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def getConnector(port: Int, conf: SparkConf): Connector = {
-    val https = getHttpPolicy(conf)
+    val https = conf.get("spark.ui.https.enabled", "false").toBoolean
     if (https) {
       buildSslSelectChannelConnector(port, conf)
     } else {
-      conf.set("spark.http.policy", "http")
       val connector = new SelectChannelConnector
       connector.setPort(port)
       connector
@@ -245,13 +244,6 @@ private[spark] object JettyUtils extends Logging {
     connector
   }
 
-  def getHttpPolicy(conf: SparkConf): Boolean = {
-    if (conf.contains("spark.http.policy") && conf.get("spark.http.policy").equals("https")) {
-      true
-    } else {
-      false
-    }
-  }
 }
 
 private[spark] case class ServerInfo(

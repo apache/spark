@@ -97,8 +97,6 @@ private[spark] class SparkUI(
    */
   private[spark] def appUIHostPort = publicHostName + ":" + boundPort
 
-  private def appUiAddressPrefix = conf.get("spark.http.policy")
-
   private[spark] def appUIAddress = s"$appUiAddressPrefix://$appUIHostPort"
 }
 

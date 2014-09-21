@@ -53,9 +53,6 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
   }
-  if (conf.contains("worker.ui.port")) {
-    webUiPort = conf.get("worker.ui.port").toInt
-  }
 
   parse(args.toList)
 
