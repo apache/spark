@@ -42,7 +42,7 @@ object SparkGLRM {
   var ITERATIONS = 2
   // Regularization parameter
   var REG = 100
-  // Num of chunks
+  // Number of partitions for data
   var NUMCHUNKS = 2
 
 
