@@ -17,14 +17,15 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
-import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
-import org.apache.spark.storage.{BlockObjectWriter}
-import org.apache.spark.serializer.Serializer
+import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle._
+import org.apache.spark.storage.BlockObjectWriter
 
-class HashShuffleWriter[K, V](
+private[spark] class HashShuffleWriter[K, V](
+    shuffleBlockManager: FileShuffleBlockManager,
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
     context: TaskContext)
@@ -33,12 +34,19 @@ class HashShuffleWriter[K, V](
   private val dep = handle.dependency
   private val numOutputSplits = dep.partitioner.numPartitions
   private val metrics = context.taskMetrics
+
+  // Are we in the process of stopping? Because map tasks can call stop() with success = true
+  // and then call stop() with success = false if they get an exception, we want to make sure
+  // we don't try deleting files, etc twice.
   private var stopping = false
 
+  private val writeMetrics = new ShuffleWriteMetrics()
+  metrics.shuffleWriteMetrics = Some(writeMetrics)
+
   private val blockManager = SparkEnv.get.blockManager
-  private val shuffleBlockManager = blockManager.shuffleBlockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
-  private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser)
+  private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
+    writeMetrics)
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
@@ -61,7 +69,8 @@ class HashShuffleWriter[K, V](
   }
 
   /** Close this writer, passing along whether the map completed */
-  override def stop(success: Boolean): Option[MapStatus] = {
+  override def stop(initiallySuccess: Boolean): Option[MapStatus] = {
+    var success = initiallySuccess
     try {
       if (stopping) {
         return None
@@ -69,15 +78,16 @@ class HashShuffleWriter[K, V](
       stopping = true
       if (success) {
         try {
-          return Some(commitWritesAndBuildStatus())
+          Some(commitWritesAndBuildStatus())
         } catch {
           case e: Exception =>
+            success = false
             revertWrites()
             throw e
         }
       } else {
         revertWrites()
-        return None
+        None
       }
     } finally {
       // Release the writers back to the shuffle block manager.
@@ -93,22 +103,11 @@ class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    var totalBytes = 0L
-    var totalTime = 0L
     val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
-      writer.commit()
-      writer.close()
+      writer.commitAndClose()
       val size = writer.fileSegment().length
-      totalBytes += size
-      totalTime += writer.timeWriting()
       MapOutputTracker.compressSize(size)
     }
-
-    // Update shuffle metrics.
-    val shuffleMetrics = new ShuffleWriteMetrics
-    shuffleMetrics.shuffleBytesWritten = totalBytes
-    shuffleMetrics.shuffleWriteTime = totalTime
-    metrics.shuffleWriteMetrics = Some(shuffleMetrics)
 
     new MapStatus(blockManager.blockManagerId, compressedSizes)
   }
@@ -116,8 +115,7 @@ class HashShuffleWriter[K, V](
   private def revertWrites(): Unit = {
     if (shuffle != null && shuffle.writers != null) {
       for (writer <- shuffle.writers) {
-        writer.revertPartialWrites()
-        writer.close()
+        writer.revertPartialWritesAndClose()
       }
     }
   }

@@ -20,7 +20,9 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.io.EOFException
+
 import scala.collection.immutable.Map
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapred.FileSplit
@@ -39,7 +41,9 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
-import org.apache.spark.util.NextIterator
+import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
+import org.apache.spark.util.{NextIterator, Utils}
+
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -140,8 +144,8 @@ class HadoopRDD[K, V](
       // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
       // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-      // synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456)
-      conf.synchronized {
+      // Synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456).
+      HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         val newJobConf = new JobConf(conf)
         initLocalJobConfFuncOpt.map(f => f(newJobConf))
         HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
@@ -194,7 +198,7 @@ class HadoopRDD[K, V](
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
-      context.addOnCompleteCallback{ () => closeIfNeeded() }
+      context.addTaskCompletionListener{ context => closeIfNeeded() }
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
@@ -225,11 +229,23 @@ class HadoopRDD[K, V](
         try {
           reader.close()
         } catch {
-          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+          case e: Exception => {
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }
     new InterruptibleIterator[(K, V)](context, iter)
+  }
+
+  /** Maps over a partition, providing the InputSplit that was used as the base of the partition. */
+  @DeveloperApi
+  def mapPartitionsWithInputSplit[U: ClassTag](
+      f: (InputSplit, Iterator[(K, V)]) => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = {
+    new HadoopMapPartitionsWithSplitRDD(this, f, preservesPartitioning)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
@@ -246,6 +262,9 @@ class HadoopRDD[K, V](
 }
 
 private[spark] object HadoopRDD {
+  /** Constructing Configuration objects is not threadsafe, use this lock to serialize. */
+  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
    * the local process.
@@ -268,5 +287,26 @@ private[spark] object HadoopRDD {
     conf.setBoolean("mapred.task.is.map", true)
     conf.setInt("mapred.task.partition", splitId)
     conf.set("mapred.job.id", jobID.toString)
+  }
+
+  /**
+   * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
+   * the given function rather than the index of the partition.
+   */
+  private[spark] class HadoopMapPartitionsWithSplitRDD[U: ClassTag, T: ClassTag](
+      prev: RDD[T],
+      f: (InputSplit, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean = false)
+    extends RDD[U](prev) {
+
+    override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+
+    override def getPartitions: Array[Partition] = firstParent[T].partitions
+
+    override def compute(split: Partition, context: TaskContext) = {
+      val partition = split.asInstanceOf[HadoopPartition]
+      val inputSplit = partition.inputSplit.value
+      f(inputSplit, firstParent[T].iterator(split, context))
+    }
   }
 }

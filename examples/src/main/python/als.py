@@ -16,6 +16,9 @@
 #
 
 """
+This is an example implementation of ALS for learning how to use Spark. Please refer to
+ALS in pyspark.mllib.recommendation for more conventional use.
+
 This example requires numpy (http://www.numpy.org/)
 """
 from os.path import realpath
@@ -49,18 +52,24 @@ def update(i, vec, mat, ratings):
 
 
 if __name__ == "__main__":
+
     """
-    Usage: als [M] [U] [F] [iterations] [slices]"
+    Usage: als [M] [U] [F] [iterations] [partitions]"
     """
+
+    print >> sys.stderr, """WARN: This is a naive implementation of ALS and is given as an
+      example. Please use the ALS method found in pyspark.mllib.recommendation for more
+      conventional use."""
+
     sc = SparkContext(appName="PythonALS")
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     U = int(sys.argv[2]) if len(sys.argv) > 2 else 500
     F = int(sys.argv[3]) if len(sys.argv) > 3 else 10
     ITERATIONS = int(sys.argv[4]) if len(sys.argv) > 4 else 5
-    slices = int(sys.argv[5]) if len(sys.argv) > 5 else 2
+    partitions = int(sys.argv[5]) if len(sys.argv) > 5 else 2
 
-    print "Running ALS with M=%d, U=%d, F=%d, iters=%d, slices=%d\n" % \
-        (M, U, F, ITERATIONS, slices)
+    print "Running ALS with M=%d, U=%d, F=%d, iters=%d, partitions=%d\n" % \
+        (M, U, F, ITERATIONS, partitions)
 
     R = matrix(rand(M, F)) * matrix(rand(U, F).T)
     ms = matrix(rand(M, F))
@@ -71,7 +80,7 @@ if __name__ == "__main__":
     usb = sc.broadcast(us)
 
     for i in range(ITERATIONS):
-        ms = sc.parallelize(range(M), slices) \
+        ms = sc.parallelize(range(M), partitions) \
                .map(lambda x: update(x, msb.value[x, :], usb.value, Rb.value)) \
                .collect()
         # collect() returns a list, so array ends up being
@@ -79,7 +88,7 @@ if __name__ == "__main__":
         ms = matrix(np.array(ms)[:, :, 0])
         msb = sc.broadcast(ms)
 
-        us = sc.parallelize(range(U), slices) \
+        us = sc.parallelize(range(U), partitions) \
                .map(lambda x: update(x, usb.value[x, :], msb.value, Rb.value.T)) \
                .collect()
         us = matrix(np.array(us)[:, :, 0])
@@ -88,3 +97,5 @@ if __name__ == "__main__":
         error = rmse(R, ms, us)
         print "Iteration %d:" % i
         print "\nRMSE: %5.4f\n" % error
+
+    sc.stop()

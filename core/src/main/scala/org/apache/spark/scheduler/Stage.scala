@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
@@ -41,6 +43,9 @@ import org.apache.spark.util.CallSite
  * stage, the callSite gives the user code that created the RDD being shuffled. For a result
  * stage, the callSite gives the user code that executes the associated action (e.g. count()).
  *
+ * A single stage can consist of multiple attempts. In that case, the latestInfo field will
+ * be updated for each attempt.
+ *
  */
 private[spark] class Stage(
     val id: Int,
@@ -56,7 +61,21 @@ private[spark] class Stage(
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
+
+  /** Set of jobs that this stage belongs to. */
+  val jobIds = new HashSet[Int]
+
+  /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
+  var resultOfJob: Option[ActiveJob] = None
+  var pendingTasks = new HashSet[Task[_]]
+
   private var nextAttemptId = 0
+
+  val name = callSite.shortForm
+  val details = callSite.longForm
+
+  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
+  var latestInfo: StageInfo = StageInfo.fromStage(this)
 
   def isAvailable: Boolean = {
     if (!isShuffleMap) {
@@ -100,6 +119,7 @@ private[spark] class Stage(
     }
   }
 
+  /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1
@@ -107,9 +127,6 @@ private[spark] class Stage(
   }
 
   def attemptId: Int = nextAttemptId
-
-  val name = callSite.short
-  val details = callSite.long
 
   override def toString = "Stage " + id
 

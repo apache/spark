@@ -35,7 +35,7 @@ abstract class Command extends LeafNode {
  */
 case class NativeCommand(cmd: String) extends Command {
   override def output =
-    Seq(BoundReference(0, AttributeReference("result", StringType, nullable = false)()))
+    Seq(AttributeReference("result", StringType, nullable = false)())
 }
 
 /**
@@ -43,17 +43,16 @@ case class NativeCommand(cmd: String) extends Command {
  */
 case class SetCommand(key: Option[String], value: Option[String]) extends Command {
   override def output = Seq(
-    BoundReference(0, AttributeReference("key", StringType, nullable = false)()),
-    BoundReference(1, AttributeReference("value", StringType, nullable = false)()))
+    AttributeReference("", StringType, nullable = false)())
 }
 
 /**
  * Returned by a parser when the users only wants to see what query plan would be executed, without
  * actually performing the execution.
  */
-case class ExplainCommand(plan: LogicalPlan) extends Command {
+case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends Command {
   override def output =
-    Seq(BoundReference(0, AttributeReference("plan", StringType, nullable = false)()))
+    Seq(AttributeReference("plan", StringType, nullable = false)())
 }
 
 /**
@@ -72,7 +71,12 @@ case class DescribeCommand(
     isExtended: Boolean) extends Command {
   override def output = Seq(
     // Column names are based on Hive.
-    BoundReference(0, AttributeReference("col_name", StringType, nullable = false)()),
-    BoundReference(1, AttributeReference("data_type", StringType, nullable = false)()),
-    BoundReference(2, AttributeReference("comment", StringType, nullable = false)()))
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = false)())
 }
+
+/**
+ * Returned for the "CACHE TABLE tableName AS SELECT .." command.
+ */
+case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan) extends Command

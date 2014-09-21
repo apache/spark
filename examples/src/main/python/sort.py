@@ -34,3 +34,5 @@ if __name__ == "__main__":
     output = sortedCount.collect()
     for (num, unitcount) in output:
         print num
+
+    sc.stop()

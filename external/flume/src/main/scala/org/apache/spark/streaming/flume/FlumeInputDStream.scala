@@ -39,11 +39,8 @@ import org.apache.spark.streaming.receiver.Receiver
 
 import org.jboss.netty.channel.ChannelPipelineFactory
 import org.jboss.netty.channel.Channels
-import org.jboss.netty.channel.ChannelPipeline
-import org.jboss.netty.channel.ChannelFactory
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
-import org.jboss.netty.handler.execution.ExecutionHandler
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -153,15 +150,15 @@ class FlumeReceiver(
 
   private def initServer() = {
     if (enableDecompression) {
-      val channelFactory = new NioServerSocketChannelFactory
-        (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-      val channelPipelieFactory = new CompressionChannelPipelineFactory()
+      val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
+                                                             Executors.newCachedThreadPool())
+      val channelPipelineFactory = new CompressionChannelPipelineFactory()
       
       new NettyServer(
         responder, 
         new InetSocketAddress(host, port),
-        channelFactory, 
-        channelPipelieFactory, 
+        channelFactory,
+        channelPipelineFactory,
         null)
     } else {
       new NettyServer(responder, new InetSocketAddress(host, port))

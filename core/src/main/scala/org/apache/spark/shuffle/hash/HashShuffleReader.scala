@@ -20,8 +20,9 @@ package org.apache.spark.shuffle.hash
 import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
+import org.apache.spark.util.collection.ExternalSorter
 
-class HashShuffleReader[K, C](
+private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,
@@ -35,10 +36,10 @@ class HashShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
-      Serializer.getSerializer(dep.serializer))
+    val ser = Serializer.getSerializer(dep.serializer)
+    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
 
-    if (dep.aggregator.isDefined) {
+    val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
       } else {
@@ -47,7 +48,22 @@ class HashShuffleReader[K, C](
     } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
-      iter
+      // Convert the Product2s to pairs since this is what downstream RDDs currently expect
+      iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
+    }
+
+    // Sort the output if there is a sort ordering defined.
+    dep.keyOrdering match {
+      case Some(keyOrd: Ordering[K]) =>
+        // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
+        // the ExternalSorter won't spill to disk.
+        val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
+        sorter.insertAll(aggregatedIter)
+        context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
+        context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
+        sorter.iterator
+      case None =>
+        aggregatedIter
     }
   }
 

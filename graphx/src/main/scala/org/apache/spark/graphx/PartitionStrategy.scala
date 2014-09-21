@@ -91,7 +91,7 @@ object PartitionStrategy {
   case object EdgePartition1D extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val mixingPrime: VertexId = 1125899906842597L
-      (math.abs(src) * mixingPrime).toInt % numParts
+      (math.abs(src * mixingPrime) % numParts).toInt
     }
   }
 

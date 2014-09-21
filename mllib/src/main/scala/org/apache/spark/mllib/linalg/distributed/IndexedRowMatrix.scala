@@ -76,16 +76,12 @@ class IndexedRowMatrix(
   }
 
   /**
-   * Computes the singular value decomposition of this matrix.
+   * Computes the singular value decomposition of this IndexedRowMatrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
    *
-   * There is no restriction on m, but we require `n^2` doubles to fit in memory.
-   * Further, n should be less than m.
-
-   * The decomposition is computed by first computing A'A = V S^2 V',
-   * computing svd locally on that (since n x n is small), from which we recover S and V.
-   * Then we compute U via easy matrix multiplication as U =  A * (V * S^-1).
-   * Note that this approach requires `O(n^3)` time on the master node.
+   * The cost and implementation of this method is identical to that in
+   * [[org.apache.spark.mllib.linalg.distributed.RowMatrix]]
+   * With the addition of indices.
    *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
@@ -130,7 +126,7 @@ class IndexedRowMatrix(
     val indexedRows = rows.map(_.index).zip(mat.rows).map { case (i, v) =>
       IndexedRow(i, v)
     }
-    new IndexedRowMatrix(indexedRows, nRows, nCols)
+    new IndexedRowMatrix(indexedRows, nRows, B.numCols)
   }
 
   /**

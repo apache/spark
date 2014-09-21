@@ -53,9 +53,9 @@ case class InsertIntoHiveTable(
     (@transient sc: HiveContext)
   extends UnaryNode {
 
-  val outputClass = newSerializer(table.tableDesc).getSerializedClass
-  @transient private val hiveContext = new Context(sc.hiveconf)
-  @transient private val db = Hive.get(sc.hiveconf)
+  @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
+  @transient private lazy val hiveContext = new Context(sc.hiveconf)
+  @transient private lazy val db = Hive.get(sc.hiveconf)
 
   private def newSerializer(tableDesc: TableDesc): Serializer = {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
@@ -131,7 +131,7 @@ case class InsertIntoHiveTable(
       conf,
       SparkHiveHadoopWriter.createPathFromString(fileSinkConf.getDirName, conf))
 
-    logger.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
+    log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
 
     val writer = new SparkHiveHadoopWriter(conf, fileSinkConf)
     writer.preSetup()

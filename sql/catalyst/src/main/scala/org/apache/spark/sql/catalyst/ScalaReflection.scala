@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
 
@@ -31,6 +30,15 @@ object ScalaReflection {
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
+
+  /** Converts Scala objects to catalyst rows / types */
+  def convertToCatalyst(a: Any): Any = a match {
+    case o: Option[_] => o.orNull
+    case s: Seq[_] => s.map(convertToCatalyst)
+    case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
+    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
+    case other => other
+  }
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
@@ -62,11 +70,14 @@ object ScalaReflection {
       sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
-      Schema(ArrayType(schemaFor(elementType).dataType), nullable = true)
+      val Schema(dataType, nullable) = schemaFor(elementType)
+      Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
     case t if t <:< typeOf[Map[_,_]] =>
       val TypeRef(_, _, Seq(keyType, valueType)) = t
-      Schema(MapType(schemaFor(keyType).dataType, schemaFor(valueType).dataType), nullable = true)
-    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
+      val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+      Schema(MapType(schemaFor(keyType).dataType,
+        valueDataType, valueContainsNull = valueNullable), nullable = true)
+    case t if t <:< typeOf[String]            => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
     case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
@@ -83,6 +94,26 @@ object ScalaReflection {
     case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
     case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
     case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+  }
+
+  def typeOfObject: PartialFunction[Any, DataType] = {
+    // The data type can be determined without ambiguity.
+    case obj: BooleanType.JvmType => BooleanType
+    case obj: BinaryType.JvmType => BinaryType
+    case obj: StringType.JvmType => StringType
+    case obj: ByteType.JvmType => ByteType
+    case obj: ShortType.JvmType => ShortType
+    case obj: IntegerType.JvmType => IntegerType
+    case obj: LongType.JvmType => LongType
+    case obj: FloatType.JvmType => FloatType
+    case obj: DoubleType.JvmType => DoubleType
+    case obj: DecimalType.JvmType => DecimalType
+    case obj: TimestampType.JvmType => TimestampType
+    case null => NullType
+    // For other cases, there is no obvious mapping from the type of the given object to a
+    // Catalyst data type. A user should provide his/her specific rules
+    // (in a user-defined PartialFunction) to infer the Catalyst data type for other types of
+    // objects and then compose the user-defined PartialFunction with this one.
   }
 
   implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
