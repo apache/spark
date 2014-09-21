@@ -77,14 +77,14 @@ instances. The default region is `us-east-1`.
 to launch instances in. Sometimes, you will get an error because there
 is not enough capacity in one zone, and you should try to launch in
 another.
--    `--ebs-vol-size=GB` will attach an EBS volume with a given amount
+-    `--ebs-vol-size=<GB>` will attach an EBS volume with a given amount
      of space to each node so that you can have a persistent HDFS cluster
      on your nodes across cluster restarts (see below).
--    `--spot-price=PRICE` will launch the worker nodes as
+-    `--spot-price=<price>` will launch the worker nodes as
      [Spot Instances](http://aws.amazon.com/ec2/spot-instances/),
      bidding for the given maximum price (in dollars).
--    `--spark-version=VERSION` will pre-load the cluster with the
-     specified version of Spark. VERSION can be a version number
+-    `--spark-version=<version>` will pre-load the cluster with the
+     specified version of Spark. The <version> can be a version number
      (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
 -    If one of your launches fails due to e.g. not having the right
