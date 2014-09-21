@@ -18,18 +18,18 @@
 #
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
-source $FWDIR/bin/utils.sh
+source "$FWDIR/bin/utils.sh"
 
 SCALA_VERSION=2.10
 
 function usage() {
   echo "Usage: ./bin/pyspark [options]" 1>&2
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
 }
 
@@ -48,7 +48,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   fi
 fi
 
-. $FWDIR/bin/load-spark-env.sh
+. "$FWDIR"/bin/load-spark-env.sh
 
 # Figure out which Python executable to use
 if [[ -z "$PYSPARK_PYTHON" ]]; then
@@ -57,12 +57,12 @@ fi
 export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
-export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
-export PYTHONPATH=$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH
+export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"
+export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
-export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
-export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
+export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
+export PYTHONSTARTUP="$FWDIR/python/pyspark/shell.py"
 
 # If IPython options are specified, assume user wants to run IPython
 if [[ -n "$IPYTHON_OPTS" ]]; then
@@ -85,6 +85,8 @@ export PYSPARK_SUBMIT_ARGS
 
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
     exec "$PYSPARK_PYTHON" -m doctest $1
   else
@@ -97,14 +99,16 @@ fi
 if [[ "$1" =~ \.py$ ]]; then
   echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
   echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
-  primary=$1
+  primary="$1"
   shift
   gatherSparkSubmitOpts "$@"
-  exec $FWDIR/bin/spark-submit "${SUBMISSION_OPTS[@]}" $primary "${APPLICATION_OPTS[@]}"
+  exec "$FWDIR"/bin/spark-submit "${SUBMISSION_OPTS[@]}" "$primary" "${APPLICATION_OPTS[@]}"
 else
+  # PySpark shell requires special handling downstream
+  export PYSPARK_SHELL=1
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
-    exec ipython $IPYTHON_OPTS
+    exec ${PYSPARK_PYTHON:-ipython} $IPYTHON_OPTS
   else
     exec "$PYSPARK_PYTHON"
   fi

@@ -55,8 +55,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   def add(sample: Vector): this.type = {
     if (n == 0) {
-      require(sample.toBreeze.length > 0, s"Vector should have dimension larger than zero.")
-      n = sample.toBreeze.length
+      require(sample.size > 0, s"Vector should have dimension larger than zero.")
+      n = sample.size
 
       currMean = BDV.zeros[Double](n)
       currM2n = BDV.zeros[Double](n)
@@ -65,8 +65,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currMin = BDV.fill(n)(Double.MaxValue)
     }
 
-    require(n == sample.toBreeze.length, s"Dimensions mismatch when adding new sample." +
-      s" Expecting $n but got ${sample.toBreeze.length}.")
+    require(n == sample.size, s"Dimensions mismatch when adding new sample." +
+      s" Expecting $n but got ${sample.size}.")
 
     sample.toBreeze.activeIterator.foreach {
       case (_, 0.0) => // Skip explicit zero elements.

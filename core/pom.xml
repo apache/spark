@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.1.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -68,9 +68,15 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
+    <!--
+      Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
+      class exposed in the Java API). The plugin will then remove this dependency from the published
+      pom, so that Guava does not pollute the client's compilation classpath.
+    -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -300,27 +306,77 @@
       </plugin>
       <!-- Unzip py4j so we can include its files in the jar -->
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>1.2.1</version>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
         <executions>
           <execution>
             <phase>generate-resources</phase>
             <goals>
-              <goal>exec</goal>
+              <goal>run</goal>
             </goals>
           </execution>
         </executions>
         <configuration>
-          <executable>unzip</executable>
-          <workingDirectory>../python</workingDirectory>
-          <arguments>
-            <argument>-o</argument>
-            <argument>lib/py4j*.zip</argument>
-            <argument>-d</argument>
-            <argument>build</argument>
-          </arguments>
+          <tasks>
+            <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="../python/build" />
+          </tasks>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <artifactSet>
+                <includes>
+                  <include>com.google.guava:guava</include>
+                </includes>
+              </artifactSet>
+              <filters>
+                <!-- See comment in the guava dependency declaration above. -->
+                <filter>
+                  <artifact>com.google.guava:guava</artifact>
+                  <includes>
+                    <include>com/google/common/base/Optional*</include>
+                  </includes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        Copy guava to the build directory. This is needed to make the SPARK_PREPEND_CLASSES
+        option work in compute-classpath.sh, since it would put the non-shaded Spark classes in
+        the runtime classpath.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <useSubDirectoryPerType>true</useSubDirectoryPerType>
+              <includeArtifactIds>guava</includeArtifactIds>
+              <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
 

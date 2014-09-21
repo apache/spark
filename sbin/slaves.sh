@@ -36,29 +36,29 @@ if [ $# -le 0 ]; then
   exit 1
 fi
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 . "$sbin/spark-config.sh"
 
 # If the slaves file is specified in the command line,
 # then it takes precedence over the definition in
 # spark-env.sh. Save it here.
-HOSTLIST=$SPARK_SLAVES
+HOSTLIST="$SPARK_SLAVES"
 
 # Check if --config is passed as an argument. It is an optional parameter.
 # Exit if the argument is not a directory.
 if [ "$1" == "--config" ]
 then
   shift
-  conf_dir=$1
+  conf_dir="$1"
   if [ ! -d "$conf_dir" ]
   then
     echo "ERROR : $conf_dir is not a directory"
     echo $usage
     exit 1
   else
-    export SPARK_CONF_DIR=$conf_dir
+    export SPARK_CONF_DIR="$conf_dir"
   fi
   shift
 fi
@@ -79,7 +79,7 @@ if [ "$SPARK_SSH_OPTS" = "" ]; then
 fi
 
 for slave in `cat "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
- ssh $SPARK_SSH_OPTS $slave $"${@// /\\ }" \
+ ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
    2>&1 | sed "s/^/$slave: /" &
  if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
    sleep $SPARK_SLAVE_SLEEP

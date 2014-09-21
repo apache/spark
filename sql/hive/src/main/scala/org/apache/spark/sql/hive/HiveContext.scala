@@ -79,6 +79,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Change the default SQL dialect to HiveQL
   override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  private[spark] def convertMetastoreParquet: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet", "false") == "true"
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
@@ -236,24 +244,23 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
-    override def lookupRelation(
-      databaseName: Option[String],
-      tableName: String,
-      alias: Option[String] = None): LogicalPlan = {
-
-      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
-    }
-  }
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false)
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedRules =
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUdfs ::
+        Nil
+    }
 
   /**
    * Runs the specified SQL query using Hive.
@@ -326,6 +333,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
+      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,
@@ -343,9 +351,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
-    // TODO: Create mixin for the analyzer instead of overriding things here.
-    override lazy val optimizedPlan =
-      optimizer(ExtractPythonUdfs(catalog.PreInsertionCasts(catalog.CreateTables(analyzed))))
 
     override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
@@ -379,7 +384,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType, _)) =>
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -399,7 +404,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // be similar with Hive.
         describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
-        command.sideEffectResult.map(_.toString)
+        command.sideEffectResult.map(_.head.toString)
 
       case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
@@ -414,7 +419,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       logical match {
         case _: NativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => executedPlan.toString
+        case _ => super.simpleString
       }
   }
 }

@@ -154,6 +154,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {
@@ -317,6 +318,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
 
 object JarCreationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
@@ -338,6 +340,7 @@ object JarCreationTest {
 
 object SimpleApplicationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val configs = Seq("spark.master", "spark.app.name")

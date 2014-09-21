@@ -19,57 +19,76 @@
 Python package for random data generation.
 """
 
+from functools import wraps
 
 from pyspark.rdd import RDD
-from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
-from pyspark.serializers import NoOpSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 
-class RandomRDDGenerators:
+__all__ = ['RandomRDDs', ]
 
+
+def serialize(f):
+    @wraps(f)
+    def func(sc, *a, **kw):
+        jrdd = f(sc, *a, **kw)
+        return RDD(sc._jvm.PythonRDD.javaToPython(jrdd), sc,
+                   BatchedSerializer(PickleSerializer(), 1024))
+    return func
+
+
+def toArray(f):
+    @wraps(f)
+    def func(sc, *a, **kw):
+        rdd = f(sc, *a, **kw)
+        return rdd.map(lambda vec: vec.toArray())
+    return func
+
+
+class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
     """
 
     @staticmethod
+    @serialize
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
-        uniform distribution on [0.0, 1.0].
+        uniform distribution U(0.0, 1.0).
 
-        To transform the distribution in the generated RDD from U[0.0, 1.0]
-        to U[a, b], use
-        C{RandomRDDGenerators.uniformRDD(sc, n, p, seed)\
+        To transform the distribution in the generated RDD from U(0.0, 1.0)
+        to U(a, b), use
+        C{RandomRDDs.uniformRDD(sc, n, p, seed)\
           .map(lambda v: a + (b - a) * v)}
 
-        >>> x = RandomRDDGenerators.uniformRDD(sc, 100).collect()
+        >>> x = RandomRDDs.uniformRDD(sc, 100).collect()
         >>> len(x)
         100
         >>> max(x) <= 1.0 and min(x) >= 0.0
         True
-        >>> RandomRDDGenerators.uniformRDD(sc, 100, 4).getNumPartitions()
+        >>> RandomRDDs.uniformRDD(sc, 100, 4).getNumPartitions()
         4
-        >>> parts = RandomRDDGenerators.uniformRDD(sc, 100, seed=4).getNumPartitions()
+        >>> parts = RandomRDDs.uniformRDD(sc, 100, seed=4).getNumPartitions()
         >>> parts == sc.defaultParallelism
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
-        uniform = RDD(jrdd, sc, NoOpSerializer())
-        return uniform.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @serialize
     def normalRDD(sc, size, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of i.i.d samples from the standard normal
+        Generates an RDD comprised of i.i.d. samples from the standard normal
         distribution.
 
         To transform the distribution in the generated RDD from standard normal
-        to some other normal N(mean, sigma), use
-        C{RandomRDDGenerators.normal(sc, n, p, seed)\
+        to some other normal N(mean, sigma^2), use
+        C{RandomRDDs.normal(sc, n, p, seed)\
           .map(lambda v: mean + sigma * v)}
 
-        >>> x = RandomRDDGenerators.normalRDD(sc, 1000, seed=1L)
+        >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1L)
         >>> stats = x.stats()
         >>> stats.count()
         1000L
@@ -78,18 +97,17 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - 1.0) < 0.1
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
-        normal = RDD(jrdd, sc, NoOpSerializer())
-        return normal.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @serialize
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of i.i.d samples from the Poisson
+        Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
 
         >>> mean = 100.0
-        >>> x = RandomRDDGenerators.poissonRDD(sc, mean, 1000, seed=1L)
+        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=1L)
         >>> stats = x.stats()
         >>> stats.count()
         1000L
@@ -99,38 +117,38 @@ class RandomRDDGenerators:
         >>> abs(stats.stdev() - sqrt(mean)) < 0.5
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
-        poisson = RDD(jrdd, sc, NoOpSerializer())
-        return poisson.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
 
     @staticmethod
+    @toArray
+    @serialize
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
-        from the uniform distribution on [0.0 1.0].
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
+        from the uniform distribution U(0.0, 1.0).
 
         >>> import numpy as np
-        >>> mat = np.matrix(RandomRDDGenerators.uniformVectorRDD(sc, 10, 10).collect())
+        >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
         >>> mat.shape
         (10, 10)
         >>> mat.max() <= 1.0 and mat.min() >= 0.0
         True
-        >>> RandomRDDGenerators.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
+        >>> RandomRDDs.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
+        return sc._jvm.PythonMLLibAPI() \
             .uniformVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        uniform = RDD(jrdd, sc, NoOpSerializer())
-        return uniform.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
+    @toArray
+    @serialize
     def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
 
         >>> import numpy as np
-        >>> mat = np.matrix(RandomRDDGenerators.normalVectorRDD(sc, 100, 100, seed=1L).collect())
+        >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - 0.0) < 0.1
@@ -138,20 +156,20 @@ class RandomRDDGenerators:
         >>> abs(mat.std() - 1.0) < 0.1
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
+        return sc._jvm.PythonMLLibAPI() \
             .normalVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        normal = RDD(jrdd, sc, NoOpSerializer())
-        return normal.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
     @staticmethod
+    @toArray
+    @serialize
     def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
-        Generates an RDD comprised of vectors containing i.i.d samples drawn
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
 
         >>> import numpy as np
         >>> mean = 100.0
-        >>> rdd = RandomRDDGenerators.poissonVectorRDD(sc, mean, 100, 100, seed=1L)
+        >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1L)
         >>> mat = np.mat(rdd.collect())
         >>> mat.shape
         (100, 100)
@@ -161,10 +179,8 @@ class RandomRDDGenerators:
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
+        return sc._jvm.PythonMLLibAPI() \
             .poissonVectorRDD(sc._jsc, mean, numRows, numCols, numPartitions, seed)
-        poisson = RDD(jrdd, sc, NoOpSerializer())
-        return poisson.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
 
 
 def _test():

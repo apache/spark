@@ -42,6 +42,7 @@ private[spark] case class PythonUDF(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
+    broadcastVars: JList[Broadcast[Array[Byte]]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
     children: Seq[Expression]) extends Expression with SparkLogging {
@@ -49,7 +50,6 @@ private[spark] case class PythonUDF(
   override def toString = s"PythonUDF#$name(${children.mkString(",")})"
 
   def nullable: Boolean = true
-  def references: Set[Attribute] = children.flatMap(_.references).toSet
 
   override def eval(input: Row) = sys.error("PythonUDFs can not be directly evaluated.")
 }
@@ -99,7 +99,7 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
         logical.Project(
           l.output,
           l.transformExpressions {
-            case p: PythonUDF if p.id == udf.id => evaluation.resultAttribute
+            case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
           }.withNewChildren(newChildren))
       }
   }
@@ -113,7 +113,6 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
 case class EvaluatePython(udf: PythonUDF, child: LogicalPlan) extends logical.UnaryNode {
   val resultAttribute = AttributeReference("pythonUDF", udf.dataType, nullable=true)()
 
-  def references = Set.empty
   def output = child.output :+ resultAttribute
 }
 
@@ -147,7 +146,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       udf.pythonIncludes,
       false,
       udf.pythonExec,
-      Seq[Broadcast[Array[Byte]]](),
+      udf.broadcastVars,
       udf.accumulator
     ).mapPartitions { iter =>
       val pickle = new Unpickler
