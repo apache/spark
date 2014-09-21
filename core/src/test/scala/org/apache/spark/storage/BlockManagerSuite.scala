@@ -1283,13 +1283,13 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(master.getPeers(BlockManagerId("", "", 1)).isEmpty)
   }
 
-  test("block replication - 2x") {
+  test("block replication - 2x replication") {
     testReplication(2,
       Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_AND_DISK_SER_2)
     )
   }
 
-  test("block replication - 3x") {
+  test("block replication - 3x replication") {
     // Generate storage levels with 3x replication
     val storageLevels = {
       Seq(MEMORY_ONLY, MEMORY_ONLY_SER, DISK_ONLY, MEMORY_AND_DISK, MEMORY_AND_DISK_SER).map {
@@ -1316,7 +1316,44 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     testReplication(5, storageLevels)
   }
 
-  test("block replication with addition and deletion of block managers") {
+  test("block replication - deterministic node selection") {
+    val blockSize = 1000
+    val storeSize = 10000
+    val stores = (1 to 5).map { i => makeBlockManager(storeSize, s"store$i") }
+    val storageLevel2x = StorageLevel.MEMORY_AND_DISK_2
+    val storageLevel3x = StorageLevel(true, true, false, true, 3)
+    val storageLevel4x = StorageLevel(true, true, false, true, 4)
+
+    def putBlockAndGetLocations(blockId: String, level: StorageLevel): Set[BlockManagerId] = {
+      stores.head.putSingle(blockId, new Array[Byte](blockSize), level)
+      val locations = master.getLocations(blockId).sortBy { _.executorId }.toSet
+      stores.foreach { _.removeBlock(blockId) }
+      master.removeBlock(blockId)
+      locations
+    }
+
+    val a1Locs = putBlockAndGetLocations("a1", storageLevel2x)
+    assert(putBlockAndGetLocations("a1", storageLevel2x) === a1Locs,
+      "Inserting a 2x replicated block second time gave different locations from the first")
+
+    val a2Locs3x = putBlockAndGetLocations("a2", storageLevel3x)
+    assert(putBlockAndGetLocations("a2", storageLevel3x) === a2Locs3x,
+      "Inserting a 3x replicated block second time gave different locations from the first")
+    val a2Locs2x = putBlockAndGetLocations("a2", storageLevel2x)
+    assert(
+      a2Locs2x.subsetOf(a2Locs3x),
+      "Inserting a with 2x replication gave locations that are not a subset of locations" +
+        s" with 3x replication [3x: ${a2Locs3x.mkString(",")}; 2x: ${a2Locs2x.mkString(",")}"
+    )
+    val a2Locs4x = putBlockAndGetLocations("a2", storageLevel4x)
+    assert(
+      a2Locs3x.subsetOf(a2Locs4x),
+      "Inserting a with 4x replication gave locations that are not a superset of locations " +
+        s"with 3x replication [3x: ${a2Locs3x.mkString(",")}; 4x: ${a2Locs4x.mkString(",")}"
+    )
+  }
+
+  test("block replication - addition and deletion of block managers") {
     val blockSize = 1000
     val storeSize = 10000
     val initialStores = (1 to 2).map { i => makeBlockManager(storeSize, s"store$i") }
@@ -1329,10 +1366,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
      */
     def testPut(blockId: String, storageLevel: StorageLevel, expectedNumLocations: Int) {
       try {
-        initialStores(0).putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+        initialStores.head.putSingle(blockId, new Array[Byte](blockSize), storageLevel)
         assert(master.getLocations(blockId).size === expectedNumLocations)
       } finally {
-        master.removeBlock(blockId)
+        allStores.foreach { _.removeBlock(blockId) }
       }
     }
 

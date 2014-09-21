@@ -798,7 +798,7 @@ private[spark] class BlockManager(
     cachedPeers.synchronized {
       if (cachedPeers.isEmpty || forceFetch || timeout) {
         cachedPeers.clear()
-        cachedPeers ++= master.getPeers(blockManagerId)
+        cachedPeers ++= master.getPeers(blockManagerId).sortBy(_.hashCode)
         lastPeerFetchTime = System.currentTimeMillis
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
@@ -817,6 +817,7 @@ private[spark] class BlockManager(
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
     val startTime = System.nanoTime
+    val random = new Random(blockId.hashCode)
 
     var forceFetchPeers = false
     var failures = 0
@@ -825,7 +826,7 @@ private[spark] class BlockManager(
     // Get a random peer
     def getRandomPeer(): Option[BlockManagerId] = {
       val peers = getPeers(forceFetchPeers) -- peersReplicatedTo -- peersFailedToReplicateTo
-      if (!peers.isEmpty) Some(peers.toSeq(Random.nextInt(peers.size))) else None
+      if (!peers.isEmpty) Some(peers.toSeq(random.nextInt(peers.size))) else None
     }
 
     // One by one choose a random peer and try uploading the block to it
