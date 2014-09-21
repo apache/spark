@@ -105,7 +105,8 @@ private[spark] abstract class WebUI(
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
       serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
-      logInfo(s"Started %s at $appUiAddressPrefix://%s:%d".format(className, publicHostName, boundPort))
+      logInfo(s"Started %s at $appUiAddressPrefix://%s:%d".format(
+        className, publicHostName, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to bind %s".format(className), e)
