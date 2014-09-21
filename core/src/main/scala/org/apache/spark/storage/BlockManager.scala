@@ -792,7 +792,7 @@ private[spark] class BlockManager(
    * Get peer block managers in the system.
    */
   private def getPeers(forceFetch: Boolean): HashSet[BlockManagerId] = {
-    val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 1000) // milliseconds
+    val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
     val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
 
     cachedPeers.synchronized {

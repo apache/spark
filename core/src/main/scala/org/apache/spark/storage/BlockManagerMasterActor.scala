@@ -404,17 +404,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   /** Get the list of the peers of the given block manager */
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = blockManagerInfo.keySet.filterNot { _.isDriver }.toArray
-    val selfIndex = blockManagerIds.indexOf(blockManagerId)
-    if (selfIndex == -1) {
-      logError("Self index for " + blockManagerId + " not found")
-      Seq.empty
+    val blockManagerIds = blockManagerInfo.keySet
+    if (blockManagerIds.contains(blockManagerId)) {
+      blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
     } else {
-      // If the blockManagerIds is [ id1 id2 id3 id4 id5 ] and the blockManagerId is id2
-      // Then this code will return the list [ id3 id4 id5 id1 ]
-      Array.tabulate[BlockManagerId](blockManagerIds.size - 1) { i =>
-        blockManagerIds((selfIndex + i + 1) % blockManagerIds.size)
-      }
+      Seq.empty
     }
   }
 }
