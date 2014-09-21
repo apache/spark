@@ -22,11 +22,10 @@ import operator
 from pyspark.serializers import NoOpSerializer,\
     BatchedSerializer, CloudPickleSerializer, pack_long,\
     CompressedSerializer
-from pyspark.rdd import _JavaStackTrace
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.streaming.util import rddToFileName, RDDFunction
-
+from pyspark.traceback_utils import SCCallSiteSync
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -187,7 +186,7 @@ class DStream(object):
                 yield outputSerializer.dumps(items)
         keyed = PipelinedDStream(self, add_shuffle_key)
         keyed._bypass_serializer = True
-        with _JavaStackTrace(self.ctx) as st:
+        with SCCallSiteSync(self.context) as css:
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
                                                           id(partitionFunc))
             jdstream = self.ctx._jvm.PythonPairwiseDStream(keyed._jdstream.dstream(),
