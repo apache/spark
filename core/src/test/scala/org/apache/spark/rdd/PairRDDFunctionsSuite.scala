@@ -17,21 +17,17 @@
 
 package org.apache.spark.rdd
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.mapred._
-import org.apache.hadoop.util.Progressable
-
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashSet
 import scala.util.Random
 
-import com.google.common.io.Files
-import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
-OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
-TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
-import org.apache.spark.SparkContext._
 import org.scalatest.FunSuite
+import com.google.common.io.Files
+import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.conf.{Configuration, Configurable}
+
+import org.apache.spark.SparkContext._
+import org.apache.spark.{Partitioner, SharedSparkContext}
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("aggregateByKey") {
@@ -471,7 +467,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
 
     // No error, non-configurable formats still work
-    pairs.saveAsNewAPIHadoopFile[NewFakeFormat]("ignored")
+    pairs.saveAsNewAPIHadoopFile[FakeFormat]("ignored")
 
     /*
       Check that configurable formats get configured:
@@ -480,17 +476,6 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       Assertion is in ConfigTestFormat.getRecordWriter.
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
-  }
-
-  test("saveAsHadoopFile should respect configured output committers") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
-    val conf = new JobConf()
-    conf.setOutputCommitter(classOf[FakeOutputCommitter])
-
-    FakeOutputCommitter.ran = false
-    pairs.saveAsHadoopFile("ignored", pairs.keyClass, pairs.valueClass, classOf[FakeOutputFormat], conf)
-
-    assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
   test("lookup") {
@@ -636,86 +621,40 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile
   tries to instantiate them with Class.newInstance.
  */
-
-/*
- * Original Hadoop API
- */
 class FakeWriter extends RecordWriter[Integer, Integer] {
-  override def write(key: Integer, value: Integer): Unit = ()
 
-  override def close(reporter: Reporter): Unit = ()
-}
-
-class FakeOutputCommitter() extends OutputCommitter() {
-  override def setupJob(jobContext: JobContext): Unit = ()
-
-  override def needsTaskCommit(taskContext: TaskAttemptContext): Boolean = true
-
-  override def setupTask(taskContext: TaskAttemptContext): Unit = ()
-
-  override def commitTask(taskContext: TaskAttemptContext): Unit = {
-    FakeOutputCommitter.ran = true
-    ()
-  }
-
-  override def abortTask(taskContext: TaskAttemptContext): Unit = ()
-}
-
-/*
- * Used to communicate state between the test harness and the OutputCommitter.
- */
-object FakeOutputCommitter {
-  var ran = false
-}
-
-class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
-  override def getRecordWriter(
-      ignored: FileSystem,
-      job: JobConf, name: String,
-      progress: Progressable): RecordWriter[Integer, Integer] = {
-    new FakeWriter()
-  }
-
-  override def checkOutputSpecs(ignored: FileSystem, job: JobConf): Unit = ()
-}
-
-/*
- * New-style Hadoop API
- */
-class NewFakeWriter extends NewRecordWriter[Integer, Integer] {
-
-  def close(p1: NewTaskAttempContext) = ()
+  def close(p1: TaskAttemptContext) = ()
 
   def write(p1: Integer, p2: Integer) = ()
 
 }
 
-class NewFakeCommitter extends NewOutputCommitter {
-  def setupJob(p1: NewJobContext) = ()
+class FakeCommitter extends OutputCommitter {
+  def setupJob(p1: JobContext) = ()
 
-  def needsTaskCommit(p1: NewTaskAttempContext): Boolean = false
+  def needsTaskCommit(p1: TaskAttemptContext): Boolean = false
 
-  def setupTask(p1: NewTaskAttempContext) = ()
+  def setupTask(p1: TaskAttemptContext) = ()
 
-  def commitTask(p1: NewTaskAttempContext) = ()
+  def commitTask(p1: TaskAttemptContext) = ()
 
-  def abortTask(p1: NewTaskAttempContext) = ()
+  def abortTask(p1: TaskAttemptContext) = ()
 }
 
-class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
+class FakeFormat() extends OutputFormat[Integer, Integer]() {
 
-  def checkOutputSpecs(p1: NewJobContext)  = ()
+  def checkOutputSpecs(p1: JobContext)  = ()
 
-  def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
-    new NewFakeWriter()
+  def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
+    new FakeWriter()
   }
 
-  def getOutputCommitter(p1: NewTaskAttempContext): NewOutputCommitter = {
-    new NewFakeCommitter()
+  def getOutputCommitter(p1: TaskAttemptContext): OutputCommitter = {
+    new FakeCommitter()
   }
 }
 
-class ConfigTestFormat() extends NewFakeFormat() with Configurable {
+class ConfigTestFormat() extends FakeFormat() with Configurable {
 
   var setConfCalled = false
   def setConf(p1: Configuration) = {
@@ -725,7 +664,7 @@ class ConfigTestFormat() extends NewFakeFormat() with Configurable {
 
   def getConf: Configuration = null
 
-  override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+  override def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
     assert(setConfCalled, "setConf was never called")
     super.getRecordWriter(p1)
   }
