@@ -48,12 +48,15 @@ by looking for the "Name" tag of the instance in the Amazon EC2 Console.
     key pair, `<num-slaves>` is the number of slave nodes to launch (try
     1 at first), and `<cluster-name>` is the name to give to your
     cluster.
+
     For Example:
-    ```
+
+    ```bash
     export AWS_SECRET_ACCESS_KEY=AaBbCcDdEeFGgHhIiJjKkLlMmNnOoPpQqRrSsTtU
 export AWS_ACCESS_KEY_ID=ABCDEFG1234567890123
 ./spark-ec2 --key-pair=awskey --identity-file=awskey.pem --region=us-west-1 --zone=us-west-1a --spark-version=1.1.0 launch spark-cluster
     ```
+    
 -   After everything launches, check that the cluster scheduler is up and sees
     all the slaves by going to its web UI, which will be printed at the end of
     the script (typically `http://<master-hostname>:8080`).
