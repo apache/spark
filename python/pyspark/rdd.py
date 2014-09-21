@@ -120,6 +120,10 @@ class RDD(object):
     operated on in parallel.
     """
 
+    @property
+    def partitions(self):
+        return self._jrdd.partitions()
+
     def __init__(self, jrdd, ctx, jrdd_deserializer):
         self._jrdd = jrdd
         self.is_cached = False
@@ -287,7 +291,7 @@ class RDD(object):
         >>> rdd.getNumPartitions()
         2
         """
-        return self._jrdd.partitions().size()
+        return self.partitions.size()
 
     def filter(self, f):
         """
