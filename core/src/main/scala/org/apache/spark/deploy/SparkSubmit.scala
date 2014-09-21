@@ -26,6 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
 
+import org.apache.spark.deploy.ConfigConstants._
 /**
  * Main gateway of launching a Spark application.
  *
@@ -111,10 +112,6 @@ object SparkSubmit {
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
-      if (args.master == "yarn-standalone") {
-        printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
-        args.master = "yarn-cluster"
-      }
       (args.master, args.deployMode) match {
         case ("yarn-cluster", null) =>
           deployMode = CLUSTER
@@ -123,7 +120,7 @@ object SparkSubmit {
         case ("yarn-client", "cluster") =>
           printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
         case (_, mode) =>
-          args.master = "yarn-" + Option(mode).getOrElse("client")
+          args.master = s"yarn-$mode"
       }
 
       // Make sure YARN is included in our build if we're trying to use it
@@ -140,26 +137,26 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
       case (_, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
-      case (_, CLUSTER) if isShell(args.primaryResource) =>
+      case (_, CLUSTER) if isShell(args.primaryResource.getOrElse("")) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case _ =>
     }
 
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython) {
-      if (args.primaryResource == PYSPARK_SHELL) {
+      if (args.primaryResource.get == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
         args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
       } else {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
-        args.files = mergeFileLists(args.files, args.primaryResource)
+        args.childArgs = ArrayBuffer(args.primaryResource.getOrElse(""), args.pyFiles.getOrElse("")) ++ args.childArgs
+        args.files = mergeFileLists(args.files.orNull, args.primaryResource.orNull)
       }
-      args.files = mergeFileLists(args.files, args.pyFiles)
+      args.files = mergeFileLists(args.files.orNull, args.pyFiles.orNull)
       // Format python file paths properly before adding them to the PYTHONPATH
-      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
+      sysProps(SparkSubmitPyFiles) = PythonRunner.formatPaths(args.pyFiles.getOrElse("")).mkString(",")
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -171,57 +168,60 @@ object SparkSubmit {
 
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
-      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.name.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
+      OptionAssigner(args.jars.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = SparkJars),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
-        sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraClassPath"),
-      OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraJavaOptions"),
-      OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraLibraryPath"),
+        sysProp = SparkDriverMemory),
+      OptionAssigner(args.driverExtraClassPath.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = SparkDriverExtraClassPath),
+      OptionAssigner(args.driverExtraJavaOptions.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = SparkDriverExtraJavaOptions),
+      OptionAssigner(args.driverExtraLibraryPath.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = SparkDriverExtraLibraryPath),
 
       // Standalone cluster only
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
       // Yarn client only
-      OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
-      OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = "spark.executor.cores"),
-      OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.queue, YARN, CLIENT, sysProp = SparkYarnQueue),
+      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = SparkExecutorInstances),
+      OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = SparkExecutorCores),
+      OptionAssigner(args.files.orNull, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
+      OptionAssigner(args.archives.orNull, YARN, CLIENT, sysProp = SparkYarnDistArchives),
 
       // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
+      OptionAssigner(args.name.orNull, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
       OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
-      OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
-      OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
-      OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
+      OptionAssigner(args.files.orNull, YARN, CLUSTER, clOption = "--files"),
+      OptionAssigner(args.archives.orNull, YARN, CLUSTER, clOption = "--archives"),
+      OptionAssigner(args.jars.orNull, YARN, CLUSTER, clOption = "--addJars"),
 
       // Other options
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+        sysProp = SparkExecutorMemory),
+      OptionAssigner(args.totalExecutorCores.orNull, STANDALONE | MESOS, ALL_DEPLOY_MODES,
+        sysProp = SparkCoresMax),
+      OptionAssigner(args.files.orNull, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
+        sysProp = SparkFiles)
     )
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
-      childMainClass = args.mainClass
-      if (isUserJar(args.primaryResource)) {
-        childClasspath += args.primaryResource
-      }
-      if (args.jars != null) { childClasspath ++= args.jars.split(",") }
-      if (args.childArgs != null) { childArgs ++= args.childArgs }
+      childMainClass = args.mainClass.get
+      //if (isUserJar(args.primaryResource.orNull)) {
+      //  childClasspath += args.primaryResource.getOrElse("")
+      //}
+      args.primaryResource.filter(isUserJar).foreach( childClasspath += _)
+      args.jars.foreach( childClasspath ++= _.split(",")  )
+      args.childArgs.foreach( childArgs += _  )
+      //if (args.jars.isDefined) { childClasspath ++= args.jars.split(",") }
+      //if (!args.childArgs.isEmpty) { childArgs ++= args.childArgs }
     }
 
 
@@ -240,11 +240,11 @@ object SparkSubmit {
     // For python files, the primary resource is already distributed as a regular file
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
-      if (isUserJar(args.primaryResource)) {
-        jars = jars ++ Seq(args.primaryResource)
+      var jars = sysProps.get(SparkJars).map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      if (isUserJar(args.primaryResource.getOrElse(""))) {
+        jars = jars ++ Seq(args.primaryResource.getOrElse(""))
       }
-      sysProps.put("spark.jars", jars.mkString(","))
+      sysProps.put(SparkJars, jars.mkString(","))
     }
 
     // In standalone-cluster mode, use Client as a wrapper around the user class
@@ -254,7 +254,7 @@ object SparkSubmit {
         childArgs += "--supervise"
       }
       childArgs += "launch"
-      childArgs += (args.master, args.primaryResource, args.mainClass)
+      childArgs += (args.master, args.primaryResource.get, args.mainClass.get)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -263,15 +263,16 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (clusterManager == YARN && deployMode == CLUSTER) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource)
+      if (args.primaryResource.get != SPARK_INTERNAL) {
+        childArgs += ("--jar", args.primaryResource.get)
       }
-      childArgs += ("--class", args.mainClass)
+      childArgs += ("--class", args.mainClass.get)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }
     }
 
+    /**
     // Properties given with --conf are superceded by other options, but take precedence over
     // properties in the defaults file.
     for ((k, v) <- args.sparkProperties) {
@@ -281,7 +282,7 @@ object SparkSubmit {
     // Read from default spark properties, if any
     for ((k, v) <- args.getDefaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
-    }
+    }**/
 
     (childArgs, childClasspath, sysProps, childMainClass)
   }
@@ -362,18 +363,22 @@ object SparkSubmit {
    * Return whether the given primary resource represents a shell.
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
-    primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+    (primaryResource != null) && (primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL)
   }
 
   /**
    * Return whether the given primary resource requires running python.
    */
   private[spark] def isPython(primaryResource: String): Boolean = {
-    primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
+    (primaryResource != null) && (primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL)
   }
 
   private[spark] def isInternal(primaryResource: String): Boolean = {
-    primaryResource == SPARK_INTERNAL
+    (primaryResource != null) && (primaryResource == SPARK_INTERNAL)
+  }
+
+  private[spark] def isInternalOrShell(primaryResource: String): Boolean = {
+    isInternal(primaryResource) || isShell(primaryResource)
   }
 
   /**
