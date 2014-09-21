@@ -41,7 +41,7 @@ object SparkGLRM {
   // Number of iterations
   var ITERATIONS = 2
   // Regularization parameter
-  var REG = 10000
+  var REG = 100
   // Num of chunks
   var NUMCHUNKS = 2
 
@@ -71,14 +71,14 @@ object SparkGLRM {
     R.map { case (i, j, rij) => (i, j, loss(i, j, ms.value(i).dot(us.value(j)), rij))}
   }
 
-  def prox(v:BDV[Double], stepSize:Double): BDV[Double] = {
+  def proxL2(v:BDV[Double], stepSize:Double): BDV[Double] = {
     // L2 prox
     v / (1.0 + stepSize * REG)
   }
 
   // Update factors
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
-             loss_grads: RDD[(Int, Int, Double)], stepSize: Double)
+             loss_grads: RDD[(Int, Int, Double)], stepSize: Double, prox: (BDV[Double], Double) => BDV[Double])
   : Array[BDV[Double]] = {
     val ret = Array.fill(ms.value.size)(BDV.zeros[Double](rank))
 
@@ -127,14 +127,14 @@ object SparkGLRM {
       println("Computing gradient losses")
       var lg = computeLossGrads(msb, usb, R)
       println("Updating M factors")
-      ms = update(usb, msb, lg, 1.0/iter)
+      ms = update(usb, msb, lg, 1.0/iter, proxL2)
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
       lg = computeLossGrads(usb, msb, RT)
       println("Updating U factors")
-      us = update(msb, usb, lg, 1.0/iter)
+      us = update(msb, usb, lg, 1.0/iter, proxL2)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
       println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij}.mean())
