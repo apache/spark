@@ -22,6 +22,7 @@ import java.io.File
 import scala.collection.JavaConversions._
 
 import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.deploy.ConfigConstants._
 
 /**
  * Launch an application through Spark submit in client mode with the appropriate classpath,
@@ -68,11 +69,11 @@ private[spark] object SparkSubmitDriverBootstrapper {
     assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
     // Parse the properties file for the equivalent spark.driver.* configs
-    val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
-    val confDriverMemory = properties.get("spark.driver.memory")
-    val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
-    val confClasspath = properties.get("spark.driver.extraClassPath")
-    val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
+    val properties = SparkSubmitArguments.getPropertyValuesFromFile(propertiesFile)
+    val confDriverMemory = properties.get(SparkDriverMemory)//"spark.driver.memory")
+    val confLibraryPath = properties.get(SparkDriverExtraLibraryPath)//"spark.driver.extraLibraryPath")
+    val confClasspath = properties.get(SparkDriverExtraClassPath)//"spark.driver.extraClassPath")
+    val confJavaOpts = properties.get(SparkDriverExtraClassPath)//"spark.driver.extraJavaOptions")
 
     // Favor Spark submit arguments over the equivalent configs in the properties file.
     // Note that we do not actually use the Spark submit values for library path, classpath,

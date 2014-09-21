@@ -27,8 +27,10 @@ import com.typesafe.config._
 import org.apache.spark.deploy.ConfigConstants._
 import org.apache.spark.util.Utils
 
+import scala.collection.{Set, Map}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.parallel.mutable
+import scala.sys.SystemProperties
 
 /**
  * Configuration structure formed by merging all possible sources of configuration
@@ -113,7 +115,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   val sparkProperties = new HashMap[String, String]()
 
   lazy val verbose: Boolean =  SparkVerbose == true.toString
-  lazy val isPython: Boolean = SparkSubmit.isPython(primaryResource.getOrElse(""))
+  lazy val isPython: Boolean = primaryResource.isDefined && SparkSubmit.isPython(primaryResource.get)
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
 
   // any child argument detected on command line are stored here.
@@ -122,14 +124,21 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   /**
    * Configuration read in from property file if specified on command line
    */
-  private var propertiesFileConfig: Config = null
+  private var propertiesFileConfig: Config = ConfigFactory.empty
   /**
    * Used to store parameters parsed from command line before constructing master config object
    */
   private val parsedParameters = new HashMap[String, String]()
 
   parseOpts(args.toList)
+  // parameters delivered by conf command do not have priority over explicit
+  // command line parameter
+  for((k,v) <- sparkProperties) {
+    parsedParameters.getOrElseUpdate(k,v)
+  }
   var resolvedConfig: Config = mergeSparkProperties
+  printResolvedConfig()
+
   // The only config item that doesn't fit nicely into a Map[String, String]
   // is the child arguments config item
   if (resolvedConfig.hasPath(SparkAppArguments))
@@ -138,7 +147,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 
   // now add the rest of the config items to the config map
-  conf.addAll(resolvedConfig.root.mapValues(_.unwrapped.toString))
+  conf ++= resolvedConfig.entrySet.map(entry => entry.getKey -> entry.getValue.unwrapped.toString)
 
   // some configuration items can be derived if there are not present
   deriveConfigurations()
@@ -172,35 +181,43 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     val defaultParseOptions = ConfigParseOptions.defaults()
       .setSyntax(ConfigSyntax.CONF)
       .setOriginDescription("Default values")
+      .setClassLoader(Thread.currentThread.getContextClassLoader)
       .setAllowMissing(true)
 
+    new SystemProperties().put("config.trace","loads")
+
     // Configuration read in from spark-submit-defaults.conf file found on the classpath
-    val hardCodedDefaultConfig: Config = ConfigFactory.parseResources(SparkSubmitDefaults,defaultParseOptions)
+    val hardCodedDefaultConfig: Config = ConfigFactory.parseResources(
+      SparkSubmitDefaults, defaultParseOptions)
+    if (hardCodedDefaultConfig.entrySet().size == 0)
+    {
+      throw new IllegalStateException(s"Default values not found at classpath $SparkSubmitDefaults")
+    }
 
     // Configuration read in from defaults file if it exists
     val sparkDefaultConfig = SparkSubmitArguments.getSparkDefaultFileConfig
 
     // Configuration from java system properties
-    val systemProperties = ConfigFactory.systemProperties()
+    val systemPropertyConfig = ConfigFactory.systemProperties()
 
     // Configuration variables from the environment
     val environmentConfig: Config = ConfigFactory.systemEnvironment()
 
-    val childArgsConfig = if (childArgsCommandLine.isEmpty) {
-      ConfigFactory.empty()
-    } else {
-      ConfigFactory.parseMap(Map(SparkAppArguments->childArgsCommandLine), CommandLineOrigin)
-    }
-
     // Configuration read in from the command line
-    val parsedSparkCommandLineConfig = ConfigFactory.parseMap(parsedParameters, CommandLineOrigin)
-      .withFallback(childArgsConfig)
+    val parsedSparkCommandLineConfig = if (childArgsCommandLine.isEmpty) {
+      ConfigFactory.parseMap(parsedParameters, CommandLineOrigin)
+    } else {
+      val childArgs: java.lang.Iterable[String] = childArgsCommandLine
+
+      ConfigFactory.parseMap(parsedParameters, CommandLineOrigin)
+        .withValue(SparkAppArguments, ConfigValueFactory.fromAnyRef(childArgs))
+    }
 
     ConfigFactory.empty()
       .withFallback(parsedSparkCommandLineConfig)
       .withFallback(propertiesFileConfig)
       .withFallback(environmentConfig)
-      .withFallback(systemProperties)
+      .withFallback(systemPropertyConfig)
       .withFallback(sparkDefaultConfig)
       .withFallback(hardCodedDefaultConfig)
       .resolve()
@@ -216,11 +233,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     val configFileUris = List(SparkFiles, SparkSubmitPyFiles, SparkYarnDistArchives,
       SparkJars, SparkAppPrimaryResource)
 
-    // create new config value with resolved file uris where needed
-    val resolvedFileUris = configFileUris
-      .filter( x => configExists(x) &&
-        ((x != SparkAppPrimaryResource) || (!SparkSubmit.isInternalOrShell(conf.get(x).get))))
-      .map( x => x -> Utils.resolveURIs(x,testWindows=false) )
+    val resolvedFileUris = for{
+      id <- configFileUris
+      if configExists(id) &&
+        ((id != SparkAppPrimaryResource) || (!SparkSubmit.isInternalOrShell(conf.get(id).get)))
+    } yield (id -> Utils.resolveURIs(conf.get(id).get, testWindows=false))
 
     conf ++= resolvedFileUris
 
@@ -249,7 +266,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     //master = Option(master).getOrElse("local[*]")
 
-    if ((name == null) && primaryResource.isDefined) {
+    if (name.isEmpty && primaryResource.isDefined) {
       name = Utils.stripDirectory(primaryResource.get)
     }
 
@@ -257,8 +274,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def checkRequiredArguments() = {
-    if (args.length == 0) {
-      printUsageAndExit(-1)
+    if (primaryResource.isDefined && mainClass.isEmpty) {
+      SparkSubmit.printErrorAndExit("No main class")
+    }
+
+    if (deployMode != "client" && deployMode != "cluster") {
+      SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
     }
     if (!configExists(SparkAppPrimaryResource)) {
       SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
@@ -292,8 +313,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 
   def printResolvedConfig() = {
-    val renderOptions = ConfigRenderOptions.defaults().setOriginComments(true).setFormatted(true)
-    SparkSubmit.printStream.println(resolvedConfig.root().render(renderOptions))
+    val renderOptions = ConfigRenderOptions.concise().setOriginComments(false).setFormatted(true)
+    SparkSubmit.printStream.println(resolvedConfig.root().get("spark").render(renderOptions))
   }
 
   override def toString =  {
@@ -328,9 +349,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--deploy-mode") :: value :: tail =>
-        if (value != "client" && value != "cluster") {
-          SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
-        }
         //deployMode = value
         parsedParameters.put(SparkDeployMode, value)
         parse(tail)
@@ -421,10 +439,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
       case ("--conf" | "-c") :: value :: tail =>
         value.split("=", 2).toSeq match {
-          case Seq(k, v) => {
-            sparkProperties(k) = v
-            parsedParameters.put(k,v)
-          }
+          case Seq(k, v) => sparkProperties(k) = v
           case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
         }
         parse(tail)
@@ -527,24 +542,49 @@ object SparkSubmitArguments {
    * @return config object
    */
   def getSparkDefaultFileConfig: Config = {
-    val baseConfDir = sys.env.get(SparkHome).get + File.separator + SparkConfDir
+    val baseConfDir = sys.env.get(SparkHome).map( _ + File.separator + SparkConfDir)
     val altConfDir = sys.env.get(AltSparkConfPath)
-    val sparkConfPath = altConfDir.getOrElse(baseConfDir) + File.separator + SparkDefaultsConfFile
-    if (new File(sparkConfPath).exists()) {
-      getConfigValuesFromFile(sparkConfPath, sparkConfPath)
-    }
-    else {
-      ConfigFactory.empty()
-    }
+
+    val defaultFile = for {
+      confDir <- altConfDir.orElse(baseConfDir)
+      confPath = confDir + File.separator + SparkDefaultsConfFile
+      if new File(confPath).exists
+    } yield getConfigValuesFromFile(confPath, originDescription = confPath)
+
+    defaultFile.getOrElse(ConfigFactory.empty())
   }
 
-  /** Return default present in the currently defined defaults file. */
-  def getConfigValuesFromFile(filePath: String, originDescription:String): Config = {
-    var propConfig = ConfigFactory.empty()
 
+  /**
+   * Parses a property file using the typesafe conf property file parser
+   * Typesafe conf is used rather then native java property code for consistency purposed
+   * @param filePath Path to property file
+   * @return Map of config values parsed from file
+   */
+  def getPropertyValuesFromFile(filePath: String): Map[String, String] =
+  {
+    val propFileParserOptions = ConfigParseOptions
+      .defaults()
+      .setSyntax(ConfigSyntax.PROPERTIES)
+
+    def propValues = getConfigValuesFromFileWithOptions(filePath, propFileParserOptions)
+      .entrySet().map( entry => entry.getKey -> entry.getValue.unwrapped().toString)
+
+    Map( propValues.toSeq: _* )
+  }
+
+  def getConfigValuesFromFile(filePath: String, originDescription: String): Config =
+  {
     val propFileParserOptions = ConfigParseOptions
       .defaults()
       .setOriginDescription(originDescription)
+
+    getConfigValuesFromFileWithOptions(filePath, propFileParserOptions)
+  }
+
+  /** Return default present in the currently defined defaults file. */
+  def getConfigValuesFromFileWithOptions(filePath: String, propFileParserOptions: ConfigParseOptions): Config = {
+    var propConfig = ConfigFactory.empty()
 
     val propFile = new File(filePath)
     try {

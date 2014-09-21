@@ -272,6 +272,9 @@ object SparkSubmit {
       }
     }
 
+    for( (k,v) <- args.conf.filterKeys(_.startsWith("spark"))) {
+      sysProps.getOrElseUpdate(k, v)
+    }
     /**
     // Properties given with --conf are superceded by other options, but take precedence over
     // properties in the defaults file.
