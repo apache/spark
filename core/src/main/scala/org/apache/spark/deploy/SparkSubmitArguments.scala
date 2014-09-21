@@ -57,12 +57,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
-  parseOpts(args.toList)
-  mergeSparkProperties()
-  checkRequiredArguments()
-
-  /** Return default present in the currently defined defaults file. */
-  def getDefaultSparkProperties = {
+  /** Default properties present in the currently defined defaults file. */
+  lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
@@ -78,6 +74,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
     defaultProperties
   }
+
+  parseOpts(args.toList)
+  mergeSparkProperties()
+  checkRequiredArguments()
 
   /**
    * Fill in any undefined values based on the default properties file or options passed in through
@@ -107,7 +107,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       }
     }
 
-    val properties = getDefaultSparkProperties
+    val properties = HashMap[String, String]()
+    properties.putAll(defaultSparkProperties)
     properties.putAll(sparkProperties)
 
     // Use properties file as fallback for values which have a direct analog to
@@ -213,7 +214,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  verbose                 $verbose
     |
     |Default properties from $propertiesFile:
-    |${getDefaultSparkProperties.mkString("  ", "\n  ", "\n")}
+    |${defaultSparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
