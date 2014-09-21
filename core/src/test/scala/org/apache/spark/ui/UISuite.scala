@@ -24,6 +24,7 @@ import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.server.Server
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
