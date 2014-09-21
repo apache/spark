@@ -308,7 +308,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     sc.addSparkListener(listener)
 
     val numTasks = 10
-    val f = sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.countAsync()
+    val f = sc.runAsync {
+      sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.count()
+    }
     // Wait until one task has started (because we want to make sure that any tasks that are started
     // have corresponding end events sent to the listener).
     var finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS

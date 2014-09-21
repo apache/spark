@@ -154,87 +154,32 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   def jobId = jobWaiter.jobId
 }
 
-
 /**
- * :: Experimental ::
- * A [[FutureAction]] for actions that could trigger multiple Spark jobs. Examples include take,
- * takeSample. Cancellation works by setting the cancelled flag to true and interrupting the
- * action thread if it is being blocked by a job.
+ * This is an extension of the Scala Future interface to support cancellation.
  */
-@Experimental
-class ComplexFutureAction[T] extends FutureAction[T] {
+class RunAsyncResult[T] private[spark] (jobGroupId: String,
+                        jobGroupDescription: String,
+                        sc: SparkContext,
+                        func: => T) extends FutureAction[T] {
 
-  // Pointer to the thread that is executing the action. It is set when the action is run.
+  // Pointer to the thread that is executing the action; it is set when the action is run.
   @volatile private var thread: Thread = _
-
-  // A flag indicating whether the future has been cancelled. This is used in case the future
-  // is cancelled before the action was even run (and thus we have no thread to interrupt).
-  @volatile private var _cancelled: Boolean = false
 
   // A promise used to signal the future.
   private val p = promise[T]()
 
-  override def cancel(): Unit = this.synchronized {
-    _cancelled = true
+  /**
+   * Cancel this Future and any Spark jobs launched from it.  The cancellation of Spark jobs is
+   * performed asynchronously.
+   */
+  def cancel(): Unit = this.synchronized {
     if (thread != null) {
       thread.interrupt()
+      sc.cancelJobGroup(jobGroupId)
+      thread.join()
+      thread = null
     }
   }
-
-  /**
-   * Executes some action enclosed in the closure. To properly enable cancellation, the closure
-   * should use runJob implementation in this promise. See takeAsync for example.
-   */
-  def run(func: => T)(implicit executor: ExecutionContext): this.type = {
-    scala.concurrent.future {
-      thread = Thread.currentThread
-      try {
-        p.success(func)
-      } catch {
-        case e: Exception => p.failure(e)
-      } finally {
-        thread = null
-      }
-    }
-    this
-  }
-
-  /**
-   * Runs a Spark job. This is a wrapper around the same functionality provided by SparkContext
-   * to enable cancellation.
-   */
-  def runJob[T, U, R](
-      rdd: RDD[T],
-      processPartition: Iterator[T] => U,
-      partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit,
-      resultFunc: => R) {
-    // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
-    // command need to be in an atomic block.
-    val job = this.synchronized {
-      if (!cancelled) {
-        rdd.context.submitJob(rdd, processPartition, partitions, resultHandler, resultFunc)
-      } else {
-        throw new SparkException("Action has been cancelled")
-      }
-    }
-
-    // Wait for the job to complete. If the action is cancelled (with an interrupt),
-    // cancel the job and stop the execution. This is not in a synchronized block because
-    // Await.ready eventually waits on the monitor in FutureJob.jobWaiter.
-    try {
-      Await.ready(job, Duration.Inf)
-    } catch {
-      case e: InterruptedException =>
-        job.cancel()
-        throw new SparkException("Action has been cancelled")
-    }
-  }
-
-  /**
-   * Returns whether the promise has been cancelled.
-   */
-  def cancelled: Boolean = _cancelled
 
   @throws(classOf[InterruptedException])
   @throws(classOf[scala.concurrent.TimeoutException])
@@ -255,4 +200,26 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   override def isCompleted: Boolean = p.isCompleted
 
   override def value: Option[Try[T]] = p.future.value
+
+  private def run() {
+    thread = new Thread(s"RunAsync for job group $jobGroupId") {
+      override def run() {
+        try {
+          sc.setJobGroup(jobGroupId, jobGroupDescription, interruptOnCancel = true)
+          val result: T = func  // Force evaluation
+          p.success(result)
+        } catch {
+          case e: InterruptedException =>
+            p.failure(new SparkException("runAsync has been cancelled"))
+          case t: Throwable =>
+            p.failure(t)
+        } finally {
+          sc.clearJobGroup()
+        }
+      }
+    }
+    thread.start()
+  }
+
+  run()
 }
