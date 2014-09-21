@@ -53,7 +53,7 @@ class SparkContext(object):
 
     """
     Main entry point for Spark functionality. A SparkContext represents the
-    connection to a Spark cluster, and can be used to create L{RDD}s and
+    connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
     """
 
@@ -211,6 +211,7 @@ class SparkContext(object):
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
                 SparkContext._jvm.SerDeUtil.initialize()
+                SparkContext._jvm.SerDe.initialize()
 
             if instance:
                 if (SparkContext._active_spark_context and
