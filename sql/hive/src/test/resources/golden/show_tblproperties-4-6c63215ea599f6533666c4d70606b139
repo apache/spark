@@ -1,6 +1,10 @@
-	 
-last_modified_by	ocquery
-last_modified_time	1408598216
+numFiles	0
+last_modified_by	root
+last_modified_time	1411142382
 tmp	true
-transient_lastDdlTime	1408598216
+transient_lastDdlTime	1411142382
+COLUMN_STATS_ACCURATE	false
+totalSize	0
+numRows	-1
 bar	bar value
+rawDataSize	-1

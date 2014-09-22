@@ -1,17 +1,17 @@
 # col_name            	data_type           	comment             
 	 	 
-value               	string              	None                
+value               	string              	                    
 	 	 
 # Detailed Table Information	 	 
 Database:           	default             	 
-Owner:              	marmbrus            	 
-CreateTime:         	Fri Feb 07 14:47:52 PST 2014	 
+Owner:              	root                	 
+CreateTime:         	Fri Sep 19 08:40:29 PDT 2014	 
 LastAccessTime:     	UNKNOWN             	 
 Protect Mode:       	None                	 
 Retention:          	0                   	 
 Table Type:         	VIRTUAL_VIEW        	 
 Table Parameters:	 	 
-	transient_lastDdlTime	1391813272          
+	transient_lastDdlTime	1411141229          
 	 	 
 # Storage Information	 	 
 SerDe Library:      	null                	 
