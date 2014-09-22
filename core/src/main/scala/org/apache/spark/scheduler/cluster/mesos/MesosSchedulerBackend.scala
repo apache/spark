@@ -30,7 +30,7 @@ import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
 /**
@@ -61,6 +61,8 @@ private[spark] class MesosSchedulerBackend(
   var execArgs: Array[Byte] = null
 
   var classLoader: ClassLoader = null
+
+  @volatile var appId: FrameworkID = _
 
   override def start() {
     synchronized {
@@ -168,6 +170,7 @@ private[spark] class MesosSchedulerBackend(
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     val oldClassLoader = setClassLoader()
     try {
+      appId = frameworkId
       logInfo("Registered as framework ID " + frameworkId.getValue)
       registeredLock.synchronized {
         isRegistered = true
@@ -349,5 +352,7 @@ private[spark] class MesosSchedulerBackend(
 
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
+  override def applicationId(): Option[String] = Option(appId).map(_.getValue)
 
 }

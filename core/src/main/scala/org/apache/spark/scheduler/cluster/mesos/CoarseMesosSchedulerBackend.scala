@@ -76,6 +76,8 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   var nextMesosTaskId = 0
 
+  @volatile var appId: FrameworkID = _
+
   def newMesosTaskId(): Int = {
     val id = nextMesosTaskId
     nextMesosTaskId += 1
@@ -167,6 +169,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
+    appId = frameworkId
     logInfo("Registered as framework ID " + frameworkId.getValue)
     registeredLock.synchronized {
       isRegistered = true
@@ -309,5 +312,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
     slaveLost(d, s)
   }
+
+  override def applicationId: Option[String] = Option(appId).map(_.getValue)
 
 }
