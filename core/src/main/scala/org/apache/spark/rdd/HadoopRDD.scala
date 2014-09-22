@@ -185,6 +185,11 @@ class HadoopRDD[K, V](
     array
   }
 
+  // Task input metrics are added to for each execution of compute().  This is not instantiated
+  // inside compute() for the CoalescedRDD case which calls compute() multiple times for a single
+  // task.  See SPARK-2630
+  private val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 
@@ -202,8 +207,6 @@ class HadoopRDD[K, V](
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
-      // Set the task input metrics.
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       try {
         /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
          * always at record boundaries, so tasks may need to read into other splits to complete
