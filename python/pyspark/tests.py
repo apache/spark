@@ -324,7 +324,8 @@ class TestAddFile(PySparkTestCase):
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
     def test_overwrite_system_module(self):
-        self.sc.addPyFile("python/test_support/SimpleHTTPServer.py")
+        self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
+
         import SimpleHTTPServer
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
