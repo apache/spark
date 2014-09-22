@@ -24,7 +24,7 @@ endif
 
 all: $(TARGET_NAME)
 
-$(SBT_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
+$(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
 	./sbt/sbt assembly
 	cp -f $(SBT_TARGET_NAME) ../inst/
 
