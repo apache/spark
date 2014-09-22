@@ -139,11 +139,12 @@ private object IDF {
          * number of documents, set IDF to 0. This
          * will cause multiplication in IDFModel to
          * set TF-IDF to 0.
+         *
+         * Since arrays are initialized to 0 by default,
+         * we just omit changing those entries.
          */
         if(df(j) >= minimumOccurence) {
           inv(j) = math.log((m + 1.0)/ (df(j) + 1.0))
-        } else {
-          inv(j) = 0.0
         }
         j += 1
       }
