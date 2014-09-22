@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharOb
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
@@ -76,7 +76,7 @@ case class InsertIntoHiveTable(
       new HiveVarchar(s, s.size)
 
     case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
-      new HiveDecimal(bd.underlying())
+      HiveDecimal.create(bd.underlying())
 
     case (row: Row, oi: StandardStructObjectInspector) =>
       val struct = oi.create()
@@ -129,11 +129,16 @@ case class InsertIntoHiveTable(
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(
       conf,
-      SparkHiveHadoopWriter.createPathFromString(fileSinkConf.getDirName, conf))
+      SparkHiveHadoopWriter.createPathFromString(fileSinkConf.getDirName.toString, conf))
 
     log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
-
-    val writer = new SparkHiveHadoopWriter(conf, fileSinkConf)
+    val broadcastConf = sc.sparkContext.broadcast(new SerializableWritable(conf))
+    val compressed = fileSinkConf.getCompressed
+    val tableDesc = fileSinkConf.getTableInfo
+    val compressCodec = fileSinkConf.getCompressCodec
+    val compressType = fileSinkConf.getCompressType
+    val writer = new SparkHiveHadoopWriter(broadcastConf.value.value, compressed, tableDesc,
+      compressCodec, compressType)
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[Writable]) {
@@ -176,13 +181,13 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = hiveContext.getExternalTmpFileURI(tableLocation)
-    val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
+    val tmpLocation = hiveContext.getExternalTmpPath(tableLocation.toUri)
+    @transient val fileSinkConf = new FileSinkDesc(tmpLocation, tableDesc, false)
     val rdd = childRdd.mapPartitions { iter =>
-      val serializer = newSerializer(fileSinkConf.getTableInfo)
+      val serializer = newSerializer(tableDesc)
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(
-          fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+          tableDesc.getDeserializer.getObjectInspector,
           ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 

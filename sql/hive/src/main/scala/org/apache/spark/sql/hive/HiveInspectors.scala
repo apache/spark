@@ -137,7 +137,7 @@ private[hive] trait HiveInspectors {
 
   /** Converts native catalyst types to the types expected by Hive */
   def wrap(a: Any): AnyRef = a match {
-    case s: String => new hadoopIo.Text(s) // TODO why should be Text?
+    case s: String => s: java.lang.String
     case i: Int => i: java.lang.Integer
     case b: Boolean => b: java.lang.Boolean
     case f: Float => f: java.lang.Float
@@ -145,7 +145,7 @@ private[hive] trait HiveInspectors {
     case l: Long => l: java.lang.Long
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
-    case b: BigDecimal => b.bigDecimal
+    case b: BigDecimal => HiveDecimal.create(b.underlying())
     case b: Array[Byte] => b
     case t: java.sql.Timestamp => t
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
@@ -154,6 +154,8 @@ private[hive] trait HiveInspectors {
       val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
       hashMap.putAll(m.map { case (k, v) => wrap(k) -> wrap(v) })
       hashMap
+    case _: WritableVoidObjectInspector => NullType
+    case _: JavaVoidObjectInspector => NullType
     case null => null
   }
 

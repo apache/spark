@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.Context
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -212,10 +214,10 @@ private[hive] object HiveQl {
   /**
    * Returns the AST for the given SQL string.
    */
-  def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
-
+  def getAst(sql: String, hiveConf: HiveConf): ASTNode = ParseUtils.findRootNonNullToken(
+    (new ParseDriver).parse(sql, new Context(hiveConf)))
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sql: String, hiveConf: HiveConf): LogicalPlan = {
     try {
       if (sql.trim.toLowerCase.startsWith("set")) {
         // Split in two parts since we treat the part before the first "="
@@ -233,7 +235,7 @@ private[hive] object HiveQl {
           case Seq(tableName) => 
             CacheCommand(tableName, true)
           case Seq(tableName, _, select @ _*) => 
-            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
+            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim, hiveConf))
         }
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
@@ -248,21 +250,21 @@ private[hive] object HiveQl {
       } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
-        createPlan(sql)
+        createPlan(sql, hiveConf)
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
       case e: NotImplementedError => sys.error(
         s"""
           |Unsupported language features in query: $sql
-          |${dumpTree(getAst(sql))}
+          |${dumpTree(getAst(sql, hiveConf))}
         """.stripMargin)
     }
   }
   
   /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
-    val tree = getAst(sql)
+  def createPlan(sql: String, hiveConf: HiveConf) = {
+    val tree = getAst(sql, hiveConf)
     if (nativeCommands contains tree.getText) {
       NativeCommand(sql)
     } else {
