@@ -100,11 +100,14 @@ trait ClientBase extends Logging {
     val amMem = args.amMemory + memoryOverhead
     if (amMem > maxMem) {
 
-      val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
-        .format(amMem, maxMem)
+      val errorMessage = "Required AM memory (%d+%d MB) is above the max threshold (%d MB) of this cluster."
+        .format(args.amMemory, memoryOverhead, maxMem)
       logError(errorMessage)
       throw new IllegalArgumentException(errorMessage)
     }
+    logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
+      amMem,
+      memoryOverhead))
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
     // getting all the node reports and computing ourselves.
