@@ -605,7 +605,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -643,7 +643,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a JavaSQLContext :
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
@@ -681,7 +681,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight python %}
 # sc is an existing SparkContext.
