@@ -78,10 +78,6 @@ private[yarn] abstract class YarnAllocator(
   // Containers to be released in next request to RM
   private val releasedContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
-  // Additional memory overhead - in mb.
-  protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
-
   // Number of container requests that have been sent to, but not yet allocated by the
   // ApplicationMaster.
   private val numPendingAllocate = new AtomicInteger()
@@ -96,6 +92,11 @@ private[yarn] abstract class YarnAllocator(
   protected val executorCores = args.executorCores
   protected val (preferredHostToCount, preferredRackToCount) =
     generateNodeToWeight(conf, preferredNodes)
+
+  // Additional memory overhead - in mb.
+  protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+    math.max((YarnSparkHadoopUtil.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, 
+    YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN))
 
   private val launcherPool = new ThreadPoolExecutor(
     // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
@@ -117,9 +118,10 @@ private[yarn] abstract class YarnAllocator(
 
     if (missing > 0) {
       numPendingAllocate.addAndGet(missing)
-      logInfo("Will Allocate %d executor containers, each with %d memory".format(
+      logInfo("Will Allocate %d executor containers, each with %d+%d MB memory".format(
         missing,
-        (executorMemory + memoryOverhead)))
+        executorMemory, 
+        memoryOverhead))
     } else {
       logDebug("Empty allocation request ...")
     }

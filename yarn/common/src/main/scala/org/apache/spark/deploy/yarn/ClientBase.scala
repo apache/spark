@@ -61,7 +61,8 @@ trait ClientBase extends Logging {
 
   // Additional memory overhead - in mb.
   protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
+     math.max((YarnSparkHadoopUtil.MEMORY_OVERHEAD_FACTOR * args.amMemory).toInt, 
+     YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN))
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {

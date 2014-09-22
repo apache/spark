@@ -85,8 +85,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 }
 
 object YarnSparkHadoopUtil {
-  // Additional memory overhead - in mb.
-  val DEFAULT_MEMORY_OVERHEAD = 384
+  // Additional memory overhead 
+  val MEMORY_OVERHEAD_FACTOR = 0.07
+  val MEMORY_OVERHEAD_MIN = 384
 
   val ANY_HOST = "*"
 
