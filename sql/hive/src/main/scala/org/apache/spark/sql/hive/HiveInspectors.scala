@@ -154,8 +154,6 @@ private[hive] trait HiveInspectors {
       val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
       hashMap.putAll(m.map { case (k, v) => wrap(k) -> wrap(v) })
       hashMap
-    case _: WritableVoidObjectInspector => NullType
-    case _: JavaVoidObjectInspector => NullType
     case null => null
   }
 
@@ -215,6 +213,8 @@ private[hive] trait HiveInspectors {
     case _: JavaHiveDecimalObjectInspector => DecimalType
     case _: WritableTimestampObjectInspector => TimestampType
     case _: JavaTimestampObjectInspector => TimestampType
+    case _: WritableVoidObjectInspector => NullType
+    case _: JavaVoidObjectInspector => NullType
   }
 
   implicit class typeInfoConversions(dt: DataType) {
