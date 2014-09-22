@@ -107,7 +107,7 @@ private[spark] class YarnClientSchedulerBackend(
         "It might have been killed or unable to launch application master.")
     }
     if (state == YarnApplicationState.RUNNING) {
-      logInfo(s"Application ${appId.getId} has started running.")
+      logInfo(s"Application $appId has started running.")
     }
   }
 

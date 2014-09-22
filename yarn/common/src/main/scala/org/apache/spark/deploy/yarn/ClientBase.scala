@@ -77,8 +77,9 @@ private[spark] trait ClientBase extends Logging {
   }
 
   /**
-   * Copy the given file to a remote file system if needed. This is used for preparing
-   * resources for launching the ApplicationMaster container. Exposed for testing.
+   * Copy the given file to a remote file system (e.g. HDFS) if needed.
+   * The file is only copied if the source and destination file systems are different. This is used
+   * for preparing resources for launching the ApplicationMaster container. Exposed for testing.
    */
   def copyFileToRemote(
       destDir: Path,
@@ -409,6 +410,7 @@ private[spark] trait ClientBase extends Logging {
    * Report the state of an application until it has exited, either successfully or
    * due to some failure, then return the application state.
    *
+   * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
    * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
@@ -425,9 +427,8 @@ private[spark] trait ClientBase extends Logging {
       val state = report.getYarnApplicationState
 
       if (logApplicationReport) {
-        logInfo(s"Application report from ResourceManager for app ${appId.getId} (state: $state)")
+        logInfo(s"Application report for $appId (state: $state)")
         val details = Seq[(String, String)](
-          ("full identifier", appId.toString),
           ("client token", getClientToken(report)),
           ("diagnostics", report.getDiagnostics),
           ("ApplicationMaster host", report.getHost),
