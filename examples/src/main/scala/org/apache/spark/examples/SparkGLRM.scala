@@ -149,7 +149,7 @@ object SparkGLRM {
       us = update(msb, usb, lg, 1.0/iter, proxL2)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
-      println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij}.mean())
+      println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij }.mean())
       //println(us.mkString(", "))
       //println(ms.mkString(", "))
       println()
