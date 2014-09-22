@@ -80,7 +80,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
