@@ -460,7 +460,7 @@ private[spark] class ReceivingConnection(
     if (currId != null) currId else super.getRemoteConnectionManagerId()
   }
 
-  // The reciever's remote address is the local socket on remote side : which is NOT
+  // The receiver's remote address is the local socket on remote side : which is NOT
   // the connection manager id of the receiver.
   // We infer that from the messages we receive on the receiver socket.
   private def processConnectionManagerId(header: MessageChunkHeader) {
