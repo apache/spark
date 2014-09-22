@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
@@ -590,6 +592,45 @@ class HiveQuerySuite extends HiveComparisonTest {
       |
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
+
+  test("Dynamic partition folder layout") {
+    sql("DROP TABLE IF EXISTS dynamic_part_table")
+    sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+
+    val data = Map(
+      Seq("1", "1") -> 1,
+      Seq("1", "NULL") -> 2,
+      Seq("NULL", "1") -> 3,
+      Seq("NULL", "NULL") -> 4)
+
+    data.foreach { case (parts, value) =>
+      sql(
+        s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+           |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
+         """.stripMargin)
+
+      val partFolder = Seq("partcol1", "partcol2")
+        .zip(parts)
+        .map { case (k, v) =>
+          if (v == "NULL") {
+            s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultVal}"
+          } else {
+            s"$k=$v"
+          }
+        }
+        .mkString("/")
+
+      // Loads partition data to a temporary table to verify contents
+      val path = s"$warehousePath/dynamic_part_table/$partFolder/part-00000"
+
+      sql("DROP TABLE IF EXISTS dp_verify")
+      sql("CREATE TABLE dp_verify(intcol INT)")
+      sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
+
+      assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+    }
+  }
 
   test("Partition spec validation") {
     sql("DROP TABLE IF EXISTS dp_test")
