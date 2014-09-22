@@ -232,11 +232,11 @@ class PythonMLLibAPI extends Serializable {
   def trainNaiveBayes(
       data: JavaRDD[LabeledPoint],
       lambda: Double): java.util.List[java.lang.Object] = {
-    val model = NaiveBayes.train(data.rdd, lambda)
+    // val model = NaiveBayes.train(data.rdd, lambda, "local")
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(Vectors.dense(model.labels))
-    ret.add(Vectors.dense(model.pi))
-    ret.add(model.theta)
+    // ret.add(Vectors.dense(model.labels))
+    // ret.add(Vectors.dense(model.pi))
+    // ret.add(model.theta)
     ret
   }
 

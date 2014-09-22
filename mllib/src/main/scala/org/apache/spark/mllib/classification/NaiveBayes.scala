@@ -24,19 +24,25 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
- * Model for Naive Bayes Classifiers.
+ * Abstract model for a naive bayes classifier.
+ */
+abstract class NaiveBayesModel extends ClassificationModel with Serializable
+
+/**
+ * Local model for a naive bayes classifier.
  *
  * @param labels list of labels
  * @param pi log of class priors, whose dimension is C, number of labels
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
  */
-class NaiveBayesModel private[mllib] (
+private class LocalNaiveBayesModel(
     val labels: Array[Double],
     val pi: Array[Double],
-    val theta: Array[Array[Double]]) extends ClassificationModel with Serializable {
+    val theta: Array[Array[Double]]) extends NaiveBayesModel {
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
@@ -68,6 +74,54 @@ class NaiveBayesModel private[mllib] (
 }
 
 /**
+ * One block from a distributed model for a naive bayes classifier. The model is divided into
+ * blocks, each containing the complete model state for a group of labels.
+ *
+ * @param labels array of labels
+ * @param pi log of class priors, with dimension C, the number of labels in this block
+ * @param theta log of class conditional probabilities, with dimensions C-by-D,
+ *              where D is the number of features
+ */
+private case class NBModelBlock(labels: Array[Double], pi: BDV[Double], theta: BDM[Double])
+
+/**
+ * Distributed model for a naive bayes classifier.
+ *
+ * @param modelBlocks RDD of NBModelBlock, comprising the model
+ */
+private class DistNaiveBayesModel(val modelBlocks: RDD[NBModelBlock]) extends NaiveBayesModel {
+
+  override def predict(testData: RDD[Vector]): RDD[Double] = {
+    // Pair each test data point with all model blocks.
+    val testXModel = testData.map(_.toBreeze).zipWithIndex().cartesian(modelBlocks)
+
+    // Find the maximum a posteriori label for each (test_data_point, model_block) pair.
+    val testXModelMaxes = testXModel.map { case ((test, i), model) => {
+      val posterior = model.pi + model.theta * test
+      val maxIdx = brzArgmax(posterior)
+      (i, (posterior(maxIdx), model.labels(maxIdx)))
+    }}
+
+    // Find the maximum for each test data point, across all model blocks.
+    val testMaxes = testXModelMaxes.reduceByKey(Ordering[(Double,Double)].max)
+
+    // Reorder based on the original testData index, then project the labels.
+    testMaxes.sortByKey().map{ case (_, (_, label)) => label }
+  }
+
+  override def predict(testData: Vector): Double = {
+    val testBreeze = testData.toBreeze
+
+    // Find the max a posteriori label for each model block, then the max of these block maxes.
+    modelBlocks.map( m => {
+      val posterior = m.pi + m.theta * testBreeze
+      val maxIdx = brzArgmax(posterior)
+      (posterior(maxIdx), m.labels(maxIdx))
+    }).max._2
+  }
+}
+
+/**
  * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
  *
  * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
@@ -77,11 +131,19 @@ class NaiveBayesModel private[mllib] (
  */
 class NaiveBayes private (private var lambda: Double) extends Serializable with Logging {
 
+  private var distMode = "local"
+
   def this() = this(1.0)
 
   /** Set the smoothing parameter. Default: 1.0. */
   def setLambda(lambda: Double): NaiveBayes = {
     this.lambda = lambda
+    this
+  }
+
+  /** Set the model distribution mode, either "local" or "dist" (for distributed). */
+  def setDistMode(distMode: String) = {
+    this.distMode = distMode
     this
   }
 
@@ -103,10 +165,8 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
       }
     }
 
-    // Aggregates term frequencies per label.
-    // TODO: Calling combineByKey and collect creates two stages, we can implement something
-    // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
+    // Sum the document counts and feature frequencies for each label.
+    val labelAggregates = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
       createCombiner = (v: Vector) => {
         requireNonnegativeValues(v)
         (1L, v.toBreeze.toDenseVector)
@@ -117,7 +177,20 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
       },
       mergeCombiners = (c1: (Long, BDV[Double]), c2: (Long, BDV[Double])) =>
         (c1._1 + c2._1, c1._2 += c2._2)
-    ).collect()
+    )
+
+    distMode match {
+      case "local" => trainLocalModel(labelAggregates)
+      case "dist" => trainDistModel(labelAggregates)
+      case _ =>
+        throw new SparkException(s"Naive Bayes requires a valid distMode but found $distMode.")
+    }
+  }
+
+  private def trainLocalModel(labelAggregates: RDD[(Double, (Long, BDV[Double]))]) = {
+    // TODO: Calling combineByKey and collect creates two stages, we can implement something
+    // TODO: similar to reduceByKeyLocally to save one stage.
+    val aggregated = labelAggregates.collect()
     val numLabels = aggregated.length
     var numDocuments = 0L
     aggregated.foreach { case (_, (n, _)) =>
@@ -141,7 +214,41 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
       i += 1
     }
 
-    new NaiveBayesModel(labels, pi, theta)
+    new LocalNaiveBayesModel(labels, pi, theta)
+  }
+
+  private def trainDistModel(labelAggregates: RDD[(Double, (Long, BDV[Double]))]) = {
+    case class LabelAggregate(label: Double, numDocuments: Long, sumFeatures: BDV[Double])
+    val aggregated = labelAggregates.map(x => LabelAggregate(x._1, x._2._1, x._2._2))
+
+    // Compute the model's prior (pi) vector and conditional (theta) matrix for each batch of
+    // labels.
+    // NOTE In contrast to the local trainer, the piLogDenom normalization term is omitted here.
+    // Computing this term requires an additional aggregation on 'aggregated', and because the
+    // term is an additive constant it does not affect maximum a posteriori model prediction.
+    val modelBlocks = aggregated.mapPartitions(p => p.grouped(100).map { batch =>
+      val numFeatures = batch.head.sumFeatures.length
+      val pi = batch.map(l => math.log(l.numDocuments + lambda))
+
+      // Assemble values of the theta matrix in row major order.
+      val theta = new Array[Double](batch.length * numFeatures)
+      batch.flatMap( l => {
+        val thetaLogDenom = math.log(brzSum(l.sumFeatures) + numFeatures * lambda)
+        l.sumFeatures.iterator.map(f => math.log(f._2 + lambda) - thetaLogDenom)
+      }).copyToArray(theta)
+
+      NBModelBlock(labels = batch.map(_.label).toArray,
+                   pi     = new BDV[Double](pi.toArray),
+                   theta  = new BDM[Double](batch.length, numFeatures, theta,
+                                            offset=0, majorStride=numFeatures, isTranspose=true))
+    })
+
+    // Materialize and persist the model, check that it is nonempty.
+    if (modelBlocks.persist(StorageLevel.MEMORY_AND_DISK).count() == 0) {
+      throw new SparkException("Naive Bayes requires a nonempty training RDD.")
+    }
+
+    new DistNaiveBayesModel(modelBlocks)
   }
 }
 
@@ -177,8 +284,9 @@ object NaiveBayes {
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
+   * @param distMode The model distribution mode, either "local" or "dist" (for distributed)
    */
-  def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
-    new NaiveBayes(lambda).run(input)
+  def train(input: RDD[LabeledPoint], lambda: Double, distMode: String): NaiveBayesModel = {
+    new NaiveBayes(lambda).setDistMode(distMode).run(input)
   }
 }

@@ -22,7 +22,7 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
@@ -63,12 +63,12 @@ object NaiveBayesSuite {
 class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
-    val numOfPredictions = predictions.zip(input).count {
+    val numOfWrongPredictions = predictions.zip(input).count {
       case (prediction, expected) =>
         prediction != expected.label
     }
-    // At least 80% of the predictions should be on.
-    assert(numOfPredictions < input.length / 5)
+    // At least 80% of the predictions should be correct.
+    assert(numOfWrongPredictions < input.length / 5)
   }
 
   test("Naive Bayes") {
@@ -95,6 +95,51 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("distributed naive bayes") {
+    val nPoints = 10000
+    val nLabels = 150
+    val nFeatures = 300
+
+    def logNormalize(s: Seq[Int]) = {
+      s.map(_.toDouble / s.sum).map(math.log)
+    }
+
+    val pi = logNormalize(1 to nLabels).toArray
+    val theta = (for(l <- 1 to nLabels; f <- 1 to nFeatures)
+      yield if (f == l) 10000 else 1 // Each label is dominated by a different feature.
+    ).grouped(nFeatures).map(logNormalize).map(_.toArray).toArray
+
+    val trainData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
+    val trainRDD = sc.parallelize(trainData, 1)
+    trainRDD.cache()
+
+    val model = NaiveBayes.train(trainRDD, 1.0, "dist")
+
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    val shortValData = validationData.take(nPoints / 10)
+    validatePrediction(shortValData.map(row => model.predict(row.features)), shortValData)
+  }
+
+  test("distributed naive bayes with empty train RDD") {
+    val emptyTrainRDD = sc.parallelize(new Array[LabeledPoint](0), 2)
+    intercept[SparkException] {
+      NaiveBayes.train(emptyTrainRDD, 1.0, "dist")
+    }
+  }
+
+  test("distributed naive bayes with empty test RDD") {
+    val trainRDD = sc.parallelize(LabeledPoint(1.0, Vectors.dense(2.0)) :: Nil, 2)
+    val model = NaiveBayes.train(trainRDD, 1.0, "dist")
+    val emptyTestRDD = sc.parallelize(new Array[Vector](0), 2)
+    assert(model.predict(emptyTestRDD).count == 0)
   }
 
   test("detect negative values") {

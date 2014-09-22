@@ -84,7 +84,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     int numAccurate1 = validatePrediction(POINTS, model1);
     Assert.assertEquals(POINTS.size(), numAccurate1);
 
-    NaiveBayesModel model2 = NaiveBayes.train(testRDD.rdd(), 0.5);
+    NaiveBayesModel model2 = NaiveBayes.train(testRDD.rdd(), 0.5, "local");
     int numAccurate2 = validatePrediction(POINTS, model2);
     Assert.assertEquals(POINTS.size(), numAccurate2);
   }
