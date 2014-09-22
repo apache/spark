@@ -100,13 +100,23 @@ object Minutes {
 }
 
 // Java-friendlier versions of the objects above.
+// Named "Durations" instead of "Duration" to avoid changing the case class's implied API.
 
-object Duration {
+object Durations {
 
-  // No 'milliseconds' since it would conflict with methods above. Use the constructor directly.
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of milliseconds.
+   */
+  def milliseconds(milliseconds: Long) = Milliseconds(milliseconds)
 
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of seconds.
+   */
   def seconds(seconds: Long) = Seconds(seconds)
 
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of minutes.
+   */
   def minutes(minutes: Long) = Minutes(minutes)
 
 }

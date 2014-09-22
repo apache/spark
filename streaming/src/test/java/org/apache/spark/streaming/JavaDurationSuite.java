@@ -67,13 +67,18 @@ public class JavaDurationSuite {
   }
 
   @Test
+  public void testMilliseconds() {
+    Assert.assertEquals(new Duration(100), Durations.milliseconds(100));
+  }
+
+  @Test
   public void testSeconds() {
-    Assert.assertEquals(new Duration(30 * 1000), Duration.seconds(30));
+    Assert.assertEquals(new Duration(30 * 1000), Durations.seconds(30));
   }
 
   @Test
   public void testMinutes() {
-    Assert.assertEquals(new Duration(2 * 60 * 1000), Duration.minutes(2));
+    Assert.assertEquals(new Duration(2 * 60 * 1000), Durations.minutes(2));
   }
 
 }
