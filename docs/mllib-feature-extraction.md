@@ -68,7 +68,7 @@ val sc: SparkContext = ...
 val documents: RDD[Seq[String]] = sc.textFile("...").map(_.split(" ").toSeq)
 
 val hashingTF = new HashingTF()
-val tf: RDD[Vector] = hasingTF.transform(documents)
+val tf: RDD[Vector] = hashingTF.transform(documents)
 {% endhighlight %}
 
 While applying `HashingTF` only needs a single pass to the data, applying `IDF` needs two passes: 
