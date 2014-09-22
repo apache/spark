@@ -428,6 +428,18 @@ setMethod("lapplyPartition",
             lapplyPartitionsWithIndex(X, function(s, part) { FUN(part) })
           })
 
+#' @rdname mapPartitions
+#' @export
+setGeneric("mapPartitions", function(X, FUN) {
+           standardGeneric("mapPartitions") })
+
+#' @rdname mapPartitions
+#' @aliases mapPartitions,RDD,function-method
+setMethod("mapPartitions",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
+            lapplyPartition(X, FUN)
+          })
 
 #' Return a new RDD by applying a function to each partition of this RDD, while
 #' tracking the index of the original partition.
