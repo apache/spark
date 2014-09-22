@@ -296,7 +296,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
-            driver.destroy()
+            driver.close()
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
