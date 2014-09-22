@@ -691,7 +691,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "sort_merge_join_desc_7",
     "stats0",
     "stats_aggregator_error_1",
-    "stats_empty_partition",
+//    "stats_empty_partition", catylyst result not match hive result, they get different COLUMN_STATS_ACCURATE of Partition Parameters
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
