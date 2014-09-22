@@ -27,8 +27,6 @@ import org.junit.Before;
 import org.junit.Test;
 import com.google.common.collect.Lists;
 
-import java.lang.reflect.Method;
-
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
