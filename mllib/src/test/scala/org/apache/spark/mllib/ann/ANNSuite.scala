@@ -39,7 +39,7 @@ class ANNSuite extends FunSuite with LocalSparkContext {
       (Vectors.dense(features), Vectors.dense(Array(label)))}
     val rddData = sc.parallelize(data, 2)
     val topology = Array[Int](inputSize, hiddenSize, outputSize)
-    val model = ArtificialNeuralNetwork.train(rddData, topology, 2000, 2.0, 1.0)
+    val model = ArtificialNeuralNetwork.train(rddData, topology, 100, 1e-5)
     val predictionAndLabels = rddData.map { case(input, label) =>
       (model.predictV(input)(0), label(0)) }.collect()
     assert(predictionAndLabels.forall { case(p, l) => (math.round(p) - l) == 0 })
