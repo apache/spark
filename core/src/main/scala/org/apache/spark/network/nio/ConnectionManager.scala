@@ -65,8 +65,6 @@ private[nio] class ConnectionManager(
   private val selector = SelectorProvider.provider.openSelector()
   private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
-  // default to 30 second timeout waiting for authentication
-  private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
   private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
@@ -788,7 +786,6 @@ private[nio] class ConnectionManager(
     }
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     connection.send(message)
-
     wakeupSelector()
   }
 
