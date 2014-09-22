@@ -28,7 +28,19 @@ import scala.collection.BitSet
 
 /**
  * Generalized Low Rank Models for Spark
+ *
+ * Run these commands from the spark root directory.
+ *
+ * Compile with:
+ * sbt/sbt assembly
+ *
+ * Run with:
+ * ./bin/spark-submit  --class org.apache.spark.examples.SparkGLRM  \
+ * ./examples/target/scala-2.10/spark-examples-1.1.0-SNAPSHOT-hadoop1.0.4.jar \
+ * --executor-memory 1G \
+ * --driver-memory 1G
  */
+
 object SparkGLRM {
   // Number of movies
   var M = 1000000
