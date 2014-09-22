@@ -141,14 +141,15 @@ abstract class RDD[T: ClassTag](
   def persist(newLevel: StorageLevel): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
-      throw new UnsupportedOperationException(
-        "Cannot change storage level of an RDD after it was already assigned a level")
+      logError("Cannot change storage level of an RDD after it was already assigned a level")
+      this
+    } else {
+      sc.persistRDD(this)
+      // Register the RDD with the ContextCleaner for automatic GC-based cleanup
+      sc.cleaner.foreach(_.registerRDDForCleanup(this))
+      storageLevel = newLevel
+      this
     }
-    sc.persistRDD(this)
-    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
-    sc.cleaner.foreach(_.registerRDDForCleanup(this))
-    storageLevel = newLevel
-    this
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
