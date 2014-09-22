@@ -20,6 +20,7 @@ package org.apache.spark.graphx.lib
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.PartitionStrategy.EdgePartition2D
 
 /**
  * Compute the number of triangles passing through each vertex.
@@ -39,13 +40,20 @@ import org.apache.spark.graphx._
 object TriangleCount {
 
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
-    // Remove redundant edges
-    val g = graph.groupEdges((a, b) => a).cache()
+
+    // Remove self edges and orient remaining edges from low id to high id
+    val canonicalEdges = graph.edges.filter(e => e.srcId != e.dstId).map { e =>
+      if (e.srcId < e.dstId) (e.srcId, e.dstId) else (e.dstId, e.srcId)
+    }
+
+    // Automatically group duplicate edges
+    val reducedGraph = Graph.fromEdgeTuples(canonicalEdges, defaultValue = true,
+      uniqueEdges = Some(EdgePartition2D)).cache()
 
     // Construct set representations of the neighborhoods
     val nbrSets: VertexRDD[VertexSet] =
-      g.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
-        val set = new VertexSet(4)
+      reducedGraph.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
+        val set = new VertexSet(nbrs.length)
         var i = 0
         while (i < nbrs.size) {
           // prevent self cycle
@@ -56,14 +64,14 @@ object TriangleCount {
         }
         set
       }
+
     // join the sets with the graph
-    val setGraph: Graph[VertexSet, ED] = g.outerJoinVertices(nbrSets) {
+    val setGraph: Graph[VertexSet, Int] = reducedGraph.outerJoinVertices(nbrSets) {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
+
     // Edge function computes intersection of smaller vertex with larger vertex
     def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]) {
-      assert(ctx.srcAttr != null)
-      assert(ctx.dstAttr != null)
       val (smallSet, largeSet) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
         (ctx.srcAttr, ctx.dstAttr)
       } else {
@@ -80,15 +88,18 @@ object TriangleCount {
       ctx.sendToSrc(counter)
       ctx.sendToDst(counter)
     }
+
     // compute the intersection along edges
     val counters: VertexRDD[Int] = setGraph.aggregateMessages(edgeFunc, _ + _)
     // Merge counters with the graph and divide by two since each triangle is counted twice
-    g.outerJoinVertices(counters) {
-      (vid, _, optCounter: Option[Int]) =>
-        val dblCount = optCounter.getOrElse(0)
-        // double count should be even (divisible by two)
-        assert((dblCount & 1) == 0)
-        dblCount / 2
+    graph.outerJoinVertices(counters) { (vid, _, optCounter: Option[Int]) =>
+      val dblCount = optCounter.getOrElse(0)
+      // This algorithm double counts each triangle so the final count should be even
+      val isEven = (dblCount & 1) == 0
+      if (!isEven) {
+        throw new Exception("Triangle count resulted in an invalid number of triangles.")
+      }
+      dblCount / 2
     }
-  } // end of TriangleCount
+  }
 }
