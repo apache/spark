@@ -118,9 +118,9 @@ private[yarn] abstract class YarnAllocator(
 
     if (missing > 0) {
       numPendingAllocate.addAndGet(missing)
-      logInfo("Will Allocate %d executor containers, each with %d+%d MB memory".format(
+      logInfo("Will allocate %d executor containers, each with %d MB memory including %d MB overhead".format(
         missing,
-        executorMemory, 
+        (executorMemory + memoryOverhead), 
         memoryOverhead))
     } else {
       logDebug("Empty allocation request ...")
