@@ -505,6 +505,7 @@ def tag_instance(instance, name):
     for i in range(0, 5):
         try:
             instance.add_tag(key='Name', value=name)
+            break
         except:
             print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
             if (i == 5):
