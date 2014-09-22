@@ -87,11 +87,16 @@ if [ "$SPARK_SSH_OPTS" = "" ]; then
 fi
 
 for slave in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
- ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
-   2>&1 | sed "s/^/$slave: /"
- if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
-   sleep $SPARK_SLAVE_SLEEP
- fi
+  if [ "${SPARK_SSH_FOREGROUND}" = "y" ] || [ "${SPARK_SSH_FOREGROUND}" = "yes" ]; then
+    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$slave: /"
+  else
+    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$slave: /" &
+  fi
+  if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
+    sleep $SPARK_SLAVE_SLEEP
+  fi
 done
 
 wait
