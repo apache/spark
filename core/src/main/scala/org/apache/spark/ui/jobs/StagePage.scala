@@ -170,7 +170,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             Distribution(data).get.getQuantiles().map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
 
           val inputSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.inputMetrics.map(_.bytesRead).getOrElse(0L).toDouble
+            metrics.get.inputMetrics.map(_.bytesRead.get()).getOrElse(0L).toDouble
           }
           val inputQuantiles = <td>Input</td> +: getQuantileCols(inputSizes)
 
@@ -247,7 +247,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
       val inputReadable = maybeInput
-        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+        .map(m =>
+          s"${Utils.bytesToString(m.bytesRead.get())} (${m.readMethod.toString.toLowerCase()})")
         .getOrElse("")
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)

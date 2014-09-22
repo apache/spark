@@ -71,7 +71,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
       if (metrics != null) {
         metrics.inputMetrics.foreach { inputMetrics =>
           executorToInputBytes(eid) =
-            executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+            executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead.get()
         }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =
