@@ -21,13 +21,11 @@ import java.awt._
 import java.awt.event._
 import java.text.SimpleDateFormat
 import java.util.Calendar
-
 import org.apache.spark._
 import org.apache.spark.mllib.ann._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
-
 import scala.Array.canBuildFrom
 import scala.util.Random
 
@@ -369,7 +367,7 @@ object ANNDemo {
   }
 
 
-  def generateInput3D(f: (Double,Double) => Double, xmin: Double, xmax: Double,
+  def generateInput3D(f: (Double,Double) => Double, xmin: Double, xmax: Double, 
       ymin: Double, ymax: Double, noPoints: Int): Array[(Vector,Vector)] = {
 
     var out = new Array[(Vector,Vector)](noPoints)
@@ -486,7 +484,7 @@ object ANNDemo {
 
     val validationRDD2D =
       sc.parallelize(generateInput2D( T => f(T), -10, 10, 100 ), 2).cache
-    val validationRDD3D =
+    val validationRDD3D = 
       sc.parallelize(generateInput3D( (x,y) => f3D(x,y), -10, 10, -10, 10, 100 ), 2).cache
     val validationRDD4D =
       sc.parallelize( generateInput4D( t => f4D(t), -10, 10, 100 ), 2 ).cache
@@ -497,25 +495,25 @@ object ANNDemo {
 
     var starttime = Calendar.getInstance().getTime()
     println("Training 2D")
-    var model2D = ArtificialNeuralNetwork.train(testRDD2D, Array[Int](5, 3), 1000, 1e-8)
+    var model2D = ArtificialNeuralNetwork.train(testRDD2D, Array[Int](1, 5, 3, 1), 1000, 1e-8)
     var stoptime = Calendar.getInstance().getTime()
     println(((stoptime.getTime-starttime.getTime + 500) / 1000) + "s")
 
     starttime = stoptime
     println("Training 3D")
-    var model3D = ArtificialNeuralNetwork.train(testRDD3D, Array[Int](20), 1000, 1e-8)
+    var model3D = ArtificialNeuralNetwork.train(testRDD3D, Array[Int](2, 20, 1), 1000, 1e-8)
     stoptime = Calendar.getInstance().getTime()
     println(((stoptime.getTime-starttime.getTime + 500) / 1000) + "s")
 
     starttime = stoptime
     println("Training 4D")
-    var model4D = ArtificialNeuralNetwork.train(testRDD4D, Array[Int](20), 1000, 1e-8)
+    var model4D = ArtificialNeuralNetwork.train(testRDD4D, Array[Int](1, 20, 3), 1000, 1e-8)
     stoptime = Calendar.getInstance().getTime()
     println(((stoptime.getTime-starttime.getTime + 500) / 1000) + "s")
 
-    val predictedAndTarget2D = validationRDD2D.map(T => (T._1, T._2, model2D.predict(T._1)))
-    val predictedAndTarget3D = validationRDD3D.map(T => (T._1, T._2, model3D.predict(T._1)))
-    val predictedAndTarget4D = validationRDD4D.map(T => (T._1, T._2, model4D.predict(T._1)))
+    val predictedAndTarget2D = validationRDD2D.map(T => (T._1, T._2, model2D.predictV(T._1)))
+    val predictedAndTarget3D = validationRDD3D.map(T => (T._1, T._2, model3D.predictV(T._1)))
+    val predictedAndTarget4D = validationRDD4D.map(T => (T._1, T._2, model4D.predictV(T._1)))
 
     var err2D = predictedAndTarget2D.map( T =>
       (T._3.toArray(0) - T._2.toArray(0))*(T._3.toArray(0) - T._2.toArray(0))
@@ -556,7 +554,7 @@ object ANNDemo {
 
     while(true) { // stops when closing the window
 
-      curAngle = curAngle + math.Pi/8
+      curAngle = curAngle + math.Pi/4
       if(curAngle >= 2*math.Pi) {
         curAngle = curAngle - 2*math.Pi
       }
