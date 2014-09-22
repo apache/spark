@@ -78,7 +78,7 @@ The value of node N_{j,l} is calculated  as follows:
 
 Where g is the sigmod function
 
-`$g(t) = \frac{e^{\beta t} }{1+e^{\beta t}}$`
+`$g(t) = \frac{1}{1+e^{-t}}$`
 
 # LBFGS
 
