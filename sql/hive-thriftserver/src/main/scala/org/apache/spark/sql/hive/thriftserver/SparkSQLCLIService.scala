@@ -44,12 +44,12 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
     val sparkSqlSessionManager = new SparkSQLSessionManager(hiveContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
+    val authentication = "hive.server2.authentication"
 
     try {
-      HiveAuthFactory.loginFromKeytab(hiveConf)
-      val serverUserName = ShimLoader.getHadoopShims
-        .getShortUserName(ShimLoader.getHadoopShims.getUGIForConf(hiveConf))
-      setSuperField(this, "serverUserName", serverUserName)
+      if(hiveConf.get(authentication)!="NONE") {
+        HiveAuthFactory.loginFromKeytab(hiveConf)
+      }
     } catch {
       case e @ (_: IOException | _: LoginException) =>
         throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
