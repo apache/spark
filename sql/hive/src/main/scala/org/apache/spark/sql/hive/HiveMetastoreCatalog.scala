@@ -36,10 +36,10 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.util.Utils
-
 import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.util.Utils
+
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
@@ -130,14 +130,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(
-                 LowerCaseSchema(table: MetastoreRelation), _, child, _) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(
-                 LowerCaseSchema(
                    InMemoryRelation(_, _, _,
-                     HiveTableScan(_, table, _))), _, child, _) =>
+                     HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -178,7 +176,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   override def unregisterAllTables() = {}
 }
-
 
 /**
  * :: DeveloperApi ::

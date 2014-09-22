@@ -26,6 +26,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
@@ -35,7 +36,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.spark.sql.SQLConf
 
 /* Implicit conversions */
@@ -78,7 +78,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
-  CommandProcessorFactory.clean(hiveconf);
+
+  CommandProcessorFactory.clean(hiveconf)
   configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */

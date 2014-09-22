@@ -245,6 +245,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this] lazy val cast: Any => Any = dataType match {
+    case dt if dt == child.dataType => identity[Any]
     case StringType => castToString
     case BinaryType => castToBinary
     case DecimalType => castToDecimal

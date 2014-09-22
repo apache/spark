@@ -171,8 +171,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
         val tableParameters = relation.hiveQlTable.getParameters
         val oldTotalSize =
-          Option(tableParameters.get(HiveShim.getStatsSetupConstTotalSize)).
-            map(_.toLong).getOrElse(0L)
+          Option(tableParameters.get(HiveShim.getStatsSetupConstTotalSize))
+            .map(_.toLong)
+            .getOrElse(0L)
         val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
@@ -246,15 +247,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
-    override def lookupRelation(
-      databaseName: Option[String],
-      tableName: String,
-      alias: Option[String] = None): LogicalPlan = {
-
-      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
-    }
-  }
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
@@ -302,12 +295,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
-            driver.close
+            driver.close()
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
           driver.getResults(results)
-          driver.close
+          driver.close()
           results
         case _ =>
           sessionState.out.println(tokens(0) + " " + cmd_1)

@@ -25,9 +25,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.{SQLConf, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.HiveShim
 
 class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
   TestHive.reset()
@@ -80,7 +80,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
-    if (HiveShim.version.equals("0.12.0")) {
+
+    // TODO: How it works? needs to add it back for other hive version.
+    if (HiveShim.version =="0.12.0") {
       assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
     }
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")

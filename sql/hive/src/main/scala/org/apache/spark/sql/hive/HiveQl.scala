@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
@@ -27,8 +29,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.conf.HiveConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -215,9 +215,14 @@ private[hive] object HiveQl {
    * Returns the AST for the given SQL string.
    */
   def getAst(sql: String): ASTNode = {
+    /*
+     * Context has to be passed in in hive0.13.1.
+     * Otherwise, there will be Null pointer exception,
+     * when retrieving properties form HiveConf.
+     */
     val hContext = new Context(new HiveConf())
     val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
-    hContext.clear
+    hContext.clear()
     node
   }
 
@@ -237,7 +242,12 @@ private[hive] object HiveQl {
             SetCommand(Some(key), Some(value))
         }
       } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        CacheCommand(sql.trim.drop(12).trim, true)
+        sql.trim.drop(12).trim.split(" ").toSeq match {
+          case Seq(tableName) => 
+            CacheCommand(tableName, true)
+          case Seq(tableName, _, select @ _*) => 
+            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
+        }
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
@@ -251,15 +261,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
-        val tree = getAst(sql)
-        if (nativeCommands contains tree.getText) {
-          NativeCommand(sql)
-        } else {
-          nodeToPlan(tree) match {
-            case NativePlaceholder => NativeCommand(sql)
-            case other => other
-          }
-        }
+        createPlan(sql)
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -268,6 +270,19 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
+    }
+  }
+  
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
+    val tree = getAst(sql)
+    if (nativeCommands contains tree.getText) {
+      NativeCommand(sql)
+    } else {
+      nodeToPlan(tree) match {
+        case NativePlaceholder => NativeCommand(sql)
+        case other => other
+      }
     }
   }
 

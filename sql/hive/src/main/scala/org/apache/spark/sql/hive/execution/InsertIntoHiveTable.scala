@@ -21,10 +21,11 @@ import scala.collection.JavaConversions._
 
 import java.util.{HashMap => JHashMap}
 
-import org.apache.hadoop.hive.common.`type`.{HiveVarchar}
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.plan.{TableDesc}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -39,8 +40,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation, SparkHiveHadoopWriter}
-import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc, ShimContext => Context}
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{HiveShim, ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.HiveShim._
 
 /**
@@ -178,7 +178,7 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = hiveContext.getExternalTmpPath(tableLocation)
+    val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val rdd = childRdd.mapPartitions { iter =>
       val serializer = newSerializer(fileSinkConf.getTableInfo)

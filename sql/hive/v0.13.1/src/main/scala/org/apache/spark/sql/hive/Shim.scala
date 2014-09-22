@@ -17,44 +17,53 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
-import scala.language.implicitConversions
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
-import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
-import scala.collection.JavaConversions._
-import org.apache.spark.Logging
-import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
+import java.util.Properties
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.Partition
-import org.apache.hadoop.{io => hadoopIo}
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
+import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer}
 import org.apache.hadoop.mapred.InputFormat
-import java.util.Properties
-import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.spark.Logging
+import org.apache.hadoop.{io => hadoopIo}
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 
-/*hive-0.13.1 support shimmer layer*/
-object HiveShim {
+/**
+ * A compatibility layer for interacting with Hive version 0.13.1.
+ */
+private[hive] object HiveShim {
   val version = "0.13.1"
   /*
-   * hive-0.13 support DECIMAL(precision, scale), DECIMAL in hive-0.12 is actually DECIMAL(10,0)
+   * TODO: hive-0.13 support DECIMAL(precision, scale), DECIMAL in hive-0.12 is actually DECIMAL(10,0)
    * Full support of new decimal feature need to be fixed in seperate PR.
    */
   val metastoreDecimal = "decimal(10,0)"
-  def getTableDesc(serdeClass: Class[_ <: Deserializer], inputFormatClass: Class[_ <: InputFormat[_, _]], outputFormatClass: Class[_], properties: Properties) = {
+
+  def getTableDesc(
+    serdeClass: Class[_ <: Deserializer],
+    inputFormatClass: Class[_ <: InputFormat[_, _]],
+    outputFormatClass: Class[_],
+    properties: Properties) = {
     new TableDesc(inputFormatClass, outputFormatClass, properties)
   }
+
   def getStatsSetupConstTotalSize = StatsSetupConst.TOTAL_SIZE
+
   def createDefaultDBIfNeeded(context: HiveContext) ={
     context.runSqlHive("CREATE DATABASE default")
     context.runSqlHive("USE default")
   }
-  /*handle the difference in HiveQuerySuite*/
+
+  /** The string used to denote an empty comments field in the schema. */
   def getEmptyCommentsFieldValue = ""
 
-  def convertCatalystString2Hive(s: String) = s
+  def convertCatalystStringToHive(s: String) = s
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
     CommandProcessorFactory.get(cmd, conf)
@@ -66,7 +75,7 @@ object HiveShim {
 
   /*
    * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
-   * */
+   */
   private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
     val result: StringBuilder = new StringBuilder(old)
@@ -86,13 +95,16 @@ object HiveShim {
 
   /*
    * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null or empty
-   * */
+   */
   def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
     if (ids != null && ids.size > 0) {
       ColumnProjectionUtils.appendReadColumns(conf, ids)
-    } else {
-      appendReadColumnNames(conf, names)
     }
+    appendReadColumnNames(conf, names)
+  }
+
+  def getExternalTmpPath(context: Context, path: Path) = {
+    context.getExternalTmpPath(path.toUri)
   }
 
   /*
@@ -113,12 +125,6 @@ object HiveShim {
   }
 }
 
-class ShimContext(conf: Configuration) extends Context(conf) {
-  def  getExternalTmpPath(path: Path): Path = {
-    super.getExternalTmpPath (path.toUri)
-  }
-}
-
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
   extends Serializable with Logging {
   var compressCodec: String = _
@@ -128,7 +134,9 @@ class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed
   def setCompressed(compressed: Boolean) {
     this.compressed = compressed
   }
+
   def getDirName = dir
+
   def setDestTableId(destTableId: Int) {
     this.destTableId = destTableId
   }
