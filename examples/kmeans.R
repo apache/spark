@@ -14,8 +14,8 @@ dist.fun <- function(P, C) {
     C,
     1, 
     function(x) { 
-      colSums((t(P) - x)^2))
-    }
+      colSums((t(P) - x)^2)}
+    )
 }
 
 closestPoint <-  function(P, C) {
