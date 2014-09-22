@@ -350,6 +350,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "date_comparison",
     "date_join1",
     "date_serde",
+    "date_udf",
     "decimal_1",
     "decimal_4",
     "decimal_join",
