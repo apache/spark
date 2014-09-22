@@ -19,18 +19,23 @@
 
 package org.apache.spark.deploy
 
-import java.io.File
+import java.io.{File, FileInputStream}
 import java.util.jar.JarFile
+import java.util.Properties
+import java.util.{Map=>JavaMap}
 import scala.collection.JavaConversions._
 
 import com.typesafe.config._
 import org.apache.spark.deploy.ConfigConstants._
 import org.apache.spark.util.Utils
 
-import scala.collection.{Set, Map}
+import scala.collection.JavaConverters._
+import scala.collection.{mutable, Set, Map}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.collection.parallel.mutable
+
 import scala.sys.SystemProperties
+
+import org.apache.spark.deploy.MergedPropertyMap._
 
 /**
  * Configuration structure formed by merging all possible sources of configuration
@@ -218,7 +223,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       .withFallback(propertiesFileConfig)
       .withFallback(environmentConfig)
       .withFallback(systemPropertyConfig)
-      .withFallback(sparkDefaultConfig)
+      //.withFallback(sparkDefaultConfig)
       .withFallback(hardCodedDefaultConfig)
       .resolve()
   }
@@ -541,17 +546,26 @@ object SparkSubmitArguments {
    * otherwise returns an empty config structure
    * @return config object
    */
-  def getSparkDefaultFileConfig: Config = {
-    val baseConfDir = sys.env.get(SparkHome).map( _ + File.separator + SparkConfDir)
-    val altConfDir = sys.env.get(AltSparkConfPath)
+  def getSparkDefaultFileConfig: Map[String, String] = {
+    val baseConfDir: Option[String] = sys.env.get(SparkHome).map(_ + File.separator + SparkConfDir)
+    val altConfDir: Option[String] = sys.env.get(AltSparkConfPath)
+    val confDir: Option[String] = altConfDir.orElse(baseConfDir)
 
-    val defaultFile = for {
-      confDir <- altConfDir.orElse(baseConfDir)
-      confPath = confDir + File.separator + SparkDefaultsConfFile
-      if new File(confPath).exists
-    } yield getConfigValuesFromFile(confPath, originDescription = confPath)
+    def loadPropFile(propFile: File): Properties = {
+      val prop = new Properties()
+      prop.load(new FileInputStream(propFile))
+      prop
+    }
 
-    defaultFile.getOrElse(ConfigFactory.empty())
+    confDir.flatMap(path => Some(path + File.separator + SparkDefaultsConfFile))
+      .flatMap(path => Some(new File(path)))
+      .filter(confFile => confFile.exists())
+      .flatMap(confFile => Some(loadPropFile(confFile)))
+      .flatMap(propObj => {
+          Some(Map() ++ propObj.entrySet
+            .map(entry => (entry.getKey.toString -> entry.getValue.toString)))
+        })
+      .getOrElse(Map.empty)
   }
 
 
@@ -563,14 +577,21 @@ object SparkSubmitArguments {
    */
   def getPropertyValuesFromFile(filePath: String): Map[String, String] =
   {
-    val propFileParserOptions = ConfigParseOptions
-      .defaults()
-      .setSyntax(ConfigSyntax.PROPERTIES)
+    val propFile = new File(filePath)
+    if (propFile.exists) {
+      val prop = new Properties()
+      val propStream = new FileInputStream(propFile)
+      prop.load(propStream)
 
-    def propValues = getConfigValuesFromFileWithOptions(filePath, propFileParserOptions)
-      .entrySet().map( entry => entry.getKey -> entry.getValue.unwrapped().toString)
+      val propVals = for {
+        entry <- prop.entrySet.asScala
+      } yield (entry.getKey.toString -> entry.getValue.toString)
 
-    Map( propValues.toSeq: _* )
+      propVals.toMap
+    }
+    else {
+      Map.empty
+    }
   }
 
   def getConfigValuesFromFile(filePath: String, originDescription: String): Config =
