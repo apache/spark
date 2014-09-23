@@ -211,7 +211,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
-    finalStatus = FinalApplicationStatus.SUCCEEDED
   }
 
   private def launchReporterThread(): Thread = {
@@ -412,7 +411,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
         catch {
           case e: SecurityException =>
-            logError("setSecurityManager:", e)
+            logError("Error in setSecurityManager:", e)
         }
 
         Utils.tryOrExit {
