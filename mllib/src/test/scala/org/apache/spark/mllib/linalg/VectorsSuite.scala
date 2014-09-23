@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
+
 class VectorsSuite extends FunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
@@ -99,5 +101,58 @@ class VectorsSuite extends FunSuite {
     val vec2 = Vectors.sparse(8, Array(0, 2, 4, 6), Array(1.0, 2.0, 3.0, 4.0))
     assert(vec2(6) === 4.0)
     assert(vec2(7) === 0.0)
+  }
+
+  test("parse vectors") {
+    val vectors = Seq(
+      Vectors.dense(Array.empty[Double]),
+      Vectors.dense(1.0),
+      Vectors.dense(1.0E6, 0.0, -2.0e-7),
+      Vectors.sparse(0, Array.empty[Int], Array.empty[Double]),
+      Vectors.sparse(1, Array(0), Array(1.0)),
+      Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0)))
+    vectors.foreach { v =>
+      val v1 = Vectors.parse(v.toString)
+      assert(v.getClass === v1.getClass)
+      assert(v === v1)
+    }
+
+    val malformatted = Seq("1", "[1,,]", "[1,2b]", "(1,[1,2])", "([1],[2.0,1.0])")
+    malformatted.foreach { s =>
+      intercept[SparkException] {
+        Vectors.parse(s)
+        println(s"Didn't detect malformatted string $s.")
+      }
+    }
+  }
+
+  test("zeros") {
+    assert(Vectors.zeros(3) === Vectors.dense(0.0, 0.0, 0.0))
+  }
+
+  test("Vector.copy") {
+    val sv = Vectors.sparse(4, Array(0, 2), Array(1.0, 2.0))
+    val svCopy = sv.copy
+    (sv, svCopy) match {
+      case (sv: SparseVector, svCopy: SparseVector) =>
+        assert(sv.size === svCopy.size)
+        assert(sv.indices === svCopy.indices)
+        assert(sv.values === svCopy.values)
+        assert(!sv.indices.eq(svCopy.indices))
+        assert(!sv.values.eq(svCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${svCopy.getClass} on ${sv.getClass}.")
+    }
+
+    val dv = Vectors.dense(1.0, 0.0, 2.0)
+    val dvCopy = dv.copy
+    (dv, dvCopy) match {
+      case (dv: DenseVector, dvCopy: DenseVector) =>
+        assert(dv.size === dvCopy.size)
+        assert(dv.values === dvCopy.values)
+        assert(!dv.values.eq(dvCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${dvCopy.getClass} on ${dv.getClass}.")
+    }
   }
 }

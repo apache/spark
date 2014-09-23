@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class SVMModel private[mllib] (
+class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
@@ -65,7 +65,7 @@ class SVMModel private[mllib] (
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     threshold match {
-      case Some(t) => if (margin < 0) 0.0 else 1.0
+      case Some(t) => if (margin < t) 0.0 else 1.0
       case None => margin
     }
   }

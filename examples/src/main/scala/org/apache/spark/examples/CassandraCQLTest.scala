@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
+
 /*
   Need to create following keyspace and column family in cassandra before running this example
   Start CQL shell using ./bin/cqlsh and execute following commands

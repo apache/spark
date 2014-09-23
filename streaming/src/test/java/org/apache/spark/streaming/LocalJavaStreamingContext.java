@@ -27,7 +27,6 @@ public abstract class LocalJavaStreamingContext {
 
     @Before
     public void setUp() {
-        System.clearProperty("spark.driver.port");
         System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
         ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
         ssc.checkpoint("checkpoint");
@@ -37,8 +36,5 @@ public abstract class LocalJavaStreamingContext {
     public void tearDown() {
         ssc.stop();
         ssc = null;
-
-        // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-        System.clearProperty("spark.driver.port");
     }
 }

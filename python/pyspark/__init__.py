@@ -49,14 +49,29 @@ Hive:
       Main entry point for accessing data stored in Apache Hive..
 """
 
+# The following block allows us to import python's random instead of mllib.random for scripts in
+# mllib that depend on top level pyspark packages, which transitively depend on python's random.
+# Since Python's import logic looks for modules in the current package first, we eliminate
+# mllib.random as a candidate for C{import random} by removing the first search path, the script's
+# location, in order to force the loader to look in Python's top-level modules for C{random}.
+import sys
+s = sys.path.pop(0)
+import random
+sys.path.insert(0, s)
+
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.sql import SQLContext
 from pyspark.rdd import RDD
-from pyspark.sql import SchemaRDD
-from pyspark.sql import Row
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
+from pyspark.accumulators import Accumulator, AccumulatorParam
+from pyspark.broadcast import Broadcast
+from pyspark.serializers import MarshalSerializer, PickleSerializer
 
+# for back compatibility
+from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 
-__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD", "SparkFiles", "StorageLevel", "Row"]
+__all__ = [
+    "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
+    "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+]

@@ -124,4 +124,6 @@ class CustomPartitioner(partitions: Int) extends Partitioner {
       c.numPartitions == numPartitions
     case _ => false
   }
+
+  override def hashCode: Int = numPartitions
 }

@@ -25,7 +25,6 @@ import tachyon.client.TachyonFile
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.ShuffleSender
 import org.apache.spark.util.Utils
 
 
@@ -36,7 +35,7 @@ import org.apache.spark.util.Utils
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
 private[spark] class TachyonBlockManager(
-    shuffleManager: ShuffleBlockManager,
+    blockManager: BlockManager,
     rootDirs: String,
     val master: String)
   extends Logging {
@@ -50,7 +49,7 @@ private[spark] class TachyonBlockManager(
 
   private val MAX_DIR_CREATION_ATTEMPTS = 10
   private val subDirsPerTachyonDir =
-    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
+    blockManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
 
   // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName;
   // then, inside this directory, create multiple subdirectories that we will hash files into,
@@ -137,7 +136,7 @@ private[spark] class TachyonBlockManager(
   private def addShutdownHook() {
     tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark tachyon dirs") {
-      override def run() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
         logDebug("Shutdown hook called")
         tachyonDirs.foreach { tachyonDir =>
           try {
@@ -145,8 +144,8 @@ private[spark] class TachyonBlockManager(
               Utils.deleteRecursively(tachyonDir, client)
             }
           } catch {
-            case t: Throwable =>
-              logError("Exception while deleting tachyon spark dir: " + tachyonDir, t)
+            case e: Exception =>
+              logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
           }
         }
       }

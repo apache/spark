@@ -41,18 +41,40 @@ import org.apache.spark.io.CompressionCodec
 private[spark] class FileLogger(
     logDir: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
+    hadoopConf: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true,
     dirPermissions: Option[FsPermission] = None)
   extends Logging {
 
+  def this(
+      logDir: String,
+      sparkConf: SparkConf,
+      compress: Boolean = false,
+      overwrite: Boolean = true) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
+      overwrite = overwrite)
+  }
+
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
 
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+  /**
+   * To avoid effects of FileSystem#close or FileSystem.closeAll called from other modules,
+   * create unique FileSystem instance only for FileLogger
+   */
+  private val fileSystem = {
+    val conf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val logUri = new URI(logDir)
+    val scheme = logUri.getScheme
+    if (scheme == "hdfs") {
+      conf.setBoolean("fs.hdfs.impl.disable.cache", true)
+    }
+    FileSystem.get(logUri, conf)
+  }
+
   var fileIndex = 0
 
   // Only used if compression is enabled
@@ -60,6 +82,14 @@ private[spark] class FileLogger(
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
+
+  // The Hadoop APIs have changed over time, so we use reflection to figure out
+  // the correct method to use to flush a hadoop data stream. See SPARK-1518
+  // for details.
+  private val hadoopFlushMethod = {
+    val cls = classOf[FSDataOutputStream]
+    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
+  }
 
   private var writer: Option[PrintWriter] = None
 
@@ -149,13 +179,13 @@ private[spark] class FileLogger(
   /**
    * Flush the writer to disk manually.
    *
-   * If the Hadoop FileSystem is used, the underlying FSDataOutputStream (r1.0.4) must be
-   * sync()'ed manually as it does not support flush(), which is invoked by when higher
-   * level streams are flushed.
+   * When using a Hadoop filesystem, we need to invoke the hflush or sync
+   * method. In HDFS, hflush guarantees that the data gets to all the
+   * DataNodes.
    */
   def flush() {
     writer.foreach(_.flush())
-    hadoopDataStream.foreach(_.sync())
+    hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
   }
 
   /**
@@ -188,6 +218,5 @@ private[spark] class FileLogger(
   def stop() {
     hadoopDataStream.foreach(_.close())
     writer.foreach(_.close())
-    fileSystem.close()
   }
 }

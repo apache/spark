@@ -17,17 +17,16 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.util.Random
 import scala.collection.JavaConversions._
-
-import org.scalatest.FunSuite
+import scala.util.Random
 
 import org.jblas.DoubleMatrix
+import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 object SVMSuite {
 
@@ -67,6 +66,43 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     }
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
+  }
+
+  test("SVM with threshold") {
+    val nPoints = 10000
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val svm = new SVMWithSGD().setIntercept(true)
+    svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+
+    val model = svm.run(testRDD)
+
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+
+    var predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 0.0) != predictions.length)
+
+    // High threshold makes all the predictions 0.0
+    model.setThreshold(10000.0)
+    predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 0.0) == predictions.length)
+
+    // Low threshold makes all the predictions 1.0
+    model.setThreshold(-10000.0)
+    predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 1.0) == predictions.length)
   }
 
   test("SVM using local random SGD") {
@@ -154,5 +190,21 @@ class SVMSuite extends FunSuite with LocalSparkContext {
 
     // Turning off data validation should not throw an exception
     new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
+  }
+}
+
+class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = SVMWithSGD.train(points, 2)
+    val predictions = model.predict(points.map(_.features))
   }
 }

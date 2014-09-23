@@ -10,7 +10,7 @@ title: GraphX Programming Guide
   <img src="img/graphx_logo.png"
        title="GraphX Logo"
        alt="GraphX"
-       width="65%" />
+       width="60%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
@@ -24,6 +24,8 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 [mapReduceTriplets](#mrTriplets)) as well as an optimized variant of the [Pregel](#pregel) API. In
 addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
+
+**GraphX is currently an alpha component. While we will minimize API changes, some APIs may change in future releases.**
 
 ## Background on Graph-Parallel Computation
 
@@ -86,7 +88,7 @@ support the [Bagel API](api/scala/index.html#org.apache.spark.bagel.package) and
 [Bagel programming guide](bagel-programming-guide.html). However, we encourage Bagel users to
 explore the new GraphX API and comment on issues that may complicate the transition from Bagel.
 
-## Upgrade Guide from Spark 0.9.1
+## Migrating from Spark 0.9.1
 
 GraphX in Spark {{site.SPARK_VERSION}} contains one user-facing interface change from Spark 0.9.1. [`EdgeRDD`][EdgeRDD] may now store adjacent vertex attributes to construct the triplets, so it has gained a type parameter. The edges of a graph of type `Graph[VD, ED]` are of type `EdgeRDD[ED, VD]` rather than `EdgeRDD[ED]`.
 
@@ -690,7 +692,7 @@ class GraphOps[VD, ED] {
 
 In Spark, RDDs are not persisted in memory by default. To avoid recomputation, they must be explicitly cached when using them multiple times (see the [Spark Programming Guide][RDD Persistence]). Graphs in GraphX behave the same way. **When using a graph multiple times, make sure to call [`Graph.cache()`][Graph.cache] on it first.**
 
-[RDD Persistence]: scala-programming-guide.html#rdd-persistence
+[RDD Persistence]: programming-guide.html#rdd-persistence
 [Graph.cache]: api/scala/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]
 
 In iterative computations, *uncaching* may also be necessary for best performance. By default, cached RDDs and graphs will remain in memory until memory pressure forces them to be evicted in LRU order. For iterative computation, intermediate results from previous iterations will fill up the cache. Though they will eventually be evicted, the unnecessary data stored in memory will slow down garbage collection. It would be more efficient to uncache intermediate results as soon as they are no longer necessary. This involves materializing (caching and forcing) a graph or RDD every iteration, uncaching all other datasets, and only using the materialized dataset in future iterations. However, because graphs are composed of multiple RDDs, it can be difficult to unpersist them correctly. **For iterative computation we recommend using the Pregel API, which correctly unpersists intermediate results.**

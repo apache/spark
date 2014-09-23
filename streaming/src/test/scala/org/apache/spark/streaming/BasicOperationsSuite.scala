@@ -92,9 +92,9 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(second.size === 5)
     assert(third.size === 5)
 
-    assert(first.flatten.toSet === (1 to 100).toSet)
-    assert(second.flatten.toSet === (101 to 200).toSet)
-    assert(third.flatten.toSet === (201 to 300).toSet)
+    assert(first.flatten.toSet.equals((1 to 100).toSet) )
+    assert(second.flatten.toSet.equals((101 to 200).toSet))
+    assert(third.flatten.toSet.equals((201 to 300).toSet))
   }
 
   test("repartition (fewer partitions)") {
@@ -111,9 +111,9 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(second.size === 2)
     assert(third.size === 2)
 
-    assert(first.flatten.toSet === (1 to 100).toSet)
-    assert(second.flatten.toSet === (101 to 200).toSet)
-    assert(third.flatten.toSet === (201 to 300).toSet)
+    assert(first.flatten.toSet.equals((1 to 100).toSet))
+    assert(second.flatten.toSet.equals( (101 to 200).toSet))
+    assert(third.flatten.toSet.equals((201 to 300).toSet))
   }
 
   test("groupByKey") {
@@ -452,7 +452,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("rdd cleanup - updateStateByKey") {
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-      Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+      Some(values.sum + state.getOrElse(0))
     }
     val stateStream = runCleanupTest(
       conf, _.map(_ -> 1).updateStateByKey(updateFunc).checkpoint(Seconds(3)))

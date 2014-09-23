@@ -23,6 +23,8 @@ import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
+import scala.reflect.runtime.{universe => unv}
+import scala.util.Try
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -39,59 +41,99 @@ object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
 
-  private def classesPrivateWithin(packageName: String): Set[String] = {
+
+  private def isDeveloperApi(sym: unv.Symbol) =
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+
+  private def isExperimental(sym: unv.Symbol) =
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
+
+
+  private def isPackagePrivate(sym: unv.Symbol) =
+    !sym.privateWithin.fullName.startsWith("<none>")
+
+  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
+    !moduleSymbol.privateWithin.fullName.startsWith("<none>")
+
+  /**
+   * For every class checks via scala reflection if the class itself or contained members
+   * have DeveloperApi or Experimental annotations or they are package private.
+   * Returns the tuple of such classes and members.
+   */
+  private def privateWithin(packageName: String): (Set[String], Set[String]) = {
 
     val classes = getClasses(packageName)
-    val privateClasses = mutable.HashSet[String]()
-
-    def isPackagePrivate(className: String) = {
-      try {
-        /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
-           is a module or class. */
-
-        val privateAsClass = mirror
-          .classSymbol(Class.forName(className, false, classLoader))
-          .privateWithin
-          .fullName
-          .startsWith(packageName)
-
-        val privateAsModule = mirror
-          .staticModule(className)
-          .privateWithin
-          .fullName
-          .startsWith(packageName)
-
-        privateAsClass || privateAsModule
-      } catch {
-        case _: Throwable => {
-          println("Error determining visibility: " + className)
-          false
-        }
-      }
-    }
+    val ignoredClasses = mutable.HashSet[String]()
+    val ignoredMembers = mutable.HashSet[String]()
 
     for (className <- classes) {
-      val directlyPrivateSpark = isPackagePrivate(className)
-
-      /* Inner classes defined within a private[spark] class or object are effectively
+      try {
+        val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
+        val moduleSymbol = mirror.staticModule(className)
+        val directlyPrivateSpark =
+          isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
+        val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
+        val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
+        /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
-      val indirectlyPrivateSpark = {
-        val maybeOuter = className.toString.takeWhile(_ != '$')
-        if (maybeOuter != className) {
-          isPackagePrivate(maybeOuter)
-        } else {
-          false
+        lazy val indirectlyPrivateSpark = {
+          val maybeOuter = className.toString.takeWhile(_ != '$')
+          if (maybeOuter != className) {
+            isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
+              isPackagePrivateModule(mirror.staticModule(maybeOuter))
+          } else {
+            false
+          }
         }
+        if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
+          ignoredClasses += className
+        }
+        // check if this class has package-private/annotated members.
+        ignoredMembers ++= getAnnotatedOrPackagePrivateMembers(classSymbol)
+
+      } catch {
+        case _: Throwable => println("Error instrumenting class:" + className)
       }
-      if (directlyPrivateSpark || indirectlyPrivateSpark) privateClasses += className
     }
-    privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
+    (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
+  }
+
+  /** Scala reflection does not let us see inner function even if they are upgraded
+    * to public for some reason. So had to resort to java reflection to get all inner
+    * functions with $$ in there name.
+    */
+  def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
+    try {
+      Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
+        .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
+    } catch {
+      case t: Throwable =>
+        println("[WARN] Unable to detect inner functions for class:" + classSymbol.fullName)
+        Seq.empty[String]
+    }
+  }
+
+  private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
+    classSymbol.typeSignature.members.filterNot(x =>
+      x.fullName.startsWith("java") || x.fullName.startsWith("scala")
+    ).filter(x =>
+      isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)
+    ).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
   def main(args: Array[String]) {
-    scala.tools.nsc.io.File(".mima-excludes").
-      writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
-    println("Created : .mima-excludes in current directory.")
+    import scala.tools.nsc.io.File
+    val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
+    val previousContents = Try(File(".generated-mima-class-excludes").lines()).
+      getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-class-excludes")
+      .writeAll(previousContents + privateClasses.mkString("\n"))
+    println("Created : .generated-mima-class-excludes in current directory.")
+    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
+      .getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-member-excludes").writeAll(previousMembersContents +
+      privateMembers.mkString("\n"))
+    println("Created : .generated-mima-member-excludes in current directory.")
   }
 
 
@@ -124,10 +166,17 @@ object GenerateMIMAIgnore {
    * Get all classes in a package from a jar file.
    */
   private def getClassesFromJar(jarPath: String, packageName: String) = {
+    import scala.collection.mutable
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
-    val classes = for (entry <- enums if entry.endsWith(".class"))
-      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
+    val classes = mutable.HashSet[Class[_]]()
+    for (entry <- enums if entry.endsWith(".class")) {
+      try {
+        classes += Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
+      } catch {
+        case _: Throwable => println("Unable to load:" + entry)
+      }
+    }
     classes
   }
 }

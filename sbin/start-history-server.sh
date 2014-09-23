@@ -19,19 +19,21 @@
 
 # Starts the history server on the machine this script is executed on.
 #
-# Usage: start-history-server.sh <base-log-dir> [<web-ui-port>]
-#   Example: ./start-history-server.sh --dir /tmp/spark-events --port 18080
+# Usage: start-history-server.sh
+#
+# Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
-if [ $# -lt 1 ]; then
-  echo "Usage: ./start-history-server.sh <base-log-dir>"
-  echo "Example: ./start-history-server.sh /tmp/spark-events"
-  exit
+. "$sbin/spark-config.sh"
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
+
+if [ $# != 0 ]; then
+  echo "Using command line arguments for setting the log directory is deprecated. Please "
+  echo "set the spark.history.fs.logDirectory configuration option instead."
+  export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.history.fs.logDirectory=$1"
 fi
 
-LOG_DIR=$1
-
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 --dir "$LOG_DIR"
+exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1

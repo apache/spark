@@ -27,10 +27,11 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkException, TaskState}
+import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.ui.JettyUtils
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -46,10 +47,24 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
+  var totalRegisteredExecutors = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+  // Submit tasks only after (registered resources / total expected resources)
+  // is equal to at least this value, that is double between 0 and 1.
+  var minRegisteredRatio =
+    math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
+  // Submit tasks after maxRegisteredWaitingTime milliseconds
+  // if minRegisteredRatio has not yet been reached
+  val maxRegisteredWaitingTime =
+    conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
+  val createTime = System.currentTimeMillis()
 
-  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
+  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
+
+    override protected def log = CoarseGrainedSchedulerBackend.this.log
+
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
@@ -67,14 +82,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
-    def receive = {
+    def receiveWithLogging = {
       case RegisterExecutor(executorId, hostPort, cores) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorActor.contains(executorId)) {
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
-          sender ! RegisteredExecutor(sparkProperties)
+          sender ! RegisteredExecutor
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           totalCores(executorId) = cores
@@ -82,6 +97,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
+          totalRegisteredExecutors.addAndGet(1)
           makeOffers()
         }
 
@@ -119,10 +135,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         removeExecutor(executorId, reason)
         sender ! true
 
+      case AddWebUIFilter(filterName, filterParams, proxyBase) =>
+        addWebUIFilter(filterName, filterParams, proxyBase)
+        sender ! true
       case DisassociatedEvent(_, address, _) =>
         addressToExecutorId.get(address).foreach(removeExecutor(_,
           "remote Akka client disassociated"))
 
+      case RetrieveSparkProps =>
+        sender ! sparkProperties
     }
 
     // Make fake resource offers on all executors
@@ -140,8 +161,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
-        executorActor(task.executorId) ! LaunchTask(task)
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val serializedTask = ser.serialize(task)
+        if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
+          val taskSetId = scheduler.taskIdToTaskSetId(task.taskId)
+          scheduler.activeTaskSets.get(taskSetId).foreach { taskSet =>
+            try {
+              var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+                "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
+                "spark.akka.frameSize or using broadcast variables for large values."
+              msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
+                AkkaUtils.reservedSizeBytes)
+              taskSet.abort(msg)
+            } catch {
+              case e: Exception => logError("Exception in error callback", e)
+            }
+          }
+        }
+        else {
+          freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
+          executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
+        }
       }
     }
 
@@ -223,6 +263,36 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)
+    }
+  }
+
+  def sufficientResourcesRegistered(): Boolean = true
+
+  override def isReady(): Boolean = {
+    if (sufficientResourcesRegistered) {
+      logInfo("SchedulerBackend is ready for scheduling beginning after " +
+        s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
+      return true
+    }
+    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
+      logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTime(ms)")
+      return true
+    }
+    false
+  }
+
+  // Add filters to the SparkUI
+  def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
+    if (proxyBase != null && proxyBase.nonEmpty) {
+      System.setProperty("spark.ui.proxyBase", proxyBase)
+    }
+
+    if (Seq(filterName, filterParams).forall(t => t != null && t.nonEmpty)) {
+      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      conf.set("spark.ui.filters", filterName)
+      conf.set(s"spark.$filterName.params", filterParams)
+      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }
 }

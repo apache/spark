@@ -32,6 +32,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, Records}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
@@ -40,7 +41,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   extends YarnClientImpl with ClientBase with Logging {
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, new Configuration(), spConf)
+    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
   def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
 
@@ -71,7 +72,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
     val capability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
     // Memory for the ApplicationMaster.
-    capability.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    capability.setMemory(args.amMemory + memoryOverhead)
     amContainer.setResource(capability)
 
     appContext.setQueue(args.amQueue)
@@ -85,22 +86,12 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   def run() {
     val appId = runApp()
     monitorApplication(appId)
-    System.exit(0)
   }
 
   def logClusterResourceDetails() {
     val clusterMetrics: YarnClusterMetrics = super.getYarnClusterMetrics
-    logInfo("Got Cluster metric info from ASM, numNodeManagers = " +
+    logInfo("Got cluster metric info from ASM, numNodeManagers = " +
       clusterMetrics.getNumNodeManagers)
-
-    val queueInfo: QueueInfo = super.getQueueInfo(args.amQueue)
-    logInfo( """Queue info ... queueName = %s, queueCurrentCapacity = %s, queueMaxCapacity = %s,
-      queueApplicationCount = %s, queueChildQueueCount = %s""".format(
-        queueInfo.getQueueName,
-        queueInfo.getCurrentCapacity,
-        queueInfo.getMaximumCapacity,
-        queueInfo.getApplications.size,
-        queueInfo.getChildQueues.size))
   }
 
 
@@ -110,14 +101,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setApplicationId(appId)
     appContext.setApplicationName(args.appName)
     appContext
-  }
-
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int = {
-    val minResMemory = newApp.getMinimumResourceCapability().getMemory()
-    val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-          ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-          YarnAllocationHandler.MEMORY_OVERHEAD)
-    amMemory
   }
 
   def setupSecurityToken(amContainer: ContainerLaunchContext) = {
@@ -179,8 +162,17 @@ object Client {
     System.setProperty("SPARK_YARN_MODE", "true")
 
     val sparkConf = new SparkConf
-    val args = new ClientArguments(argStrings, sparkConf)
 
-    new Client(args, sparkConf).run
+    try {
+      val args = new ClientArguments(argStrings, sparkConf)
+      new Client(args, sparkConf).run()
+    } catch {
+      case e: Exception => {
+        Console.err.println(e.getMessage)
+        System.exit(1)
+      }
+    }
+
+    System.exit(0)
   }
 }

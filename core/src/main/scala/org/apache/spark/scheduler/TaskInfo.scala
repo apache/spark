@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -27,10 +29,12 @@ import org.apache.spark.annotation.DeveloperApi
 class TaskInfo(
     val taskId: Long,
     val index: Int,
+    val attempt: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
-    val taskLocality: TaskLocality.TaskLocality) {
+    val taskLocality: TaskLocality.TaskLocality,
+    val speculative: Boolean) {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -40,14 +44,19 @@ class TaskInfo(
   var gettingResultTime: Long = 0
 
   /**
+   * Intermediate updates to accumulables during this task. Note that it is valid for the same
+   * accumulable to be updated multiple times in a single task or for two accumulables with the
+   * same name but different IDs to exist in a task.
+   */
+  val accumulables = ListBuffer[AccumulableInfo]()
+
+  /**
    * The time when the task has completed successfully (including the time to remotely fetch
    * results, if necessary).
    */
   var finishTime: Long = 0
 
   var failed = false
-
-  var serializedSize: Int = 0
 
   private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
@@ -83,6 +92,8 @@ class TaskInfo(
       "UNKNOWN"
     }
   }
+
+  def id: String = s"$index.$attempt"
 
   def duration: Long = {
     if (!finished) {

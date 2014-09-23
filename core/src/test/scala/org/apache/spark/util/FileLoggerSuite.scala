@@ -17,33 +17,40 @@
 
 package org.apache.spark.util
 
-import java.io.IOException
+import java.io.{File, IOException}
 
 import scala.io.Source
-import scala.util.Try
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 
 /**
  * Test writing files through the FileLogger.
  */
 class FileLoggerSuite extends FunSuite with BeforeAndAfter {
-  private val fileSystem = Utils.getHadoopFileSystem("/")
+  private val fileSystem = Utils.getHadoopFileSystem("/",
+    SparkHadoopUtil.get.newConfiguration(new SparkConf()))
   private val allCompressionCodecs = Seq[String](
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
-  private val testDir = Files.createTempDir()
-  private val logDirPath = Utils.getFilePath(testDir, "test-file-logger")
-  private val logDirPathString = logDirPath.toString
+  private var testDir: File = _
+  private var logDirPath: Path = _
+  private var logDirPathString: String = _
+
+  before {
+    testDir = Files.createTempDir()
+    logDirPath = Utils.getFilePath(testDir, "test-file-logger")
+    logDirPathString = logDirPath.toString
+  }
 
   after {
-    Try { fileSystem.delete(logDirPath, true) }
+    Utils.deleteRecursively(testDir)
   }
 
   test("Simple logging") {

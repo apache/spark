@@ -33,10 +33,12 @@ import org.apache.spark.streaming.flume.SparkFlumeEvent;
  *  Your Flume AvroSink should be pointed to this address.
  *
  *  Usage: JavaFlumeEventCount <host> <port>
- *
  *    <host> is the host the Flume receiver will be started on - a receiver
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
+ *
+ *  To run this example:
+ *     `$ bin/run-example org.apache.spark.examples.streaming.JavaFlumeEventCount <host> <port>`
  */
 public final class JavaFlumeEventCount {
   private JavaFlumeEventCount() {
@@ -56,7 +58,7 @@ public final class JavaFlumeEventCount {
     Duration batchInterval = new Duration(2000);
     SparkConf sparkConf = new SparkConf().setAppName("JavaFlumeEventCount");
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, batchInterval);
-    JavaReceiverInputDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, "localhost", port);
+    JavaReceiverInputDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, host, port);
 
     flumeStream.count();
 

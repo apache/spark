@@ -15,39 +15,45 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-
-import scala.language.implicitConversions
+package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
+import org.apache.hadoop.hive.serde2.io.TimestampWritable
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
-import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution._
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators}
+import org.apache.spark.sql.catalyst.analysis.{OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.ExtractPythonUdfs
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.{Command => PhysicalCommand}
+import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 /**
- * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
- * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
+ * DEPRECATED: Use HiveContext instead.
  */
+@deprecated("""
+  Use HiveContext instead.  It will still create a local metastore if one is not specified.
+  However, note that the default directory is ./metastore_db, not ./metastore
+  """, "1.1")
 class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val metastorePath = new File("metastore").getCanonicalPath
@@ -55,10 +61,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    // TODO: refactor this so we can work with other databases.
-    runSqlHive(
-      s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
-    runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
+    setConf("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    setConf("hive.metastore.warehouse.dir", warehousePath)
   }
 
   configure() // Must be called before initializing the catalog below.
@@ -71,22 +76,37 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
+  // Change the default SQL dialect to HiveQL
+  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  private[spark] def convertMetastoreParquet: Boolean =
+    getConf("spark.sql.hive.convertMetastoreParquet", "false") == "true"
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
-  /**
-   * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
-   */
-  def hiveql(hqlQuery: String): SchemaRDD = {
-    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but does not perform any execution.
-    result.queryExecution.toRdd
-    result
+  override def sql(sqlText: String): SchemaRDD = {
+    // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
+    if (dialect == "sql") {
+      super.sql(sqlText)
+    } else if (dialect == "hiveql") {
+      new SchemaRDD(this, HiveQl.parseSql(sqlText))
+    }  else {
+      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+    }
   }
 
-  /** An alias for `hiveql`. */
+  @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
+             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
+  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
+
+  @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
+             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
 
   /**
@@ -100,9 +120,81 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
 
+  /**
+   * Analyzes the given table in the current database to generate statistics, which will be
+   * used in query optimizations.
+   *
+   * Right now, it only supports Hive tables and it only updates the size of a Hive table
+   * in the Hive metastore.
+   */
+  def analyze(tableName: String) {
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+
+    relation match {
+      case relation: MetastoreRelation => {
+        // This method is mainly based on
+        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
+        // in Hive 0.13 (except that we do not use fs.getContentSummary).
+        // TODO: Generalize statistics collection.
+        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
+        // Can we use fs.getContentSummary in future?
+        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
+        // countFileSize to count the table size.
+        def calculateTableSize(fs: FileSystem, path: Path): Long = {
+          val fileStatus = fs.getFileStatus(path)
+          val size = if (fileStatus.isDir) {
+            fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
+          } else {
+            fileStatus.getLen
+          }
+
+          size
+        }
+
+        def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
+          val path = table.getPath()
+          var size: Long = 0L
+          try {
+            val fs = path.getFileSystem(conf)
+            size = calculateTableSize(fs, path)
+          } catch {
+            case e: Exception =>
+              logWarning(
+                s"Failed to get the size of table ${table.getTableName} in the " +
+                s"database ${table.getDbName} because of ${e.toString}", e)
+              size = 0L
+          }
+
+          size
+        }
+
+        val tableParameters = relation.hiveQlTable.getParameters
+        val oldTotalSize =
+          Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE)).map(_.toLong).getOrElse(0L)
+        val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
+        // Update the Hive metastore if the total size of the table is different than the size
+        // recorded in the Hive metastore.
+        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
+        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+          tableParameters.put(StatsSetupConst.TOTAL_SIZE, newTotalSize.toString)
+          val hiveTTable = relation.hiveQlTable.getTTable
+          hiveTTable.setParameters(tableParameters)
+          val tableFullName =
+            relation.hiveQlTable.getDbName() + "." + relation.hiveQlTable.getTableName()
+
+          catalog.client.alterTable(tableFullName, new Table(hiveTTable))
+        }
+      }
+      case otherRelation =>
+        throw new NotImplementedError(
+          s"Analyze has only implemented for Hive tables, " +
+            s"but ${tableName} is a ${otherRelation.nodeName}")
+    }
+  }
+
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
-  protected val outputBuffer =  new java.io.OutputStream {
+  protected lazy val outputBuffer =  new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
@@ -129,33 +221,51 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
+  /**
+   * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
+   * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
+   * set() or a SET command inside sql() will be set in the SQLConf *as well as*
+   * in the HiveConf.
+   */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
+  @transient protected[hive] lazy val sessionState = {
+    val ss = new SessionState(hiveconf)
+    setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    ss
+  }
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
+  override def setConf(key: String, value: String): Unit = {
+    super.setConf(key, value)
+    runSqlHive(s"SET $key=$value")
+  }
+
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
-    override def lookupRelation(
-      databaseName: Option[String],
-      tableName: String,
-      alias: Option[String] = None): LogicalPlan = {
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
 
-      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
-    }
-  }
+  // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
+  override protected[sql] lazy val functionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
+    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+      override val extendedRules =
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUdfs ::
+        Nil
+    }
 
   /**
    * Runs the specified SQL query using Hive.
    */
-  protected def runSqlHive(sql: String): Seq[String] = {
+  protected[sql] def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
     val results = runHive(sql, 100000)
     // It is very confusing when you only get back some of the results...
@@ -199,7 +309,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       }
     } catch {
       case e: Exception =>
-        logger.error(
+        logError(
           s"""
             |======================
             |HIVE FAILURE OUTPUT
@@ -218,12 +328,17 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      CommandStrategy(self),
+      HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
+      InMemoryScans,
+      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,
-      PartialAggregation,
+      HashAggregation,
+      LeftSemiJoin,
       HashJoin,
       BasicOperators,
       CartesianProduct,
@@ -234,48 +349,30 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] val planner = hivePlanner
 
-  @transient
-  protected lazy val emptyResult =
-    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
-
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
-    // TODO: Create mixin for the analyzer instead of overriding things here.
-    override lazy val optimizedPlan =
-      optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    override lazy val toRdd: RDD[Row] =
-      analyzed match {
-        case NativeCommand(cmd) =>
-          val output = runSqlHive(cmd)
-
-          if (output.size == 0) {
-            emptyResult
-          } else {
-            val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
-            sparkContext.parallelize(asRows, 1)
-          }
-        case _ =>
-          executedPlan.execute().map(_.copy())
-      }
+    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType)
+        ShortType, DecimalType, TimestampType, BinaryType)
 
-    protected def toHiveString(a: (Any, DataType)): String = a match {
+    protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ))=>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
+      case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
+      case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -285,9 +382,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ))=>
+      case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType)) =>
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -301,10 +398,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
      * execution is simply passed back to Hive.
      */
-    def stringResult(): Seq[String] = analyzed match {
-      case NativeCommand(cmd) => runSqlHive(cmd)
-      case ExplainCommand(plan) => new QueryExecution { val logical = plan }.toString.split("\n")
-      case query =>
+    def stringResult(): Seq[String] = executedPlan match {
+      case describeHiveTableCommand: DescribeHiveTableCommand =>
+        // If it is a describe command for a Hive table, we want to have the output format
+        // be similar with Hive.
+        describeHiveTableCommand.hiveString
+      case command: PhysicalCommand =>
+        command.sideEffectResult.map(_.head.toString)
+
+      case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
@@ -315,8 +417,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Executed by Hive>"
-        case _ => executedPlan.toString
+        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
+        case _ => super.simpleString
       }
   }
 }

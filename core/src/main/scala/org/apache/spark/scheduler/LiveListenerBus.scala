@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.util.concurrent.{LinkedBlockingQueue, Semaphore}
 
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -42,7 +43,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
 
   private val listenerThread = new Thread("SparkListenerBus") {
     setDaemon(true)
-    override def run() {
+    override def run(): Unit = Utils.logUncaughtExceptions {
       while (true) {
         eventLock.acquire()
         // Atomically remove and process this event
@@ -77,11 +78,8 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     val eventAdded = eventQueue.offer(event)
     if (eventAdded) {
       eventLock.release()
-    } else if (!queueFullErrorMessageLogged) {
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
-        "rate at which tasks are being started by the scheduler.")
-      queueFullErrorMessageLogged = true
+    } else {
+      logQueueFullErrorMessage()
     }
   }
 
@@ -96,12 +94,17 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
       if (System.currentTimeMillis > finishTime) {
         return false
       }
-      /* Sleep rather than using wait/notify, because this is used only for testing and wait/notify
-       * add overhead in the general case. */
+      /* Sleep rather than using wait/notify, because this is used only for testing and
+       * wait/notify add overhead in the general case. */
       Thread.sleep(10)
     }
     true
   }
+
+  /**
+   * For testing only. Return whether the listener daemon thread is still alive.
+   */
+  def listenerThreadIsAlive: Boolean = synchronized { listenerThread.isAlive }
 
   /**
    * Return whether the event queue is empty.
@@ -110,6 +113,23 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
    * have already been processed by all attached listeners, if this returns true.
    */
   def queueIsEmpty: Boolean = synchronized { eventQueue.isEmpty }
+
+  /**
+   * Log an error message to indicate that the event queue is full. Do this only once.
+   */
+  private def logQueueFullErrorMessage(): Unit = {
+    if (!queueFullErrorMessageLogged) {
+      if (listenerThread.isAlive) {
+        logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
+          "This likely means one of the SparkListeners is too slow and cannot keep up with" +
+          "the rate at which tasks are being started by the scheduler.")
+      } else {
+        logError("SparkListenerBus thread is dead! This means SparkListenerEvents have not" +
+          "been (and will no longer be) propagated to listeners for some time.")
+      }
+      queueFullErrorMessageLogged = true
+    }
+  }
 
   def stop() {
     if (!started) {

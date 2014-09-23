@@ -31,26 +31,29 @@ import org.apache.spark.sql.catalyst.types._
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
  *
  * {{{
- *  scala> import catalyst.dsl._
+ *  scala> import org.apache.spark.sql.catalyst.dsl.expressions._
  *
  *  // Standard operators are added to expressions.
+ *  scala> import org.apache.spark.sql.catalyst.expressions.Literal
  *  scala> Literal(1) + Literal(1)
- *  res1: catalyst.expressions.Add = (1 + 1)
+ *  res0: org.apache.spark.sql.catalyst.expressions.Add = (1 + 1)
  *
  *  // There is a conversion from 'symbols to unresolved attributes.
  *  scala> 'a.attr
- *  res2: catalyst.analysis.UnresolvedAttribute = 'a
+ *  res1: org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute = 'a
  *
  *  // These unresolved attributes can be used to create more complicated expressions.
  *  scala> 'a === 'b
- *  res3: catalyst.expressions.Equals = ('a = 'b)
+ *  res2: org.apache.spark.sql.catalyst.expressions.EqualTo = ('a = 'b)
  *
  *  // SQL verbs can be used to construct logical query plans.
- *  scala> TestRelation('key.int, 'value.string).where('key === 1).select('value).analyze
- *  res4: catalyst.plans.logical.LogicalPlan =
- *  Project {value#1}
- *   Filter (key#0 = 1)
- *    TestRelation {key#0,value#1}
+ *  scala> import org.apache.spark.sql.catalyst.plans.logical._
+ *  scala> import org.apache.spark.sql.catalyst.dsl.plans._
+ *  scala> LocalRelation('key.int, 'value.string).where('key === 1).select('value).analyze
+ *  res3: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
+ *  Project [value#3]
+ *   Filter (key#2 = 1)
+ *    LocalRelation [key#2,value#3], []
  * }}}
  */
 package object dsl {
@@ -73,11 +76,28 @@ package object dsl {
     def <= (other: Expression) = LessThanOrEqual(expr, other)
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
-    def === (other: Expression) = Equals(expr, other)
-    def !== (other: Expression) = Not(Equals(expr, other))
+    def === (other: Expression) = EqualTo(expr, other)
+    def <=> (other: Expression) = EqualNullSafe(expr, other)
+    def !== (other: Expression) = Not(EqualTo(expr, other))
+
+    def in(list: Expression*) = In(expr, list)
 
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)
+    def contains(other: Expression) = Contains(expr, other)
+    def startsWith(other: Expression) = StartsWith(expr, other)
+    def endsWith(other: Expression) = EndsWith(expr, other)
+    def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)) =
+      Substring(expr, pos, len)
+    def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)) =
+      Substring(expr, pos, len)
+
+    def isNull = IsNull(expr)
+    def isNotNull = IsNotNull(expr)
+
+    def getItem(ordinal: Expression) = GetItem(expr, ordinal)
+    def getField(fieldName: String) = GetField(expr, fieldName)
+
     def cast(to: DataType) = Cast(expr, to)
 
     def asc = SortOrder(expr, Ascending)
@@ -104,6 +124,19 @@ package object dsl {
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
+
+    def sum(e: Expression) = Sum(e)
+    def sumDistinct(e: Expression) = SumDistinct(e)
+    def count(e: Expression) = Count(e)
+    def countDistinct(e: Expression*) = CountDistinct(e)
+    def approxCountDistinct(e: Expression, rsd: Double = 0.05) = ApproxCountDistinct(e, rsd)
+    def avg(e: Expression) = Average(e)
+    def first(e: Expression) = First(e)
+    def last(e: Expression) = Last(e)
+    def min(e: Expression) = Min(e)
+    def max(e: Expression) = Max(e)
+    def upper(e: Expression) = Upper(e)
+    def lower(e: Expression) = Lower(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
@@ -149,6 +182,18 @@ package object dsl {
 
       /** Creates a new AttributeReference of type binary */
       def binary = AttributeReference(s, BinaryType, nullable = true)()
+
+      /** Creates a new AttributeReference of type array */
+      def array(dataType: DataType) = AttributeReference(s, ArrayType(dataType), nullable = true)()
+
+      /** Creates a new AttributeReference of type map */
+      def map(keyType: DataType, valueType: DataType): AttributeReference =
+        map(MapType(keyType, valueType))
+      def map(mapType: MapType) = AttributeReference(s, mapType, nullable = true)()
+
+      /** Creates a new AttributeReference of type struct */
+      def struct(fields: StructField*): AttributeReference = struct(StructType(fields))
+      def struct(structType: StructType) = AttributeReference(s, structType, nullable = true)()
     }
 
     implicit class DslAttribute(a: AttributeReference) {
@@ -158,7 +203,7 @@ package object dsl {
       // Protobuf terminology
       def required = a.withNullability(false)
 
-      def at(ordinal: Int) = BoundReference(ordinal, a)
+      def at(ordinal: Int) = BoundReference(ordinal, a.dataType, a.nullable)
     }
   }
 
@@ -171,6 +216,8 @@ package object dsl {
     def select(exprs: NamedExpression*) = Project(exprs, logicalPlan)
 
     def where(condition: Expression) = Filter(condition, logicalPlan)
+
+    def limit(limitExpr: Expression) = Limit(limitExpr, logicalPlan)
 
     def join(
         otherPlan: LogicalPlan,

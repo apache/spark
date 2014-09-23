@@ -17,11 +17,15 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * An iterator that wraps around an existing iterator to provide task killing functionality.
  * It works by checking the interrupted flag in [[TaskContext]].
  */
-private[spark] class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+@DeveloperApi
+class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator[T])
   extends Iterator[T] {
 
   def hasNext: Boolean = {
@@ -29,7 +33,7 @@ private[spark] class InterruptibleIterator[+T](val context: TaskContext, val del
     // is allowed. The assumption is that Thread.interrupted does not have a memory fence in read
     // (just a volatile field in C), while context.interrupted is a volatile in the JVM, which
     // introduces an expensive read fence.
-    if (context.interrupted) {
+    if (context.isInterrupted) {
       throw new TaskKilledException
     } else {
       delegate.hasNext

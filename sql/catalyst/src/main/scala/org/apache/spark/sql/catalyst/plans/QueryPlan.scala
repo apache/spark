@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.types.{ArrayType, DataType, StructField, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType with Product =>
@@ -28,7 +29,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: Set[Attribute] = output.toSet
+  def outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
@@ -49,11 +50,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionDown(e: Expression) = {
       val newE = e.transformDown(rule)
-      if (newE.id != e.id && newE != e) {
+      if (newE.fastEquals(e)) {
+        e
+      } else {
         changed = true
         newE
-      } else {
-        e
       }
     }
 
@@ -81,11 +82,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionUp(e: Expression) = {
       val newE = e.transformUp(rule)
-      if (newE.id != e.id && newE != e) {
+      if (newE.fastEquals(e)) {
+        e
+      } else {
         changed = true
         newE
-      } else {
-        e
       }
     }
 
@@ -123,4 +124,12 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case other => Nil
     }.toSeq
   }
+
+  def schema: StructType = StructType.fromAttributes(output)
+
+  /** Returns the output schema in the tree format. */
+  def schemaString: String = schema.treeString
+
+  /** Prints out the schema in the tree format */
+  def printSchema(): Unit = println(schemaString)
 }

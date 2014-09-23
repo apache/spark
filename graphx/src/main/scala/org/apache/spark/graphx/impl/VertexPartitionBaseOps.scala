@@ -35,7 +35,7 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 private[graphx] abstract class VertexPartitionBaseOps
     [VD: ClassTag, Self[X] <: VertexPartitionBase[X] : VertexPartitionBaseOpsConstructor]
     (self: Self[VD])
-    extends Logging {
+  extends Serializable with Logging {
 
   def withIndex(index: VertexIdToIndexMap): Self[VD]
   def withValues[VD2: ClassTag](values: Array[VD2]): Self[VD2]

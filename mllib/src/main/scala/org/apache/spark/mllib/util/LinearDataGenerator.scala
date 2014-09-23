@@ -129,7 +129,8 @@ object LinearDataGenerator {
     val sc = new SparkContext(sparkMaster, "LinearDataGenerator")
     val data = generateLinearRDD(sc, nexamples, nfeatures, eps, nparts = parts)
 
-    MLUtils.saveLabeledData(data, outputPath)
+    data.saveAsTextFile(outputPath)
+
     sc.stop()
   }
 }

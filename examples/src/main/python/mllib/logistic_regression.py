@@ -30,8 +30,10 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithSGD
 
 
-# Parse a line of text into an MLlib LabeledPoint object
 def parsePoint(line):
+    """
+    Parse a line of text into an MLlib LabeledPoint object.
+    """
     values = [float(s) for s in line.split(' ')]
     if values[0] == -1:   # Convert -1 labels to 0 for MLlib
         values[0] = 0
@@ -39,12 +41,13 @@ def parsePoint(line):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print >> sys.stderr, "Usage: logistic_regression <master> <file> <iters>"
+    if len(sys.argv) != 3:
+        print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonLR")
-    points = sc.textFile(sys.argv[2]).map(parsePoint)
-    iterations = int(sys.argv[3])
+    sc = SparkContext(appName="PythonLR")
+    points = sc.textFile(sys.argv[1]).map(parsePoint)
+    iterations = int(sys.argv[2])
     model = LogisticRegressionWithSGD.train(points, iterations)
     print "Final weights: " + str(model.weights)
     print "Final intercept: " + str(model.intercept)
+    sc.stop()

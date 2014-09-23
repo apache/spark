@@ -30,4 +30,13 @@ private[spark] trait SchedulerBackend {
 
   def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
     throw new UnsupportedOperationException
+  def isReady(): Boolean = true
+
+  /**
+   * The application ID associated with the job, if any.
+   *
+   * @return The application ID, or None if the backend does not provide an ID.
+   */
+  def applicationId(): Option[String] = None
+
 }

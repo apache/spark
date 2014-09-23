@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
+import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
@@ -29,8 +29,9 @@ import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
 /**
  * An example app for binary classification. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.BinaryClassification
+ * bin/run-example org.apache.spark.examples.mllib.BinaryClassification
  * }}}
+ * A synthetic dataset is located at `data/mllib/sample_binary_classification_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object BinaryClassification {
@@ -65,7 +66,8 @@ object BinaryClassification {
         .text("number of iterations")
         .action((x, c) => c.copy(numIterations = x))
       opt[Double]("stepSize")
-        .text(s"initial step size, default: ${defaultParams.stepSize}")
+        .text("initial step size (ignored by logistic regression), " +
+          s"default: ${defaultParams.stepSize}")
         .action((x, c) => c.copy(stepSize = x))
       opt[String]("algorithm")
         .text(s"algorithm (${Algorithm.values.mkString(",")}), " +
@@ -81,6 +83,15 @@ object BinaryClassification {
         .required()
         .text("input paths to labeled examples in LIBSVM format")
         .action((x, c) => c.copy(input = x))
+      note(
+        """
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.BinaryClassification \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  --algorithm LR --regType L2 --regParam 1.0 \
+          |  data/mllib/sample_binary_classification_data.txt
+        """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>
@@ -115,10 +126,9 @@ object BinaryClassification {
 
     val model = params.algorithm match {
       case LR =>
-        val algorithm = new LogisticRegressionWithSGD()
+        val algorithm = new LogisticRegressionWithLBFGS()
         algorithm.optimizer
           .setNumIterations(params.numIterations)
-          .setStepSize(params.stepSize)
           .setUpdater(updater)
           .setRegParam(params.regParam)
         algorithm.run(training).clearThreshold()

@@ -22,13 +22,13 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
-class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
+class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
   with BeforeAndAfter with BeforeAndAfterAll {
 
   /** Length of time to wait while draining listener events. */
@@ -180,8 +180,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     rdd3.count()
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
-    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
-    stageInfo3.rddInfos.size should be {2} // ShuffledRDD, MapPartitionsRDD
+    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
+    stageInfo3.rddInfos.size should be {1} // ShuffledRDD
     stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
   }
@@ -239,23 +239,27 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
+
+      /* Test is disabled (SEE SPARK-2208)
       if (stageInfo.rddInfos.exists(_.name == d4.name)) {
         checkNonZeroAvg(
           taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
           stageInfo + " fetchWaitTime")
       }
+      */
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
+          taskMetrics.inputMetrics should not be ('defined)
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
-          sm.totalBlocksFetched should be > (0)
-          sm.localBlocksFetched should be > (0)
+          sm.totalBlocksFetched should be (128)
+          sm.localBlocksFetched should be (128)
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0l)
         }
@@ -331,16 +335,47 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
-  def checkNonZeroAvg(m: Traversable[Long], msg: String) {
+  test("SparkListener moves on if a listener throws an exception") {
+    val badListener = new BadListener
+    val jobCounter1 = new BasicJobCounter
+    val jobCounter2 = new BasicJobCounter
+    val bus = new LiveListenerBus
+
+    // Propagate events to bad listener first
+    bus.addListener(badListener)
+    bus.addListener(jobCounter1)
+    bus.addListener(jobCounter2)
+    bus.start()
+
+    // Post events to all listeners, and wait until the queue is drained
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
+    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
+    // The exception should be caught, and the event should be propagated to other listeners
+    assert(bus.listenerThreadIsAlive)
+    assert(jobCounter1.count === 5)
+    assert(jobCounter2.count === 5)
+  }
+
+  /**
+   * Assert that the given list of numbers has an average that is greater than zero.
+   */
+  private def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
-  class BasicJobCounter extends SparkListener {
+  /**
+   * A simple listener that counts the number of jobs observed.
+   */
+  private class BasicJobCounter extends SparkListener {
     var count = 0
     override def onJobEnd(job: SparkListenerJobEnd) = count += 1
   }
 
-  class SaveStageAndTaskInfo extends SparkListener {
+  /**
+   * A simple listener that saves all task infos and task metrics.
+   */
+  private class SaveStageAndTaskInfo extends SparkListener {
     val stageInfos = mutable.Map[StageInfo, Seq[(TaskInfo, TaskMetrics)]]()
     var taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
@@ -358,7 +393,10 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
-  class SaveTaskEvents extends SparkListener {
+  /**
+   * A simple listener that saves the task indices for all task events.
+   */
+  private class SaveTaskEvents extends SparkListener {
     val startedTasks = new mutable.HashSet[Int]()
     val startedGettingResultTasks = new mutable.HashSet[Int]()
     val endedTasks = new mutable.HashSet[Int]()
@@ -377,4 +415,12 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }
+
+  /**
+   * A simple listener that throws an exception on job end.
+   */
+  private class BadListener extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
+  }
+
 }

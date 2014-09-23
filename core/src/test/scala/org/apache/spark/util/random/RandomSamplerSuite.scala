@@ -42,7 +42,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       }
     }
     whenExecuting(random) {
-      val sampler = new BernoulliSampler[Int](0.25, 0.55)(random)
+      val sampler = new BernoulliSampler[Int](0.25, 0.55)
+      sampler.rng = random
       assert(sampler.sample(a.iterator).toList == List(3, 4, 5))
     }
   }
@@ -54,7 +55,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       }
     }
     whenExecuting(random) {
-      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
+      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)
+      sampler.rng = random
       assert(sampler.sample(a.iterator).toList === List(1, 2, 6, 7, 8, 9))
     }
   }
@@ -66,7 +68,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       }
     }
     whenExecuting(random) {
-      val sampler = new BernoulliSampler[Int](0.35)(random)
+      val sampler = new BernoulliSampler[Int](0.35)
+      sampler.rng = random
       assert(sampler.sample(a.iterator).toList == List(1, 2, 3))
     }
   }
@@ -78,7 +81,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       }
     }
     whenExecuting(random) {
-      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
+      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)
+      sampler.rng = random
       assert(sampler.sample(a.iterator).toList == List(1, 2, 6, 7, 8, 9))
     }
   }
@@ -88,7 +92,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       random.setSeed(10L)
     }
     whenExecuting(random) {
-      val sampler = new BernoulliSampler[Int](0.2)(random)
+      val sampler = new BernoulliSampler[Int](0.2)
+      sampler.rng = random
       sampler.setSeed(10L)
     }
   }
@@ -100,7 +105,8 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
       }
     }
     whenExecuting(poisson) {
-      val sampler = new PoissonSampler[Int](0.2)(poisson)
+      val sampler = new PoissonSampler[Int](0.2)
+      sampler.rng = poisson
       assert(sampler.sample(a.iterator).toList == List(2, 3, 3, 5, 6))
     }
   }

@@ -65,7 +65,7 @@ object SVMDataGenerator {
       LabeledPoint(y, Vectors.dense(x))
     }
 
-    MLUtils.saveLabeledData(data, outputPath)
+    data.saveAsTextFile(outputPath)
 
     sc.stop()
   }

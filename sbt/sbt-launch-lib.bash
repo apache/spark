@@ -7,7 +7,7 @@
 # TODO - Should we merge the main SBT script with this library?
 
 if test -z "$HOME"; then
-  declare -r script_dir="$(dirname $script_path)"
+  declare -r script_dir="$(dirname "$script_path")"
 else
   declare -r script_dir="$HOME/.sbt"
 fi
@@ -16,6 +16,7 @@ declare -a residual_args
 declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
+declare -a maven_profiles
 
 if test -x "$JAVA_HOME/bin/java"; then
     echo -e "Using $JAVA_HOME as default JAVA_HOME."
@@ -45,20 +46,20 @@ acquire_sbt_jar () {
 
   if [[ ! -f "$sbt_jar" ]]; then
     # Download sbt launch jar if it hasn't been downloaded yet
-    if [ ! -f ${JAR} ]; then
+    if [ ! -f "${JAR}" ]; then
     # Download
     printf "Attempting to fetch sbt\n"
-    JAR_DL=${JAR}.part
+    JAR_DL="${JAR}.part"
     if hash curl 2>/dev/null; then
-      (curl --progress-bar ${URL1} > ${JAR_DL} || curl --progress-bar ${URL2} > ${JAR_DL}) && mv ${JAR_DL} ${JAR}
+      (curl --silent ${URL1} > "${JAR_DL}" || curl --silent ${URL2} > "${JAR_DL}") && mv "${JAR_DL}" "${JAR}"
     elif hash wget 2>/dev/null; then
-      (wget --progress=bar ${URL1} -O ${JAR_DL} || wget --progress=bar ${URL2} -O ${JAR_DL}) && mv ${JAR_DL} ${JAR}
+      (wget --quiet ${URL1} -O "${JAR_DL}" || wget --quiet ${URL2} -O "${JAR_DL}") && mv "${JAR_DL}" "${JAR}"
     else
       printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
       exit -1
     fi
     fi
-    if [ ! -f ${JAR} ]; then
+    if [ ! -f "${JAR}" ]; then
     # We failed to download
     printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
     exit -1
@@ -87,6 +88,13 @@ addJava () {
   dlog "[addJava] arg = '$1'"
   java_args=( "${java_args[@]}" "$1" )
 }
+
+enableProfile () {
+  dlog "[enableProfile] arg = '$1'"
+  maven_profiles=( "${maven_profiles[@]}" "$1" )
+  export SBT_MAVEN_PROFILES="${maven_profiles[@]}"
+}
+
 addSbt () {
   dlog "[addSbt] arg = '$1'"
   sbt_commands=( "${sbt_commands[@]}" "$1" )
@@ -141,7 +149,8 @@ process_args () {
      -java-home) require_arg path "$1" "$2" && java_cmd="$2/bin/java" && export JAVA_HOME=$2 && shift 2 ;;
 
             -D*) addJava "$1" && shift ;;
-            -J*) addJava "${1:2}" && shift ;;
+            -J*) addJava "${1:2}" && shift ;; 
+            -P*) enableProfile "$1" && shift ;;
               *) addResidual "$1" && shift ;;
     esac
   done

@@ -133,6 +133,16 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         Iterator((part.srcIds ++ part.dstIds).toSet)
       }.collect
       assert(verts.exists(id => partitionSetsUnpartitioned.count(_.contains(id)) > bound))
+
+      // Forming triplets view
+      val g = Graph(
+        sc.parallelize(List((0L, "a"), (1L, "b"), (2L, "c"))),
+        sc.parallelize(List(Edge(0L, 1L, 1), Edge(0L, 2L, 1)), 2))
+      assert(g.triplets.collect.map(_.toTuple).toSet ===
+        Set(((0L, "a"), (1L, "b"), 1), ((0L, "a"), (2L, "c"), 1)))
+      val gPart = g.partitionBy(EdgePartition2D)
+      assert(gPart.triplets.collect.map(_.toTuple).toSet ===
+        Set(((0L, "a"), (1L, "b"), 1), ((0L, "a"), (2L, "c"), 1)))
     }
   }
 
@@ -146,6 +156,31 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // mapVertices changing type
       val mappedVAttrs2 = star.mapVertices((vid, attr) => attr.length)
       assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, 1)).toSet)
+    }
+  }
+
+  test("mapVertices changing type with same erased type") {
+    withSpark { sc =>
+      val vertices = sc.parallelize(Array[(Long, Option[java.lang.Integer])](
+        (1L, Some(1)),
+        (2L, Some(2)),
+        (3L, Some(3))
+      ))
+      val edges = sc.parallelize(Array(
+        Edge(1L, 2L, 0),
+        Edge(2L, 3L, 0),
+        Edge(3L, 1L, 0)
+      ))
+      val graph0 = Graph(vertices, edges)
+      // Trigger initial vertex replication
+      graph0.triplets.foreach(x => {})
+      // Change type of replicated vertices, but preserve erased type
+      val graph1 = graph0.mapVertices {
+        case (vid, integerOpt) => integerOpt.map((x: java.lang.Integer) => (x.toDouble): java.lang.Double)
+      }
+      // Access replicated vertices, exposing the erased type
+      val graph2 = graph1.mapTriplets(t => t.srcAttr.get)
+      assert(graph2.edges.map(_.attr).collect.toSet === Set[java.lang.Double](1.0, 2.0, 3.0))
     }
   }
 
