@@ -92,7 +92,7 @@ import org.apache.spark.mllib.feature.IDF
 
 // ... continue from the previous example
 tf.cache()
-val idf = new IDF(minDocFreq=2).fit(tf)
+val idf = new IDF(minDocFreq = 2).fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
 
