@@ -37,9 +37,12 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
+  private var oldConf: Map[String, String] = _
 
   override def beforeAll() {
     tempDir = Utils.createTempDir()
+
+    oldConf = sys.props.filter { case (k, v) => k.startsWith("spark.") }.toMap
 
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(new YarnConfiguration())
@@ -60,6 +63,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
   override def afterAll() {
     yarnCluster.stop()
     sys.props.retain { case (k, v) => !k.startsWith("spark.") }
+    sys.props ++= oldConf
     super.afterAll()
   }
 
