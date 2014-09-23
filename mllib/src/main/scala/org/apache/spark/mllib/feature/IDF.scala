@@ -37,8 +37,6 @@ import org.apache.spark.rdd.RDD
  *
  * @param minimumOccurence minimum of documents in which a term
  *                         should appear for filtering
- *
- *
  */
 @Experimental
 class IDF(val minimumOccurence: Long) {
