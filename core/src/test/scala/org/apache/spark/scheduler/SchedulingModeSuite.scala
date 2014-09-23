@@ -26,6 +26,85 @@ import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark.{SparkContext, Logging, LocalSparkContext}
 
+class FakeTaskSetManager(
+                          initPriority: Int,
+                          initStageId: Int,
+                          initNumTasks: Int,
+                          taskScheduler: TaskSchedulerImpl,
+                          taskSet: TaskSet)
+  extends TaskSetManager(taskScheduler, taskSet, 0) {
+
+  parent = null
+  weight = 1
+  minShare = 2
+  priority = initPriority
+  stageId = initStageId
+  name = "TaskSet_"+stageId
+  override val numTasks = initNumTasks
+  tasksSuccessful = 0
+
+  var numRunningTasks = 0
+  override def runningTasks = numRunningTasks
+
+  def increaseRunningTasks(taskNum: Int) {
+    numRunningTasks += taskNum
+    if (parent != null) {
+      parent.increaseRunningTasks(taskNum)
+    }
+  }
+
+  def decreaseRunningTasks(taskNum: Int) {
+    numRunningTasks -= taskNum
+    if (parent != null) {
+      parent.decreaseRunningTasks(taskNum)
+    }
+  }
+
+  override def addSchedulable(schedulable: Schedulable) {
+  }
+
+  override def removeSchedulable(schedulable: Schedulable) {
+  }
+
+  override def getSchedulableByName(name: String): Schedulable = {
+    null
+  }
+
+  override def executorLost(executorId: String, host: String): Unit = {
+  }
+
+  override def resourceOffer(
+                              execId: String,
+                              host: String,
+                              maxLocality: TaskLocality.TaskLocality)
+  : Option[TaskDescription] =
+  {
+    if (tasksSuccessful + numRunningTasks < numTasks) {
+      increaseRunningTasks(1)
+      Some(new TaskDescription(0, execId, "task 0:0", 0, null))
+    } else {
+      None
+    }
+  }
+
+  override def checkSpeculatableTasks(): Boolean = {
+    true
+  }
+
+  def taskFinished() {
+    decreaseRunningTasks(1)
+    tasksSuccessful +=1
+    if (tasksSuccessful == numTasks) {
+      parent.removeSchedulable(this)
+    }
+  }
+
+  def abort() {
+    decreaseRunningTasks(numRunningTasks)
+    parent.removeSchedulable(this)
+  }
+}
+
 
 class SchedulingModeSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
   with LocalSparkContext with Logging {
