@@ -22,7 +22,8 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
@@ -111,7 +112,7 @@ private[spark] class BlockManager(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
-  private val cachedPeers = new HashSet[BlockManagerId]
+  private val cachedPeers = new mutable.HashSet[BlockManagerId]
   private var lastPeerFetchTime = 0L
 
   initialize()
@@ -791,11 +792,10 @@ private[spark] class BlockManager(
   /**
    * Get peer block managers in the system.
    */
-  private def getPeers(forceFetch: Boolean): HashSet[BlockManagerId] = {
-    val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
-    val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
-
+  private def getPeers(forceFetch: Boolean): mutable.HashSet[BlockManagerId] = {
     cachedPeers.synchronized {
+      val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
+      val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
       if (cachedPeers.isEmpty || forceFetch || timeout) {
         cachedPeers.clear()
         cachedPeers ++= master.getPeers(blockManagerId).sortBy(_.hashCode)
@@ -812,27 +812,52 @@ private[spark] class BlockManager(
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val numPeersToReplicateTo = level.replication - 1
-    val peersReplicatedTo = new HashSet[BlockManagerId]
-    val peersFailedToReplicateTo = new HashSet[BlockManagerId]
+    val peersForReplication = new ArrayBuffer[BlockManagerId]
+    val peersReplicatedTo = new ArrayBuffer[BlockManagerId]
+    val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
     val startTime = System.nanoTime
     val random = new Random(blockId.hashCode)
 
-    var forceFetchPeers = false
+    var replicationFailed = false
     var failures = 0
     var done = false
 
-    // Get a random peer
+    // Get cached list of peers
+    peersForReplication ++= getPeers(forceFetch = false)
+
+    // Get a random peer. Note that this selection of a peer is deterministic on the block id.
+    // So assuming the list of peers does not change and no replication failures,
+    // if there are multiple attempts in the same node to replicate the same block,
+    // the same set of peers will be selected.
     def getRandomPeer(): Option[BlockManagerId] = {
-      val peers = getPeers(forceFetchPeers) -- peersReplicatedTo -- peersFailedToReplicateTo
-      if (!peers.isEmpty) Some(peers.toSeq(random.nextInt(peers.size))) else None
+      // If replication had failed, then force update the cached list of peers and remove the peers
+      // that have been already used
+      if (replicationFailed) {
+        peersForReplication.clear()
+        peersForReplication ++= getPeers(forceFetch = true)
+        peersForReplication --= peersReplicatedTo
+        peersForReplication --= peersFailedToReplicateTo
+      }
+      if (!peersForReplication.isEmpty) {
+        Some(peersForReplication(random.nextInt(peersForReplication.size)))
+      } else {
+        None
+      }
     }
 
     // One by one choose a random peer and try uploading the block to it
     // If replication fails (e.g., target peer is down), force the list of cached peers
     // to be re-fetched from driver and then pick another random peer for replication. Also
     // temporarily black list the peer for which replication failed.
+    //
+    // This selection of a peer and replication is continued in a loop until one of the
+    // following 3 conditions is fulfilled:
+    // (i) specified number of peers have been replicated to
+    // (ii) too many failures in replicating to peers
+    // (iii) no peer left to replicate to
+    //
     while (!done) {
       getRandomPeer() match {
         case Some(peer) =>
@@ -845,22 +870,22 @@ private[spark] class BlockManager(
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
               .format((System.nanoTime - onePeerStartTime) / 1e6))
             peersReplicatedTo += peer
-            forceFetchPeers = false
+            peersForReplication -= peer
+            replicationFailed = false
             if (peersReplicatedTo.size == numPeersToReplicateTo) {
-              done = true
+              done = true  // specified number of peers have been replicated to
             }
           } catch {
             case e: Exception =>
               logWarning(s"Failed to replicate $blockId to $peer, failure #$failures", e)
               failures += 1
-              forceFetchPeers = true
+              replicationFailed = true
               peersFailedToReplicateTo += peer
-              if (failures > maxReplicationFailures) {
+              if (failures > maxReplicationFailures) { // too many failures in replcating to peers
                 done = true
               }
           }
-        case None =>
-          // no peer left to replicate to
+        case None => // no peer left to replicate to
           done = true
       }
     }
