@@ -24,7 +24,10 @@ Read data file users.parquet in local Spark distro:
 
 $ cd $SPARK_HOME
 $ export AVRO_PARQUET_JARS=/path/to/parquet-avro-1.5.0.jar
-$ ./bin/spark-submit --driver-class-path /path/to/example/jar --jars $AVRO_PARQUET_JARS ./examples/src/main/python/parquet_inputformat.py examples/src/main/resources/users.parquet
+$ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
+        --jars $AVRO_PARQUET_JARS \\
+        ./examples/src/main/python/parquet_inputformat.py \\
+        examples/src/main/resources/users.parquet
 <...lots of log output...>
 {u'favorite_color': None, u'name': u'Alyssa', u'favorite_numbers': [3, 9, 15, 20]}
 {u'favorite_color': u'red', u'name': u'Ben', u'favorite_numbers': []}
@@ -36,14 +39,15 @@ if __name__ == "__main__":
         Usage: parquet_inputformat.py <data_file>
 
         Run with example jar:
-        ./bin/spark-submit --driver-class-path /path/to/example/jar /path/to/examples/parquet_inputformat.py <data_file>
+        ./bin/spark-submit --driver-class-path /path/to/example/jar \\
+                /path/to/examples/parquet_inputformat.py <data_file>
         Assumes you have Parquet data stored in <data_file>.
         """
         exit(-1)
 
     path = sys.argv[1]
     sc = SparkContext(appName="ParquetInputFormat")
-    
+
     parquet_rdd = sc.newAPIHadoopFile(
         path,
         'parquet.avro.AvroParquetInputFormat',
