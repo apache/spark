@@ -138,6 +138,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("division",
     "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
 
+  createQueryTest("modulus",
+    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), (101 / 2) % 10 FROM src LIMIT 1")
+
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
