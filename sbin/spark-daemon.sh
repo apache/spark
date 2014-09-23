@@ -142,8 +142,12 @@ case $startStop in
 
     spark_rotate_log "$log"
     echo starting $command, logging to $log
-    cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    if [ $command == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2" ]; then
+      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
+        "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
+    else
+      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    fi
     newpid=$!
     echo $newpid > $pid
     sleep 2
