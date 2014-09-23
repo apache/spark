@@ -146,7 +146,7 @@ private object IDF {
          * we just omit changing those entries.
          */
         if(df(j) >= minDocFreq) {
-          inv(j) = math.log((m + 1.0)/ (df(j) + 1.0))
+          inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
         }
         j += 1
       }
