@@ -32,14 +32,14 @@ import org.apache.spark.rdd.RDD
  * number of documents and `d(t)` is the number of documents that contain term `t`.
  *
  * This implementation supports filtering out terms which do not appear in a minimum number
- * of documents (controlled by the variable minimumOccurence). For terms that are not in
- * at least `minimumOccurence` documents, the IDF is found as 0, resulting in TF-IDFs of 0.
+ * of documents (controlled by the variable `minDocFreq`). For terms that are not in
+ * at least `minDocFreq` documents, the IDF is found as 0, resulting in TF-IDFs of 0.
  *
- * @param minimumOccurence minimum of documents in which a term
- *                         should appear for filtering
+ * @param minDocFreq minimum of documents in which a term
+ *                   should appear for filtering
  */
 @Experimental
-class IDF(val minimumOccurence: Int) {
+class IDF(val minDocFreq: Int) {
 
   def this() = this(0)
 
@@ -51,7 +51,7 @@ class IDF(val minimumOccurence: Int) {
    */
   def fit(dataset: RDD[Vector]): IDFModel = {
     val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
-          minimumOccurence=minimumOccurence))(
+          minDocFreq=minDocFreq))(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
     ).idf()
@@ -70,7 +70,7 @@ class IDF(val minimumOccurence: Int) {
 private object IDF {
 
   /** Document frequency aggregator. */
-  class DocumentFrequencyAggregator(val minimumOccurence: Int) extends Serializable {
+  class DocumentFrequencyAggregator(val minDocFreq: Int) extends Serializable {
 
     /** number of documents */
     private var m = 0L
@@ -145,7 +145,7 @@ private object IDF {
          * Since arrays are initialized to 0 by default,
          * we just omit changing those entries.
          */
-        if(df(j) >= minimumOccurence) {
+        if(df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0)/ (df(j) + 1.0))
         }
         j += 1
@@ -165,8 +165,8 @@ class IDFModel private[mllib] (val idf: Vector) extends Serializable {
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
    *
-   * If minimumOccurence was set for the IDF calculation,
-   * the terms which occur in fewer than minimumOccurence
+   * If `minDocFreq` was set for the IDF calculation,
+   * the terms which occur in fewer than `minDocFreq`
    * documents will have an entry of 0.
    *
    * @param dataset an RDD of term frequency vectors

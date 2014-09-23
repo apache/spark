@@ -85,14 +85,14 @@ val tfidf: RDD[Vector] = idf.transform(tf)
 
 MLLib's IDF implementation provides an option for ignoring terms which occur in less than a
 minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
-can be used by passing the `minimumOccurence` value to the IDF constructor.
+can be used by passing the `minDocFreq` value to the IDF constructor.
 
 {% highlight scala %}
 import org.apache.spark.mllib.feature.IDF
 
 // ... continue from the previous example
 tf.cache()
-val idf = new IDF(minimumOccurence=2).fit(tf)
+val idf = new IDF(minDocFreq=2).fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
 

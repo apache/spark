@@ -55,7 +55,7 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     assert(tfidf2.values(0) ~== (1.0 * expected(1)) absTol 1e-12)
   }
 
-  test("idf minimum occurence filtering") {
+  test("idf minimum document frequency filtering") {
     val n = 4
     val localTermFrequencies = Seq(
       Vectors.sparse(n, Array(1, 3), Array(1.0, 2.0)),
@@ -64,7 +64,7 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     )
     val m = localTermFrequencies.size
     val termFrequencies = sc.parallelize(localTermFrequencies, 2)
-    val idf = new IDF(minimumOccurence=1)
+    val idf = new IDF(minDocFreq=1)
     val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if(x > 0) {

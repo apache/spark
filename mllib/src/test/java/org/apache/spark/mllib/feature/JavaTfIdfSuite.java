@@ -65,7 +65,7 @@ public class JavaTfIdfSuite implements Serializable {
   }
 
   @Test
-  public void tfIdfMinimumOccurence() {
+  public void tfIdfMinimumDocumentFrequency() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
     JavaRDD<ArrayList<String>> documents = sc.parallelize(Lists.newArrayList(
