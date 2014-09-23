@@ -18,8 +18,13 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLConf, SQLContext}
 
 /** A SQLContext that can be used for local testing. */
 object TestSQLContext
-  extends SQLContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
+  extends SQLContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf())) {
+
+  /** Fewer partitions to speed up testing. */
+  override private[spark] def numShufflePartitions: Int =
+    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+}

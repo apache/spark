@@ -351,6 +351,33 @@
           </execution>
         </executions>
       </plugin>
+      <!--
+        Copy guava to the build directory. This is needed to make the SPARK_PREPEND_CLASSES
+        option work in compute-classpath.sh, since it would put the non-shaded Spark classes in
+        the runtime classpath.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <useSubDirectoryPerType>true</useSubDirectoryPerType>
+              <includeArtifactIds>guava</includeArtifactIds>
+              <silent>true</silent>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
 
     <resources>

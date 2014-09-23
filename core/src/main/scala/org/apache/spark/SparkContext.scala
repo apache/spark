@@ -49,7 +49,6 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkD
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
@@ -221,8 +220,14 @@ class SparkContext(config: SparkConf) extends Logging {
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
   // Initialize the Spark UI, registering all associated listeners
-  private[spark] val ui = new SparkUI(this)
-  ui.bind()
+  private[spark] val ui: Option[SparkUI] =
+    if (conf.getBoolean("spark.ui.enabled", true)) {
+      Some(new SparkUI(this))
+    } else {
+      // For tests, do not enable the UI
+      None
+    }
+  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -991,7 +996,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Shut down the SparkContext. */
   def stop() {
     postApplicationEnd()
-    ui.stop()
+    ui.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -1067,11 +1072,8 @@ class SparkContext(config: SparkConf) extends Logging {
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
-    val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
-    logInfo(
-      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
   }
 

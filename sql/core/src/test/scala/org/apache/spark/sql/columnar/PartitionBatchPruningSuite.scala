@@ -28,7 +28,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   val originalColumnBatchSize = columnBatchSize
   val originalInMemoryPartitionPruning = inMemoryPartitionPruning
 
-  override protected def beforeAll() {
+  override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
     val rawData = sparkContext.makeRDD(1 to 100, 5).map(IntegerData)
@@ -38,7 +38,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
     setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
   }
 
-  override protected def afterAll() {
+  override protected def afterAll(): Unit = {
     setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
     setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
   }
@@ -76,7 +76,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
       filter: String,
       expectedQueryResult: Seq[Int],
       expectedReadPartitions: Int,
-      expectedReadBatches: Int) {
+      expectedReadBatches: Int): Unit = {
 
     test(filter) {
       val query = sql(s"SELECT * FROM intData WHERE $filter")

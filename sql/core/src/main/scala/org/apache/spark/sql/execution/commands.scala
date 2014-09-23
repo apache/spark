@@ -166,3 +166,21 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
       child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class CacheTableAsSelectCommand(tableName: String, logicalPlan: LogicalPlan)
+  extends LeafNode with Command {
+  
+  override protected[sql] lazy val sideEffectResult = {
+    import sqlContext._
+    logicalPlan.registerTempTable(tableName)
+    cacheTable(tableName) 
+    Seq.empty[Row]
+  }
+
+  override def output: Seq[Attribute] = Seq.empty  
+  
+}

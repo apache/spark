@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
@@ -55,7 +55,7 @@ private[hive] trait HiveStrategies {
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: SchemaRDD) {
       def lowerCase =
-        new SchemaRDD(s.sqlContext, LowerCaseSchema(s.logicalPlan))
+        new SchemaRDD(s.sqlContext, s.logicalPlan)
 
       def addPartitioningAttributes(attrs: Seq[Attribute]) =
         new SchemaRDD(
@@ -165,6 +165,16 @@ private[hive] trait HiveStrategies {
              InMemoryRelation(_, _, _,
                HiveTableScan(_, table, _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.CreateTableAsSelect(database, tableName, child) =>
+        val query = planLater(child)
+        CreateTableAsSelect(
+          database.get,
+          tableName,
+          query,
+          InsertIntoHiveTable(_: MetastoreRelation, 
+            Map(), 
+            query, 
+            true)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
