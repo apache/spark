@@ -34,7 +34,6 @@ import org.apache.spark.util.Utils
 
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 
-  private var oldConf: Map[String, String] = _
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
@@ -45,8 +44,6 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(new YarnConfiguration())
     yarnCluster.start()
-
-    oldConf = sys.props.toMap
     yarnCluster.getConfig().foreach { e =>
       sys.props += ("spark.hadoop." + e.getKey() -> e.getValue())
     }
@@ -62,16 +59,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 
   override def afterAll() {
     yarnCluster.stop()
-
-    val sysProps = sys.props.map { case (k, v) => (k, v) }
-    sysProps.foreach { case (k, v) =>
-      if (k.startsWith("spark.")) {
-        sys.props -= k
-      }
-    }
-
-    sys.props ++= oldConf
-
+    sys.props.retain { case (k, v) => !k.startsWith("spark.") }
     super.afterAll()
   }
 
@@ -116,12 +104,22 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 private object YarnClusterDriver extends Logging with Matchers {
 
   def main(args: Array[String]) = {
+    if (args.length != 2) {
+      System.err.println(
+        s"""
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnClusterDriver [master] [result file]
+        """.stripMargin)
+      System.exit(1)
+    }
+
     val sc = new SparkContext(new SparkConf().setMaster(args(0))
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
     val status = new File(args(1))
     var result = "failure"
     try {
-      val data = sc.parallelize(1 to 4).map(i => i).collect().toSet
+      val data = sc.parallelize(1 to 4, 4).collect().toSet
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
