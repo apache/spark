@@ -12,8 +12,8 @@ object MergedPropertyMap {
    * have priority over older ones
    * @param propList list of property maps to merge
    */
-  def mergePropertyMaps( propList: List[Map[String, String]]) = {
-    val propMap = mutable.HashMap[String, String]()
+  def mergePropertyMaps( propList: List[Map[String, String]]): mutable.Map[String, String] = {
+    val propMap = new mutable.HashMap[String, String]()
     // loop through each entry of each map in order of priority
     // and add it to our propMap
     propList.reverse.foreach {

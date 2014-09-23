@@ -40,7 +40,7 @@ import org.apache.spark.deploy.MergedPropertyMap._
 /**
  * Configuration structure formed by merging all possible sources of configuration
  * information in order of priority (from lowest priority to highest)
- * 1. hard coded defaults in class path at spark-submit-defaults.conf
+ * 1. hard coded defaults in class path at spark-submit-defaults.prop
  * 2. SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
  * 3. System config variables (eg by using -Dspark.var.name)
  * 4. Environment variables
@@ -117,42 +117,40 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def pyFiles = getStringConfig(SparkSubmitPyFiles)
   def pyFiles_= (value: String):Unit = conf.put(SparkSubmitPyFiles, value)
 
-  val sparkProperties = new HashMap[String, String]()
+  // arguments passed via --conf command line options
+  val cmdLineConfOptionConfig = new HashMap[String, String]()
 
   lazy val verbose: Boolean =  SparkVerbose == true.toString
   lazy val isPython: Boolean = primaryResource.isDefined && SparkSubmit.isPython(primaryResource.get)
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
 
   // any child argument detected on command line are stored here.
-  private var childArgsCommandLine = new ArrayBuffer[String]()
+  private var cmdLineChildArgs = new ArrayBuffer[String]()
 
   /**
    * Configuration read in from property file if specified on command line
    */
-  private var propertiesFileConfig: Config = ConfigFactory.empty
+  private var cmdLinePropFileConfig: Option[Map[String,String]] = None
+  
   /**
-   * Used to store parameters parsed from command line before constructing master config object
+   * Used to store parameters parsed from command line (except for --conf and child arguments)
    */
-  private val parsedParameters = new HashMap[String, String]()
+  private val cmdLineOptionConfig = new HashMap[String, String]()
 
   parseOpts(args.toList)
-  // parameters delivered by conf command do not have priority over explicit
-  // command line parameter
-  for((k,v) <- sparkProperties) {
-    parsedParameters.getOrElseUpdate(k,v)
-  }
-  var resolvedConfig: Config = mergeSparkProperties
-  printResolvedConfig()
+
+  conf ++= mergeSparkProperties
+  //printResolvedConfig()
 
   // The only config item that doesn't fit nicely into a Map[String, String]
   // is the child arguments config item
-  if (resolvedConfig.hasPath(SparkAppArguments))
-  {
-    childArgs ++= resolvedConfig.getStringList(SparkAppArguments)
-  }
+  //if (resolvedConfig.hasPath(SparkAppArguments))
+  //{
+  //  childArgs ++= resolvedConfig.getStringList(SparkAppArguments)
+  //}
 
   // now add the rest of the config items to the config map
-  conf ++= resolvedConfig.entrySet.map(entry => entry.getKey -> entry.getValue.unwrapped.toString)
+  //conf ++= resolvedConfig.entrySet.map(entry => entry.getKey -> entry.getValue.unwrapped.toString)
 
   // some configuration items can be derived if there are not present
   deriveConfigurations()
@@ -173,29 +171,20 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /**
    * Resolves Configuration sources in order of lowest priority to highest
-   * 1. hard coded defaults in class path at spark-submit-defaults.conf
+   * 1. hard coded defaults in class path at spark-submit-defaults.prop
    * 2. SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
    * 3. System config variables (eg by using -Dspark.var.name)
    * 4. Environment variables
    * 5. properties file specified on the command line with --properties-file
-   * 6. command line option or --conf override
+   * 6. command line options passed by --conf
+   * 7. command line options other then --conf override
    */
   private def mergeSparkProperties = {
-    val CommandLineOrigin: String = "Command line"
-
-    val defaultParseOptions = ConfigParseOptions.defaults()
-      .setSyntax(ConfigSyntax.CONF)
-      .setOriginDescription("Default values")
-      .setClassLoader(Thread.currentThread.getContextClassLoader)
-      .setAllowMissing(true)
-
-    new SystemProperties().put("config.trace","loads")
-
-    // Configuration read in from spark-submit-defaults.conf file found on the classpath
-    val hardCodedDefaultConfig: Config = ConfigFactory.parseResources(
-      SparkSubmitDefaults, defaultParseOptions)
-    if (hardCodedDefaultConfig.entrySet().size == 0)
-    {
+    // Configuration read in from spark-submit-defaults.prop file found on the classpath
+    val is = Thread.currentThread().getContextClassLoader().getResourceAsStream(SparkSubmitDefaults)
+    val hardCodedDefaultConfig = new Properties()
+    hardCodedDefaultConfig.load(is)
+    if (hardCodedDefaultConfig.size() == 0) {
       throw new IllegalStateException(s"Default values not found at classpath $SparkSubmitDefaults")
     }
 
@@ -203,29 +192,31 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     val sparkDefaultConfig = SparkSubmitArguments.getSparkDefaultFileConfig
 
     // Configuration from java system properties
-    val systemPropertyConfig = ConfigFactory.systemProperties()
+    val systemPropertyConfig = SparkSubmitArguments.getPropertyMap(System.getProperties)
 
-    // Configuration variables from the environment
-    val environmentConfig: Config = ConfigFactory.systemEnvironment()
+    // Configuration variables from the environment 
+    // support legacy variables
+    val environmentConfig: Map[String, String] = System.getenv()
 
-    // Configuration read in from the command line
-    val parsedSparkCommandLineConfig = if (childArgsCommandLine.isEmpty) {
-      ConfigFactory.parseMap(parsedParameters, CommandLineOrigin)
-    } else {
-      val childArgs: java.lang.Iterable[String] = childArgsCommandLine
+    val legacyEnvVars : List[(String, String)] = List("MASTER"->SparkMaster, "DEPLOY_MODE"->SparkDeployMode)
 
-      ConfigFactory.parseMap(parsedParameters, CommandLineOrigin)
-        .withValue(SparkAppArguments, ConfigValueFactory.fromAnyRef(childArgs))
-    }
+    // legacy variables act at the priority of a system property
+    legacyEnvVars.map( {case(varName, propName) => (environmentConfig.get(varName), propName) })
+      .filter( {case(varVariable, _) => varVariable.isDefined} )
+      .foreach( {case(varVariable, propName) => systemPropertyConfig.put(propName, varVariable.get)})
 
-    ConfigFactory.empty()
-      .withFallback(parsedSparkCommandLineConfig)
-      .withFallback(propertiesFileConfig)
-      .withFallback(environmentConfig)
-      .withFallback(systemPropertyConfig)
-      //.withFallback(sparkDefaultConfig)
-      .withFallback(hardCodedDefaultConfig)
-      .resolve()
+    // Config passed in from command line
+    def commandLineConfig = cmdLineOptionConfig
+    // TODO: check handing of childArgs
+    
+    MergedPropertyMap.mergePropertyMaps(List(hardCodedDefaultConfig,
+      sparkDefaultConfig,
+      systemPropertyConfig,
+      environmentConfig,
+      cmdLinePropFileConfig.getOrElse(Map.empty),
+      cmdLineConfOptionConfig,
+      commandLineConfig
+    ))
   }
 
   private def deriveConfigurations() = {
@@ -318,8 +309,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 
   def printResolvedConfig() = {
-    val renderOptions = ConfigRenderOptions.concise().setOriginComments(false).setFormatted(true)
-    SparkSubmit.printStream.println(resolvedConfig.root().get("spark").render(renderOptions))
+    //val renderOptions = ConfigRenderOptions.concise().setOriginComments(false).setFormatted(true)
+    //SparkSubmit.printStream.println(resolvedConfig.root().get("spark").render(renderOptions))
   }
 
   override def toString =  {
@@ -340,111 +331,111 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     def parse(opts: Seq[String]): Unit = opts match {
       case ("--name") :: value :: tail =>
         //name = value
-        parsedParameters.put(SparkAppName, value)
+        cmdLineOptionConfig.put(SparkAppName, value)
         parse(tail)
 
       case ("--master") :: value :: tail =>
         //master = value
-        parsedParameters.put(SparkMaster, value)
+        cmdLineOptionConfig.put(SparkMaster, value)
         parse(tail)
 
       case ("--class") :: value :: tail =>
         //mainClass = value
-        parsedParameters.put(SparkAppClass, value)
+        cmdLineOptionConfig.put(SparkAppClass, value)
         parse(tail)
 
       case ("--deploy-mode") :: value :: tail =>
         //deployMode = value
-        parsedParameters.put(SparkDeployMode, value)
+        cmdLineOptionConfig.put(SparkDeployMode, value)
         parse(tail)
 
       case ("--num-executors") :: value :: tail =>
         //numExecutors = value
-        parsedParameters.put(SparkExecutorInstances, value)
+        cmdLineOptionConfig.put(SparkExecutorInstances, value)
         parse(tail)
 
       case ("--total-executor-cores") :: value :: tail =>
         //totalExecutorCores = value
-        parsedParameters.put(SparkCoresMax, value)
+        cmdLineOptionConfig.put(SparkCoresMax, value)
         parse(tail)
 
       case ("--executor-cores") :: value :: tail =>
         //executorCores = value
-        parsedParameters.put(SparkExecutorCores, value)
+        cmdLineOptionConfig.put(SparkExecutorCores, value)
         parse(tail)
 
       case ("--executor-memory") :: value :: tail =>
         //executorMemory = value
-        parsedParameters.put(SparkExecutorMemory, value)
+        cmdLineOptionConfig.put(SparkExecutorMemory, value)
         parse(tail)
 
       case ("--driver-memory") :: value :: tail =>
         //driverMemory = value
-        parsedParameters.put(SparkDriverMemory, value)
+        cmdLineOptionConfig.put(SparkDriverMemory, value)
         parse(tail)
 
       case ("--driver-cores") :: value :: tail =>
         //driverCores = value
-        parsedParameters.put(SparkDriverCores, value)
+        cmdLineOptionConfig.put(SparkDriverCores, value)
         parse(tail)
 
       case ("--driver-class-path") :: value :: tail =>
         //driverExtraClassPath = value
-        parsedParameters.put(SparkDriverExtraClassPath, value)
+        cmdLineOptionConfig.put(SparkDriverExtraClassPath, value)
         parse(tail)
 
       case ("--driver-java-options") :: value :: tail =>
         //driverExtraJavaOptions = value
-        parsedParameters.put(SparkDriverExtraJavaOptions, value)
+        cmdLineOptionConfig.put(SparkDriverExtraJavaOptions, value)
         parse(tail)
 
       case ("--driver-library-path") :: value :: tail =>
         //driverExtraLibraryPath = value
-        parsedParameters.put(SparkDriverExtraLibraryPath, value)
+        cmdLineOptionConfig.put(SparkDriverExtraLibraryPath, value)
         parse(tail)
 
       case ("--properties-file") :: value :: tail =>
         //propertiesFile = value
-        propertiesFileConfig = SparkSubmitArguments.getConfigValuesFromFile(value, value)
+        cmdLinePropFileConfig = Some(SparkSubmitArguments.getPropertyValuesFromFile(value))
         parse(tail)
 
       case ("--supervise") :: tail =>
         //supervise = true
-        parsedParameters.put(SparkDriverSupervise, true.toString)
+        cmdLineOptionConfig.put(SparkDriverSupervise, true.toString)
         parse(tail)
 
       case ("--queue") :: value :: tail =>
         //queue = value
-        parsedParameters.put(SparkYarnQueue, value)
+        cmdLineOptionConfig.put(SparkYarnQueue, value)
         parse(tail)
 
       case ("--files") :: value :: tail =>
         //files = Utils.resolveURIs(value)
         // TODO: resolveURIs on all files
-        parsedParameters.put(SparkFiles, value)
+        cmdLineOptionConfig.put(SparkFiles, value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
         //pyFiles = Utils.resolveURIs(value)
         // TODO: resolveURIs on all pyFiles
-        //parsedParameters.put(SparkSubmitPyFiles, value)
+        //cmdLineOptionConfig.put(SparkSubmitPyFiles, value)
         parse(tail)
 
       case ("--archives") :: value :: tail =>
         //archives = Utils.resolveURIs(value)
         // TODO: resolveURIs on all archives
-        parsedParameters.put(SparkYarnDistArchives, value)
+        cmdLineOptionConfig.put(SparkYarnDistArchives, value)
         parse(tail)
 
       case ("--jars") :: value :: tail =>
         //jars = Utils.resolveURIs(value)
         // TODO: resolveURIs on all jars
-        parsedParameters.put(SparkJars, value)
+        cmdLineOptionConfig.put(SparkJars, value)
         parse(tail)
 
       case ("--conf" | "-c") :: value :: tail =>
         value.split("=", 2).toSeq match {
-          case Seq(k, v) => sparkProperties(k) = v
+          case Seq(k, v) => cmdLineConfOptionConfig(k) = v
           case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
         }
         parse(tail)
@@ -454,7 +445,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
       case ("--verbose" | "-v") :: tail =>
         //verbose = true
-        parsedParameters.put(SparkVerbose, true.toString)
+        cmdLineOptionConfig.put(SparkVerbose, true.toString)
         parse(tail)
 
       case EQ_SEPARATED_OPT(opt, value) :: tail =>
@@ -473,10 +464,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
           }
           */
         // TODO: Run resolveURI on returned SparkAppPrimaryResource
-        parsedParameters.put(SparkAppPrimaryResource, value)
+        cmdLineOptionConfig.put(SparkAppPrimaryResource, value)
         //isPython = SparkSubmit.isPython(value)
-        childArgsCommandLine ++= tail
-        //parsedParameters.put(SparkAppArguments, tail.mkString)
+        cmdLineChildArgs ++= tail
+        //cmdLineOptionConfig.put(SparkAppArguments, tail.mkString)
 
       case Nil =>
     }
@@ -561,14 +552,20 @@ object SparkSubmitArguments {
       .flatMap(path => Some(new File(path)))
       .filter(confFile => confFile.exists())
       .flatMap(confFile => Some(loadPropFile(confFile)))
-      .flatMap(propObj => {
-          Some(Map() ++ propObj.entrySet
-            .map(entry => (entry.getKey.toString -> entry.getValue.toString)))
-        })
+      .flatMap(prop => Some(getPropertyMap(prop)))
       .getOrElse(Map.empty)
   }
 
-
+  /**
+   * Converts the passed java property object into a scale Map[String, String]
+   * @param prop Java properties object
+   * @return Map[propName->propValue]
+   */
+  def getPropertyMap(prop: Properties): mutable.Map[String,String] = {
+    new HashMap() ++ prop.entrySet
+      .map(entry => (entry.getKey.toString -> entry.getValue.toString))
+  }
+    
   /**
    * Parses a property file using the typesafe conf property file parser
    * Typesafe conf is used rather then native java property code for consistency purposed

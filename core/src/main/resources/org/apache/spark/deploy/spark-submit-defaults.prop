@@ -1,0 +1,94 @@
+# The master URL for the cluster egspark://host:port, mesos://host:port, yarn, or local.
+# legacy env variable MASTER
+spark.master = "local[*]"
+
+# Should spark submit run in verbose mode: default is false
+spark.verbose = false
+
+# Comma-separated list of files to be placed in the working directory of each executor
+# spark.files = ""
+
+# Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+# spark.submit.pyfiles =
+
+# Comma-separated list of local jars to include on the driver and executor classpaths.
+# spark.jars = ""
+
+
+# Path to a bundled jar including your application and all dependencies.
+# The URL must be globally visible inside of your cluster, for instance,
+# an hdfs:// path or a file:// path that is present on all nodes.
+# spark.app.primaryResource = ""
+
+# A name of your application.
+# spark.app.name = ""
+
+# Your application's main class (for Java / Scala apps).
+# spark.app.class = ""
+
+# Additional arguments to pass to the driver program
+# spark.app.arguments = ""
+
+# Whether to launch the driver program locally ("client") or
+# on one of the worker machines inside the cluster ("cluster")
+# legacy variable DEPLOY_MODE
+# (Default: client).
+spark.deployMode = "client"
+
+# Spark standalone and Mesos only: Total cores for all executors.
+# spark.cores.max:
+
+# Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+spark.executor.memory = 1G
+
+# Yarn client only:  Number of cores per executor (Default: 1).
+spark.executor.cores = 1
+
+# Yarn client only: Number of executors to launch (Default: 2).
+spark.executor.instances = 2
+
+
+# Standalone with cluster deploy mode only
+# Memory for driver (e.g. 1000M, 2G) (Default: 512M).
+spark.driver.memory = 512M
+
+# Spark standalone with cluster deploy mode only:
+# Number of cores for driver (default: 1)
+spark.driver.cores = 1
+
+# Spark standalone with cluster deploy mode only:
+# restart driver application on failure (default: false)
+spark.driver.supervise = "false"
+
+# Extra Java options to pass to the driver
+# spark.driver.extraJavaOptions = ""
+
+# Extra library path entries to pass to the driver.
+# spark.driver.extraLibraryPath = ""
+
+# Extra class path entries to pass to the driver. Note that
+# jars added with --jars are automatically included in the classpath.
+# spark.driver.extraClassPath = ""
+
+
+# Yarn specific configurations
+
+# The YARN queue to submit to (Default: "default").
+spark.yarn.queue = "default"
+
+# Number of executors to launch (Default: 2).
+spark.yarn.numExecutors = 2
+
+# Yarn dist configuration
+]
+# Comma separated list of archives to be placed into the
+# working directory of each executor
+# spark.yarn.dist.archives = ""
+
+
+
+
+}
+
+
+

@@ -143,5 +143,5 @@ object ConfigConstants {
   /**
    * Name of the spark submit defaults resource
    */
-  val SparkSubmitDefaults: String = """org/apache/spark/deploy/spark-submit-defaults.conf"""
+  val SparkSubmitDefaults: String = """org/apache/spark/deploy/spark-submit-defaults.prop"""
 }
