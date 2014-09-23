@@ -79,7 +79,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
   /**
    * Predict values for a single data point using the model trained.
    *
-   * @param testData array representing a single data point
+   * @param testData Vector representing a single data point
    * @return Vector prediction from the trained model
    *
    *         Returns the complete vector.
