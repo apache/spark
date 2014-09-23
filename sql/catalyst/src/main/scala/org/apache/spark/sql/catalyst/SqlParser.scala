@@ -149,6 +149,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       grpExprs: Seq[Expression], 
       projExprs: Seq[Expression]): Seq[NamedExpression] = {
     grpExprs.zipWithIndex.map {
+      case (ne: NamedExpression, _) => ne
       case (e, i) => 
         var aliasForGrp:NamedExpression = null
         projExprs.foreach {

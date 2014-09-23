@@ -676,7 +676,5 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-3371 Renaming a function expression with group by gives error") {
     registerFunction("len", (s: String) => s.length)
     checkAnswer(
-      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
-      Seq(Seq("1")))
-  }    
+      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)}    
 }
