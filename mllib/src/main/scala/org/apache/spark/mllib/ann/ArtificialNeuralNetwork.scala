@@ -163,7 +163,7 @@ object ArtificialNeuralNetwork {
       topology: Array[Int],
       maxNumIterations: Int,
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
-        train(input, topology, randomWeights(topology), maxNumIterations, convergenceTol)
+    train(input, topology, randomWeights(topology), maxNumIterations, convergenceTol)
   }
 
   def randomWeights(topology: Array[Int]): Vector = {
