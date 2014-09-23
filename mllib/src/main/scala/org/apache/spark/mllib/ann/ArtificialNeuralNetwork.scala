@@ -103,7 +103,7 @@ class ArtificialNeuralNetwork private(
     setNumIterations(maxNumIterations)
 
   private def run(input: RDD[(Vector, Vector)], initialWeights: Vector):
-  ArtificialNeuralNetworkModel = {
+      ArtificialNeuralNetworkModel = {
     val data = input.map(v =>
       (0.0,
         Vectors.fromBreeze(DenseVector.vertcat(
