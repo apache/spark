@@ -78,7 +78,7 @@ private object IDF {
     private var df: BDV[Long] = _
 
 
-   def this() = this(0);
+   def this() = this(0)
 
     /** Adds a new document. */
     def add(doc: Vector): this.type = {
