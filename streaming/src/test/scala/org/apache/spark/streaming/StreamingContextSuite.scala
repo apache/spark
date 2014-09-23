@@ -19,13 +19,16 @@ package org.apache.spark.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.language.postfixOps
+
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.{MetadataCleaner, Utils}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.apache.spark.util.Utils
+import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -257,6 +260,10 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
 
+  test("DStream and generated RDD creation sites") {
+    testPackage.test()
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => (1 to i))
     val inputStream = new TestInputStream(s, input, 1)
@@ -292,4 +299,38 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
 object TestReceiver {
   val counter = new AtomicInteger(1)
+}
+
+/** Streaming application for testing DStream and RDD creation sites */
+package object testPackage extends Assertions {
+  def test() {
+    val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
+    val ssc = new StreamingContext(conf , Milliseconds(100))
+    try {
+      val inputStream = ssc.receiverStream(new TestReceiver)
+
+      // Verify creation site of DStream
+      val creationSite = inputStream.creationSite
+      assert(creationSite.shortForm.contains("receiverStream") &&
+        creationSite.shortForm.contains("StreamingContextSuite")
+      )
+      assert(creationSite.longForm.contains("testPackage"))
+
+      // Verify creation site of generated RDDs
+      var rddGenerated = false
+      var rddCreationSiteCorrect = true
+
+      inputStream.foreachRDD { rdd =>
+        rddCreationSiteCorrect = rdd.creationSite == creationSite
+        rddGenerated = true
+      }
+      ssc.start()
+
+      eventually(timeout(10000 millis), interval(10 millis)) {
+        assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
+      }
+    } finally {
+      ssc.stop()
+    }
+  }
 }
