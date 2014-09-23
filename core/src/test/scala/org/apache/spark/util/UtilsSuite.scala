@@ -301,9 +301,9 @@ class UtilsSuite extends FunSuite with Logging {
 
   // Test for using the util function to change our log levels.
   test("log4j log level change") {
-    Utils.setLogLevel(org.apache.log4j.Level.ALL)
+    Utils.setLoggingLevel(org.apache.log4j.Level.ALL)
     assert(log.isInfoEnabled())
-    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+    Utils.setLoggingLevel(org.apache.log4j.Level.ERROR)
     assert(!log.isInfoEnabled())
     assert(log.isErrorEnabled())
   }
