@@ -52,7 +52,8 @@ class IDF(val minimumOccurence: Long) {
    * @param dataset an RDD of term frequency vectors
    */
   def fit(dataset: RDD[Vector]): IDFModel = {
-    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(minimumOccurence=minimumOccurence))(
+    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
+          minimumOccurence=minimumOccurence))(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
     ).idf()
