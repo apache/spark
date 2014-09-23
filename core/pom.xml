@@ -343,7 +343,9 @@
                 <filter>
                   <artifact>com.google.guava:guava</artifact>
                   <includes>
+                    <include>com/google/common/base/Absent*</include>
                     <include>com/google/common/base/Optional*</include>
+                    <include>com/google/common/base/Present*</include>
                   </includes>
                 </filter>
               </filters>
