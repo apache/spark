@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
 
@@ -93,6 +94,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     } else if (plan.getClass != this.getClass) {
       false
     } else {
+      logDebug(
+        s"[${cleanArgs.mkString(", ")}] == [${plan.cleanArgs.mkString(", ")}]")
       cleanArgs == plan.cleanArgs
     }
   }
@@ -101,12 +104,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
     productIterator.map {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if children contains tn => null
       case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
       case s: Option[_] => s.map {
         case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case other => other
       }
       case s: Seq[_] => s.map {
         case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case other => other
       }
       case other => other
     }.toSeq

@@ -27,6 +27,12 @@ import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 /** Holds a cached logical plan and its data */
 private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
 
+/**
+ * Provides support in a SQLContext for caching query results and automatically using these cached
+ * results when subsequent queries are executed.  Data is cached using byte buffers stored in an
+ * InMemoryRelation.  This relation is automatically substituted query plans that return the
+ * `sameResult` as the originally cached query.
+ */
 private[sql] trait CacheManager {
   self: SQLContext =>
 

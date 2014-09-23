@@ -41,4 +41,10 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil)
   }
 
   override protected def stringArgs = Iterator(output)
+
+  override def sameResult(plan: LogicalPlan): Boolean = plan match {
+    case LocalRelation(otherOutput, otherData) =>
+      otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
+    case _ => false
+  }
 }

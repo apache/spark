@@ -85,7 +85,6 @@ case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
 
-/*
 @deprecated("Use LogicalRDD", "1.2.0")
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
@@ -118,4 +117,3 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQ
     sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
   )
 }
-*/
