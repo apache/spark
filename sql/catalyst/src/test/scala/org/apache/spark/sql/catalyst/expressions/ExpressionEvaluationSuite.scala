@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.scalatest.FunSuite
+import org.scalatest.Matchers._
+import org.scalautils.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -127,6 +129,13 @@ class ExpressionEvaluationSuite extends FunSuite {
       val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
+  }
+
+  def checkDoubleEvaluation(expression: Expression, expected: Spread[Double], inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    actual.asInstanceOf[Double] shouldBe expected 
   }
 
   test("IN") {
@@ -469,6 +478,29 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 * c2, 2, row)
     checkEvaluation(c1 / c2, 0, row)
     checkEvaluation(c1 % c2, 1, row)
+  }
+
+  test("fractional arithmetic") {
+    val row = new GenericRow(Array[Any](1.1, 2.0, 3.1, null))
+    val c1 = 'a.double.at(0)
+    val c2 = 'a.double.at(1)
+    val c3 = 'a.double.at(2)
+    val c4 = 'a.double.at(3)
+
+    checkEvaluation(UnaryMinus(c1), -1.1, row)
+    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0)
+    checkEvaluation(Add(c1, c4), null, row)
+    checkEvaluation(Add(c1, c2), 3.1, row)
+    checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), c2), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), Literal(null, DoubleType)), null, row)
+
+    checkEvaluation(-c1, -1.1, row)
+    checkEvaluation(c1 + c2, 3.1, row)
+    checkDoubleEvaluation(c1 - c2, (-0.9 +- 0.001), row)
+    checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
+    checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
+    checkDoubleEvaluation(c3 % c2, (1.1 +- 0.001), row)
   }
 
   test("BinaryComparison") {
