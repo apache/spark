@@ -121,64 +121,61 @@ class SchedulingModeSuite extends FunSuite with BeforeAndAfter with EasyMockSuga
     new FakeTaskSetManager(priority, stage, numTasks, cs , taskSet)
   }
 
-  def checkTaskSetIds(workerOffers: Seq[WorkerOffer], expectedTaskSetIds: Seq[String]) {
-    assert(workerOffers.size == expectedTaskSetIds.size)
-    for (i <- 0 until workerOffers.size) {
-      val scheduledTask = taskScheduler.resourceOffers(Seq[WorkerOffer](workerOffers(i))).flatten
-      assert(getTasksetIdFromTaskDescription(scheduledTask(0)) === expectedTaskSetIds(i))
+  def resourceOffer(rootPool: Pool): Int = {
+    val taskSetQueue = rootPool.getSortedTaskSetQueue
+    /* Just for Test*/
+    for (manager <- taskSetQueue) {
+      logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(
+        manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
     }
+    for (taskSet <- taskSetQueue) {
+      taskSet.resourceOffer("execId_1", "hostname_1", TaskLocality.ANY) match {
+        case Some(task) =>
+          return taskSet.stageId
+        case None => {}
+      }
+    }
+    -1
   }
 
-  private def getTasksetIdFromTaskDescription(td: TaskDescription) = {
-    """task (\d+\.\d+):\d+""".r.findFirstMatchIn(td.name) match {
-      case None => null
-      case Some(matchedString) => matchedString.group(1)
-    }
+  def checkTaskSetId(rootPool: Pool, expectedTaskSetId: Int) {
+    assert(resourceOffer(rootPool) === expectedTaskSetId)
   }
 
   test("FIFO Scheduler Test") {
-    val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
-    val taskSet2 = FakeTask.createTaskSet(1, 1, 0)
-    val taskSet3 = FakeTask.createTaskSet(1, 2, 0)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
     schedulableBuilder.buildPools()
-    taskScheduler.rootPool = rootPool
-    taskScheduler.schedulableBuilder = schedulableBuilder
 
-    val taskSetManager0 = createDummyTaskSetManager(0, 0, 1, taskScheduler, taskSet1)
-    val taskSetManager1 = createDummyTaskSetManager(0, 1, 1, taskScheduler, taskSet2)
-    val taskSetManager2 = createDummyTaskSetManager(0, 2, 1, taskScheduler, taskSet3)
+    val taskSetManager0 = createDummyTaskSetManager(0, 0, 2, taskScheduler, taskSet)
+    val taskSetManager1 = createDummyTaskSetManager(0, 1, 2, taskScheduler, taskSet)
+    val taskSetManager2 = createDummyTaskSetManager(0, 2, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager0, null)
     schedulableBuilder.addTaskSetManager(taskSetManager1, null)
     schedulableBuilder.addTaskSetManager(taskSetManager2, null)
 
-    checkTaskSetIds(generateWorkerOffers(3), Seq[String]("0.0", "1.0", "2.0"))
-  }
-
-  def generateWorkerOffers(offerNum: Int): Seq[WorkerOffer] = {
-    var s = new ArrayBuffer[WorkerOffer]
-    for (i <- 0 until offerNum) {
-      s += new WorkerOffer("execId_%d".format(i), "hostname_%s".format(i), 1)
-    }
-    s
+    checkTaskSetId(rootPool, 0)
+    resourceOffer(rootPool)
+    checkTaskSetId(rootPool, 1)
+    resourceOffer(rootPool)
+    taskSetManager1.abort()
+    checkTaskSetId(rootPool, 2)
   }
 
   test("Fair Scheduler Test") {
-    val taskSet10 = FakeTask.createTaskSet(1, 0, 0)
-    val taskSet11 = FakeTask.createTaskSet(1, 1, 0)
-    val taskSet12 = FakeTask.createTaskSet(1, 2, 0)
-    val taskSet23 = FakeTask.createTaskSet(1, 3, 0)
-    val taskSet24 = FakeTask.createTaskSet(1, 4, 0)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.scheduler.allocation.file", xmlPath)
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
-    taskScheduler.rootPool = rootPool
-    taskScheduler.schedulableBuilder = schedulableBuilder
 
     assert(rootPool.getSchedulableByName("default") != null)
     assert(rootPool.getSchedulableByName("1") != null)
@@ -196,22 +193,26 @@ class SchedulingModeSuite extends FunSuite with BeforeAndAfter with EasyMockSuga
     val properties2 = new Properties()
     properties2.setProperty("spark.scheduler.pool","2")
 
-    val taskSetManager10 = createDummyTaskSetManager(1, 0, 1, taskScheduler, taskSet10)
-    val taskSetManager11 = createDummyTaskSetManager(1, 1, 1, taskScheduler, taskSet11)
-    val taskSetManager12 = createDummyTaskSetManager(1, 2, 2, taskScheduler, taskSet12)
+    val taskSetManager10 = createDummyTaskSetManager(1, 0, 1, taskScheduler, taskSet)
+    val taskSetManager11 = createDummyTaskSetManager(1, 1, 1, taskScheduler, taskSet)
+    val taskSetManager12 = createDummyTaskSetManager(1, 2, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager10, properties1)
     schedulableBuilder.addTaskSetManager(taskSetManager11, properties1)
     schedulableBuilder.addTaskSetManager(taskSetManager12, properties1)
 
-    val taskSetManager23 = createDummyTaskSetManager(2, 3, 2, taskScheduler, taskSet23)
-    val taskSetManager24 = createDummyTaskSetManager(2, 4, 2, taskScheduler, taskSet24)
+    val taskSetManager23 = createDummyTaskSetManager(2, 3, 2, taskScheduler, taskSet)
+    val taskSetManager24 = createDummyTaskSetManager(2, 4, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager23, properties2)
     schedulableBuilder.addTaskSetManager(taskSetManager24, properties2)
 
-    val workerOffers = generateWorkerOffers(8)
-
-    checkTaskSetIds(workerOffers,
-      Seq[String]("0.0", "3.0", "3.0", "1.0", "4.0", "2.0", "2.0", "4.0"))
+    checkTaskSetId(rootPool, 0)
+    checkTaskSetId(rootPool, 3)
+    checkTaskSetId(rootPool, 3)
+    checkTaskSetId(rootPool, 1)
+    checkTaskSetId(rootPool, 4)
+    checkTaskSetId(rootPool, 2)
+    checkTaskSetId(rootPool, 2)
+    checkTaskSetId(rootPool, 4)
 
     taskSetManager12.taskFinished()
     assert(rootPool.getSchedulableByName("1").runningTasks === 3)
@@ -220,14 +221,9 @@ class SchedulingModeSuite extends FunSuite with BeforeAndAfter with EasyMockSuga
   }
 
   test("Nested Pool Test") {
-    val taskSet0 = FakeTask.createTaskSet(5, 0, 0)
-    val taskSet1 = FakeTask.createTaskSet(5, 1, 0)
-    val taskSet2 = FakeTask.createTaskSet(5, 2, 0)
-    val taskSet3 = FakeTask.createTaskSet(5, 3, 0)
-    val taskSet4 = FakeTask.createTaskSet(5, 4, 0)
-    val taskSet5 = FakeTask.createTaskSet(5, 5, 0)
-    val taskSet6 = FakeTask.createTaskSet(5, 6, 0)
-    val taskSet7 = FakeTask.createTaskSet(5, 7, 0)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
@@ -245,29 +241,29 @@ class SchedulingModeSuite extends FunSuite with BeforeAndAfter with EasyMockSuga
     pool1.addSchedulable(pool10)
     pool1.addSchedulable(pool11)
 
-    val taskSetManager000 = createDummyTaskSetManager(0, 0, 5, taskScheduler, taskSet0)
-    val taskSetManager001 = createDummyTaskSetManager(0, 1, 5, taskScheduler, taskSet1)
+    val taskSetManager000 = createDummyTaskSetManager(0, 0, 5, taskScheduler, taskSet)
+    val taskSetManager001 = createDummyTaskSetManager(0, 1, 5, taskScheduler, taskSet)
     pool00.addSchedulable(taskSetManager000)
     pool00.addSchedulable(taskSetManager001)
 
-    val taskSetManager010 = createDummyTaskSetManager(1, 2, 5, taskScheduler, taskSet2)
-    val taskSetManager011 = createDummyTaskSetManager(1, 3, 5, taskScheduler, taskSet3)
+    val taskSetManager010 = createDummyTaskSetManager(1, 2, 5, taskScheduler, taskSet)
+    val taskSetManager011 = createDummyTaskSetManager(1, 3, 5, taskScheduler, taskSet)
     pool01.addSchedulable(taskSetManager010)
     pool01.addSchedulable(taskSetManager011)
 
-    val taskSetManager100 = createDummyTaskSetManager(2, 4, 5, taskScheduler, taskSet4)
-    val taskSetManager101 = createDummyTaskSetManager(2, 5, 5, taskScheduler, taskSet5)
+    val taskSetManager100 = createDummyTaskSetManager(2, 4, 5, taskScheduler, taskSet)
+    val taskSetManager101 = createDummyTaskSetManager(2, 5, 5, taskScheduler, taskSet)
     pool10.addSchedulable(taskSetManager100)
     pool10.addSchedulable(taskSetManager101)
 
-    val taskSetManager110 = createDummyTaskSetManager(3, 6, 5, taskScheduler, taskSet6)
-    val taskSetManager111 = createDummyTaskSetManager(3, 7, 5, taskScheduler, taskSet7)
+    val taskSetManager110 = createDummyTaskSetManager(3, 6, 5, taskScheduler, taskSet)
+    val taskSetManager111 = createDummyTaskSetManager(3, 7, 5, taskScheduler, taskSet)
     pool11.addSchedulable(taskSetManager110)
     pool11.addSchedulable(taskSetManager111)
 
-    taskScheduler.rootPool = rootPool
-
-    val workerOffers = generateWorkerOffers(4)
-    checkTaskSetIds(workerOffers, Seq[String]("0.0", "4.0", "6.0", "2.0"))
+    checkTaskSetId(rootPool, 0)
+    checkTaskSetId(rootPool, 4)
+    checkTaskSetId(rootPool, 6)
+    checkTaskSetId(rootPool, 2)
   }
 }
