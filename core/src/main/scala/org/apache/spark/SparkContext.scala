@@ -232,6 +232,12 @@ class SparkContext(config: SparkConf) extends Logging {
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
+  /** Control our logLevel
+   * @param logLevel The desired log level as a string.
+   */
+  def setLoggingLevel(logLevel: String) = {
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+  }
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
