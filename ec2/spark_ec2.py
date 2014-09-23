@@ -38,7 +38,7 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
-DEFAULT_SPARK_VERSION = "1.0.0"
+DEFAULT_SPARK_VERSION = "1.1.0"
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
@@ -218,7 +218,7 @@ def is_active(instance):
 def get_spark_shark_version(opts):
     spark_shark_map = {
         "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0"
+        "1.0.0": "1.0.0", "1.0.1": "1.0.1", "1.0.2": "1.0.2", "1.1.0": "1.1.0"
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
