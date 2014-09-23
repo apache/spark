@@ -865,16 +865,15 @@ private[spark] object Utils extends Logging {
   }
 
   /** Default filtering function for finding call sites using `getCallSite`. */
-  private def defaultCallSiteFilterFunc(className: String): Boolean = {
+  private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
     val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
-    val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
+    val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
-    // If the class neither belongs to Spark nor is a simple Scala class, then it is a
-    // user-defined class
-    !isSparkClass && !isScalaClass
+    // If the class is a Spark internal class or a Scala class, then exclude.
+    isSparkCoreClass || isScalaClass
   }
 
   /**
@@ -882,9 +881,9 @@ private[spark] object Utils extends Logging {
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    *
-   * @param classFilterFunc Function that returns true if the given class belongs to user code
+   * @param skipClass Function that is used to exclude non-user-code classes.
    */
-  def getCallSite(classFilterFunc: String => Boolean = defaultCallSiteFilterFunc): CallSite = {
+  def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot { ste:StackTraceElement =>
         // When running under some profilers, the current stack trace might contain some bogus
@@ -905,7 +904,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (insideSpark) {
-        if (!classFilterFunc(el.getClassName)) {
+        if (skipClass(el.getClassName)) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)

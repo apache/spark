@@ -447,7 +447,7 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
-    sparkContext.setCallSite(DStream.getCallSite())
+    sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
     state = Started
   }
