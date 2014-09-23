@@ -41,7 +41,7 @@ import org.apache.spark.rdd.RDD
  *
  */
 @Experimental
-class IDF(minimumOccurence: Long) {
+class IDF(val minimumOccurence: Long) {
 
   def this() = this(0L)
 
@@ -71,7 +71,7 @@ class IDF(minimumOccurence: Long) {
 private object IDF {
 
   /** Document frequency aggregator. */
-  class DocumentFrequencyAggregator(minimumOccurence: Long) extends Serializable {
+  class DocumentFrequencyAggregator(val minimumOccurence: Long) extends Serializable {
 
     /** number of documents */
     private var m = 0L
