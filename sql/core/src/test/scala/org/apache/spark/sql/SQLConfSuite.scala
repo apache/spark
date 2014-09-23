@@ -17,15 +17,24 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.FunSuiteLike
+
 import org.apache.spark.sql.test._
 
 /* Implicits */
 import TestSQLContext._
 
-class SQLConfSuite extends QueryTest {
+class SQLConfSuite extends QueryTest with FunSuiteLike {
 
   val testKey = "test.key.0"
   val testVal = "test.val.0"
+
+  test("propagate from spark conf") {
+    // We create a new context here to avoid order dependence with other tests that might call
+    // clear().
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    assert(newContext.getConf("spark.sql.testkey", "false") == "true")
+  }
 
   test("programmatic ways of basic setting and getting") {
     clear()
