@@ -79,6 +79,9 @@ private object IDF {
     /** document frequency vector */
     private var df: BDV[Long] = _
 
+
+   def this() = this(0L);
+
     /** Adds a new document. */
     def add(doc: Vector): this.type = {
       if (isEmpty) {
