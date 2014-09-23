@@ -246,7 +246,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.queryExecution.analyzed)
+    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
   }
 
   /**
@@ -414,7 +414,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def simpleString: String =
       s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
-      """
+      """.stripMargin.trim
 
     override def toString: String =
       // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})

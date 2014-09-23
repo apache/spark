@@ -27,9 +27,10 @@ import warnings
 from array import array
 from operator import itemgetter
 
-from pyspark.rdd import RDD, PipelinedRDD
+from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import SCCallSiteSync
 
 from itertools import chain, ifilter, imap
 
@@ -288,7 +289,7 @@ class StructType(DataType):
     """Spark SQL StructType
 
     The data type representing rows.
-    A StructType object comprises a list of L{StructField}s.
+    A StructType object comprises a list of L{StructField}.
 
     """
 
@@ -439,6 +440,7 @@ _type_mappings = {
     float: DoubleType,
     str: StringType,
     unicode: StringType,
+    bytearray: BinaryType,
     decimal.Decimal: DecimalType,
     datetime.datetime: TimestampType,
     datetime.date: TimestampType,
@@ -689,11 +691,12 @@ _acceptable_types = {
     ByteType: (int, long),
     ShortType: (int, long),
     IntegerType: (int, long),
-    LongType: (long,),
+    LongType: (int, long),
     FloatType: (float,),
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
+    BinaryType: (bytearray,),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
@@ -727,9 +730,9 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    if _type not in _acceptable_types:
-        return
+    assert _type in _acceptable_types, "unkown datatype: %s" % dataType
 
+    # subclass of them can not be deserialized in JVM
     if type(obj) not in _acceptable_types[_type]:
         raise TypeError("%s can not accept abject in type %s"
                         % (dataType, type(obj)))
@@ -903,7 +906,7 @@ class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
 
-    A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
+    A SQLContext can be used create L{SchemaRDD}, register L{SchemaRDD} as
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
@@ -974,7 +977,11 @@ class SQLContext(object):
         command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
-        pickled_command = CloudPickleSerializer().dumps(command)
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if pickled_command > (1 << 20):  # 1M
+            broadcast = self._sc.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
             self._sc._gateway._gateway_client)
@@ -993,7 +1000,7 @@ class SQLContext(object):
                                       str(returnType))
 
     def inferSchema(self, rdd):
-        """Infer and apply a schema to an RDD of L{Row}s.
+        """Infer and apply a schema to an RDD of L{Row}.
 
         We peek at the first row of the RDD to determine the fields' names
         and types. Nested collections are supported, which include array,
@@ -1046,7 +1053,7 @@ class SQLContext(object):
 
     def applySchema(self, rdd, schema):
         """
-        Applies the given schema to the given RDD of L{tuple} or L{list}s.
+        Applies the given schema to the given RDD of L{tuple} or L{list}.
 
         These tuples or lists can contain complex nested structures like
         lists, maps or nested rows.
@@ -1116,6 +1123,11 @@ class SQLContext(object):
 
         # take the first few rows to verify schema
         rows = rdd.take(10)
+        # Row() cannot been deserialized by Pyrolite
+        if rows and isinstance(rows[0], tuple) and rows[0].__class__.__name__ == 'Row':
+            rdd = rdd.map(tuple)
+            rows = rdd.take(10)
+
         for row in rows:
             _verify_type(row, schema)
 
@@ -1182,6 +1194,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1192,6 +1205,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -1232,6 +1246,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1242,6 +1257,7 @@ class SQLContext(object):
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -1550,6 +1566,18 @@ class SchemaRDD(RDD):
             self._id = self._jrdd.id()
         return self._id
 
+    def limit(self, num):
+        """Limit the result count to the number specified.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.limit(2).collect()
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
+        >>> srdd.limit(0).collect()
+        []
+        """
+        rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
+        return SchemaRDD(rdd, self.sql_ctx)
+
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
 
@@ -1626,15 +1654,39 @@ class SchemaRDD(RDD):
         return self._jschema_rdd.count()
 
     def collect(self):
-        """
-        Return a list that contains all of the rows in this RDD.
+        """Return a list that contains all of the rows in this RDD.
 
-        Each object in the list is on Row, the fields can be accessed as
+        Each object in the list is a Row, the fields can be accessed as
         attributes.
+
+        Unlike the base RDD implementation of collect, this implementation
+        leverages the query optimizer to perform a collect on the SchemaRDD,
+        which supports features such as filter pushdown.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.collect()
+        [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
         """
-        rows = RDD.collect(self)
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD().collectToPython().iterator()
         cls = _create_cls(self.schema())
-        return map(cls, rows)
+        return map(cls, self._collect_iterator_through_file(bytesInJava))
+
+    def take(self, num):
+        """Take the first num rows of the RDD.
+
+        Each object in the list is a Row, the fields can be accessed as
+        attributes.
+
+        Unlike the base RDD implementation of take, this implementation
+        leverages the query optimizer to perform a collect on a SchemaRDD,
+        which supports features such as filter pushdown.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.take(2)
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
+        """
+        return self.limit(num).collect()
 
     # Convert each object in the RDD to a Row with the right class
     # for this SchemaRDD, so that fields can be accessed as attributes.
@@ -1694,8 +1746,11 @@ class SchemaRDD(RDD):
         rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
         return SchemaRDD(rdd, self.sql_ctx)
 
-    def distinct(self):
-        rdd = self._jschema_rdd.distinct()
+    def distinct(self, numPartitions=None):
+        if numPartitions is None:
+            rdd = self._jschema_rdd.distinct()
+        else:
+            rdd = self._jschema_rdd.distinct(numPartitions)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def intersection(self, other):

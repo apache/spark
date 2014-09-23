@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
 
-import org.apache.spark.{TaskContext, Logging, SparkException}
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener, BlockTransferService}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
