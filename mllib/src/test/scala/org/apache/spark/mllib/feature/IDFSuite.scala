@@ -38,7 +38,7 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     val idf = new IDF
     val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
-      math.log((m.toDouble + 1.0) / (x + 1.0))
+      math.log((m + 1.0) / (x + 1.0))
     })
     assert(model.idf ~== expected absTol 1e-12)
     val tfidf = model.transform(termFrequencies).cache().zipWithIndex().map(_.swap).collectAsMap()
@@ -68,7 +68,7 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if (x > 0) {
-        math.log((m.toDouble + 1.0) / (x + 1.0))
+        math.log((m + 1.0) / (x + 1.0))
       } else {
         0
       }
