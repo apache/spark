@@ -144,4 +144,9 @@ object ConfigConstants {
    * Name of the spark submit defaults resource
    */
   val SparkSubmitDefaults: String = """org/apache/spark/deploy/spark-submit-defaults.prop"""
+
+  /**
+   * Path to an additional properties file to attempt to load at startup
+   */
+  val SparkPropertiesFile = "spark.propertiesFile"
 }

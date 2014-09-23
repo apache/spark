@@ -12,11 +12,11 @@ object MergedPropertyMap {
    * have priority over older ones
    * @param propList list of property maps to merge
    */
-  def mergePropertyMaps( propList: List[Map[String, String]]): mutable.Map[String, String] = {
+  def mergePropertyMaps( propList: Vector[Map[String, String]]): mutable.Map[String, String] = {
     val propMap = new mutable.HashMap[String, String]()
     // loop through each entry of each map in order of priority
     // and add it to our propMap
-    propList.reverse.foreach {
+    propList.foreach {
       _.foreach{ case(k,v) => propMap.getOrElseUpdate(k,v)}
     }
     propMap
@@ -28,13 +28,13 @@ object MergedPropertyMap {
    * the existing old property will still be copied out as well
    * @param propAliases Map[old Propname -> New PropName]
    * @param propSource Map[PropName -> PropValue]
-   * @return copy of propSource updated with new entries as per propAliases
+   * @return new entries as per propAliases
    */
   def applyAliases( propAliases: Map[String, String], propSource: Map[String, String]): Map[String, String] = {
     def entries: Map[String, String]  = for{
       (oldPropName, newPropName) <- propAliases
       propValue = propSource.get(oldPropName)
     } yield (newPropName -> propValue.get)
-    propSource ++ entries
+    entries
   }
 }

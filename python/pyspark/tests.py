@@ -45,7 +45,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
-from pyspark.sql import SQLContext, IntegerType
+from pyspark.sql import SQLContext, IntegerType, Row
 from pyspark import shuffle
 
 _have_scipy = False
@@ -434,6 +434,12 @@ class TestRDDFunctions(PySparkTestCase):
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
 
+    def test_large_closure(self):
+        N = 1000000
+        data = [float(i) for i in xrange(N)]
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(data)).sum()
+        self.assertEquals(N, m)
+
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
         b = self.sc.parallelize(range(100, 105))
@@ -652,6 +658,15 @@ class TestSQL(PySparkTestCase):
         result = srdd.distinct(5)
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
+
+    def test_apply_schema_to_row(self):
+        srdd = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
+        srdd2 = self.sqlCtx.applySchema(srdd.map(lambda x: x), srdd.schema())
+        self.assertEqual(srdd.collect(), srdd2.collect())
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
+        srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
+        self.assertEqual(10, srdd3.count())
 
 
 class TestIO(PySparkTestCase):
@@ -1092,7 +1107,7 @@ class TestOutputFormat(PySparkTestCase):
     def test_unbatched_save_and_read(self):
         basepath = self.tempdir.name
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
+        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
         unbatched_sequence = sorted(self.sc.sequenceFile(
@@ -1138,7 +1153,7 @@ class TestOutputFormat(PySparkTestCase):
         basepath = self.tempdir.name
         # non-batch-serialized RDD[[(K, V)]] should be rejected
         data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
-        rdd = self.sc.parallelize(data, numSlices=len(data))
+        rdd = self.sc.parallelize(data, len(data))
         self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
             basepath + "/malformed/sequence"))
 
