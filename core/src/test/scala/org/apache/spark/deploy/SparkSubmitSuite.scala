@@ -360,4 +360,19 @@ object SimpleApplicationTest {
       }
     }
   }
+/**
+  --archives/--files via sparksubmit defaults to use file:// if not specified, for both yarn-client and yarn-cluster
+
+  spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
+for both yarn-client and yarn-cluster
+
+  env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then it should default to hdfs://
+
+    --files/--archives specified from spark-class in yarn-cluster mode then it should default to hdfs://
+
+    // TODO: check handing of childArgs
+
+    // todo: checking resolving of file args
+  */
+
 }
