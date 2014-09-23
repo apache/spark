@@ -231,7 +231,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
 
     checkEvaluation(Literal(1) cast LongType, 1)
-    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
+    checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
+    checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
+    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
     checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
@@ -242,11 +244,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 0)
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
+      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 0)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
@@ -293,16 +295,18 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
+    val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
     val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
+    val tss = new Timestamp(seconds)
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)
     checkEvaluation(Cast(ts, LongType), 15)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
-    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, IntegerType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, LongType), TimestampType), ts)
     checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),

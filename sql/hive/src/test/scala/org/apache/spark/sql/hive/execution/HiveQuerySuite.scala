@@ -303,6 +303,30 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("case statements WITHOUT key #4",
     "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
 
+  createQueryTest("timestamp cast #1",
+    "SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #2",
+    "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #3",
+    "SELECT CAST(CAST(1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #4",
+    "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #5",
+    "SELECT CAST(CAST(-1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #6",
+    "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #7",
+    "SELECT CAST(CAST(-1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #8",
+    "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
