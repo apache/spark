@@ -57,6 +57,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
+  // Respect SPARK_*_MEMORY for cluster mode
+  driverMemory = sys.env.get("SPARK_DRIVER_MEMORY").orNull
+  executorMemory = sys.env.get("SPARK_EXECUTOR_MEMORY").orNull
+
   parseOpts(args.toList)
   mergeSparkProperties()
   checkRequiredArguments()
