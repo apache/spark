@@ -34,6 +34,16 @@ import org.apache.spark.util.Utils
 
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 
+  // log4j configuration for the Yarn containers, so that their output is collected
+  // by Yarn instead of trying to overwrite unit-tests.log.
+  private val LOG4J_CONF = """
+    |log4j.rootCategory=DEBUG, console
+    |log4j.appender.console=org.apache.log4j.ConsoleAppender
+    |log4j.appender.console.target=System.err
+    |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+    |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+    """.stripMargin
+
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
@@ -41,6 +51,15 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
 
   override def beforeAll() {
     tempDir = Utils.createTempDir()
+
+    val logConfDir = new File(tempDir, "log4j")
+    logConfDir.mkdir()
+
+    val logConfFile = new File(logConfDir, "log4j.properties")
+    Files.write(LOG4J_CONF, logConfFile, Charsets.UTF_8)
+
+    val childClasspath = logConfDir.getAbsolutePath() + File.pathSeparator +
+      sys.props("java.class.path")
 
     oldConf = sys.props.filter { case (k, v) => k.startsWith("spark.") }.toMap
 
@@ -54,8 +73,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
     sys.props += ("spark.yarn.jar" -> ("local:" + fakeSparkJar.getAbsolutePath()))
     sys.props += ("spark.executor.instances" -> "1")
-    sys.props += ("spark.driver.extraClassPath" -> sys.props("java.class.path"))
-    sys.props += ("spark.executor.extraClassPath" -> sys.props("java.class.path"))
+    sys.props += ("spark.driver.extraClassPath" -> childClasspath)
+    sys.props += ("spark.executor.extraClassPath" -> childClasspath)
 
     super.beforeAll()
   }
