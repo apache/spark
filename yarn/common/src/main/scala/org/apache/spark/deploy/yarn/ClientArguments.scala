@@ -17,15 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
+private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
   var addJars: String = null
   var files: String = null
   var archives: String = null
@@ -35,28 +34,56 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var executorMemory = 1024 // MB
   var executorCores = 1
   var numExecutors = 2
-  var amQueue = sparkConf.get("QUEUE", "default")
+  var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   var priority = 0
 
+  // Additional memory to allocate to containers
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val amMemoryOverhead = sparkConf.getInt(
+    "spark.yarn.driver.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
+  val executorMemoryOverhead = sparkConf.getInt(
+    "spark.yarn.executor.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
+
   parseArgs(args.toList)
+  loadEnvironmentArgs()
+  validateArgs()
 
-  // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
-  // it should default to hdfs://
-  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
-  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+  /** Load any default arguments provided through environment variables and Spark properties. */
+  private def loadEnvironmentArgs(): Unit = {
+    // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
+    // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
+    files = Option(files)
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orNull
+    archives = Option(archives)
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orNull
+  }
 
-  // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
-  // for both yarn-client and yarn-cluster
-  files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").
-    map(p => Utils.resolveURIs(p)).orNull)
-  archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").
-    map(p => Utils.resolveURIs(p)).orNull)
+  /**
+   * Fail fast if any arguments provided are invalid.
+   * This is intended to be called only after the provided arguments have been parsed.
+   */
+  private def validateArgs(): Unit = {
+    // TODO: memory checks are outdated (SPARK-3476)
+    Map[Boolean, String](
+      (numExecutors <= 0) -> "You must specify at least 1 executor!",
+      (amMemory <= amMemoryOverhead) -> s"AM memory must be > $amMemoryOverhead MB",
+      (executorMemory <= executorMemoryOverhead) ->
+        s"Executor memory must be > $executorMemoryOverhead MB"
+    ).foreach { case (errorCondition, errorMessage) =>
+      if (errorCondition) {
+        throw new IllegalArgumentException(errorMessage + "\n" + getUsageMessage())
+      }
+    }
+  }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
-  
+    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -138,16 +165,14 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     userArgs = userArgsBuffer.readOnly
   }
 
-
-  def getUsageMessage(unknownParam: Any = null): String = {
+  private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-
     message +
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
+      "  --arg ARG                  Argument to be passed to your application's main class.\n" +
       "                             Multiple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +

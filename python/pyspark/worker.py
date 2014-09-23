@@ -79,10 +79,12 @@ def main(infile, outfile):
                 _broadcastRegistry[bid] = Broadcast(bid, value)
             else:
                 bid = - bid - 1
-                _broadcastRegistry.remove(bid)
+                _broadcastRegistry.pop(bid)
 
         _accumulatorRegistry.clear()
         command = pickleSer._read_with_length(infile)
+        if isinstance(command, Broadcast):
+            command = pickleSer.loads(command.value)
         (func, stats, deserializer, serializer) = command
         init_time = time.time()
 

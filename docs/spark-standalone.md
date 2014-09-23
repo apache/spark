@@ -248,8 +248,10 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
-only supports deploying the driver inside the client process that is submitting the application
-(`client` deploy mode).
+supports two deploy modes. In `client` mode, the driver is launched in the same process as the
+client that submits the application. In `cluster` mode, however, the driver is launched from one
+of the Worker processes inside the cluster, and the client process exits as soon as it fulfills
+its responsibility of submitting the application without waiting for the application to finish.
 
 If your application is launched through Spark submit, then the application jar is automatically
 distributed to all worker nodes. For any additional jars that your application depends on, you
@@ -307,7 +309,7 @@ tight firewall settings. For a complete list of ports to configure, see the
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.
 
-# Standby Masters with ZooKeeper
+## Standby Masters with ZooKeeper
 
 **Overview**
 
@@ -347,7 +349,7 @@ There's an important distinction to be made between "registering with a Master" 
 
 Due to this property, new Masters can be created at any time, and the only thing you need to worry about is that _new_ applications and Workers can find it to register with in case it becomes the leader. Once registered, you're taken care of.
 
-# Single-Node Recovery with Local File System
+## Single-Node Recovery with Local File System
 
 **Overview**
 
