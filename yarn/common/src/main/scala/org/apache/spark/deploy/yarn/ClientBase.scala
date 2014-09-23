@@ -388,6 +388,9 @@ trait ClientBase extends Logging {
         .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
 
+    // For log4j configuration to reference
+    javaOpts += "-D=spark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR
+
     val userClass =
       if (args.userClass != null) {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
