@@ -205,7 +205,7 @@ Note that for the first option, both executors and the application master will s
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
 to the same log file).
 
-For a streaming application to operate 24/7, user can use RollingFileAppender in log4j.properties to avoid disk overflow of single log file. And to locate log files in YARN container log directory, configure RollingFileAppender's file location as "${spark.yarn.app.container.log.dir}/spark.log". So these log files can be viewed on YARN's container page during running. And logs will be copied to HDFS after job finished if log aggregation is turned on.
+If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use "${spark.yarn.app.container.log.dir}" in your log4j.properties. For example, log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log. For streaming application, configuring RollingFileAppender and setting file location to YARN's log directory will avoid disk overflow caused by large log file, and logs can be accessed using YARN's log utility.
 
 # Important notes
 
