@@ -39,9 +39,9 @@ import org.apache.spark.rdd.RDD
  *                         should appear for filtering
  */
 @Experimental
-class IDF(val minimumOccurence: Long) {
+class IDF(val minimumOccurence: Int) {
 
-  def this() = this(0L)
+  def this() = this(0)
 
   // TODO: Allow different IDF formulations.
 
@@ -70,7 +70,7 @@ class IDF(val minimumOccurence: Long) {
 private object IDF {
 
   /** Document frequency aggregator. */
-  class DocumentFrequencyAggregator(val minimumOccurence: Long) extends Serializable {
+  class DocumentFrequencyAggregator(val minimumOccurence: Int) extends Serializable {
 
     /** number of documents */
     private var m = 0L
@@ -78,7 +78,7 @@ private object IDF {
     private var df: BDV[Long] = _
 
 
-   def this() = this(0L);
+   def this() = this(0);
 
     /** Adds a new document. */
     def add(doc: Vector): this.type = {

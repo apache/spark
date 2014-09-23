@@ -64,7 +64,7 @@ class IDFSuite extends FunSuite with LocalSparkContext {
     )
     val m = localTermFrequencies.size
     val termFrequencies = sc.parallelize(localTermFrequencies, 2)
-    val idf = new IDF(minimumOccurence=1L)
+    val idf = new IDF(minimumOccurence=1)
     val model = idf.fit(termFrequencies)
     val expected = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if(x > 0) {
