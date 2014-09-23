@@ -73,6 +73,46 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def childrenResolved: Boolean = !children.exists(!_.resolved)
 
   /**
+   * Returns true when the given logical plan will return the same results as this logical plan.
+   *
+   * Since its likely undecideable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.  Logical operators that
+   * can do better should override this function.
+   */
+  def sameResult(plan: LogicalPlan): Boolean = {
+    if (plan.children.size != children.size) {
+      false
+    } else if (plan.children.zip(children).exists { case (l, r) => !l.sameResult(r) }) {
+      false
+    } else if (plan.getClass != this.getClass) {
+      false
+    } else {
+      cleanArgs == plan.cleanArgs
+    }
+  }
+
+  /** Args that have cleaned such that differences in expression id should not affect equality */
+  protected lazy val cleanArgs: Seq[Any] = {
+    val input = children.flatMap(_.output)
+    productIterator.map {
+      case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      case s: Option[_] => s.map {
+        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      }
+      case s: Seq[_] => s.map {
+        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      }
+      case other => other
+    }.toSeq
+  }
+
+  /**
    * Optionally resolves the given string to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.

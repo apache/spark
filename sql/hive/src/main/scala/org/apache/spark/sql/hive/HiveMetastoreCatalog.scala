@@ -132,10 +132,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
-      case p @ logical.InsertIntoTable(
-                   InMemoryRelation(_, _, _,
-                     HiveTableScan(_, table, _)), _, child, _) =>
-        castChildOutput(p, table, child)
+
+      // case p @ logical.InsertIntoTable(
+      //             InMemoryRelation(_, _, _,
+      //               HiveTableScan(_, table, _)), _, child, _) =>
+      //  castChildOutput(p, table, child)
     }
 
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {
@@ -302,7 +303,7 @@ private[hive] case class MetastoreRelation
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = tableName +: alias.toSeq)
+    )(qualifiers = alias.map(a => Seq(a)).getOrElse(Seq(tableName)))
   }
 
   // Must be a stable value since new attributes are born here.
