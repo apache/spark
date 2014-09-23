@@ -789,4 +789,13 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result3(0)(1) === "the answer")
     Utils.deleteRecursively(tmpdir)
   }
+  
+  test("Querying on empty parquet throws exception (SPARK-3536)") {
+    val tmpdir = Utils.createTempDir()
+    Utils.deleteRecursively(tmpdir)
+    createParquetFile[TestRDDEntry](tmpdir.toString()).registerTempTable("tmpemptytable")
+    val result1 = sql("SELECT * FROM tmpemptytable").collect()
+    assert(result1.size === 0)
+    Utils.deleteRecursively(tmpdir)
+  }
 }
