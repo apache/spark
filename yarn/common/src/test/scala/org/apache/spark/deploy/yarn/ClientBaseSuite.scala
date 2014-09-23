@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
-import org.apache.hadoop.yarn.api.records.ContainerLaunchContext
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -90,7 +90,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    ClientBase.populateClasspath(args, conf, sparkConf, env, None)
+    ClientBase.populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(File.pathSeparator)
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -114,10 +114,10 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
     val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
-    doReturn(new Path("/")).when(client).copyRemoteFile(any(classOf[Path]),
+    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort(), anyBoolean())
 
-    var tempDir = Files.createTempDir();
+    val tempDir = Files.createTempDir()
     try {
       client.prepareLocalResources(tempDir.getAbsolutePath())
       sparkConf.getOption(ClientBase.CONF_SPARK_USER_JAR) should be (Some(USER))
@@ -247,13 +247,13 @@ class ClientBaseSuite extends FunSuite with Matchers {
 
   private class DummyClient(
       val args: ClientArguments,
-      val conf: Configuration,
+      val hadoopConf: Configuration,
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
-
-    override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit =
-      throw new UnsupportedOperationException()
-
+    override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = ???
+    override def submitApplication(): ApplicationId = ???
+    override def getApplicationReport(appId: ApplicationId): ApplicationReport = ???
+    override def getClientToken(report: ApplicationReport): String = ???
   }
 
 }
