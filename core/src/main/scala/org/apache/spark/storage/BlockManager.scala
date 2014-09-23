@@ -862,13 +862,13 @@ private[spark] class BlockManager(
       getRandomPeer() match {
         case Some(peer) =>
           try {
-            val onePeerStartTime = System.nanoTime
+            val onePeerStartTime = System.currentTimeMillis
             data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
-              .format((System.nanoTime - onePeerStartTime) / 1e6))
+              .format((System.currentTimeMillis - onePeerStartTime) / 1e3))
             peersReplicatedTo += peer
             peersForReplication -= peer
             replicationFailed = false
@@ -889,13 +889,12 @@ private[spark] class BlockManager(
           done = true
       }
     }
+    val timeTakeMs = (System.currentTimeMillis - startTime) / 1e3
+    logDebug(s"Replicating $blockId of ${data.limit()} bytes to " +
+      s"${peersReplicatedTo.size} peer(s) took $timeTakeMs ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
-      logError(s"Replicated $blockId of ${data.limit()} bytes to only " +
-        s"${peersReplicatedTo.size} peer(s) instead of ${numPeersToReplicateTo} " +
-        s"in ${(System.nanoTime - startTime) / 1e6} ms")
-    } else {
-      logDebug(s"Successfully replicated $blockId of ${data.limit()} bytes to " +
-        s"${peersReplicatedTo.size} peer(s) in ${(System.nanoTime - startTime) / 1e6} ms")
+      logWarning(s"Block $blockId replicated to only " +
+        s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
     }
   }
 
