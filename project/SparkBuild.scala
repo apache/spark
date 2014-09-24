@@ -146,6 +146,9 @@ object SparkBuild extends PomBuild {
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
 
+  /* YARN common settings */
+  enable(YARN.settings)(yarn)
+
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
@@ -168,6 +171,12 @@ object SparkBuild extends PomBuild {
     } ++ Seq[Project](OldDeps.project)
   }
 
+}
+
+object YARN {
+  lazy val settings = Seq(
+    scalaSource in Compile := baseDirectory.value / "common/src/main/scala"
+  )
 }
 
 object Flume {
