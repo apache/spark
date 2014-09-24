@@ -25,7 +25,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print >> sys.stderr, "Usage: sql <file>"
         exit(-1)
-    sc = SparkContext(appName="PythonWordCount")
+    sc = SparkContext(appName="PythonSQL")
     sqlContext = SQLContext(sc)
 
     # A JSON dataset is pointed to by path.
