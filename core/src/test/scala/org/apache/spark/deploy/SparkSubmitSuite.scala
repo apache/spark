@@ -373,6 +373,24 @@ for both yarn-client and yarn-cluster
     // TODO: check handing of childArgs
 
     // todo: checking resolving of file args
+
+        //if (isUserJar(args.primaryResource.orNull)) {
+      //  childClasspath += args.primaryResource.getOrElse("")
+      //}
+      //if (args.jars.isDefined) { childClasspath ++= args.jars.split(",") }
+      //if (!args.childArgs.isEmpty) { childArgs ++= args.childArgs }
+
+      /**
+    // Properties given with --conf are superceded by other options, but take precedence over
+    // properties in the defaults file.
+    for ((k, v) <- args.sparkProperties) {
+      sysProps.getOrElseUpdate(k, v)
+    }
+
+    // Read from default spark properties, if any
+    for ((k, v) <- args.getDefaultSparkProperties) {
+      sysProps.getOrElseUpdate(k, v)
+    }**/
   */
 
 }

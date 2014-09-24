@@ -54,14 +54,6 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // SPARK_SUBMIT_BOOTSTRAP_DRIVER is used for runtime validation
     val bootstrapDriver = sys.env("SPARK_SUBMIT_BOOTSTRAP_DRIVER")
 
-    // Spark submit specific environment variables
-    //val deployMode = sys.env("SPARK_SUBMIT_DEPLOY_MODE")
-    //val propertiesFile = sys.env("SPARK_SUBMIT_PROPERTIES_FILE")
-    //val submitDriverMemory = sys.env.get("SPARK_SUBMIT_DRIVER_MEMORY")
-    //val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
-    //val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
-    //val submitJavaOpts = sys.env.get("SPARK_SUBMIT_OPTS")
-
     // list of environment variables that override differently named properties
     val envOverides = Map( "OUR_JAVA_MEM" -> SparkDriverMemory,
       "SPARK_SUBMIT_DEPLOY_MODE" -> SparkDeployMode,
@@ -81,7 +73,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
 
      /* In order of lowest priority to highest, we merge config vars from
       * 1. hard coded defaults in class path at spark-submit-defaults.prop
-      * 2. SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
+      * 2. SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf
       * 3. System config variables (eg by using -Dspark.var.name)
       * 4. Environment variables (including legacy variable mappings)
       * 5. properties file specified in SPARK_SUBMIT_PROPERTIES_FILE (specified as second arg(
@@ -94,59 +86,28 @@ private[spark] object SparkSubmitDriverBootstrapper {
     assume(classpath != null, "CLASSPATH must be set")
     assume(javaOpts != null, "JAVA_OPTS must be set")
     assume(defaultDriverMemory != null, "OUR_JAVA_MEM must be set")
-    assume(conf.getOrElse(SparkDeployMode, "") == "client", "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
-    assume(conf.getOrElse(SparkPropertiesFile, null) != null, "SPARK_SUBMIT_PROPERTIES_FILE must be set")
+    assume(conf.getOrElse(SparkDeployMode, "") == "client",
+      "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
+    assume(conf.getOrElse(SparkPropertiesFile, null) != null, "" +
+      "SPARK_SUBMIT_PROPERTIES_FILE must be set")
     assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
-    // Parse the properties file for the equivalent spark.driver.* configs
-   // val properties = SparkSubmitArguments.getPropertyValuesFromFile(new File(propertiesFile))
     val confDriverMemory = conf.get(SparkDriverMemory)
     val confLibraryPath = conf.get(SparkDriverExtraLibraryPath)
     val confClasspath = conf.get(SparkDriverExtraClassPath)
     val confJavaOpts = conf.get(SparkDriverExtraClassPath)
 
-    // Favor Spark submit arguments over the equivalent configs in the properties file.
-    // Note that we do not actually use the Spark submit values for library path, classpath,
-    // and Java opts here, because we have already captured them in Bash.
-
-   // val newDriverMemory = submitDriverMemory
-   //   .orElse(confDriverMemory)
-   //   .getOrElse(defaultDriverMemory)
-
-    /* submit var has priority
-    val newLibraryPath =
-      if (submitLibraryPath.isDefined) {
-        // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
-        ""
-      } else {
-        confLibraryPath.map("-Djava.library.path=" + _).getOrElse("")
-      }
-
-    val newClasspath =
-      if (submitClasspath.isDefined) {
-        // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
-        classpath
-      } else {
-        classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
-      }
-
-    val newJavaOpts =
-      if (submitJavaOpts.isDefined) {
-        // SPARK_SUBMIT_OPTS is already captured in JAVA_OPTS
-        javaOpts
-      } else {
-        javaOpts + confJavaOpts.map(" " + _).getOrElse("")
-      }
-  */
-    val filteredJavaOpts = Utils.splitCommandString(newJavaOpts)
+    val filteredJavaOpts = Utils.splitCommandString(confJavaOpts.getOrElse(""))
       .filterNot(_.startsWith("-Xms"))
       .filterNot(_.startsWith("-Xmx"))
+
+    val newDriverMemory = conf.get(SparkDriverMemory).get
 
     // Build up command
     val command: Seq[String] =
       Seq(runner) ++
-      Seq("-cp", newClasspath) ++
-      Seq(newLibraryPath) ++
+      Seq("-cp", confClasspath.getOrElse("")) ++
+      Seq(confLibraryPath.getOrElse("")) ++
       filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++

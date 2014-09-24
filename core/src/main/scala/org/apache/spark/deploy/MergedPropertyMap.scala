@@ -1,16 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.deploy
 
 import scala.collection._
-/**
- * Created by dale on 22/09/2014.
- */
+
 
 object MergedPropertyMap {
 
   /**
    * Flatten a map of maps out into a single map, later maps in the propList
    * have priority over older ones
-   * @param propList list of property maps to merge
+   * @param propList Vector of property maps[PropName->PropValue] to merge
    */
   def mergePropertyMaps( propList: Vector[Map[String, String]]): mutable.Map[String, String] = {
     val propMap = new mutable.HashMap[String, String]()
@@ -20,21 +34,5 @@ object MergedPropertyMap {
       _.foreach{ case(k,v) => propMap.getOrElseUpdate(k,v)}
     }
     propMap
-  }
-
-  /**
-   * Given an map of (old prop Name -> new propName)
-   * will grab properties from propSource and add them to the output under the new name
-   * the existing old property will still be copied out as well
-   * @param propAliases Map[old Propname -> New PropName]
-   * @param propSource Map[PropName -> PropValue]
-   * @return new entries as per propAliases
-   */
-  def applyAliases( propAliases: Map[String, String], propSource: Map[String, String]): Map[String, String] = {
-    def entries: Map[String, String]  = for{
-      (oldPropName, newPropName) <- propAliases
-      propValue = propSource.get(oldPropName)
-    } yield (newPropName -> propValue.get)
-    entries
   }
 }

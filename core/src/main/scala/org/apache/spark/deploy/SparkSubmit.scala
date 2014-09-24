@@ -151,12 +151,14 @@ object SparkSubmit {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource.getOrElse(""), args.pyFiles.getOrElse("")) ++ args.childArgs
+        args.childArgs = ArrayBuffer(args.primaryResource.getOrElse(""),
+          args.pyFiles.getOrElse("")) ++ args.childArgs
         args.files = mergeFileLists(args.files.orNull, args.primaryResource.orNull)
       }
       args.files = mergeFileLists(args.files.orNull, args.pyFiles.orNull)
       // Format python file paths properly before adding them to the PYTHONPATH
-      sysProps(SparkSubmitPyFiles) = PythonRunner.formatPaths(args.pyFiles.getOrElse("")).mkString(",")
+      sysProps(SparkSubmitPyFiles) = PythonRunner.formatPaths(args.pyFiles.getOrElse(""))
+        .mkString(",")
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -168,8 +170,10 @@ object SparkSubmit {
 
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
-      OptionAssigner(args.name.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = SparkJars),
+      OptionAssigner(args.name.orNull,
+        ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
+      OptionAssigner(args.jars.orNull,
+        ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = SparkJars),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = SparkDriverMemory),
       OptionAssigner(args.driverExtraClassPath.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -214,14 +218,10 @@ object SparkSubmit {
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
       childMainClass = args.mainClass.get
-      //if (isUserJar(args.primaryResource.orNull)) {
-      //  childClasspath += args.primaryResource.getOrElse("")
-      //}
+
       args.primaryResource.filter(isUserJar).foreach( childClasspath += _)
       args.jars.foreach( childClasspath ++= _.split(",")  )
       args.childArgs.foreach( childArgs += _  )
-      //if (args.jars.isDefined) { childClasspath ++= args.jars.split(",") }
-      //if (!args.childArgs.isEmpty) { childArgs ++= args.childArgs }
     }
 
 
@@ -275,17 +275,6 @@ object SparkSubmit {
     for( (k,v) <- args.conf.filterKeys(_.startsWith("spark"))) {
       sysProps.getOrElseUpdate(k, v)
     }
-    /**
-    // Properties given with --conf are superceded by other options, but take precedence over
-    // properties in the defaults file.
-    for ((k, v) <- args.sparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
-    }
-
-    // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
-    }**/
 
     (childArgs, childClasspath, sysProps, childMainClass)
   }
@@ -366,14 +355,16 @@ object SparkSubmit {
    * Return whether the given primary resource represents a shell.
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
-    (primaryResource != null) && (primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL)
+    (primaryResource != null) &&
+      (primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL)
   }
 
   /**
    * Return whether the given primary resource requires running python.
    */
   private[spark] def isPython(primaryResource: String): Boolean = {
-    (primaryResource != null) && (primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL)
+    (primaryResource != null) && (primaryResource.endsWith(".py") ||
+      primaryResource == PYSPARK_SHELL)
   }
 
   private[spark] def isInternal(primaryResource: String): Boolean = {
