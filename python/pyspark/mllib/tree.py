@@ -25,7 +25,12 @@ from pyspark.mllib._common import \
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.serializers import NoOpSerializer
 
+
+__all__ = ['DecisionTreeModel', 'DecisionTree']
+
+
 class DecisionTreeModel(object):
+
     """
     A decision tree model for classification or regression.
 
@@ -77,6 +82,7 @@ class DecisionTreeModel(object):
 
 
 class DecisionTree(object):
+
     """
     Learning algorithm for a decision tree model
     for classification or regression.
@@ -85,7 +91,9 @@ class DecisionTree(object):
                   It will probably be modified for Spark v1.2.
 
     Example usage:
-    >>> from numpy import array, ndarray
+
+    >>> from numpy import array
+    >>> import sys
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> from pyspark.mllib.tree import DecisionTree
     >>> from pyspark.mllib.linalg import SparseVector
@@ -96,15 +104,15 @@ class DecisionTree(object):
     ...     LabeledPoint(1.0, [2.0]),
     ...     LabeledPoint(1.0, [3.0])
     ... ]
-    >>>
-    >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2)
-    >>> print(model)
+    >>> categoricalFeaturesInfo = {} # no categorical features
+    >>> model = DecisionTree.trainClassifier(sc.parallelize(data), numClasses=2,
+    ...                                      categoricalFeaturesInfo=categoricalFeaturesInfo)
+    >>> sys.stdout.write(model)
     DecisionTreeModel classifier
       If (feature 0 <= 0.5)
        Predict: 0.0
       Else (feature 0 > 0.5)
        Predict: 1.0
-
     >>> model.predict(array([1.0])) > 0
     True
     >>> model.predict(array([0.0])) == 0
@@ -116,7 +124,8 @@ class DecisionTree(object):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>>
-    >>> model = DecisionTree.trainRegressor(sc.parallelize(sparse_data))
+    >>> model = DecisionTree.trainRegressor(sc.parallelize(sparse_data),
+    ...                                     categoricalFeaturesInfo=categoricalFeaturesInfo)
     >>> model.predict(array([0.0, 1.0])) == 1
     True
     >>> model.predict(array([0.0, 0.0])) == 0
@@ -128,8 +137,9 @@ class DecisionTree(object):
     """
 
     @staticmethod
-    def trainClassifier(data, numClasses, categoricalFeaturesInfo={},
-                        impurity="gini", maxDepth=4, maxBins=100):
+    def trainClassifier(data, numClasses, categoricalFeaturesInfo,
+                        impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
+                        minInfoGain=0.0):
         """
         Train a DecisionTreeModel for classification.
 
@@ -145,15 +155,27 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
+        :param minInstancesPerNode: Min number of instances required at child nodes to create
+                                    the parent split
+        :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
         """
-        return DecisionTree.train(data, "classification", numClasses,
-                                  categoricalFeaturesInfo,
-                                  impurity, maxDepth, maxBins)
+        sc = data.context
+        dataBytes = _get_unmangled_labeled_point_rdd(data)
+        categoricalFeaturesInfoJMap = \
+            MapConverter().convert(categoricalFeaturesInfo,
+                                   sc._gateway._gateway_client)
+        model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
+            dataBytes._jrdd, "classification",
+            numClasses, categoricalFeaturesInfoJMap,
+            impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        dataBytes.unpersist()
+        return DecisionTreeModel(sc, model)
 
     @staticmethod
-    def trainRegressor(data, categoricalFeaturesInfo={},
-                       impurity="variance", maxDepth=4, maxBins=100):
+    def trainRegressor(data, categoricalFeaturesInfo,
+                       impurity="variance", maxDepth=5, maxBins=32, minInstancesPerNode=1,
+                       minInfoGain=0.0):
         """
         Train a DecisionTreeModel for regression.
 
@@ -168,35 +190,9 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
-        :return: DecisionTreeModel
-        """
-        return DecisionTree.train(data, "regression", 0,
-                                  categoricalFeaturesInfo,
-                                  impurity, maxDepth, maxBins)
-
-
-    @staticmethod
-    def train(data, algo, numClasses, categoricalFeaturesInfo,
-              impurity, maxDepth, maxBins=100):
-        """
-        Train a DecisionTreeModel for classification or regression.
-
-        :param data: Training data: RDD of LabeledPoint.
-                     For classification, labels are integers
-                      {0,1,...,numClasses}.
-                     For regression, labels are real numbers.
-        :param algo: "classification" or "regression"
-        :param numClasses: Number of classes for classification.
-        :param categoricalFeaturesInfo: Map from categorical feature index
-                                        to number of categories.
-                                        Any feature not in this map
-                                        is treated as continuous.
-        :param impurity: For classification: "entropy" or "gini".
-                         For regression: "variance".
-        :param maxDepth: Max depth of tree.
-                         E.g., depth 0 means 1 leaf node.
-                         Depth 1 means 1 internal node + 2 leaf nodes.
-        :param maxBins: Number of bins used for finding splits at each node.
+        :param minInstancesPerNode: Min number of instances required at child nodes to create
+                                    the parent split
+        :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
         """
         sc = data.context
@@ -205,9 +201,9 @@ class DecisionTree(object):
             MapConverter().convert(categoricalFeaturesInfo,
                                    sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
-            dataBytes._jrdd, algo,
-            numClasses, categoricalFeaturesInfoJMap,
-            impurity, maxDepth, maxBins)
+            dataBytes._jrdd, "regression",
+            0, categoricalFeaturesInfoJMap,
+            impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
         dataBytes.unpersist()
         return DecisionTreeModel(sc, model)
 

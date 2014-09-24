@@ -39,14 +39,14 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @return Double prediction from the trained model
    */
   def predict(features: Vector): Double = {
-    topNode.predictIfLeaf(features)
+    topNode.predict(features)
   }
 
   /**
    * Predict values for the given data set using the model trained.
    *
    * @param features RDD representing data points to be predicted
-   * @return RDD[Int] where each entry contains the corresponding prediction
+   * @return RDD of predictions for each of the given data points
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))

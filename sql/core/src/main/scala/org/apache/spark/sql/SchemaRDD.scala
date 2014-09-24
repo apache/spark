@@ -377,40 +377,60 @@ class SchemaRDD(
   def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
 
   /**
+   * Helper for converting a Row to a simple Array suitable for pyspark serialization.
+   */
+  private def rowToJArray(row: Row, structType: StructType): Array[Any] = {
+    import scala.collection.Map
+
+    def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
+      case (null, _) => null
+
+      case (obj: Row, struct: StructType) => rowToJArray(obj, struct)
+
+      case (seq: Seq[Any], array: ArrayType) =>
+        seq.map(x => toJava(x, array.elementType)).asJava
+      case (list: JList[_], array: ArrayType) =>
+        list.map(x => toJava(x, array.elementType)).asJava
+      case (arr, array: ArrayType) if arr.getClass.isArray =>
+        arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
+
+      case (obj: Map[_, _], mt: MapType) => obj.map {
+        case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      }.asJava
+
+      // Pyrolite can handle Timestamp
+      case (other, _) => other
+    }
+
+    val fields = structType.fields.map(field => field.dataType)
+    row.zip(fields).map {
+      case (obj, dataType) => toJava(obj, dataType)
+    }.toArray
+  }
+
+  /**
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    import scala.collection.Map
-
-    def toJava(obj: Any, dataType: DataType): Any = dataType match {
-      case struct: StructType => rowToArray(obj.asInstanceOf[Row], struct)
-      case array: ArrayType => obj match {
-        case seq: Seq[Any] => seq.map(x => toJava(x, array.elementType)).asJava
-        case list: JList[_] => list.map(x => toJava(x, array.elementType)).asJava
-        case arr if arr != null && arr.getClass.isArray =>
-          arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
-        case other => other
-      }
-      case mt: MapType => obj.asInstanceOf[Map[_, _]].map {
-        case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
-      }.asJava
-      // Pyrolite can handle Timestamp
-      case other => obj
-    }
-    def rowToArray(row: Row, structType: StructType): Array[Any] = {
-      val fields = structType.fields.map(field => field.dataType)
-      row.zip(fields).map {
-        case (obj, dataType) => toJava(obj, dataType)
-      }.toArray
-    }
-
     val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToArray(row, rowSchema)
+        rowToJArray(row, rowSchema)
       }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
+  }
+
+  /**
+   * Serializes the Array[Row] returned by SchemaRDD's optimized collect(), using the same
+   * format as javaToPython. It is used by pyspark.
+   */
+  private[sql] def collectToPython: JList[Array[Byte]] = {
+    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
+    val pickle = new Pickler
+    new java.util.ArrayList(collect().map { row =>
+      rowToJArray(row, rowSchema)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 
   /**
@@ -423,11 +443,12 @@ class SchemaRDD(
    */
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext,
-      SparkLogicalPlan(ExistingRdd(queryExecution.analyzed.output, rdd))(sqlContext))
+      SparkLogicalPlan(
+        ExistingRdd(queryExecution.analyzed.output.map(_.newInstance), rdd))(sqlContext))
   }
 
   // =======================================================================
-  // Overriden RDD actions
+  // Overridden RDD actions
   // =======================================================================
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()

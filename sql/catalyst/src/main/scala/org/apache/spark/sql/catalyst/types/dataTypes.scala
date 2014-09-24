@@ -270,8 +270,8 @@ case object FloatType extends FractionalType {
 }
 
 object ArrayType {
-  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is false. */
-  def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
+  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
+  def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
 }
 
 /**
@@ -308,13 +308,9 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-
-  private def validateFields(fields: Seq[StructField]): Boolean =
-    fields.map(field => field.name).distinct.size == fields.size
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
-  require(StructType.validateFields(fields), "Found fields with the same name.")
 
   /**
    * Returns all field names in a [[Seq]].

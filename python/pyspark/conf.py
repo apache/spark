@@ -54,8 +54,11 @@ spark.home=/path
 (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
 
+__all__ = ['SparkConf']
+
 
 class SparkConf(object):
+
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.

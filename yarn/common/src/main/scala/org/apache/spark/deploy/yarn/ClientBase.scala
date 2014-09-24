@@ -29,7 +29,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -37,17 +37,11 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
  * Client submits an application to the YARN ResourceManager.
- *
- * Depending on the deployment mode this will launch one of two application master classes:
- * 1. In cluster mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
- *      which launches a driver program inside of the cluster.
- * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]] to
- *      request executors on behalf of a driver running outside of the cluster.
  */
 trait ClientBase extends Logging {
   val args: ClientArguments
@@ -67,14 +61,11 @@ trait ClientBase extends Logging {
 
   // Additional memory overhead - in mb.
   protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    YarnAllocationHandler.MEMORY_OVERHEAD)
+    YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
-      ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
-          "Error: You must specify a user jar when running in standalone mode!"),
-      (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
       (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
         "greater than: " + memoryOverhead),
@@ -191,23 +182,11 @@ trait ClientBase extends Logging {
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
     // local resources to the application master.
     val fs = FileSystem.get(conf)
-
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    if (UserGroupInformation.isSecurityEnabled()) {
-      if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-        logError(errorMessage)
-        throw new SparkException(errorMessage)
-      }
-    }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
+    val nns = ClientBase.getNameNodesToAccess(sparkConf) + dst
+    ClientBase.obtainTokensForNamenodes(nns, conf, credentials)
+
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
-
-    if (UserGroupInformation.isSecurityEnabled()) {
-      val dstFs = dst.getFileSystem(conf)
-      dstFs.addDelegationTokens(delegTokenRenewer, credentials)
-    }
-
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
@@ -230,7 +209,7 @@ trait ClientBase extends Logging {
       if (! localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
-          val setPermissions = if (destName.equals(ClientBase.APP_JAR)) true else false
+          val setPermissions = destName.equals(ClientBase.APP_JAR)
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), conf)
           distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,
@@ -271,6 +250,14 @@ trait ClientBase extends Logging {
     localResources
   }
 
+  /** Get all application master environment variables set on this SparkConf */
+  def getAppMasterEnv: Seq[(String, String)] = {
+    val prefix = "spark.yarn.appMasterEnv."
+    sparkConf.getAll.filter{case (k, v) => k.startsWith(prefix)}
+      .map{case (k, v) => (k.substring(prefix.length), v)}
+  }
+
+
   def setupLaunchEnv(
       localResources: HashMap[String, LocalResource],
       stagingDir: String): HashMap[String, String] = {
@@ -288,6 +275,11 @@ trait ClientBase extends Logging {
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
+    getAppMasterEnv.foreach { case (key, value) =>
+      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
+    }
+
+    // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       // Allow users to specify some environment variables.
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs, File.pathSeparator)
@@ -299,16 +291,14 @@ trait ClientBase extends Logging {
   }
 
   def userArgsToString(clientArgs: ClientArguments): String = {
-    val prefix = " --args "
+    val prefix = " --arg "
     val args = clientArgs.userArgs
     val retval = new StringBuilder()
     for (arg <- args) {
-      retval.append(prefix).append(" '").append(arg).append("' ")
+      retval.append(prefix).append(" ").append(YarnSparkHadoopUtil.escapeForShell(arg))
     }
     retval.toString
   }
-
-  def calculateAMMemory(newApp: GetNewApplicationResponse): Int
 
   def setupSecurityToken(amContainer: ContainerLaunchContext)
 
@@ -320,6 +310,8 @@ trait ClientBase extends Logging {
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
 
+    val isLaunchingDriver = args.userClass != null
+
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
     // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
     // SparkContext will not let that set spark* system properties, which is expected behavior for
@@ -328,7 +320,7 @@ trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    if (args.amClass == classOf[ApplicationMaster].getName) {
+    if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
           s"""
@@ -352,7 +344,7 @@ trait ClientBase extends Logging {
     }
     amContainer.setEnvironment(env)
 
-    val amMemory = calculateAMMemory(newApp)
+    val amMemory = args.amMemory
 
     val javaOpts = ListBuffer[String]()
 
@@ -385,10 +377,10 @@ trait ClientBase extends Logging {
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
     for ((k, v) <- sparkConf.getAll) {
-      javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
+      javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v")
     }
 
-    if (args.amClass == classOf[ApplicationMaster].getName) {
+    if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
@@ -396,27 +388,48 @@ trait ClientBase extends Logging {
         .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
 
-    // Command for the ApplicationMaster
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
-      javaOpts ++
-      Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
-        userArgsToString(args),
-        "--executor-memory", args.executorMemory.toString,
+    val userClass =
+      if (args.userClass != null) {
+        Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
+      } else {
+        Nil
+      }
+    val amClass =
+      if (isLaunchingDriver) {
+        classOf[ApplicationMaster].getName()
+      } else {
+        classOf[ApplicationMaster].getName().replace("ApplicationMaster", "ExecutorLauncher")
+      }
+    val amArgs =
+      Seq(amClass) ++ userClass ++
+      (if (args.userJar != null) Seq("--jar", args.userJar) else Nil) ++
+      Seq("--executor-memory", args.executorMemory.toString,
         "--executor-cores", args.executorCores.toString,
         "--num-executors ", args.numExecutors.toString,
+        userArgsToString(args))
+
+    // Command for the ApplicationMaster
+    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+      javaOpts ++ amArgs ++
+      Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
     logInfo("Yarn AM launch context:")
-    logInfo(s"  class:   ${args.amClass}")
-    logInfo(s"  env:     $env")
-    logInfo(s"  command: ${commands.mkString(" ")}")
+    logInfo(s"  user class: ${args.userClass}")
+    logInfo(s"  env:        $env")
+    logInfo(s"  command:    ${commands.mkString(" ")}")
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands)
 
     setupSecurityToken(amContainer)
+
+    // send the acl settings into YARN to control who has access via YARN interfaces
+    val securityManager = new SecurityManager(sparkConf)
+    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+
     amContainer
   }
 }
@@ -613,5 +626,41 @@ object ClientBase extends Logging {
   private def addClasspathEntry(path: String, env: HashMap[String, String]) =
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
+
+  /**
+   * Get the list of namenodes the user may access.
+   */
+  private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "").split(",").map(_.trim()).filter(!_.isEmpty)
+      .map(new Path(_)).toSet
+  }
+
+  private[yarn] def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  private[yarn] def obtainTokensForNamenodes(paths: Set[Path], conf: Configuration,
+    creds: Credentials) {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = getTokenRenewer(conf)
+
+      paths.foreach {
+        dst =>
+          val dstFs = dst.getFileSystem(conf)
+          logDebug("getting token for namenode: " + dst)
+          dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
+  }
 
 }

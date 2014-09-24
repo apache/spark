@@ -57,7 +57,9 @@ case class OptionalData(
 
 case class ComplexData(
     arrayField: Seq[Int],
-    mapField: Map[Int, String],
+    arrayFieldContainsNull: Seq[java.lang.Integer],
+    mapField: Map[Int, Long],
+    mapFieldValueContainsNull: Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
 case class GenericData[A](
@@ -116,8 +118,22 @@ class ScalaReflectionSuite extends FunSuite {
     val schema = schemaFor[ComplexData]
     assert(schema === Schema(
       StructType(Seq(
-        StructField("arrayField", ArrayType(IntegerType), nullable = true),
-        StructField("mapField", MapType(IntegerType, StringType), nullable = true),
+        StructField(
+          "arrayField",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayFieldContainsNull",
+          ArrayType(IntegerType, containsNull = true),
+          nullable = true),
+        StructField(
+          "mapField",
+          MapType(IntegerType, LongType, valueContainsNull = false),
+          nullable = true),
+        StructField(
+          "mapFieldValueContainsNull",
+          MapType(IntegerType, LongType, valueContainsNull = true),
+          nullable = true),
         StructField(
           "structField",
           StructType(Seq(

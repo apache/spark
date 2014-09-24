@@ -21,11 +21,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
-import org.apache.spark.shuffle.sort.SortShuffleManager
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -33,48 +31,26 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
  * However, it is also possible to have a block map to only a segment of a file, by calling
  * mapBlockToFileSegment().
  *
- * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
+ * Block files are hashed among the directories listed in spark.local.dir (or in
+ * SPARK_LOCAL_DIRS, if it's set).
  */
-private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, rootDirs: String)
-  extends PathResolver with Logging {
+private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkConf)
+  extends Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-
-  private val subDirsPerLocalDir =
-    shuffleBlockManager.conf.getInt("spark.diskStore.subDirectories", 64)
+  private val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
-  val localDirs: Array[File] = createLocalDirs()
+  val localDirs: Array[File] = createLocalDirs(conf)
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
-  private var shuffleSender : ShuffleSender = null
 
   addShutdownHook()
-
-  /**
-   * Returns the physical file segment in which the given BlockId is located. If the BlockId has
-   * been mapped to a specific FileSegment by the shuffle layer, that will be returned.
-   * Otherwise, we assume the Block is mapped to the whole file identified by the BlockId.
-   */
-  def getBlockLocation(blockId: BlockId): FileSegment = {
-    val env = SparkEnv.get  // NOTE: can be null in unit tests
-    if (blockId.isShuffle && env != null && env.shuffleManager.isInstanceOf[SortShuffleManager]) {
-      // For sort-based shuffle, let it figure out its blocks
-      val sortShuffleManager = env.shuffleManager.asInstanceOf[SortShuffleManager]
-      sortShuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId], this)
-    } else if (blockId.isShuffle && shuffleBlockManager.consolidateShuffleFiles) {
-      // For hash-based shuffle with consolidated files, ShuffleBlockManager takes care of this
-      shuffleBlockManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
-    } else {
-      val file = getFile(blockId.name)
-      new FileSegment(file, 0, file.length())
-    }
-  }
 
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
@@ -105,7 +81,7 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getBlockLocation(blockId).file.exists()
+    getFile(blockId.name).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */
@@ -131,10 +107,9 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     (blockId, getFile(blockId))
   }
 
-  private def createLocalDirs(): Array[File] = {
-    logDebug(s"Creating local directories at root dirs '$rootDirs'")
+  private def createLocalDirs(conf: SparkConf): Array[File] = {
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-    rootDirs.split(",").flatMap { rootDir =>
+    Utils.getOrCreateLocalRootDirs(conf).flatMap { rootDir =>
       var foundLocalDir = false
       var localDir: File = null
       var localDirId: String = null
@@ -186,15 +161,5 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
         }
       }
     }
-
-    if (shuffleSender != null) {
-      shuffleSender.stop()
-    }
-  }
-
-  private[storage] def startShuffleBlockSender(port: Int): Int = {
-    shuffleSender = new ShuffleSender(port, this)
-    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
-    shuffleSender.port
   }
 }

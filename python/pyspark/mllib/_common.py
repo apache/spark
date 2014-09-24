@@ -16,11 +16,12 @@
 #
 
 import struct
+import sys
 import numpy
 from numpy import ndarray, float64, int64, int32, array_equal, array
 from pyspark import SparkContext, RDD
 from pyspark.mllib.linalg import SparseVector
-from pyspark.serializers import Serializer
+from pyspark.serializers import FramedSerializer
 
 
 """
@@ -72,10 +73,18 @@ except:
 # Python interpreter must agree on what endian the machine is.
 
 
-DENSE_VECTOR_MAGIC  = 1
+DENSE_VECTOR_MAGIC = 1
 SPARSE_VECTOR_MAGIC = 2
-DENSE_MATRIX_MAGIC  = 3
+DENSE_MATRIX_MAGIC = 3
 LABELED_POINT_MAGIC = 4
+
+
+# Workaround for SPARK-2954: before Python 2.7, struct.unpack couldn't unpack bytearray()s.
+if sys.version_info[:2] <= (2, 6):
+    def _unpack(fmt, string):
+        return struct.unpack(fmt, buffer(string))
+else:
+    _unpack = struct.unpack
 
 
 def _deserialize_numpy_array(shape, ba, offset, dtype=float64):
@@ -191,7 +200,7 @@ def _deserialize_double(ba, offset=0):
         raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
     if len(ba) - offset != 8:
         raise TypeError("_deserialize_double called on a %d-byte array; wanted 8 bytes." % nb)
-    return struct.unpack("d", ba[offset:])[0]
+    return _unpack("d", ba[offset:])[0]
 
 
 def _deserialize_double_vector(ba, offset=0):
@@ -442,17 +451,16 @@ def _serialize_rating(r):
     return ba
 
 
-class RatingDeserializer(Serializer):
-    def loads(self, stream):
-        length = struct.unpack("!i", stream.read(4))[0]
-        ba = stream.read(length)
-        res = ndarray(shape=(3, ), buffer=ba, dtype=float64, offset=4)
+class RatingDeserializer(FramedSerializer):
+
+    def loads(self, string):
+        res = ndarray(shape=(3, ), buffer=string, dtype=float64, offset=4)
         return int(res[0]), int(res[1]), res[2]
 
     def load_stream(self, stream):
         while True:
             try:
-                yield self.loads(stream)
+                yield self._read_with_length(stream)
             except struct.error:
                 return
             except EOFError:

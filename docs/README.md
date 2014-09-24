@@ -20,17 +20,22 @@ In this directory you will find textfiles formatted using Markdown, with an ".md
 read those text files directly if you want. Start with index.md.
 
 The markdown code can be compiled to HTML using the [Jekyll tool](http://jekyllrb.com).
-To use the `jekyll` command, you will need to have Jekyll installed. 
-The easiest way to do this is via a Ruby Gem, see the 
-[jekyll installation instructions](http://jekyllrb.com/docs/installation).
-If not already installed, you need to install `kramdown` with `sudo gem install kramdown`.
+`Jekyll` and a few dependencies must be installed for this to work. We recommend
+installing via the Ruby Gem dependency manager. Since the exact HTML output 
+varies between versions of Jekyll and its dependencies, we list specific versions here
+in some cases:
+
+    $ sudo gem install jekyll -v 1.4.3
+    $ sudo gem uninstall kramdown -v 1.4.1
+    $ sudo gem install jekyll-redirect-from
+
 Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory
 called `_site` containing index.html as well as the rest of the compiled files.
 
 You can modify the default Jekyll build as follows:
 
     # Skip generating API docs (which takes a while)
-    $ SKIP_SCALADOC=1 jekyll build
+    $ SKIP_API=1 jekyll build
     # Serve content locally on port 4000
     $ jekyll serve --watch
     # Build the site with extra features used on the live page
