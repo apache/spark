@@ -211,9 +211,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enable profiling in Python worker, the profile result will show up by `sc.show_profiles()`,
-    or it will be showed up before the driver exiting. It also can be dumped into disk by
-    `sc.dump_profiles(path)`. If some of the profile results had been showed up maually,
-    they will not be showed up automatically before driver exiting.
+    or it will be displayed before the driver exiting. It also can be dumped into disk by
+    `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
+    they will not be displayed automatically before driver exiting.
   </td>
 </tr>
 <tr>
@@ -222,7 +222,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The directory which is used to dump the profile result before driver exiting. 
     The results will be dumped as separated file for each RDD. They can be loaded
-    by ptats.Stats(). If this is specified, the profile result will not be showed up
+    by ptats.Stats(). If this is specified, the profile result will not be displayed
     automatically.
 </tr>
 <tr>
