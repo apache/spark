@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack, ListBuffer}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -111,6 +111,10 @@ class DAGScheduler(
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
+
+  // stageId => (SplitId -> (accumulatorId, accumulatorValue))
+  private[scheduler] val stageIdToAccumulators = new HashMap[Int,
+    HashMap[Int, ListBuffer[(Long, Any)]]]
 
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
@@ -409,6 +413,66 @@ class DAGScheduler(
     updateJobIdStageIdMapsList(List(stage))
   }
 
+  def removeStage(stageId: Int) {
+    // data structures based on Stage
+    for (stage <- stageIdToStage.get(stageId)) {
+      if (runningStages.contains(stage)) {
+        logDebug("Removing running stage %d".format(stageId))
+        runningStages -= stage
+      }
+      for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+        shuffleToMapStage.remove(k)
+      }
+      if (waitingStages.contains(stage)) {
+        logDebug("Removing stage %d from waiting set.".format(stageId))
+        waitingStages -= stage
+      }
+      if (failedStages.contains(stage)) {
+        logDebug("Removing stage %d from failed set.".format(stageId))
+        failedStages -= stage
+      }
+    }
+    // data structures based on StageId
+    stageIdToStage -= stageId
+
+    // accumulate acc values, if the stage is aborted, its accumulators
+    // will not be calculated, since we have removed it in abortStage()
+    for (partitionIdToAccum <- stageIdToAccumulators.get(stageId);
+        accumulators <- partitionIdToAccum.values;
+        accum <- accumulators) {
+      Accumulators.add(accum)
+    }
+
+    stageIdToAccumulators -= stageId
+
+    logDebug("After removal of stage %d, remaining stages = %d"
+      .format(stageId, stageIdToStage.size))
+  }
+
+  /**
+   * detect the duplicate accumulator value and save the accumulator values
+   * @param accumValue the accumulator values received from the task
+   * @param stage the stage which the task belongs to
+   * @param task the completed task
+   */
+  private def saveAccumulatorValue(accumValue: Map[Long, Any], stage: Stage, task: Task[_]) {
+    if (accumValue != null) {
+      for ((id, value) <- accumValue) {
+        if (Accumulators.isAllowDuplicate(id)) {
+          Accumulators.add((id, value))
+        } else {
+          if (!stageIdToAccumulators.contains(stage.id) ||
+            !stageIdToAccumulators(stage.id).contains(task.partitionId)) {
+            val accum = stageIdToAccumulators.getOrElseUpdate(stage.id,
+              new HashMap[Int, ListBuffer[(Long, Any)]]).
+              getOrElseUpdate(task.partitionId, new ListBuffer[(Long, Any)])
+            accum += id -> value
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Removes state for job and any stages that are not needed by any other job.  Does not
    * handle cancelling tasks or notifying the SparkListener about finished jobs/stages/tasks.
@@ -428,32 +492,6 @@ class DAGScheduler(
               "Job %d not registered for stage %d even though that stage was registered for the job"
               .format(job.jobId, stageId))
           } else {
-            def removeStage(stageId: Int) {
-              // data structures based on Stage
-              for (stage <- stageIdToStage.get(stageId)) {
-                if (runningStages.contains(stage)) {
-                  logDebug("Removing running stage %d".format(stageId))
-                  runningStages -= stage
-                }
-                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
-                  shuffleToMapStage.remove(k)
-                }
-                if (waitingStages.contains(stage)) {
-                  logDebug("Removing stage %d from waiting set.".format(stageId))
-                  waitingStages -= stage
-                }
-                if (failedStages.contains(stage)) {
-                  logDebug("Removing stage %d from failed set.".format(stageId))
-                  failedStages -= stage
-                }
-              }
-              // data structures based on StageId
-              stageIdToStage -= stageId
-
-              logDebug("After removal of stage %d, remaining stages = %d"
-                .format(stageId, stageIdToStage.size))
-            }
-
             jobSet -= job.jobId
             if (jobSet.isEmpty) { // no other job needs this stage
               removeStage(stageId)
@@ -943,7 +981,7 @@ class DAGScheduler(
       case Success =>
         if (event.accumUpdates != null) {
           try {
-            Accumulators.add(event.accumUpdates)
+            saveAccumulatorValue(event.accumUpdates, stage, task)
             event.accumUpdates.foreach { case (id, partialValue) =>
               val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
               // To avoid UI cruft, ignore cases where value wasn't updated
@@ -1082,7 +1120,7 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
-
+        stageIdToAccumulators -= failedStage.id
         // Mark the map whose fetch failed as broken in the map stage
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)
@@ -1227,6 +1265,9 @@ class DAGScheduler(
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
+          // remove StageIdToAccumulators(id) ensuring that the aborted stage
+          // accumulator is not calculated when the stage is finished successfully
+          stageIdToAccumulators -= stage.id
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)

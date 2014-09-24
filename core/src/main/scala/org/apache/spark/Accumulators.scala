@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
@@ -44,11 +45,13 @@ import org.apache.spark.util.Utils
 class Accumulable[R, T] (
     @transient initialValue: R,
     param: AccumulableParam[R, T],
-    val name: Option[String])
+    val name: Option[String],
+    val allowDuplicate: Boolean = true)
   extends Serializable {
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
+  def this(@transient initialValue: R, param: AccumulableParam[R, T],
+           allowDuplicate: Boolean = true) =
+    this(initialValue, param, None, allowDuplicate)
 
   val id: Long = Accumulators.newId
 
@@ -226,9 +229,13 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-    extends Accumulable[T,T](initialValue, param, name) {
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T],
+                     name: Option[String], allowDuplicate: Boolean = true)
+    extends Accumulable[T,T](initialValue, param, name, allowDuplicate) {
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+
+  def this(initialValue: T, param: AccumulatorParam[T], allowDuplicate: Boolean) =
+    this(initialValue, param, None, allowDuplicate)
 }
 
 /**
@@ -252,10 +259,9 @@ private object Accumulators {
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
   var lastId: Long = 0
 
-  def newId: Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  private val nextAccumID = new AtomicLong(0)
+
+  def newId: Long = nextAccumID.getAndIncrement
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
@@ -265,6 +271,8 @@ private object Accumulators {
       accums(a.id) = a
     }
   }
+
+  def isAllowDuplicate(id: Long) = originals(id).allowDuplicate
 
   // Clear the local (non-original) accumulators for the current thread
   def clear() {
@@ -283,11 +291,9 @@ private object Accumulators {
   }
 
   // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
-      }
+  def add(value: (Long, Any)): Unit = synchronized {
+    if (originals.contains(value._1)) {
+      originals(value._1).asInstanceOf[Accumulable[Any, Any]] ++= value._2
     }
   }
 

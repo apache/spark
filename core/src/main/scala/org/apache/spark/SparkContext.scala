@@ -893,8 +893,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
-    new Accumulator(initialValue, param)
+  def accumulator[T](initialValue: T, allowDuplicate: Boolean = true)
+                    (implicit param: AccumulatorParam[T]) =
+    new Accumulator(initialValue, param, None, allowDuplicate)
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
@@ -931,9 +932,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
-      (initialValue: R): Accumulable[R, T] = {
+      (initialValue: R, allowDuplicate: Boolean = true): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
-    new Accumulable(initialValue, param)
+    new Accumulable(initialValue, param, allowDuplicate)
   }
 
   /**
