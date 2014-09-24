@@ -310,7 +310,11 @@ class SparkContext(config: SparkConf) extends Logging {
   // constructor
   taskScheduler.start()
 
-  val appId = taskScheduler.applicationId().getOrElse(System.currentTimeMillis().toString)
+  val appId = taskScheduler.applicationId().getOrElse({
+    logWarning("Failed to get unique Application ID. " +
+      "Instead of Application ID, UNIX time is used for the prefix of the name of metrics.")
+    System.currentTimeMillis().toString
+  })
   conf.set("spark.app.id", appId)
 
   val metricsSystem = env.metricsSystem
