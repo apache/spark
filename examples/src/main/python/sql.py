@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # Register this SchemaRDD as a table.
     people.registerAsTable("people")
 
-    # SQL statements can be run by using the sql methods provided by sqlContext.
+    # SQL statements can be run by using the sql methods provided by sqlContext
     teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
