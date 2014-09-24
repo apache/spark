@@ -35,7 +35,7 @@ import scala.collection.{mutable=>m}
  *
  * Entries in the conf Map will be filled in the following priority order
  * 1. entries specified on the command line (except from --conf entries)
- * 3. Entries specified on the command line with --conf
+ * 2. Entries specified on the command line with --conf
  * 3. Environment variables (including legacy variable mappings)
  * 4. System config variables (eg by using -Dspark.var.name)
  * 5  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist

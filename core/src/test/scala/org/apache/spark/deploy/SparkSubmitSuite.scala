@@ -360,37 +360,8 @@ object SimpleApplicationTest {
       }
     }
   }
-/**
-  --archives/--files via sparksubmit defaults to use file:// if not specified, for both yarn-client and yarn-cluster
 
-  spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
-for both yarn-client and yarn-cluster
-
-  env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then it should default to hdfs://
-
-    --files/--archives specified from spark-class in yarn-cluster mode then it should default to hdfs://
-
-    // TODO: check handing of childArgs
-
-    // todo: checking resolving of file args
-
-        //if (isUserJar(args.primaryResource.orNull)) {
-      //  childClasspath += args.primaryResource.getOrElse("")
-      //}
-      //if (args.jars.isDefined) { childClasspath ++= args.jars.split(",") }
-      //if (!args.childArgs.isEmpty) { childArgs ++= args.childArgs }
-
-      /**
-    // Properties given with --conf are superceded by other options, but take precedence over
-    // properties in the defaults file.
-    for ((k, v) <- args.sparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
-    }
-
-    // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
-    }**/
-  */
+  // TODO: Confirm the following are valid behaviour to test
+  // when should file resolving default to hdfs?
 
 }
