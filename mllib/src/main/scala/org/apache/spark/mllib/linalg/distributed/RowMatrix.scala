@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
 
+import org.apache.spark.util.random.XORShiftRandom
+
 import scala.collection.mutable.ListBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
@@ -411,7 +413,7 @@ class RowMatrix(
    *         columns of this matrix.
    */
   def columnSimilarities(): CoordinateMatrix = {
-    similarColumns(0.0)
+    columnSimilarities(0.0)
   }
 
   /**
@@ -437,12 +439,12 @@ class RowMatrix(
    *
    * For those column pairs that are above the threshold,
    * the computed similarity is correct to within 20% relative error with probability
-   * at least 1 - (0.981)^(10/B)
+   * at least 1 - (0.981)^10/B^
    *
    * The shuffle size is bounded by the *smaller* of the following two expressions:
    *
    * O(n log(n) L / (threshold * A))
-   * O(m L^2)
+   * O(m L^2^)
    *
    * The latter is the cost of the brute-force approach, so for non-zero thresholds,
    * the cost is always cheaper than the brute-force approach.
@@ -453,7 +455,7 @@ class RowMatrix(
    * @return An n x n sparse upper-triangular matrix of cosine similarities
    *         between columns of this matrix.
    */
-  def similarColumns(threshold: Double): CoordinateMatrix = {
+  def columnSimilarities(threshold: Double): CoordinateMatrix = {
     require(threshold >= 0 && threshold <= 1, s"Threshold not in [0,1]: $threshold")
 
     val gamma = if (threshold < 1e-6) {
@@ -462,7 +464,9 @@ class RowMatrix(
       10 * math.log(numCols()) / threshold
     }
 
-    similarColumnsDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
+    println(s"gamma: $gamma")
+
+    columnSimilaritiesDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
   }
 
   /**
@@ -472,37 +476,71 @@ class RowMatrix(
    * http://arxiv.org/abs/1304.1467
    *
    * @param colMags A vector of column magnitudes
-   * @param gamma The oversampling parameter. For provable results, set to 100 * log(n) / s,
+   * @param gamma The oversampling parameter. For provable results, set to 10 * log(n) / s,
    *              where s is the smallest similarity score to be estimated,
    *              and n is the number of columns
    * @return An n x n sparse upper-triangular matrix of cosine similarities
    *         between columns of this matrix.
    */
-  private[mllib] def similarColumnsDIMSUM(colMags: Array[Double],
-        gamma: Double): CoordinateMatrix = {
+  private[mllib] def columnSimilaritiesDIMSUM(
+      colMags: Array[Double],
+      gamma: Double): CoordinateMatrix = {
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
     require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
-
     val sg = math.sqrt(gamma) // sqrt(gamma) used many times
-
+    val p = colMags.map(c => sg / c)
+    val q = colMags.map(c => math.min(sg, c))
     val sims = rows.mapPartitionsWithIndex { (indx, iter) =>
-      val rand = new scala.util.Random(indx)
+      val rand = new XORShiftRandom(indx)
+      val scaled = new Array[Double](p.size)
       iter.flatMap { row =>
         val buf = new ListBuffer[((Int, Int), Double)]()
-        row.toBreeze.activeIterator.foreach {
-          case (_, 0.0) => // Skip explicit zero elements.
-          case (i, iVal) =>
-            val ci = colMags(i)
-            if (rand.nextDouble < sg / ci) {
-              row.toBreeze.activeIterator.foreach {
-                case (_, 0.0) => // Skip explicit zero elements.
-                case (j, jVal) =>
-                  val cj = colMags(j)
-                  if (i < j && rand.nextDouble < sg / cj) {
-                    val contrib = ((i, j), (iVal * jVal) / (math.min(sg, ci) * math.min(sg, cj)))
-                    buf += contrib
+        row match {
+          case sv: SparseVector =>
+            val nnz = sv.indices.size
+            var k = 0
+            while (k < nnz) {
+              scaled(k) = sv.values(k) / q(sv.indices(k))
+              k += 1
+            }
+            k = 0
+            while (k < nnz) {
+              val i = sv.indices(k)
+              val iVal = scaled(k)
+              if (iVal != 0 && rand.nextDouble() < p(i)) {
+                var l = k + 1
+                while (l < nnz) {
+                  val j = sv.indices(l)
+                  val jVal = scaled(l)
+                  if (jVal != 0 && rand.nextDouble() < p(j)) {
+                    buf += (((i, j), iVal * jVal))
                   }
+                  l += 1
+                }
               }
+              k += 1
+            }
+          case dv: DenseVector =>
+            val n = dv.values.size
+            var i = 0
+            while (i < n) {
+              scaled(i) = dv.values(i) / q(i)
+              i += 1
+            }
+            i = 0
+            while (i < n) {
+              val iVal = scaled(i)
+              if (iVal != 0 && rand.nextDouble() < p(i)) {
+                var j = i + 1
+                while (j < n) {
+                  val jVal = scaled(j)
+                  if (jVal != 0 && rand.nextDouble() < p(j)) {
+                    buf += (((i, j), iVal * jVal))
+                  }
+                  j += 1
+                }
+              }
+              i += 1
             }
         }
         buf
