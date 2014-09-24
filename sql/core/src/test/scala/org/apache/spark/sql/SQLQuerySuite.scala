@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.{ShuffledHashJoin, BroadcastHashJoin}
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
@@ -41,6 +43,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
+  test("SPARK-3176 Added Parser of SQL ABS()") {
+    checkAnswer(
+      sql("SELECT ABS(-1.3)"),
+      1.3)
+    checkAnswer(
+      sql("SELECT ABS(0.0)"),
+      0.0)
+    checkAnswer(
+      sql("SELECT ABS(2.5)"),
+      2.5)
+  }
+
+  test("SPARK-3176 Added Parser of SQL LAST()") {
+    checkAnswer(
+      sql("SELECT LAST(n) FROM lowerCaseData"),
+      4)
+  }
+
+
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
       sql("SELECT tableName FROM tableName"),
@@ -53,14 +74,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SQRT with automatic string casts") {
     checkAnswer(
       sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
-  
+
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),
@@ -456,18 +477,48 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         (3, null)))
   }
 
-  test("EXCEPT") {
-
+  test("UNION") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData "),
+      sql("SELECT * FROM lowerCaseData UNION SELECT * FROM upperCaseData"),
+      (1, "A") :: (1, "a") :: (2, "B") :: (2, "b") :: (3, "C") :: (3, "c") ::
+      (4, "D") :: (4, "d") :: (5, "E") :: (6, "F") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData UNION SELECT * FROM lowerCaseData"),
+      (1, "a") :: (2, "b") :: (3, "c") :: (4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData UNION ALL SELECT * FROM lowerCaseData"),
+      (1, "a") :: (1, "a") :: (2, "b") :: (2, "b") :: (3, "c") :: (3, "c") ::
+      (4, "d") :: (4, "d") :: Nil)
+  }
+
+  test("UNION with column mismatches") {
+    // Column name mismatches are allowed.
+    checkAnswer(
+      sql("SELECT n,l FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
+      (1, "A") :: (1, "a") :: (2, "B") :: (2, "b") :: (3, "C") :: (3, "c") ::
+      (4, "D") :: (4, "d") :: (5, "E") :: (6, "F") :: Nil)
+    // Column type mismatches are not allowed, forcing a type coercion.
+    checkAnswer(
+      sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
+      ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Tuple1(_)))
+    // Column type mismatches where a coercion is not possible, in this case between integer
+    // and array types, trigger a TreeNodeException.
+    intercept[TreeNodeException[_]] {
+      sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
+    }
+  }
+
+  test("EXCEPT") {
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData"),
       (1, "a") ::
       (2, "b") ::
       (3, "c") ::
       (4, "d") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData "), Nil)
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData"), Nil)
     checkAnswer(
-      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
+      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
  test("INTERSECT") {
@@ -596,5 +647,29 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (2, null) ::
       (3, null) ::
       (4, 2147483644) :: Nil)
+  }
+
+  test("SPARK-3423 BETWEEN") {
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      Seq((5, "5"), (6, "6"), (7, "7"))
+    )
+
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      Seq((7, "7"))
+    )
+
+    checkAnswer(
+      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      Seq()
+    )
+  }
+
+  test("cast boolean to string") {
+    // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
+    checkAnswer(
+      sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
+      ("true", "false") :: Nil)
   }
 }

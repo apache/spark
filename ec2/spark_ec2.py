@@ -52,7 +52,7 @@ class UsageError(Exception):
 def parse_args():
     parser = OptionParser(
         usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
+        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
         add_help_option=False)
     parser.add_option(
         "-h", "--help", action="help",
@@ -158,6 +158,9 @@ def parse_args():
     parser.add_option(
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
+    parser.add_option(
+        "--copy-aws-credentials", action="store_true", default=False,
+        help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -502,6 +505,7 @@ def tag_instance(instance, name):
     for i in range(0, 5):
         try:
             instance.add_tag(key='Name', value=name)
+            break
         except:
             print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
             if (i == 5):
@@ -713,6 +717,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
     }
+
+    if opts.copy_aws_credentials:
+        template_vars["aws_access_key_id"] = conn.aws_access_key_id
+        template_vars["aws_secret_access_key"] = conn.aws_secret_access_key
+    else:
+        template_vars["aws_access_key_id"] = ""
+        template_vars["aws_secret_access_key"] = ""
 
     # Create a temp directory in which we will place all the files to be
     # deployed after we substitue template parameters in them
@@ -949,6 +960,20 @@ def real_main():
             proxy_opt = ['-D', opts.proxy_port]
         subprocess.check_call(
             ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
+
+    elif action == "reboot-slaves":
+        response = raw_input(
+            "Are you sure you want to reboot the cluster " +
+            cluster_name + " slaves?\n" +
+            "Reboot cluster slaves " + cluster_name + " (y/N): ")
+        if response == "y":
+            (master_nodes, slave_nodes) = get_existing_cluster(
+                conn, opts, cluster_name, die_on_error=False)
+            print "Rebooting slaves..."
+            for inst in slave_nodes:
+                if inst.state not in ["shutting-down", "terminated"]:
+                    print "Rebooting " + inst.id
+                    inst.reboot()
 
     elif action == "get-master":
         (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)

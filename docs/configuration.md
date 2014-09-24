@@ -207,6 +207,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.worker.reuse</code></td>
+  <td>true</td>
+  <td>
+    Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
+    does not need to fork() a Python process for every tasks. It will be very useful
+    if there is large broadcast, then the broadcast will not be needed to transfered
+    from JVM to Python worker for every task.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
@@ -510,10 +520,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
-  <td>false</td>
+  <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver.
+    the driver, in seconds.
   </td>
 </tr>
 <tr>
@@ -647,7 +657,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Maximum number of retries when binding to a port before giving up.
+    Default maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>
