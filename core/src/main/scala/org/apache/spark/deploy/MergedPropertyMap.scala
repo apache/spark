@@ -31,7 +31,7 @@ object MergedPropertyMap {
     // loop through each entry of each map in order of priority
     // and add it to our propMap
     propList.foreach {
-      _.foreach{ case(k,v) => propMap.getOrElseUpdate(k,v)}
+      _.foreach{ case(k,v) => if (propMap.getOrElse(k,"").size == 0) propMap.put(k,v)}
     }
     propMap
   }

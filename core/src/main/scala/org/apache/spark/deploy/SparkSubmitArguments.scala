@@ -470,7 +470,7 @@ object SparkSubmitArguments {
     // legacy variables act at the priority of a system property
     systemPropertyConfig ++ legacyEnvVars
       .map( {case(varName, propName) => (environmentConfig.get(varName), propName) })
-      .filter( {case(varVariable, _) => varVariable.isDefined} )
+      .filter( {case(varVariable, _) => varVariable.isDefined && !varVariable.get.isEmpty} )
       .map{case(varVariable, propName) => (propName, varVariable.get)}
 
     val ConfigSources  = additionalConfigs ++ Vector (
@@ -486,7 +486,9 @@ object SparkSubmitArguments {
     val processedConfigSource = ConfigSources
       .map( configMap => getFileBasedPropertiesIfSpecified(configMap) ++ configMap)
 
-    MergedPropertyMap.mergePropertyMaps(processedConfigSource)
+    val test = MergedPropertyMap.mergePropertyMaps(processedConfigSource)
+
+    test
   }
 
   /**

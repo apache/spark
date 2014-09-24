@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
+import org.apache.spark.deploy.SparkSubmitArguments
+
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap,Map}
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -48,8 +50,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
+    val sparkConfigs = SparkSubmitArguments.mergeSparkProperties(Vector.empty)
     // Load any spark.* system properties
-    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
+    for ((k, v) <- sparkConfigs
+     if k.startsWith("spark.")) {
       settings(k) = v
     }
   }
