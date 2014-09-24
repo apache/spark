@@ -882,7 +882,11 @@ for details.
 </tr>
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
-  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
+  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs.
+    <br />
+    <b>Note:</b> The ordering of elements within each group is not guaranteed, and may even differ
+     each time the resulting RDD is evaluated.
+    <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or 
       average) over each key, using <code>reduceByKey</code> or <code>combineByKey</code> will yield much better 
       performance.

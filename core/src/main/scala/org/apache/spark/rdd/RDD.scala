@@ -593,9 +593,6 @@ abstract class RDD[T: ClassTag](
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   *
-   * The ordering of elements within each partition is not guaranteed, and may even differ
-   * each time the resulting RDD is evaluated.
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -609,9 +606,6 @@ abstract class RDD[T: ClassTag](
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   *
-   * The ordering of elements within each partition is not guaranteed, and may even differ
-   * each time the resulting RDD is evaluated.
    */
   def mapPartitionsWithIndex[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -626,9 +620,6 @@ abstract class RDD[T: ClassTag](
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   *
-   * The ordering of elements within each partition is not guaranteed, and may even differ
-   * each time the resulting RDD is evaluated.
    */
   @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](
@@ -773,9 +764,6 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Applies a function f to each partition of this RDD.
-   *
-   * The ordering of elements within each partition is not guaranteed, and may even differ
-   * each time the resulting RDD is evaluated.
    */
   def foreachPartition(f: Iterator[T] => Unit) {
     val cleanF = sc.clean(f)
@@ -1046,10 +1034,10 @@ abstract class RDD[T: ClassTag](
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    *
-   * The ordering of elements within each partition is not guaranteed, and may even differ
-   * each time the resulting RDD is evaluated. So, the pairing of elements and indices
-   * within the RDD can be observed to change. If it is important to retain the same pairing of
-   * elements to indices, then the resulting RDD should be persisted.
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The index assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
 
@@ -1058,9 +1046,10 @@ abstract class RDD[T: ClassTag](
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    *
-   * As with [[org.apache.spark.rdd.RDD#zipWithIndex]], the unique ID paired to each element
-   * may change each time the RDD is evaluated. If it is important to observe the same unique ID
-   * for each element each time the RDD is evaluated, then the resulting RDD should be persisted.
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
     val n = this.partitions.size.toLong
