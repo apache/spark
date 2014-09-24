@@ -50,7 +50,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     SparkSubmit.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = () => exitedCleanly = true
+    SparkSubmit.exitFn = () => {exitedCleanly = true}
 
     val thread = new Thread {
       override def run() = try {

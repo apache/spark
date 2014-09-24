@@ -117,9 +117,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     SparkSubmit.isPython(primaryResource.get)
 
   var childArgs: m.ArrayBuffer[String] = new m.ArrayBuffer[String]()
-
-  // any child argument detected on command line are stored here.
-  private var cmdLineChildArgs = new m.ArrayBuffer[String]()
   
   /**
    * Used to store parameters parsed from command line (except for --conf and child arguments)
@@ -131,16 +128,22 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     */
   private val cmdLineConfConfig = new m.HashMap[String, String]()
 
+  try
+  {
+    parseOpts(args.toList)
 
-  parseOpts(args.toList)
+    // see comments at start of file detailing the location and priority of configuration sources
+    conf ++= SparkSubmitArguments.mergeSparkProperties(Vector(cmdLineConfig, cmdLineConfConfig))
 
-  // see comments at start of file detailing the location and priority of configuration sources
-  conf ++= SparkSubmitArguments.mergeSparkProperties(Vector(cmdLineConfig, cmdLineConfConfig))
+    // some configuration items can be derived if there are not present
+    deriveConfigurations()
 
-  // some configuration items can be derived if there are not present
-  deriveConfigurations()
+    checkRequiredArguments()
+  } catch {
+    case e: SparkSubmit.ApplicationExitException =>
+      ; // should only get here during test running
+  }
 
-  checkRequiredArguments()
 
   private def deriveConfigurations() = {
 
@@ -226,6 +229,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
     }
+
   }
 
   override def toString =  {
@@ -348,7 +352,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
       case value :: tail =>
         cmdLineConfig.put(SparkAppPrimaryResource, value)
-        cmdLineChildArgs ++= tail
+        childArgs ++= tail
 
       case Nil =>
     }
@@ -459,7 +463,9 @@ object SparkSubmitArguments {
     // support legacy variables
     val environmentConfig = System.getenv().asScala
 
-    val legacyEnvVars = List("MASTER"->SparkMaster, "DEPLOY_MODE"->SparkDeployMode)
+    val legacyEnvVars = List("MASTER"->SparkMaster, "DEPLOY_MODE"->SparkDeployMode,
+      "SPARK_DRIVER_MEMORY"->SparkDriverMemory, "SPARK_EXECUTOR_MEMORY"->SparkExecutorMemory)
+
 
     // legacy variables act at the priority of a system property
     systemPropertyConfig ++ legacyEnvVars
