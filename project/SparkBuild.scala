@@ -147,7 +147,12 @@ object SparkBuild extends PomBuild {
   assemblyProjects.foreach(enable(Assembly.settings))
 
   /* YARN common settings */
-  enable(YARN.settings)(yarn)
+  enable(YARNCommon.settings)(yarn)
+  if (profiles.contains("yarn")) {
+    enable(YARNStable.settings)(yarn)
+  } else if (profiles.contains("yarn-alpha")) {
+    enable(YARNAlpha.settings)(yarn)
+  }
 
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
@@ -173,9 +178,21 @@ object SparkBuild extends PomBuild {
 
 }
 
-object YARN {
+object YARNCommon {
   lazy val settings = Seq(
     scalaSource in Compile := baseDirectory.value / "common/src/main/scala"
+  )
+}
+
+object YARNAlpha {
+  lazy val settings = Seq(
+    unmanagedSourceDirectories in Compile += baseDirectory.value / "alpha/src/main/scala"
+  )
+}
+
+object YARNStable {
+  lazy val settings = Seq(
+    unmanagedSourceDirectories in Compile += baseDirectory.value / "stable/src/main/scala"
   )
 }
 
