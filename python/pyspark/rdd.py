@@ -2025,7 +2025,6 @@ class PipelinedRDD(RDD):
     >>> rdd.flatMap(lambda x: [x, x]).reduce(add)
     20
     """
-    _created_profiles = []
 
     def __init__(self, prev, func, preservesPartitioning=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():

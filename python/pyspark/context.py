@@ -823,7 +823,7 @@ class SparkContext(object):
         """
         if not os.path.exists(path):
             os.makedirs(path)
-        for id, acc, _ in self._created_profiles:
+        for id, acc, _ in self._profile_stats:
             stats = acc.value
             if stats:
                 p = os.path.join(path, "rdd_%d.pstats" % id)
