@@ -100,7 +100,11 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.streaming.kafka.KafkaUtils.createStream"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.streaming.kafka.KafkaReceiver.this")
+              "org.apache.spark.streaming.kafka.KafkaReceiver.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver.this"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver$MessageHandler")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](

@@ -28,6 +28,7 @@ import scala.collection.JavaConverters;
 import junit.framework.Assert;
 
 import kafka.serializer.StringDecoder;
+import kafka.message.MessageAndMetadata;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
@@ -129,6 +130,80 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     Assert.assertEquals(sent.size(), result.size());
     for (String k : sent.keySet()) {
       Assert.assertEquals(sent.get(k).intValue(), result.get(k).intValue());
+    }
+  }
+
+  @Test
+  public void testKafkaStreamMessageHandler() throws InterruptedException {
+    String topic1 = "topic1";
+    String topic2 = "topic2";
+
+    HashMap<String, Integer> topics = new HashMap<String, Integer>();
+    topics.put(topic1, 1);
+    topics.put(topic2, 1);
+    testSuite.createTopic(topic1);
+    testSuite.createTopic(topic2);
+
+    HashMap<String, Integer> sent = new HashMap<String, Integer>();
+    sent.put("a", 5);
+
+    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
+    testSuite.produceAndSendMessage(topic1,
+      JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
+        Predef.<Tuple2<String, Object>>conforms()));
+    testSuite.produceAndSendMessage(topic2,
+      JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
+        Predef.<Tuple2<String, Object>>conforms()));
+
+    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    kafkaParams.put("zookeeper.connect", testSuite.zkConnect());
+    kafkaParams.put("group.id", "test-consumer-" + KafkaTestUtils.random().nextInt(10000));
+    kafkaParams.put("auto.offset.reset", "smallest");
+
+    JavaDStream<String> stream = KafkaUtils.createStream(ssc,
+      String.class,
+      String.class,
+      StringDecoder.class,
+      StringDecoder.class,
+      kafkaParams,
+      topics,
+      new Function<MessageAndMetadata<String, String>, String>() {
+        @Override
+        public String call(MessageAndMetadata<String, String> v1) throws Exception {
+          return v1.topic();
+        }
+      },
+      StorageLevel.MEMORY_ONLY_SER());
+
+    final HashMap<String, Long> result = new HashMap<String, Long>();
+
+    stream.countByValue().foreachRDD(
+      new Function<JavaPairRDD<String, Long>, Void>() {
+        @Override
+        public Void call(JavaPairRDD<String, Long> rdd) throws Exception {
+          List<Tuple2<String, Long>> ret = rdd.collect();
+          for (Tuple2<String, Long> r : ret) {
+            if (result.containsKey(r._1())) {
+              result.put(r._1(), result.get(r._1()) + r._2());
+            } else {
+              result.put(r._1(), r._2());
+            }
+          }
+
+          return null;
+        }
+      }
+    );
+
+    ssc.start();
+    ssc.awaitTermination(3000);
+
+    HashMap<String, Integer> expectedResult = new HashMap<String, Integer>();
+    expectedResult.put(topic1, 5);
+    expectedResult.put(topic2, 5);
+    Assert.assertEquals(expectedResult.size(), result.size());
+    for (String k : expectedResult.keySet()) {
+      Assert.assertEquals(expectedResult.get(k).intValue(), result.get(k).intValue());
     }
   }
 }

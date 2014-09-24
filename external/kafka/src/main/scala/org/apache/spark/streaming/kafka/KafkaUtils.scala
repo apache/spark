@@ -23,12 +23,15 @@ import scala.collection.JavaConversions._
 import java.lang.{Integer => JInt}
 import java.util.{Map => JMap}
 
+import kafka.message.MessageAndMetadata
 import kafka.serializer.{Decoder, StringDecoder}
 
+import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext, JavaPairDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream,
+                                            JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 
 object KafkaUtils {
@@ -71,7 +74,35 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+    def fn = (msgAndMetadata: MessageAndMetadata[K, V]) =>
+      (msgAndMetadata.key, msgAndMetadata.message)
+    createStream[K, V, U, T, (K, V)](ssc, kafkaParams, topics, fn, storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages from a Kafka Broker.
+   * @param ssc         StreamingContext object
+   * @param kafkaParams Map of kafka configuration parameters,
+   *                    see http://kafka.apache.org/08/configuration.html
+   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                    in its own thread.
+   * @param messageHandler Message processing function that gives the each Kafka message
+   *                       `MessageAndMetadata` as input, return object of type R as output.
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createStream[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag,
+    R: ClassTag](
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Map[String, Int],
+      messageHandler: MessageAndMetadata[K, V] => R,
+      storageLevel: StorageLevel
+    ): ReceiverInputDStream[R] = {
+    new KafkaInputDStream[K, V, U, T, R](ssc, kafkaParams, topics, messageHandler, storageLevel)
   }
 
   /**
@@ -144,5 +175,45 @@ object KafkaUtils {
 
     createStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * @param jssc      JavaStreamingContext object
+   * @param keyTypeClass Key type of RDD
+   * @param valueTypeClass value type of RDD
+   * @param keyDecoderClass Type of kafka key decoder
+   * @param valueDecoderClass Type of kafka value decoder
+   * @param kafkaParams Map of kafka configuration parameters,
+   *                    see http://kafka.apache.org/08/configuration.html
+   * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                in its own thread.
+   * @param messageHandler Message processing function that gives the each Kafka message
+   *                       `MessageAndMetadata` as input, return object of type R as output.
+   * @param storageLevel RDD storage level.
+   */
+  def createStream[K, V, U <: Decoder[_], T <: Decoder[_], R](
+      jssc: JavaStreamingContext,
+      keyTypeClass: Class[K],
+      valueTypeClass: Class[V],
+      keyDecoderClass: Class[U],
+      valueDecoderClass: Class[T],
+      kafkaParams: JMap[String, String],
+      topics: JMap[String, JInt],
+      messageHandler: JFunction[MessageAndMetadata[K, V], R],
+      storageLevel: StorageLevel
+    ): JavaReceiverInputDStream[R] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
+    implicit val retCmt: ClassTag[R] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[R]]
+
+    implicit val keyCmd: ClassTag[U] = ClassTag(keyDecoderClass)
+    implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
+
+    def fn = (x: MessageAndMetadata[K, V]) => messageHandler.call(x)
+
+    createStream[K, V, U, T, R](
+      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), fn, storageLevel)
   }
 }
