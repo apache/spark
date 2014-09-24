@@ -323,6 +323,18 @@ class TestAddFile(PySparkTestCase):
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
+    def test_overwrite_system_module(self):
+        self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
+
+        import SimpleHTTPServer
+        self.assertEqual("My Server", SimpleHTTPServer.__name__)
+
+        def func(x):
+            import SimpleHTTPServer
+            return SimpleHTTPServer.__name__
+
+        self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
+
 
 class TestRDDFunctions(PySparkTestCase):
 
