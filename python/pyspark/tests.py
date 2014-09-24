@@ -213,6 +213,24 @@ class SerializationTestCase(unittest.TestCase):
         out2 = ser.loads(ser.dumps(out1))
         self.assertEquals(out1, out2)
 
+    def test_func_globals(self):
+
+        class Unpicklable(object):
+            def __reduce__(self):
+                raise Exception("not picklable")
+
+        global exit
+        exit = Unpicklable()
+
+        ser = CloudPickleSerializer()
+        self.assertRaises(Exception, lambda: ser.dumps(exit))
+
+        def foo():
+            sys.exit(0)
+
+        self.assertTrue("exit" in foo.func_code.co_names)
+        ser.dumps(foo)
+
 
 class PySparkTestCase(unittest.TestCase):
 
