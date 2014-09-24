@@ -49,7 +49,7 @@ by looking for the "Name" tag of the instance in the Amazon EC2 Console.
     1 at first), and `<cluster-name>` is the name to give to your
     cluster.
 
-    For Example:
+    For example:
 
     ```bash
     export AWS_SECRET_ACCESS_KEY=AaBbCcDdEeFGgHhIiJjKkLlMmNnOoPpQqRrSsTtU
