@@ -284,7 +284,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 0)
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(
