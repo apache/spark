@@ -28,7 +28,6 @@ from threading import Thread
 import warnings
 import heapq
 import bisect
-import atexit
 from random import Random
 from math import sqrt, log, isinf, isnan
 
@@ -2088,40 +2087,8 @@ class PipelinedRDD(RDD):
 
         if enable_profile:
             self._id = self._jrdd_val.id()
-            if not self._created_profiles:
-                dump_path = self.ctx._conf.get("spark.python.profile.dump")
-                if dump_path:
-                    atexit.register(PipelinedRDD.dump_profile, dump_path)
-                else:
-                    atexit.register(PipelinedRDD.show_profile)
-            self._created_profiles.append((self._id, profileStats))
-
+            self.ctx._add_profile(self._id, profileStats)
         return self._jrdd_val
-
-    @classmethod
-    def show_profile(cls):
-        """ Print the profile stats to stdout """
-        for id, acc in cls._created_profiles:
-            stats = acc.value
-            if stats:
-                print "=" * 60
-                print "Profile of RDD<id=%d>" % id
-                print "=" * 60
-                stats.sort_stats("tottime", "cumtime").print_stats()
-        cls._created_profiles = []
-
-    @classmethod
-    def dump_profile(cls, dump_path):
-        """ Dump the profile stats into directory `dump_path`
-        """
-        if not os.path.exists(dump_path):
-            os.makedirs(dump_path)
-        for id, acc in cls._created_profiles:
-            stats = acc.value
-            if stats:
-                path = os.path.join(dump_path, "rdd_%d.pstats" % id)
-                stats.dump_stats(path)
-        cls._created_profiles = []
 
     def id(self):
         if self._id is None:

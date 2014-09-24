@@ -616,10 +616,9 @@ class TestProfiler(PySparkTestCase):
             for i in range(1 << 20):
                 x = 1
         rdd = self.sc.parallelize(range(100)).foreach(heavy_foo)
-        from pyspark.rdd import PipelinedRDD
-        profiles = PipelinedRDD._created_profiles
+        profiles = self.sc._profile_stats
         self.assertEqual(1, len(profiles))
-        id, acc = profiles.pop()
+        id, acc, _ = profiles.pop()
         stats = acc.value
         self.assertTrue(stats is not None)
         width, stat_list = stats.get_print_list([])
