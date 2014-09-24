@@ -46,12 +46,14 @@ class Accumulable[R, T] (
     @transient initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    val allowDuplicate: Boolean = true)
+    val allowDuplicate: Boolean)
   extends Serializable {
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T],
-           allowDuplicate: Boolean = true) =
-    this(initialValue, param, None, allowDuplicate)
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+    this(initialValue, param, name, true)
+
+  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
+    this(initialValue, param, None, true)
 
   val id: Long = Accumulators.newId
 
@@ -230,8 +232,12 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @tparam T result type
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T],
-                     name: Option[String], allowDuplicate: Boolean = true)
+                     name: Option[String], allowDuplicate: Boolean)
     extends Accumulable[T,T](initialValue, param, name, allowDuplicate) {
+
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) =
+    this(initialValue, param, None, true)
+
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 
   def this(initialValue: T, param: AccumulatorParam[T], allowDuplicate: Boolean) =
@@ -288,6 +294,14 @@ private object Accumulators {
       ret(id) = accum.localValue
     }
     return ret
+  }
+
+  def add(values: Map[Long, Any]): Unit = synchronized {
+    for ((id, value) <- values) {
+      if (originals.contains(id)) {
+        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
+      }
+    }
   }
 
   // Add values to the original accumulators with some given IDs
