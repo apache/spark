@@ -245,8 +245,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
-  // Add each JAR given through the constructor
-  if (jars != null) {
+  // Add each JAR given through the constructor only if execution is managed by SPARK
+  if (jars != null && !master.startsWith("execution-context:")) {
     jars.foreach(addJar)
   }
 
