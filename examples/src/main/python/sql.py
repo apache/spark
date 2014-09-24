@@ -50,4 +50,3 @@ if __name__ == "__main__":
         print each[0]
 
     sc.stop()
-
