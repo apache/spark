@@ -92,13 +92,13 @@ function post_message () {
     merge_note=" * This patch merges cleanly."
 
     source_files=$(
-        git diff master --name-only \
+        git diff master... --name-only              `# diff patch against master from branch point` \
       | grep -v -e "\/test"                         `# ignore files in test directories` \
       | grep -e "\.py$" -e "\.java$" -e "\.scala$"  `# include only code files` \
       | tr "\n" " "
     )
     new_public_classes=$(
-        git diff master ${source_files}         `# diff this patch against master and...` \
+        git diff master... ${source_files}      `# diff patch against master from branch point` \
       | grep "^\+"                              `# filter in only added lines` \
       | sed -r -e "s/^\+//g"                    `# remove the leading +` \
       | grep -e "trait " -e "class "            `# filter in lines with these key words` \
