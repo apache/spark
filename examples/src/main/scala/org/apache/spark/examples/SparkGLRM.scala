@@ -51,11 +51,11 @@ object SparkGLRM {
   // Number of features
   var rank = 2
   // Number of iterations
-  var ITERATIONS = 2
+  var ITERATIONS = 10
   // Regularization parameter
-  var REG = 100
+  var REG = 10
   // Number of partitions for data
-  var NUMCHUNKS = 2
+  var NUMCHUNKS = 4
 
 
 
