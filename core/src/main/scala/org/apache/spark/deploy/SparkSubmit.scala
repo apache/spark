@@ -54,7 +54,7 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
 
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 1
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -172,7 +172,7 @@ object SparkSubmit {
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -183,6 +183,7 @@ object SparkSubmit {
         sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
+      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
@@ -261,7 +262,7 @@ object SparkSubmit {
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
-    if (clusterManager == YARN && deployMode == CLUSTER) {
+    if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
         childArgs += ("--jar", args.primaryResource)
@@ -279,7 +280,7 @@ object SparkSubmit {
     }
 
     // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
+    for ((k, v) <- args.defaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
