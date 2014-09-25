@@ -69,8 +69,8 @@ private[spark] class FileLogger(
     val conf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val logUri = new URI(logDir)
     val scheme = logUri.getScheme
-    if (scheme == "hdfs") {
-      conf.setBoolean("fs.hdfs.impl.disable.cache", true)
+    if (scheme != null) {
+      conf.setBoolean(s"fs.${scheme}.impl.disable.cache", true)
     }
     FileSystem.get(logUri, conf)
   }
