@@ -87,7 +87,7 @@ if [ "$SPARK_SSH_OPTS" = "" ]; then
 fi
 
 for slave in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
-  if [ "${SPARK_SSH_FOREGROUND}" = "y" ] || [ "${SPARK_SSH_FOREGROUND}" = "yes" ]; then
+  if [ -n "${SPARK_SSH_FOREGROUND}" ]; then
     ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
       2>&1 | sed "s/^/$slave: /"
   else
