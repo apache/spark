@@ -141,7 +141,16 @@ private[tree] object DecisionTreeMetadata {
 
     // Set number of features to use per node (for random forests).
     val _featureSubsetStrategy = featureSubsetStrategy match {
-      case "auto" => if (numTrees == 1) "all" else "sqrt"
+      case "auto" =>
+        if (numTrees == 1) {
+          "all"
+        } else {
+          if (strategy.algo == Classification) {
+            "sqrt"
+          } else {
+            "onethird"
+          }
+        }
       case _ => featureSubsetStrategy
     }
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {

@@ -39,6 +39,15 @@ import org.apache.spark.util.Utils
  * A class which implements a random forest learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  *
+ * The settings for featureSubsetStrategy are based on the following references:
+ *  - log2: tested in Breiman (2001)
+ *  - sqrt: recommended by Breiman manual for random forests
+ *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
+ *    package.
+ * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
+ * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
+ *     random forests]]
+ *
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of algorithm (classification, regression, etc.), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
@@ -47,8 +56,9 @@ import org.apache.spark.util.Utils
  * @param featureSubsetStrategy Number of features to consider for splits at each node.
  *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
  *                              If "auto" is set, this parameter is set based on numTrees:
- *                              if numTrees == 1, then featureSubsetStrategy = "all";
- *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+ *                                if numTrees == 1, set to "all";
+ *                                if numTrees > 1 (forest) set to "sqrt" for classification and
+ *                                  to "onethird" for regression.
  * @param seed  Random seed for bootstrapping and choosing feature subsets.
  */
 @Experimental
@@ -188,8 +198,9 @@ object RandomForest extends Serializable with Logging {
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
-   *                              if numTrees == 1, then featureSubsetStrategy = "all";
-   *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+   *                                if numTrees == 1, set to "all";
+   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
+   *                                  to "onethird" for regression.
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction
    */
@@ -218,8 +229,9 @@ object RandomForest extends Serializable with Logging {
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
-   *                              if numTrees == 1, then featureSubsetStrategy = "all";
-   *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+   *                                if numTrees == 1, set to "all";
+   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
+   *                                  to "onethird" for regression.
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
    * @param maxDepth Maximum depth of the tree.
@@ -274,8 +286,9 @@ object RandomForest extends Serializable with Logging {
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
-   *                              if numTrees == 1, then featureSubsetStrategy = "all";
-   *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+   *                                if numTrees == 1, set to "all";
+   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
+   *                                  to "onethird" for regression.
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return RandomForestModel that can be used for prediction
    */
@@ -303,8 +316,9 @@ object RandomForest extends Serializable with Logging {
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
-   *                              if numTrees == 1, then featureSubsetStrategy = "all";
-   *                              if numTrees > 1, then featureSubsetStrategy = "sqrt".
+   *                                if numTrees == 1, set to "all";
+   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
+   *                                  to "onethird" for regression.
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "variance".
    * @param maxDepth Maximum depth of the tree.
