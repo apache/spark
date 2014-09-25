@@ -75,6 +75,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
+  sparkContext.getConf.getAll.foreach {
+    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
+    case _ =>
+  }
+
   /**
    * :: DeveloperApi ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
@@ -246,7 +251,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.queryExecution.analyzed)
+    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
   }
 
   /**

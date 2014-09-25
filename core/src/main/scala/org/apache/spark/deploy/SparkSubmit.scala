@@ -280,7 +280,7 @@ object SparkSubmit {
     }
 
     // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
+    for ((k, v) <- args.defaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
