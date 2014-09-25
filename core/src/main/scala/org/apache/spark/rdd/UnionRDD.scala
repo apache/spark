@@ -62,7 +62,16 @@ class UnionRDD[T: ClassTag](
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
-    val array = new Array[Partition](rdds.map(_.partitions.size).sum)
+    val arraySize = {
+      var i = 0
+      var sum = 0
+      while(i < rdds.size) {
+        sum += rdds(i).partitions.size
+        i += 1
+      }
+      sum
+    }
+    val array = new Array[Partition](arraySize)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
