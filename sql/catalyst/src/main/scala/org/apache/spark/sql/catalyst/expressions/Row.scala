@@ -64,6 +64,7 @@ trait Row extends Seq[Any] with Serializable {
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
   def getString(i: Int): String
+  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
   override def toString() =
     s"[${this.mkString(",")}]"
@@ -98,6 +99,7 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  def setAs[T](ordinal: Int, value: T) = update(ordinal, value)
 }
 
 /**
@@ -118,6 +120,7 @@ object EmptyRow extends Row {
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
+  override def getAs[T](i: Int): T = throw new UnsupportedOperationException
 
   def copy() = this
 }
@@ -181,6 +184,11 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  override def getAs[T](i: Int): T = {
+    if (values(i) == null) sys.error("Failed to check null bit for generic value.")
+    values(i).asInstanceOf[T]
+  }
+
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
@@ -217,19 +225,20 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   /** No-arg constructor for serialization. */
   def this() = this(0)
 
-  override def setBoolean(ordinal: Int,value: Boolean): Unit = { values(ordinal) = value }
-  override def setByte(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
-  override def setDouble(ordinal: Int,value: Double): Unit = { values(ordinal) = value }
-  override def setFloat(ordinal: Int,value: Float): Unit = { values(ordinal) = value }
-  override def setInt(ordinal: Int,value: Int): Unit = { values(ordinal) = value }
-  override def setLong(ordinal: Int,value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int,value: String): Unit = { values(ordinal) = value }
+  override def setBoolean(ordinal: Int, value: Boolean): Unit = { values(ordinal) = value }
+  override def setByte(ordinal: Int, value: Byte): Unit = { values(ordinal) = value }
+  override def setDouble(ordinal: Int, value: Double): Unit = { values(ordinal) = value }
+  override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
+  override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
+  override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
+  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
+  override def setAs[T](ordinal: Int, value: T): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
-  override def setShort(ordinal: Int,value: Short): Unit = { values(ordinal) = value }
+  override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
 
-  override def update(ordinal: Int,value: Any): Unit = { values(ordinal) = value }
+  override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
   override def copy() = new GenericRow(values.clone())
 }
