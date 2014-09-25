@@ -21,23 +21,24 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.1.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume-sink_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming-flume-sink</sbt.project.name>
   </properties>
-
   <packaging>jar</packaging>
   <name>Spark Project External Flume Sink</name>
   <url>http://spark.apache.org/</url>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-sdk</artifactId>
-      <version>1.4.0</version>
+      <version>${flume.version}</version>
       <exclusions>
         <exclusion>
           <groupId>io.netty</groupId>
@@ -52,7 +53,7 @@
     <dependency>
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-core</artifactId>
-      <version>1.4.0</version>
+      <version>${flume.version}</version>
       <exclusions>
         <exclusion>
           <groupId>io.netty</groupId>
@@ -65,12 +66,25 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <!--
+        Netty explicitly added in test as it has been excluded from
+        Flume dependency (to avoid runtime problems when running with
+        Spark) but unit tests need it. Version of Netty on which
+        Flume 1.4.0 depends on is "3.4.0.Final" .
+      -->
+      <groupId>io.netty</groupId>
+      <artifactId>netty</artifactId>
+      <version>3.4.0.Final</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
@@ -84,7 +98,7 @@
       <plugin>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-maven-plugin</artifactId>
-        <version>1.7.3</version>
+        <version>${avro.version}</version>
         <configuration>
           <!-- Generate the output in the same directory as the sbt-avro-plugin -->
           <outputDirectory>${project.basedir}/target/scala-${scala.binary.version}/src_managed/main/compiled_avro</outputDirectory>

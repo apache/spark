@@ -22,9 +22,9 @@ import java.util.Random
 import scala.math.exp
 
 import breeze.linalg.{Vector, DenseVector}
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -52,8 +52,8 @@ object SparkTachyonHdfsLR {
 
   def main(args: Array[String]) {
     val inputPath = args(0)
-    val conf = SparkHadoopUtil.get.newConfiguration()
     val sparkConf = new SparkConf().setAppName("SparkTachyonHdfsLR")
+    val conf = new Configuration()
     val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))

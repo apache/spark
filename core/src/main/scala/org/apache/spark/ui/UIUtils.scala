@@ -163,17 +163,15 @@ private[spark] object UIUtils extends Logging {
 
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
-      content: => Seq[Node],
-      basePath: String,
-      appName: String,
       title: String,
-      tabs: Seq[WebUITab],
-      activeTab: WebUITab,
+      content: => Seq[Node],
+      activeTab: SparkUITab,
       refreshInterval: Option[Int] = None): Seq[Node] = {
 
-    val header = tabs.map { tab =>
+    val appName = activeTab.appName
+    val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(basePath, "/" + tab.prefix)}>{tab.name}</a>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
       </li>
     }
 
@@ -234,7 +232,7 @@ private[spark] object UIUtils extends Logging {
   def listingTable[T](
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
-      data: Seq[T],
+      data: Iterable[T],
       fixedWidth: Boolean = false): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS

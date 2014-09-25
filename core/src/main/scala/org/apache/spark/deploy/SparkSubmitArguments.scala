@@ -57,12 +57,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
-  parseOpts(args.toList)
-  mergeSparkProperties()
-  checkRequiredArguments()
-
-  /** Return default present in the currently defined defaults file. */
-  def getDefaultSparkProperties = {
+  /** Default properties present in the currently defined defaults file. */
+  lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
@@ -78,6 +74,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
     defaultProperties
   }
+
+  // Respect SPARK_*_MEMORY for cluster mode
+  driverMemory = sys.env.get("SPARK_DRIVER_MEMORY").orNull
+  executorMemory = sys.env.get("SPARK_EXECUTOR_MEMORY").orNull
+
+  parseOpts(args.toList)
+  mergeSparkProperties()
+  checkRequiredArguments()
 
   /**
    * Fill in any undefined values based on the default properties file or options passed in through
@@ -107,7 +111,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       }
     }
 
-    val properties = getDefaultSparkProperties
+    val properties = HashMap[String, String]()
+    properties.putAll(defaultSparkProperties)
     properties.putAll(sparkProperties)
 
     // Use properties file as fallback for values which have a direct analog to
@@ -213,17 +218,21 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  verbose                 $verbose
     |
     |Default properties from $propertiesFile:
-    |${getDefaultSparkProperties.mkString("  ", "\n  ", "\n")}
+    |${defaultSparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    var inSparkOpts = true
+    val EQ_SEPARATED_OPT="""(--[^=]+)=(.+)""".r
 
     // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
 
+    /**
+     * NOTE: If you add or remove spark-submit options,
+     * modify NOT ONLY this file but also utils.sh
+     */
     def parse(opts: Seq[String]): Unit = opts match {
       case ("--name") :: value :: tail =>
         name = value
@@ -322,33 +331,21 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         verbose = true
         parse(tail)
 
+      case EQ_SEPARATED_OPT(opt, value) :: tail =>
+        parse(opt :: value :: tail)
+
+      case value :: tail if value.startsWith("-") =>
+        SparkSubmit.printErrorAndExit(s"Unrecognized option '$value'.")
+
       case value :: tail =>
-        if (inSparkOpts) {
-          value match {
-            // convert --foo=bar to --foo bar
-            case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
-              val parts = v.split("=")
-              parse(Seq(parts(0), parts(1)) ++ tail)
-            case v if v.startsWith("-") =>
-              val errMessage = s"Unrecognized option '$value'."
-              SparkSubmit.printErrorAndExit(errMessage)
-            case v =>
-              primaryResource =
-                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
-                  Utils.resolveURI(v).toString
-                } else {
-                  v
-                }
-              inSparkOpts = false
-              isPython = SparkSubmit.isPython(v)
-              parse(tail)
+        primaryResource =
+          if (!SparkSubmit.isShell(value) && !SparkSubmit.isInternal(value)) {
+            Utils.resolveURI(value).toString
+          } else {
+            value
           }
-        } else {
-          if (!value.isEmpty) {
-            childArgs += value
-          }
-          parse(tail)
-        }
+        isPython = SparkSubmit.isPython(value)
+        childArgs ++= tail
 
       case Nil =>
     }

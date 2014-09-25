@@ -35,10 +35,9 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
+import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.ui.StreamingTab
-import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -98,8 +97,14 @@ class StreamingContext private[streaming] (
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
    */
-  def this(path: String, hadoopConf: Configuration = new Configuration) =
+  def this(path: String, hadoopConf: Configuration) =
     this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+
+  /**
+   * Recreate a StreamingContext from a checkpoint file.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   */
+  def this(path: String) = this(path, new Configuration)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
@@ -152,7 +157,14 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
-  private[streaming] val uiTab = new StreamingTab(this)
+  private[streaming] val progressListener = new StreamingJobProgressListener(this)
+
+  private[streaming] val uiTab: Option[StreamingTab] =
+    if (conf.getBoolean("spark.ui.enabled", true)) {
+      Some(new StreamingTab(this))
+    } else {
+      None
+    }
 
   /** Register streaming source to metrics system */
   private val streamingSource = new StreamingSource(this)
@@ -234,7 +246,7 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel RDD storage level (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    *
    * @note An important point to note:
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
@@ -435,6 +447,7 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
+    sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
     state = Started
   }

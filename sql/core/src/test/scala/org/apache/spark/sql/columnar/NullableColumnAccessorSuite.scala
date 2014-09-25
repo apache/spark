@@ -45,7 +45,9 @@ class NullableColumnAccessorSuite extends FunSuite {
     testNullableColumnAccessor(_)
   }
 
-  def testNullableColumnAccessor[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
+  def testNullableColumnAccessor[T <: DataType, JvmType](
+      columnType: ColumnType[T, JvmType]): Unit = {
+
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
     val nullRow = makeNullRow(1)
 

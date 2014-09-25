@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -42,21 +44,14 @@ private[hive] abstract class HiveFunctionRegistry
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
     // not always serializable.
-    val functionInfo: FunctionInfo = Option(FunctionRegistry.getFunctionInfo(name)).getOrElse(
-      sys.error(s"Couldn't find function $name"))
+    val functionInfo: FunctionInfo =
+      Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+        sys.error(s"Couldn't find function $name"))
 
-    val functionClassName = functionInfo.getFunctionClass.getName()
+    val functionClassName = functionInfo.getFunctionClass.getName
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      val function = functionInfo.getFunctionClass.newInstance().asInstanceOf[UDF]
-      val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
-
-      lazy val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
-
-      HiveSimpleUdf(
-        functionClassName,
-        children.zip(expectedDataTypes).map { case (e, t) => Cast(e, t) }
-      )
+      HiveSimpleUdf(functionClassName, children)
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(functionClassName, children)
     } else if (
@@ -85,7 +80,6 @@ private[hive] abstract class HiveUdf extends Expression with Logging with HiveFu
   type EvaluatedType = Any
 
   def nullable = true
-  def references = children.flatMap(_.references).toSet
 
   lazy val function = createFunction[UDFType]()
 
@@ -102,48 +96,21 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
     function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
 
   @transient
+  protected lazy val arguments = children.map(c => toInspector(c.dataType)).toArray
+
+  // Create parameter converters
+  @transient
+  protected lazy val conversionHelper = new ConversionHelper(method, arguments)
+
+  @transient
   lazy val dataType = javaClassToDataType(method.getReturnType)
-
-  protected lazy val wrappers: Array[(Any) => AnyRef] = method.getParameterTypes.map { argClass =>
-    val primitiveClasses = Seq(
-      Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
-      classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
-      classOf[java.sql.Timestamp]
-    )
-    val matchingConstructor = argClass.getConstructors.find { c =>
-      c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
-    }
-
-    val constructor = matchingConstructor.getOrElse(
-      sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
-
-    (a: Any) => {
-      logDebug(
-        s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
-      // We must make sure that primitives get boxed java style.
-      if (a == null) {
-        null
-      } else {
-        constructor.newInstance(a match {
-          case i: Int => i: java.lang.Integer
-          case bd: BigDecimal => new HiveDecimal(bd.underlying())
-          case other: AnyRef => other
-        }).asInstanceOf[AnyRef]
-      }
-    }
-  }
 
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
-    val evaluatedChildren = children.map(_.eval(input))
-    // Wrap the function arguments in the expected types.
-    val args = evaluatedChildren.zip(wrappers).map {
-      case (arg, wrapper) => wrapper(arg)
-    }
+    val evaluatedChildren = children.map(c => wrap(c.eval(input)))
 
-    // Invoke the udf and unwrap the result.
-    unwrap(method.invoke(function, args: _*))
+    unwrap(FunctionRegistry.invoke(method, function, conversionHelper
+      .convertIfNecessary(evaluatedChildren: _*): _*))
   }
 }
 
@@ -222,8 +189,6 @@ private[hive] case class HiveGenericUdaf(
 
   def nullable: Boolean = true
 
-  def references: Set[Attribute] = children.map(_.references).flatten.toSet
-
   override def toString = s"$nodeName#$functionClassName(${children.mkString(",")})"
 
   def newInstance() = new HiveUdafFunction(functionClassName, children, this)
@@ -245,8 +210,6 @@ private[hive] case class HiveGenericUdtf(
     aliasNames: Seq[String],
     children: Seq[Expression])
   extends Generator with HiveInspectors with HiveFunctionFactory {
-
-  override def references = children.flatMap(_.references).toSet
 
   @transient
   protected lazy val function: GenericUDTF = createFunction()

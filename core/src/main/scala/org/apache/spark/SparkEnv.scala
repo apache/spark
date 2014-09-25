@@ -22,7 +22,6 @@ import java.net.Socket
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-import scala.concurrent.Await
 import scala.util.Properties
 
 import akka.actor._
@@ -32,10 +31,11 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.ConnectionManager
+import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -60,17 +60,14 @@ class SparkEnv (
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
+    val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
-    val connectionManager: ConnectionManager,
     val securityManager: SecurityManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
+    val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
-
-  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
-  // All accesses should be manually synchronized
-  val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -92,6 +89,8 @@ class SparkEnv (
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
     // actorSystem.awaitTermination()
+
+    // Note that blockTransferService is stopped by BlockManager since it is started by it.
   }
 
   private[spark]
@@ -109,11 +108,22 @@ class SparkEnv (
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
+
+  private[spark]
+  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+    synchronized {
+      val key = (pythonExec, envVars)
+      pythonWorkers.get(key).foreach(_.releaseWorker(worker))
+    }
+  }
 }
 
 object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
   @volatile private var lastSetSparkEnv : SparkEnv = _
+
+  private[spark] val driverActorSystemName = "sparkDriver"
+  private[spark] val executorActorSystemName = "sparkExecutor"
 
   def set(e: SparkEnv) {
     lastSetSparkEnv = e
@@ -150,21 +160,19 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
+    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+      actorSystemName, hostname, port, conf, securityManager)
 
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
-      securityManager = securityManager)
-
-    // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
-    // figure out which port number Akka actually bound to and set spark.driver.port to it.
-    if (isDriver && port == 0) {
-      conf.set("spark.driver.port",  boundPort.toString)
+    // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // This is so that we tell the executors the correct port to connect to.
+    if (isDriver) {
+      conf.set("spark.driver.port", boundPort.toString)
     }
 
-    // Create an instance of the class named by the given Java system property, or by
-    // defaultClassName if the property is not set, and return it as a T
-    def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
-      val name = conf.get(propertyName,  defaultClassName)
-      val cls = Class.forName(name, true, Utils.getContextOrSparkClassLoader)
+    // Create an instance of the class with the given name, possibly initializing it with our conf
+    def instantiateClass[T](className: String): T = {
+      val cls = Class.forName(className, true, Utils.getContextOrSparkClassLoader)
       // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
       // SparkConf, then one taking no arguments
       try {
@@ -182,11 +190,17 @@ object SparkEnv extends Logging {
       }
     }
 
-    val serializer = instantiateClass[Serializer](
+    // Create an instance of the class named by the given SparkConf property, or defaultClassName
+    // if the property is not set, possibly initializing it with our conf
+    def instantiateClassFromConf[T](propertyName: String, defaultClassName: String): T = {
+      instantiateClass[T](conf.get(propertyName, defaultClassName))
+    }
+
+    val serializer = instantiateClassFromConf[Serializer](
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
-    val closureSerializer = instantiateClass[Serializer](
+    val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
@@ -210,14 +224,24 @@ object SparkEnv extends Logging {
       "MapOutputTracker",
       new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
+    // Let the user specify short names for shuffle managers
+    val shortShuffleMgrNames = Map(
+      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
+      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
+    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
+    val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
+    val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
+
+    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+
+    val blockTransferService = new NioBlockTransferService(conf, securityManager)
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager, mapOutputTracker)
-
-    val connectionManager = blockManager.connectionManager
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
@@ -225,7 +249,8 @@ object SparkEnv extends Logging {
 
     val httpFileServer =
       if (isDriver) {
-        val server = new HttpFileServer(securityManager)
+        val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+        val server = new HttpFileServer(securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -249,9 +274,6 @@ object SparkEnv extends Logging {
       "."
     }
 
-    val shuffleManager = instantiateClass[ShuffleManager](
-      "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
-
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -267,12 +289,13 @@ object SparkEnv extends Logging {
       mapOutputTracker,
       shuffleManager,
       broadcastManager,
+      blockTransferService,
       blockManager,
-      connectionManager,
       securityManager,
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
+      shuffleMemoryManager,
       conf)
   }
 

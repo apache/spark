@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -68,10 +67,10 @@ trait ExecutorRunnableUtil extends Logging {
     // authentication settings.
     sparkConf.getAll.
       filter { case (k, v) => k.startsWith("spark.auth") || k.startsWith("spark.akka") }.
-      foreach { case (k, v) => javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\"" }
+      foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
     sparkConf.getAkkaConf.
-      foreach { case (k, v) => javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\"" }
+      foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -97,6 +96,9 @@ trait ExecutorRunnableUtil extends Logging {
           javaOpts += " -XX:CMSIncrementalDutyCycle=10 "
         }
     */
+
+    // For log4j configuration to reference
+    javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
@@ -125,9 +127,9 @@ trait ExecutorRunnableUtil extends Logging {
       localResources: HashMap[String, LocalResource],
       timestamp: String,
       size: String,
-      vis: String) = {
+      vis: String): Unit = {
     val uri = new URI(file)
-    val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
+    val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(rtype)
     amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
     amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
@@ -171,11 +173,18 @@ trait ExecutorRunnableUtil extends Logging {
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
     ClientBase.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
 
-    // Allow users to specify some environment variables
-    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
-      File.pathSeparator)
+    sparkConf.getExecutorEnv.foreach { case (key, value) =>
+      // This assumes each executor environment variable set here is a path
+      // This is kept for backward compatibility and consistency with hadoop
+      YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
+    }
 
-    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
+    // Keep this for backwards compatibility but users should move to the config
+    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
+      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
+    }
+
+    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
     env
   }
 

@@ -12,14 +12,16 @@ on the [Amazon Web Services site](http://aws.amazon.com/).
 
 `spark-ec2` is designed to manage multiple named clusters. You can
 launch a new cluster (telling the script its size and giving it a name),
-shutdown an existing cluster, or log into a cluster. Each cluster is
-identified by placing its machines into EC2 security groups whose names
-are derived from the name of the cluster. For example, a cluster named
+shutdown an existing cluster, or log into a cluster. Each cluster
+launches a set of instances, which are tagged with the cluster name,
+and placed into EC2 security groups.  If you don't specify a security
+group, the `spark-ec2` script will create security groups based on the
+cluster name you request. For example, a cluster named
 `test` will contain a master node in a security group called
 `test-master`, and a number of slave nodes in a security group called
-`test-slaves`. The `spark-ec2` script will create these security groups
-for you based on the cluster name you request. You can also use them to
-identify machines belonging to each cluster in the Amazon EC2 Console.
+`test-slaves`.  You can also specify a security group prefix to be used
+in place of the cluster name.  Machines in a cluster can be identified
+by looking for the "Name" tag of the instance in the Amazon EC2 Console.
 
 
 # Before You Start
@@ -154,6 +156,6 @@ If you have a patch or suggestion for one of these limitations, feel free to
 
 # Accessing Data in S3
 
-Spark's file interface allows it to process data in Amazon S3 using the same URI formats that are supported for Hadoop. You can specify a path in S3 as input through a URI of the form `s3n://<bucket>/path`. You will also need to set your Amazon security credentials, either by setting the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` before your program or through `SparkContext.hadoopConfiguration`. Full instructions on S3 access using the Hadoop input libraries can be found on the [Hadoop S3 page](http://wiki.apache.org/hadoop/AmazonS3).
+Spark's file interface allows it to process data in Amazon S3 using the same URI formats that are supported for Hadoop. You can specify a path in S3 as input through a URI of the form `s3n://<bucket>/path`. To provide AWS credentials for S3 access, launch the Spark cluster with the option `--copy-aws-credentials`. Full instructions on S3 access using the Hadoop input libraries can be found on the [Hadoop S3 page](http://wiki.apache.org/hadoop/AmazonS3).
 
 In addition to using a single input file, you can also use a directory of files as input by simply giving the path to the directory.

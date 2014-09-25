@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.util.Random
+import java.util.{Properties, Random}
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
@@ -41,7 +41,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils, CallSite}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -993,7 +993,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = {
-    require(p >= 4, s"p ($p) must be greater than 0")
+    require(p >= 4, s"p ($p) must be at least 4")
     require(sp <= 32, s"sp ($sp) cannot be greater than 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
@@ -1004,7 +1004,7 @@ abstract class RDD[T: ClassTag](
       },
       (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
         h1.addAll(h2)
-        h2
+        h1
       }).cardinality()
   }
 
@@ -1064,11 +1064,10 @@ abstract class RDD[T: ClassTag](
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
       if (partsScanned > 0) {
-        // If we didn't find any rows after the first iteration, just try all partitions next.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-        // by 50%.
+        // If we didn't find any rows after the previous iteration, quadruple and retry.  Otherwise,
+        // interpolate the number of partitions we need to try, but overestimate it by 50%.
         if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
+          numPartsToTry = partsScanned * 4
         } else {
           numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
         }
@@ -1128,15 +1127,19 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
-    mapPartitions { items =>
-      // Priority keeps the largest elements, so let's reverse the ordering.
-      val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
-      Iterator.single(queue)
-    }.reduce { (queue1, queue2) =>
-      queue1 ++= queue2
-      queue1
-    }.toArray.sorted(ord)
+    if (num == 0) {
+      Array.empty
+    } else {
+      mapPartitions { items =>
+        // Priority keeps the largest elements, so let's reverse the ordering.
+        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+        queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
+        Iterator.single(queue)
+      }.reduce { (queue1, queue2) =>
+        queue1 ++= queue2
+        queue1
+      }.toArray.sorted(ord)
+    }
   }
 
   /**
@@ -1221,7 +1224,8 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSite = Utils.getCallSite
+  @transient private[spark] val creationSite = sc.getCallSite()
+
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
@@ -1231,6 +1235,11 @@ abstract class RDD[T: ClassTag](
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
+  }
+
+  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] */
+  protected[spark] def parent[U: ClassTag](j: Int) = {
+    dependencies(j).rdd.asInstanceOf[RDD[U]]
   }
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
@@ -1294,6 +1303,19 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
+    // Get a debug description of an rdd without its children
+    def debugSelf (rdd: RDD[_]): Seq[String] = {
+      import Utils.bytesToString
+
+      val persistence = storageLevel.description
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize),
+          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+
+      s"$rdd [$persistence]" +: storageInfo
+    }
+
     // Apply a different rule to the last child
     def debugChildren(rdd: RDD[_], prefix: String): Seq[String] = {
       val len = rdd.dependencies.length
@@ -1319,7 +1341,11 @@ abstract class RDD[T: ClassTag](
       val partitionStr = "(" + rdd.partitions.size + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
-      Seq(partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix $desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.size + ")"
@@ -1329,7 +1355,11 @@ abstract class RDD[T: ClassTag](
         thisPrefix
         + (if (isLastChild) "  " else "| ")
         + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
-      Seq(thisPrefix + "+-" + partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix$desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def debugString(rdd: RDD[_],
                     prefix: String = "",
@@ -1337,9 +1367,8 @@ abstract class RDD[T: ClassTag](
                     isLastChild: Boolean = false): Seq[String] = {
       if (isShuffle) {
         shuffleDebugString(rdd, prefix, isLastChild)
-      }
-      else {
-        Seq(prefix + rdd) ++ debugChildren(rdd, prefix)
+      } else {
+        debugSelf(rdd).map(prefix + _) ++ debugChildren(rdd, prefix)
       }
     }
     firstDebugString(this).mkString("\n")

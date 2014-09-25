@@ -59,10 +59,11 @@ abstract class Attribute extends NamedExpression {
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
+  def withName(newName: String): Attribute
 
   def toAttribute = this
   def newInstance: Attribute
-  override def references = Set(this)
+
 }
 
 /**
@@ -85,7 +86,6 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-  override def references = child.references
 
   override def toAttribute = {
     if (resolved) {
@@ -116,6 +116,8 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends Attribute with trees.LeafNode[Expression] {
 
+  override def references = AttributeSet(this :: Nil)
+
   override def equals(other: Any) = other match {
     case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
     case _ => false
@@ -139,6 +141,14 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
       this
     } else {
       AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+    }
+  }
+
+  override def withName(newName: String): AttributeReference = {
+    if (name == newName) {
+      this
+    } else {
+      AttributeReference(newName, dataType, nullable)(exprId, qualifiers)
     }
   }
 

@@ -17,14 +17,59 @@
 
 package org.apache.spark.sql.hive
 
+import org.scalatest.BeforeAndAfterAll
+
 import scala.reflect.ClassTag
 
+
 import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
-class StatisticsSuite extends QueryTest {
+class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
+  TestHive.reset()
+  TestHive.cacheTables = false
+
+  test("parse analyze commands") {
+    def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
+      val parsed = HiveQl.parseSql(analyzeCommand)
+      val operators = parsed.collect {
+        case a: AnalyzeTable => a
+        case o => o
+      }
+
+      assert(operators.size === 1)
+      if (operators(0).getClass() != c) {
+        fail(
+          s"""$analyzeCommand expected command: $c, but got ${operators(0)}
+             |parsed command:
+             |$parsed
+           """.stripMargin)
+      }
+    }
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
+      classOf[AnalyzeTable])
+  }
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
@@ -37,7 +82,7 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
 
-    analyze("analyzeTable")
+    sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
@@ -66,7 +111,7 @@ class StatisticsSuite extends QueryTest {
 
     assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
 
-    analyze("analyzeTable_part")
+    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
@@ -85,7 +130,7 @@ class StatisticsSuite extends QueryTest {
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
-    assert(sizes.size === 1)
+    assert(sizes.size === 1, s"Size wrong for:\n ${rdd.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
       s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
   }
@@ -105,7 +150,8 @@ class StatisticsSuite extends QueryTest {
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
+      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold
+        && sizes(1) <= autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be

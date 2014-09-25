@@ -303,6 +303,21 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
 
+  test("fullOuterJoin") {
+    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val outputData = Seq(
+      Seq( ("a", (Some(1), Some("x"))), ("b", (Some(1), Some("x"))) ),
+      Seq( ("", (Some(1), Some("x"))), ("a", (Some(1), None)), ("b", (None, Some("x"))) ),
+      Seq( ("", (Some(1), None)) ),
+      Seq( ("", (None, Some("x"))) )
+    )
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.map(x => (x, 1)).fullOuterJoin(s2.map(x => (x, "x")))
+    }
+    testOperation(inputData1, inputData2, operation, outputData, true)
+  }
+
   test("updateStateByKey") {
     val inputData =
       Seq(
@@ -452,7 +467,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("rdd cleanup - updateStateByKey") {
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-      Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+      Some(values.sum + state.getOrElse(0))
     }
     val stateStream = runCleanupTest(
       conf, _.map(_ -> 1).updateStateByKey(updateFunc).checkpoint(Seconds(3)))

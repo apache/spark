@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
@@ -39,6 +37,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.util.Utils
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -55,8 +54,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+    val (databaseName, tblName) = processDatabaseAndTableName(
+                                    db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
@@ -110,18 +109,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(db, tableName, child) =>
+      // Wait until children are resolved.
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case CreateTableAsSelect(db, tableName, child) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
-
-        InsertIntoTable(
-          EliminateAnalysisOperators(
-            lookupRelation(Some(databaseName), tblName, None)),
-          Map.empty,
-          child,
-          overwrite = false)
+        CreateTableAsSelect(Some(databaseName), tableName, child)
     }
   }
 
@@ -131,15 +126,15 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object PreInsertionCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved
+      // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(
-                 InMemoryRelation(_, _,
-                   HiveTableScan(_, table, _)), _, child, _) =>
+                   InMemoryRelation(_, _, _,
+                     HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -266,9 +261,9 @@ private[hive] case class MetastoreRelation
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
 
-  @transient lazy val hiveQlTable = new Table(table)
+  @transient val hiveQlTable = new Table(table)
 
-  def hiveQlPartitions = partitions.map { p =>
+  @transient val hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
 
@@ -288,7 +283,10 @@ private[hive] case class MetastoreRelation
   )
 
   val tableDesc = new TableDesc(
-    Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
+    Class.forName(
+      hiveQlTable.getSerializationLib,
+      true,
+      Utils.getContextOrSparkClassLoader).asInstanceOf[Class[Deserializer]],
     hiveQlTable.getInputFormatClass,
     // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
     // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to

@@ -17,9 +17,13 @@
 
 """
 Decision tree classification and regression using MLlib.
+
+This example requires NumPy (http://www.numpy.org/).
 """
 
-import numpy, os, sys
+import numpy
+import os
+import sys
 
 from operator import add
 
@@ -117,6 +121,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         dataPath = sys.argv[1]
     if not os.path.isfile(dataPath):
+        sc.stop()
         usage()
     points = MLUtils.loadLibSVMFile(sc, dataPath)
 
@@ -124,10 +129,14 @@ if __name__ == "__main__":
     (reindexedData, origToNewLabels) = reindexClassLabels(points)
 
     # Train a classifier.
-    model = DecisionTree.trainClassifier(reindexedData, numClasses=2)
+    categoricalFeaturesInfo = {}  # no categorical features
+    model = DecisionTree.trainClassifier(reindexedData, numClasses=2,
+                                         categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"
     print "  Model numNodes: %d\n" % model.numNodes()
     print "  Model depth: %d\n" % model.depth()
     print "  Training accuracy: %g\n" % getAccuracy(model, reindexedData)
     print model
+
+    sc.stop()

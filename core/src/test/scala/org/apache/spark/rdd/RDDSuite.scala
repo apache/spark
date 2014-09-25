@@ -81,11 +81,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
 
-    val size = 100
-    val uniformDistro = for (i <- 1 to 100000) yield i % size
-    val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
-    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
+    val size = 1000
+    val uniformDistro = for (i <- 1 to 5000) yield i % size
+    val simpleRdd = sc.makeRDD(uniformDistro, 10)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.2)
+    assert(error(simpleRdd.countApproxDistinct(12, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -193,6 +193,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.join(emptyKv).collect().size === 0)
     assert(rdd.rightOuterJoin(emptyKv).collect().size === 0)
     assert(rdd.leftOuterJoin(emptyKv).collect().size === 2)
+    assert(rdd.fullOuterJoin(emptyKv).collect().size === 2)
     assert(rdd.cogroup(emptyKv).collect().size === 2)
     assert(rdd.union(emptyKv).collect().size === 2)
   }
@@ -521,6 +522,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedLowerK === Array(1, 2, 3, 4, 5))
   }
 
+  test("takeOrdered with limit 0") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedLowerK = rdd.takeOrdered(0)
+    assert(sortedLowerK.size === 0)
+  }
+
   test("takeOrdered with custom ordering") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     implicit val ord = implicitly[Ordering[Int]].reverse
@@ -675,6 +683,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
   }
 
+  test("repartitionAndSortWithinPartitions") {
+    val data = sc.parallelize(Seq((0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)), 2)
+
+    val partitioner = new Partitioner {
+      def numPartitions: Int = 2
+      def getPartition(key: Any): Int = key.asInstanceOf[Int] % 2
+    }
+
+    val repartitioned = data.repartitionAndSortWithinPartitions(partitioner)
+    val partitions = repartitioned.glom().collect()
+    assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
+    assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
@@ -724,6 +746,16 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val jsc: JavaSparkContext = new JavaSparkContext(sc)
     val jrdd: JavaRDD[String] = jsc.parallelize(Seq("A", "B", "C").asJava)
     jrdd.rdd.retag.collect()
+  }
+
+  test("parent method") {
+    val rdd1 = sc.parallelize(1 to 10, 2)
+    val rdd2 = rdd1.filter(_ % 2 == 0)
+    val rdd3 = rdd2.map(_ + 1)
+    val rdd4 = new UnionRDD(sc, List(rdd1, rdd2, rdd3))
+    assert(rdd4.parent(0).isInstanceOf[ParallelCollectionRDD[_]])
+    assert(rdd4.parent(1).isInstanceOf[FilteredRDD[_]])
+    assert(rdd4.parent(2).isInstanceOf[MappedRDD[_, _]])
   }
 
   test("getNarrowAncestors") {

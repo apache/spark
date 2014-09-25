@@ -106,6 +106,18 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
+  test("handles arguments to user program with name collision") {
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "userjar.jar",
+      "--master", "local",
+      "some",
+      "--weird", "args")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.childArgs should be (Seq("--master", "local", "some", "--weird", "args"))
+  }
+
   test("handles YARN cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
@@ -142,6 +154,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {
@@ -305,6 +318,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
 
 object JarCreationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
@@ -326,6 +340,7 @@ object JarCreationTest {
 
 object SimpleApplicationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val configs = Seq("spark.master", "spark.app.name")

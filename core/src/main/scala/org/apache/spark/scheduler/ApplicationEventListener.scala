@@ -24,38 +24,31 @@ package org.apache.spark.scheduler
  * from multiple applications are seen, the behavior is unspecified.
  */
 private[spark] class ApplicationEventListener extends SparkListener {
-  var appName = "<Not Started>"
-  var sparkUser = "<Not Started>"
-  var startTime = -1L
-  var endTime = -1L
-  var viewAcls = ""
-  var enableViewAcls = false
-
-  def applicationStarted = startTime != -1
-
-  def applicationCompleted = endTime != -1
-
-  def applicationDuration: Long = {
-    val difference = endTime - startTime
-    if (applicationStarted && applicationCompleted && difference > 0) difference else -1L
-  }
+  var appName: Option[String] = None
+  var appId: Option[String] = None
+  var sparkUser: Option[String] = None
+  var startTime: Option[Long] = None
+  var endTime: Option[Long] = None
+  var viewAcls: Option[String] = None
+  var adminAcls: Option[String] = None
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
-    appName = applicationStart.appName
-    startTime = applicationStart.time
-    sparkUser = applicationStart.sparkUser
+    appName = Some(applicationStart.appName)
+    appId = applicationStart.appId
+    startTime = Some(applicationStart.time)
+    sparkUser = Some(applicationStart.sparkUser)
   }
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
-    endTime = applicationEnd.time
+    endTime = Some(applicationEnd.time)
   }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {
       val environmentDetails = environmentUpdate.environmentDetails
       val allProperties = environmentDetails("Spark Properties").toMap
-      viewAcls = allProperties.getOrElse("spark.ui.view.acls", "")
-      enableViewAcls = allProperties.getOrElse("spark.ui.acls.enable", "false").toBoolean
+      viewAcls = allProperties.get("spark.ui.view.acls")
+      adminAcls = allProperties.get("spark.admin.acls")
     }
   }
 }
