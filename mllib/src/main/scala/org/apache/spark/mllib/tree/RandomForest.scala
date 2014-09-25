@@ -33,7 +33,6 @@ import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * :: Experimental ::

@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -27,6 +25,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
