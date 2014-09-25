@@ -808,7 +808,7 @@ class SparkContext(object):
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        for i, (id, acc, showed) in self._profile_stats:
+        for i, (id, acc, showed) in enumerate(self._profile_stats):
             stats = acc.value
             if not showed and stats:
                 print "=" * 60
