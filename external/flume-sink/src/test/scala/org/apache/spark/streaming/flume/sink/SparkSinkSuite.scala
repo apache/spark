@@ -38,7 +38,7 @@ class SparkSinkSuite extends FunSuite {
   val channelCapacity = 5000
 
   test("Success with ack") {
-    val (channel, sink) = initializeChannelAndSink()
+    val (channel, sink, latch) = initializeChannelAndSink()
     channel.start()
     sink.start()
 
@@ -51,7 +51,7 @@ class SparkSinkSuite extends FunSuite {
     val events = client.getEventBatch(1000)
     client.ack(events.getSequenceNumber)
     assert(events.getEvents.size() === 1000)
-    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
+    latch.await(1, TimeUnit.SECONDS)
     assertChannelIsEmpty(channel)
     sink.stop()
     channel.stop()
@@ -59,7 +59,7 @@ class SparkSinkSuite extends FunSuite {
   }
 
   test("Failure with nack") {
-    val (channel, sink) = initializeChannelAndSink()
+    val (channel, sink, latch) = initializeChannelAndSink()
     channel.start()
     sink.start()
     putEvents(channel, eventsPerBatch)
@@ -71,7 +71,7 @@ class SparkSinkSuite extends FunSuite {
     val events = client.getEventBatch(1000)
     assert(events.getEvents.size() === 1000)
     client.nack(events.getSequenceNumber)
-    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
+    latch.await(1, TimeUnit.SECONDS)
     assert(availableChannelSlots(channel) === 4000)
     sink.stop()
     channel.stop()
@@ -79,7 +79,7 @@ class SparkSinkSuite extends FunSuite {
   }
 
   test("Failure with timeout") {
-    val (channel, sink) = initializeChannelAndSink(Map(SparkSinkConfig
+    val (channel, sink, latch) = initializeChannelAndSink(Map(SparkSinkConfig
       .CONF_TRANSACTION_TIMEOUT -> 1.toString))
     channel.start()
     sink.start()
@@ -90,7 +90,7 @@ class SparkSinkSuite extends FunSuite {
     val (transceiver, client) = getTransceiverAndClient(address, 1)(0)
     val events = client.getEventBatch(1000)
     assert(events.getEvents.size() === 1000)
-    Thread.sleep(1000)
+    latch.await(1, TimeUnit.SECONDS)
     assert(availableChannelSlots(channel) === 4000)
     sink.stop()
     channel.stop()
@@ -108,7 +108,7 @@ class SparkSinkSuite extends FunSuite {
   def testMultipleConsumers(failSome: Boolean): Unit = {
     implicit val executorContext = ExecutionContext
       .fromExecutorService(Executors.newFixedThreadPool(5))
-    val (channel, sink) = initializeChannelAndSink()
+    val (channel, sink, latch) = initializeChannelAndSink(Map.empty, 5)
     channel.start()
     sink.start()
     (1 to 5).foreach(_ => putEvents(channel, eventsPerBatch))
@@ -138,7 +138,7 @@ class SparkSinkSuite extends FunSuite {
       }
     })
     batchCounter.await()
-    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
+    latch.await(1, TimeUnit.SECONDS)
     executorContext.shutdown()
     if(failSome) {
       assert(availableChannelSlots(channel) === 3000)
@@ -150,8 +150,8 @@ class SparkSinkSuite extends FunSuite {
     transceiversAndClients.foreach(x => x._1.close())
   }
 
-  private def initializeChannelAndSink(overrides: Map[String, String] = Map.empty): (MemoryChannel,
-    SparkSink) = {
+  private def initializeChannelAndSink(overrides: Map[String, String] = Map.empty,
+    batchCounter: Int = 1): (MemoryChannel, SparkSink, CountDownLatch) = {
     val channel = new MemoryChannel()
     val channelContext = new Context()
 
@@ -167,7 +167,9 @@ class SparkSinkSuite extends FunSuite {
     sinkContext.put(SparkSinkConfig.CONF_PORT, 0.toString)
     sink.configure(sinkContext)
     sink.setChannel(channel)
-    (channel, sink)
+    val latch = new CountDownLatch(batchCounter)
+    sink.countdownWhenBatchReceived(latch)
+    (channel, sink, latch)
   }
 
   private def putEvents(ch: MemoryChannel, count: Int): Unit = {
