@@ -19,6 +19,7 @@ from collections import defaultdict
 from itertools import chain, ifilter, imap
 import operator
 
+from pyspark import RDD
 from pyspark.serializers import NoOpSerializer,\
     BatchedSerializer, CloudPickleSerializer, pack_long,\
     CompressedSerializer
@@ -53,9 +54,9 @@ class DStream(object):
         """
         Return a new DStream which contains the number of elements in this DStream.
         """
-        return self.mapPartitions(lambda i: [sum(1 for _ in i)])._sum()
+        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
 
-    def _sum(self):
+    def sum(self):
         """
         Add up the elements in this DStream.
         """
@@ -78,7 +79,7 @@ class DStream(object):
         """
         def func(iterator):
             return ifilter(f, iterator)
-        return self.mapPartitions(func)
+        return self.mapPartitions(func, True)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -87,7 +88,7 @@ class DStream(object):
         """
         def func(s, iterator):
             return chain.from_iterable(imap(f, iterator))
-        return self._mapPartitionsWithIndex(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def map(self, f, preservesPartitioning=False):
         """
@@ -103,14 +104,14 @@ class DStream(object):
         """
         def func(s, iterator):
             return f(iterator)
-        return self._mapPartitionsWithIndex(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
-    def _mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
         """
         Return a new DStream by applying a function to each partition of this DStream,
         while tracking the index of the original partition.
         """
-        return PipelinedDStream(self, f, preservesPartitioning)
+        return self.transform(lambda rdd: rdd.mapPartitionsWithIndex(f, preservesPartitioning))
 
     def reduce(self, func):
         """
@@ -137,129 +138,18 @@ class DStream(object):
         Count the number of elements for each key, and return the result to the
         master as a dictionary
         """
-        if numPartitions is None:
-            numPartitions = self._defaultReducePartitions()
-
-        def combineLocally(iterator):
-            combiners = {}
-            for x in iterator:
-                (k, v) = x
-                if k not in combiners:
-                    combiners[k] = createCombiner(v)
-                else:
-                    combiners[k] = mergeValue(combiners[k], v)
-            return combiners.iteritems()
-        locally_combined = self.mapPartitions(combineLocally)
-        shuffled = locally_combined.partitionBy(numPartitions)
-
-        def _mergeCombiners(iterator):
-            combiners = {}
-            for (k, v) in iterator:
-                if k not in combiners:
-                    combiners[k] = v
-                else:
-                    combiners[k] = mergeCombiners(combiners[k], v)
-            return combiners.iteritems()
-
-        return shuffled.mapPartitions(_mergeCombiners)
+        def func(rdd):
+            return rdd.combineByKey(createCombiner, mergeValue, mergeCombiners, numPartitions)
+        return self.transform(func)
 
     def partitionBy(self, numPartitions, partitionFunc=portable_hash):
         """
         Return a copy of the DStream partitioned using the specified partitioner.
         """
-        if numPartitions is None:
-            numPartitions = self.ctx._defaultReducePartitions()
+        return self.transform(lambda rdd: rdd.partitionBy(numPartitions, partitionFunc))
 
-        # Transferring O(n) objects to Java is too expensive.  Instead, we'll
-        # form the hash buckets in Python, transferring O(numPartitions) objects
-        # to Java.  Each object is a (splitNumber, [objects]) pair.
-
-        outputSerializer = self.ctx._unbatched_serializer
-#
-#        def add_shuffle_key(split, iterator):
-#            buckets = defaultdict(list)
-#
-#            for (k, v) in iterator:
-#                buckets[partitionFunc(k) % numPartitions].append((k, v))
-#            for (split, items) in buckets.iteritems():
-#                yield pack_long(split)
-#                yield outputSerializer.dumps(items)
-#        keyed = PipelinedDStream(self, add_shuffle_key)
-
-        limit = (_parse_memory(self.ctx._conf.get(
-            "spark.python.worker.memory", "512m")) / 2)
-
-        def add_shuffle_key(split, iterator):
-
-            buckets = defaultdict(list)
-            c, batch = 0, min(10 * numPartitions, 1000)
-
-            for k, v in iterator:
-                buckets[partitionFunc(k) % numPartitions].append((k, v))
-                c += 1
-
-                # check used memory and avg size of chunk of objects
-                if (c % 1000 == 0 and get_used_memory() > limit
-                        or c > batch):
-                    n, size = len(buckets), 0
-                    for split in buckets.keys():
-                        yield pack_long(split)
-                        d = outputSerializer.dumps(buckets[split])
-                        del buckets[split]
-                        yield d
-                        size += len(d)
-
-                    avg = (size / n) >> 20
-                    # let 1M < avg < 10M
-                    if avg < 1:
-                        batch *= 1.5
-                    elif avg > 10:
-                        batch = max(batch / 1.5, 1)
-                    c = 0
-
-            for split, items in buckets.iteritems():
-                yield pack_long(split)
-                yield outputSerializer.dumps(items)
-
-        keyed = self._mapPartitionsWithIndex(add_shuffle_key)
-
-
-
-
-        keyed._bypass_serializer = True
-        with SCCallSiteSync(self.ctx) as css:
-            partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
-                                                          id(partitionFunc))
-            jdstream = self.ctx._jvm.PythonPairwiseDStream(keyed._jdstream.dstream(),
-                                                           partitioner).asJavaDStream()
-        dstream = DStream(jdstream, self._ssc, BatchedSerializer(outputSerializer))
-        # This is required so that id(partitionFunc) remains unique, even if
-        # partitionFunc is a lambda:
-        dstream._partitionFunc = partitionFunc
-        return dstream
-
-    def _defaultReducePartitions(self):
-        """
-        Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
-        If spark.default.parallelism is set, then we'll use the value from SparkContext
-        defaultParallelism, otherwise we'll use the number of partitions in this RDD
-
-        This mirrors the behavior of the Scala Partitioner#defaultPartitioner, intended to reduce
-        the likelihood of OOMs. Once PySpark adopts Partitioner-based APIs, this behavior will
-        be inherent.
-        """
-        if self.ctx._conf.contains("spark.default.parallelism"):
-            return self.ctx.defaultParallelism
-        else:
-            return self.getNumPartitions()
-
-    def getNumPartitions(self):
-        """
-        Return the number of partitions in RDD
-        """
-        # TODO: remove hard coding. RDD has NumPartitions. How do we get the number of partition
-        # through DStream?
-        return 2
+    def foreach(self, func):
+        return self.foreachRDD(lambda rdd, _: rdd.foreach(func))
 
     def foreachRDD(self, func):
         """
@@ -269,8 +159,8 @@ class DStream(object):
         This is an output operator, so this DStream will be registered as an output
         stream and there materialized.
         """
-        wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
-        self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), wrapped_func)
+        jfunc = RDDFunction(self.ctx, lambda a, b, t: func(a, t), self._jrdd_deserializer)
+        self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), jfunc)
 
     def pyprint(self):
         """
@@ -365,37 +255,14 @@ class DStream(object):
         better performance.
 
         """
-        def createCombiner(x):
-            return [x]
-
-        def mergeValue(xs, x):
-            xs.append(x)
-            return xs
-
-        def mergeCombiners(a, b):
-            a.extend(b)
-            return a
-
-        return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                                 numPartitions).mapValues(lambda x: ResultIterable(x))
+        return self.transform(lambda rdd: rdd.groupByKey(numPartitions))
 
     def countByValue(self):
         """
         Return new DStream which contains the count of each unique value in this
         DStreeam as a (value, count) pairs.
         """
-        def countPartition(iterator):
-            counts = defaultdict(int)
-            for obj in iterator:
-                counts[obj] += 1
-            yield counts
-
-        def mergeMaps(m1, m2):
-            for (k, v) in m2.iteritems():
-                m1[k] += v
-            return m1
-
-        return self.mapPartitions(countPartition).reduce(mergeMaps).flatMap(lambda x: x.items())
+        return self.map(lambda x: (x, None)).reduceByKey(lambda x, y: None).count()
 
     def saveAsTextFiles(self, prefix, suffix=None):
         """
@@ -429,24 +296,49 @@ class DStream(object):
 
         return self.foreachRDD(saveAsPickleFile)
 
-    def _test_output(self, result):
-        """
-        This function is only for test case.
-        Store data in a DStream to result to verify the result in test case
-        """
+    def collect(self):
+        result = []
+
         def get_output(rdd, time):
-            """
-            Closure to get element in RDD in the DStream.
-            This closure is called by py4j callback server.
-            """
-            collected = rdd.collect()
-            result.append(collected)
-
+            r = rdd.collect()
+            result.append(r)
         self.foreachRDD(get_output)
+        return result
 
+    def transform(self, func):
+        return TransformedRDD(self, lambda a, b, t: func(a), cache=True)
 
-# TODO: implement updateStateByKey
-# TODO: implement slice
+    def transformWith(self, func, other):
+        return TransformedRDD(self, lambda a, b, t: func(a, b), other)
+
+    def transformWithTime(self, func):
+        return TransformedRDD(self, lambda a, b, t: func(a, t))
+
+    def repartitions(self, numPartitions):
+        return self.transform(lambda rdd: rdd.repartition(numPartitions))
+
+    def union(self, other):
+        return self.transformWith(lambda a, b: a.union(b), other)
+
+    def cogroup(self, other):
+        return self.transformWith(lambda a, b: a.cogroup(b), other)
+
+    def leftOuterJoin(self, other):
+        return self.transformWith(lambda a, b: a.leftOuterJion(b), other)
+
+    def rightOuterJoin(self, other):
+        return self.transformWith(lambda a, b: a.rightOuterJoin(b), other)
+
+    def slice(self, fromTime, toTime):
+        jrdds = self._jdstream.slice(fromTime._jtime, toTime._jtime)
+        # FIXME: serializer
+        return [RDD(jrdd, self.ctx, self.ctx.serializer) for jrdd in jrdds]
+
+    def updateStateByKey(self, updateFunc):
+        # FIXME: convert updateFunc to java JFunction2
+        jFunc = updateFunc
+        return self._jdstream.updateStateByKey(jFunc)
+
 
 # Window Operations
 # TODO: implement window
@@ -456,81 +348,13 @@ class DStream(object):
 # TODO: implement countByWindow
 # TODO: implement reduceByWindow
 
-# Transform Operation
-# TODO: implement transform
-# TODO: implement transformWith
-# Following operation has dependency with transform
-# TODO: implement union
-# TODO: implement repertitions
-# TODO: implement cogroup
-# TODO: implement join
-# TODO: implement leftOuterJoin
-# TODO: implement rightOuterJoin
 
-
-class PipelinedDStream(DStream):
-    """
-    Since PipelinedDStream is same to PipelindRDD, if PipliedRDD is changed,
-    this code should be changed in the same way.
-    """
-    def __init__(self, prev, func, preservesPartitioning=False):
-        if not isinstance(prev, PipelinedDStream) or not prev._is_pipelinable():
-            # This transformation is the first in its stage:
-            self.func = func
-            self.preservesPartitioning = preservesPartitioning
-            self._prev_jdstream = prev._jdstream
-            self._prev_jrdd_deserializer = prev._jrdd_deserializer
-        else:
-            prev_func = prev.func
-
-            def pipeline_func(split, iterator):
-                return func(split, prev_func(split, iterator))
-            self.func = pipeline_func
-            self.preservesPartitioning = \
-                prev.preservesPartitioning and preservesPartitioning
-            self._prev_jdstream = prev._prev_jdstream  # maintain the pipeline
-            self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
-        self.is_cached = False
-        self.is_checkpointed = False
-        self._ssc = prev._ssc
-        self.ctx = prev.ctx
-        self.prev = prev
-        self._jdstream_val = None
-        self._jrdd_deserializer = self.ctx.serializer
-        self._bypass_serializer = False
-        self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
-
-    @property
-    def _jdstream(self):
-        if self._jdstream_val:
-            return self._jdstream_val
-        if self._bypass_serializer:
-            self.jrdd_deserializer = NoOpSerializer()
-        command = (self.func, self._prev_jrdd_deserializer,
-                   self._jrdd_deserializer)
-        # the serialized command will be compressed by broadcast
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
-            broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
-            self.ctx._gateway._gateway_client)
-        self.ctx._pickled_broadcast_vars.clear()
-        class_tag = self._prev_jdstream.classTag()
-        env = MapConverter().convert(self.ctx.environment,
-                                     self.ctx._gateway._gateway_client)
-        includes = ListConverter().convert(self.ctx._python_includes,
-                                           self.ctx._gateway._gateway_client)
-        python_dstream = self.ctx._jvm.PythonDStream(self._prev_jdstream.dstream(),
-                                                     bytearray(pickled_command),
-                                                     env, includes, self.preservesPartitioning,
-                                                     self.ctx.pythonExec,
-                                                     broadcast_vars, self.ctx._javaAccumulator,
-                                                     class_tag)
-        self._jdstream_val = python_dstream.asJavaDStream()
-        return self._jdstream_val
-
-    def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+class TransformedRDD(DStream):
+    # TODO: better name for cache
+    def __init__(self, prev, func, other=None, cache=False):
+        # TODO: combine transformed RDD
+        ssc = prev._ssc
+        t = RDDFunction(ssc._sc, func, prev._jrdd_deserializer)
+        jdstream = ssc._jvm.PythonTransformedDStream(prev._jdstream.dstream(),
+                                                     other and other._jdstream, t, cache)
+        DStream.__init__(self, jdstream.asJavaDStream(), ssc, ssc._sc.serializer)

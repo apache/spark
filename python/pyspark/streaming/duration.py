@@ -15,7 +15,32 @@
 # limitations under the License.
 #
 
-from pyspark.streaming import util
+
+def msDurationToString(ms):
+    """
+    Returns a human-readable string representing a duration such as "35ms"
+
+    >> msDurationToString(10)
+    '10 ms'
+    >>> msDurationToString(1000)
+    '1.0 s'
+    >>> msDurationToString(60000)
+    '1.0 m'
+    >>> msDurationToString(3600000)
+    '1.00 h'
+    """
+    second = 1000
+    minute = 60 * second
+    hour = 60 * minute
+
+    if ms < second:
+        return "%d ms" % ms
+    elif ms < minute:
+        return "%.1f s" % (float(ms) / second)
+    elif ms < hour:
+        return "%.1f m" % (float(ms) / minute)
+    else:
+        return "%.2f h" % (float(ms) / hour)
 
 
 class Duration(object):
@@ -82,7 +107,7 @@ class Duration(object):
         >>> d_1hour.prettyPrint()
         '1.00 h'
         """
-        return util.msDurationToString(self._millis)
+        return msDurationToString(self._millis)
 
     def milliseconds(self):
         """

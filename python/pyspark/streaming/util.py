@@ -18,54 +18,32 @@
 from pyspark.rdd import RDD
 
 
-class RDDFunction():
+class RDDFunction(object):
     """
     This class is for py4j callback. This class is related with
     org.apache.spark.streaming.api.python.PythonRDDFunction.
     """
-    def __init__(self, ctx, jrdd_deserializer, func):
+    def __init__(self, ctx, func, jrdd_deserializer):
         self.ctx = ctx
-        self.deserializer = jrdd_deserializer
         self.func = func
+        self.deserializer = jrdd_deserializer
 
-    def call(self, jrdd, time):
-        # Wrap JavaRDD into python's RDD class
-        rdd = RDD(jrdd, self.ctx, self.deserializer)
-        # Call user defined RDD function
-        self.func(rdd, time)
+    def call(self, jrdd, jrdd2, milliseconds):
+        try:
+            rdd = RDD(jrdd, self.ctx, self.deserializer)
+            other = RDD(jrdd2, self.ctx, self.deserializer) if jrdd2 else None
+            r = self.func(rdd, other, milliseconds)
+            if r:
+                return r._jrdd
+        except:
+            import traceback
+            traceback.print_exc()
 
-    def __str__(self):
-        return "%s, %s" % (str(self.deserializer), str(self.func))
+    def __repr__(self):
+        return "RDDFunction(%s, %s)" % (str(self.deserializer), str(self.func))
 
     class Java:
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
-
-
-def msDurationToString(ms):
-    """
-    Returns a human-readable string representing a duration such as "35ms"
-
-    >> msDurationToString(10)
-    '10 ms'
-    >>> msDurationToString(1000)
-    '1.0 s'
-    >>> msDurationToString(60000)
-    '1.0 m'
-    >>> msDurationToString(3600000)
-    '1.00 h'
-    """
-    second = 1000
-    minute = 60 * second
-    hour = 60 * minute
-
-    if ms < second:
-        return "%d ms" % ms
-    elif ms < minute:
-        return "%.1f s" % (float(ms) / second)
-    elif ms < hour:
-        return "%.1f m" % (float(ms) / minute)
-    else:
-        return "%.2f h" % (float(ms) / hour)
 
 
 def rddToFileName(prefix, suffix, time):
