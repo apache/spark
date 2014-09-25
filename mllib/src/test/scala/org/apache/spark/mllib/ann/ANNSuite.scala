@@ -20,6 +20,7 @@ package org.apache.spark.mllib.ann
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.util.random.XORShiftRandom
+
 import org.scalatest.FunSuite
 
 class ANNSuite extends FunSuite with LocalSparkContext {
@@ -32,16 +33,14 @@ class ANNSuite extends FunSuite with LocalSparkContext {
       Array[Double](1,1)
     )
     val outputs = Array[Double](0, 1, 1, 0)
-    val inputSize = 2
     val hiddenSize = 5
-    val outputSize = 1
     val data = inputs.zip(outputs).map { case(features, label) =>
       (Vectors.dense(features), Vectors.dense(Array(label)))}
     val rddData = sc.parallelize(data, 2)
-    val topology = Array[Int](inputSize, hiddenSize, outputSize)
-    val model = ArtificialNeuralNetwork.train(rddData, topology, 100, 1e-5)
+    val hiddenLayersTopology = Array[Int](hiddenSize)
+    val model = ArtificialNeuralNetwork.train(rddData, hiddenLayersTopology, 100, 1e-5)
     val predictionAndLabels = rddData.map { case(input, label) =>
-      (model.predictV(input)(0), label(0)) }.collect()
+      (model.predict(input)(0), label(0)) }.collect()
     assert(predictionAndLabels.forall { case(p, l) => (math.round(p) - l) == 0 })
   }
 
@@ -115,18 +114,20 @@ class ANNSuite extends FunSuite with LocalSparkContext {
         arrTmpWeights(w) = arrTmpWeights(w) + eps
 
         val annModel1 = new ArtificialNeuralNetworkModel(weights, topology)
-        val brzO1 = annModel1.predictV(data).toBreeze
+        val brzO1 = annModel1.predict(data).toBreeze
 
         val annModel2 = new ArtificialNeuralNetworkModel(tmpWeights, topology)
-        val brzO2 = annModel2.predictV(data).toBreeze
+        val brzO2 = annModel2.predict(data).toBreeze
 
         val E1 = .5* (brzO1 - brzOut).dot(brzO1 - brzOut)
         val E2 = .5* (brzO2 - brzOut).dot(brzO2 - brzOut)
         val dEdW = ( E2 - E1 ) / eps
 
         val gradw = gradient(w)
-        val err = math.abs(dEdW - gradw)
-        assert(err < accept, s"Difference between calculated and approximated gradient too large (approximated $dEdW, calculated $gradw, difference $err)" )
+        val err = dEdW - gradw
+        assert(math.abs(err) < accept, 
+      s"Difference between calculated and approximated gradient too large ($dEdW - $gradw = $err)"
+        )
 
         arrTmpWeights(w) = arrTmpWeights(w) - eps
 
