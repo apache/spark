@@ -43,22 +43,22 @@ import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(
-    appName: String,
+    appId: String,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  def this(appName: String, sparkConf: SparkConf) =
-    this(appName, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+  def this(appId: String, sparkConf: SparkConf) =
+    this(appId, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
-  private val name = appName.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_")
+  private val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_")
     .toLowerCase + "-" + System.currentTimeMillis
   val logDir = Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
 

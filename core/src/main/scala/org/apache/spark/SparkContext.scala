@@ -233,19 +233,6 @@ class SparkContext(config: SparkConf) extends Logging {
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
-  // Optionally log Spark events
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
-      logger.start()
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
-
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
@@ -317,6 +304,19 @@ class SparkContext(config: SparkConf) extends Logging {
   metricsSystem.registerSources()
   metricsSystem.registerSinks()
   metricsSystem.start()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appId, conf, hadoopConfiguration)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
