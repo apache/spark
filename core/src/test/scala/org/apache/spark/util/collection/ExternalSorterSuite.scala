@@ -24,6 +24,8 @@ import org.scalatest.{PrivateMethodTester, FunSuite}
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
+import scala.util.Random
+
 class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
@@ -714,14 +716,39 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
+    // Using wrongHashOrdering to show integer overflow introduced exception.
+    val rand = new Random
+    val wrongOrdering = new Ordering[Int] {
+      override def compare(a: Int, b: Int) = a - b
+    }
+
+    val testIntData = new Iterator[Int] {
+      private var count = 0
+
+      def hasNext = count < 1000000
+
+      def next(): Int = {
+        count += 1; rand.nextInt()
+      }
+    } ++ Iterator[Int](Int.MaxValue, Int.MinValue, Int.MaxValue, Int.MinValue)
+
+    val sorter1 = new ExternalSorter[Int, Int, Int](
+      None, None, Some(wrongOrdering), None)
+    val thrown = intercept[IllegalArgumentException] {
+      sorter1.insertAll(testIntData.map(i => (i, i)))
+    }
+
+    assert(thrown.getClass() === classOf[IllegalArgumentException])
+    assert(thrown.getMessage().contains("Comparison method violates its general contract"))
+
+    // Using aggregation and external spill to make sure ExternalSorter using
+    // partitionKeyComparator.
     val testData = Array[String](
       "hierarch",         // -1732884796
       "variants",         // -1249574770
       "inwork",           // -1183663690
       "isohel",           // -1179291542
-      "misused"           // 1069518484
-      )
-    val expected = testData.map(s => (s, 200000))
+      "misused")          // 1069518484
 
     def createCombiner(i: Int) = ArrayBuffer(i)
     def mergeValue(c: ArrayBuffer[Int], i: Int) = c += i
@@ -730,23 +757,8 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     val agg = new Aggregator[String, Int, ArrayBuffer[Int]](
       createCombiner, mergeValue, mergeCombiners)
 
-    // Using wrongHashOrdering to show that integer overflow will lead to wrong sort result.
-    val wrongHashOrdering = new Ordering[String] {
-      override def compare(a: String, b: String) = {
-        val h1 = a.hashCode()
-        val h2 = b.hashCode()
-        h1 - h2
-      }
-    }
-    val sorter1 = new ExternalSorter[String, Int, ArrayBuffer[Int]](
-      None, None, Some(wrongHashOrdering), None)
-    sorter1.insertAll(expected.iterator)
+    val expected = testData.map(i => (i, 25000))
 
-    val unexpectedResults = sorter1.iterator.toArray
-    assert(unexpectedResults !== expected)
-
-    // Using aggregation and external spill to make sure ExternalSorter using
-    // partitionKeyComparator.
     val sorter2 = new ExternalSorter[String, Int, ArrayBuffer[Int]](
       Some(agg), None, None, None)
     sorter2.insertAll(expected.flatMap { case (k, v) =>
