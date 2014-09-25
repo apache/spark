@@ -1307,4 +1307,30 @@ public class JavaAPISuite implements Serializable {
     SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
     Assert.assertEquals(data.size(), collected.length);
   }
+
+  /**
+   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
+   * since that's the only artifact where Guava classes have been relocated.
+   */
+  @Test
+  public void testGuavaOptional() {
+    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
+    // assembly.
+    sc.stop();
+    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
+    try {
+      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
+      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
+        new Function<Integer, Optional<Integer>>() {
+          @Override
+          public Optional<Integer> call(Integer i) {
+            return Optional.fromNullable(i);
+          }
+        });
+      rdd2.collect();
+    } finally {
+      localCluster.stop();
+    }
+  }
+
 }
