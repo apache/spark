@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{Utils, IntParam, MemoryParam}
-
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
@@ -45,12 +45,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   // Additional memory to allocate to containers
   // For now, use driver's memory overhead as our AM container's memory overhead
   val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead", 
-    math.max((YarnSparkHadoopUtil.MEMORY_OVERHEAD_FACTOR * amMemory).toInt, 
-    YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead", 
-    math.max((YarnSparkHadoopUtil.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, 
-    YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   validateArgs()
 
