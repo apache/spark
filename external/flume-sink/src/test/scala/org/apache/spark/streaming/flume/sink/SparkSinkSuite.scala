@@ -51,6 +51,7 @@ class SparkSinkSuite extends FunSuite {
     val events = client.getEventBatch(1000)
     client.ack(events.getSequenceNumber)
     assert(events.getEvents.size() === 1000)
+    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
     assertChannelIsEmpty(channel)
     sink.stop()
     channel.stop()
@@ -70,6 +71,7 @@ class SparkSinkSuite extends FunSuite {
     val events = client.getEventBatch(1000)
     assert(events.getEvents.size() === 1000)
     client.nack(events.getSequenceNumber)
+    TimeUnit.SECONDS.sleep(1) // Allow the sink to commit the transactions.
     assert(availableChannelSlots(channel) === 4000)
     sink.stop()
     channel.stop()
