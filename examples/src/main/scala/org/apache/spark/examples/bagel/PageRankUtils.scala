@@ -18,17 +18,7 @@
 package org.apache.spark.examples.bagel
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
-import org.apache.spark.serializer.KryoRegistrator
-
 import org.apache.spark.bagel._
-import org.apache.spark.bagel.Bagel._
-
-import scala.collection.mutable.ArrayBuffer
-
-import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
-
-import com.esotericsoftware.kryo._
 
 class PageRankUtils extends Serializable {
   def computeWithCombiner(numVertices: Long, epsilon: Double)(

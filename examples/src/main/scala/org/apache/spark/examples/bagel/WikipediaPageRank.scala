@@ -38,7 +38,7 @@ object WikipediaPageRank {
     }
     val sparkConf = new SparkConf()
     sparkConf.setAppName("WikipediaPageRank")
-    sparkConf.registerKryoClasses(Seq(classOf[PRVertex], classOf[PRMessage]))
+    sparkConf.registerKryoClasses(Array(classOf[PRVertex], classOf[PRMessage]))
 
     val inputFile = args(0)
     val threshold = args(1).toDouble

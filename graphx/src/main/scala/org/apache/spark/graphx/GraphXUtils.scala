@@ -18,17 +18,19 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.SparkConf
+
 import org.apache.spark.graphx.impl._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+
 import org.apache.spark.util.collection.{OpenHashSet, BitSet}
 import org.apache.spark.util.BoundedPriorityQueue
-import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 object GraphXUtils {
   /**
    * Registers classes that GraphX uses with Kryo.
    */
   def registerKryoClasses(conf: SparkConf) {
-    conf.registerKryoClasses(Seq(
+    conf.registerKryoClasses(Array(
       classOf[Edge[Object]],
       classOf[(VertexId, Object)],
       classOf[EdgePartition[Object, Object]],

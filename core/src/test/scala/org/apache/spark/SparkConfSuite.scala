@@ -136,36 +136,41 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
   }
 
   test("register kryo classes through registerKryoClasses") {
-    val conf = new SparkConf()
-    class Class1 {}
-    class Class2 {}
-    class Class3 {}
+    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
 
-    conf.registerKryoClasses(Seq(classOf[Class1], classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ==
+    conf.registerKryoClasses(Array(classOf[Class1], classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
       classOf[Class1].getName + "," + classOf[Class2].getName)
 
-    conf.registerKryoClasses(Seq(classOf[Class3]))
-    assert(conf.get("spark.kryo.classesToRegister") ==
+    conf.registerKryoClasses(Array(classOf[Class3]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
       classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
 
-    conf.registerKryoClasses(Seq(classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ==
+    conf.registerKryoClasses(Array(classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ===
       classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
-    new KryoSerializer(conf)
+    val serializer = new KryoSerializer(conf)
+    serializer.newInstance().serialize(new Class1())
+    serializer.newInstance().serialize(new Class2())
+    serializer.newInstance().serialize(new Class3())
   }
 
   test("register kryo classes through conf") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
     conf.set("spark.kryo.classesToRegister", "java.lang.StringBuffer")
     conf.set("spark.serializer", classOf[KryoSerializer].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
-    new KryoSerializer(conf)
+    val serializer = new KryoSerializer(conf)
+    serializer.newInstance().serialize(new StringBuffer())
   }
 
 }
+
+class Class1 {}
+class Class2 {}
+class Class3 {}

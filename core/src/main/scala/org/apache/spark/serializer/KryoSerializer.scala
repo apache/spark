@@ -53,6 +53,18 @@ class KryoSerializer(conf: SparkConf)
   private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
+  private val userRegistrator = conf.getOption("spark.kryo.registrator")
+  private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
+    .split(',')
+    .filter(!_.isEmpty)
+    .map { className =>
+      try {
+        Class.forName(className)
+      } catch {
+        case e: Exception =>
+          throw new SparkException("Failed to load class to register with Kryo", e)
+      }
+    }
 
   def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
@@ -81,9 +93,10 @@ class KryoSerializer(conf: SparkConf)
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
     try {
-      val reg = conf.getOption("spark.kryo.registrator").map(
-        Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]).getOrElse(
-        new DefaultKryoRegistrator(conf))
+      val reg = userRegistrator
+        .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
+        .getOrElse(new DefaultKryoRegistrator(classesToRegister))
+      logDebug("Running Kryo registrator: " + reg.getClass.getName)
 
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
@@ -91,7 +104,7 @@ class KryoSerializer(conf: SparkConf)
     } catch {
       case e: Exception =>
         throw new SparkException(s"Failed to invoke registrator " +
-          conf.get("spark.kryo.registrator", ""), e)
+          userRegistrator.getOrElse(""), e)
     } finally {
       Thread.currentThread.setContextClassLoader(oldClassLoader)
     }
@@ -235,19 +248,9 @@ private class JavaIterableWrapperSerializer
   }
 }
 
-private class DefaultKryoRegistrator(conf: SparkConf) extends KryoRegistrator {
+private class DefaultKryoRegistrator(classes: Seq[Class[_ <: Any]]) extends KryoRegistrator {
   override def registerClasses(kryo: Kryo) {
-    conf.getOption("spark.kryo.classesToRegister").foreach { classNames =>
-      for (className <- classNames.split(',')) {
-        try {
-          val clazz = Class.forName(className)
-          kryo.register(clazz)
-        } catch {
-          case e: Exception =>
-            throw new SparkException("Failed to load class to register with Kryo", e)
-        }
-      }
-    }
+    classes.foreach { clazz => kryo.register(clazz) }
   }
 }
 
