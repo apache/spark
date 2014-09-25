@@ -56,9 +56,6 @@ private[hive] object HiveShim {
   /** The string used to denote an empty comments field in the schema. */
   def getEmptyCommentsFieldValue = "None"
 
-  // TODO why should be Text? Hive 0.13.1 works with String
-  def convertCatalystStringToHive(s: String) = new hadoopIo.Text(s)
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
     CommandProcessorFactory.get(cmd(0), conf)
   }

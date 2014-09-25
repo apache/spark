@@ -31,7 +31,6 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 
 /* Implicit conversions */
@@ -52,19 +51,7 @@ private[hive] abstract class HiveFunctionRegistry
     val functionClassName = functionInfo.getFunctionClass.getName
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      val function = functionInfo.getFunctionClass.newInstance().asInstanceOf[UDF]
-      val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
-
-      val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
-
-      HiveSimpleUdf(
-        functionClassName,
-        children.zip(expectedDataTypes).map {
-          case (e, NullType) => e
-          case (e, t) if (e.dataType == t) => e
-          case (e, t) => Cast(e, t)
-        }
-      )
+      HiveSimpleUdf(functionClassName, children)
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(functionClassName, children)
     } else if (
@@ -118,15 +105,9 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   @transient
   lazy val dataType = javaClassToDataType(method.getReturnType)
 
-  def catalystToHive(value: Any): Object = value match {
-    // TODO need more types here? or can we use wrap()
-    case bd: BigDecimal => HiveShim.createDecimal(bd.underlying())
-    case d => d.asInstanceOf[Object]
-  }
-
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
-    val evaluatedChildren = children.map(c => catalystToHive(c.eval(input)))
+    val evaluatedChildren = children.map(c => wrap(c.eval(input)))
 
     unwrap(FunctionRegistry.invoke(method, function, conversionHelper
       .convertIfNecessary(evaluatedChildren: _*): _*))

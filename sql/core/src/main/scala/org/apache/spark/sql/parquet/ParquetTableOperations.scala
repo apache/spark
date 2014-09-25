@@ -427,11 +427,15 @@ private[parquet] class FilteringParquetRowInputFormat
         s"maxSplitSize or minSplitSie should not be negative: maxSplitSize = $maxSplitSize;" +
           s" minSplitSize = $minSplitSize")
     }
-
+    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
     getGlobalMetaData.setAccessible(true)
     val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
+    // if parquet file is empty, return empty splits.
+    if (globalMetaData == null) {
+      return splits
+    }
 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,
@@ -442,7 +446,6 @@ private[parquet] class FilteringParquetRowInputFormat
       classOf[ParquetInputFormat[_]].getDeclaredMethods.find(_.getName == "generateSplits").get
     generateSplits.setAccessible(true)
 
-    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     for (footer <- footers) {
       val fs = footer.getFile.getFileSystem(configuration)
       val file = footer.getFile

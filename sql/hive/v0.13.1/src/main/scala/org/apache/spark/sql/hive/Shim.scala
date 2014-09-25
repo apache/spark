@@ -63,8 +63,6 @@ private[hive] object HiveShim {
   /** The string used to denote an empty comments field in the schema. */
   def getEmptyCommentsFieldValue = ""
 
-  def convertCatalystStringToHive(s: String) = s
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
     CommandProcessorFactory.get(cmd, conf)
   }
