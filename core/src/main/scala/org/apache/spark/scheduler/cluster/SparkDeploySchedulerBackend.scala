@@ -129,7 +129,11 @@ private[spark] class SparkDeploySchedulerBackend(
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 
-  override def applicationId(): Option[String] = Option(appId)
+  override def applicationId(): String =
+    Option(appId).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
 
   private def waitForRegistration() = {
     registrationLock.synchronized {

@@ -313,6 +313,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     slaveLost(d, s)
   }
 
-  override def applicationId: Option[String] = Option(appId).map(_.getValue)
+  override def applicationId: String =
+    Option(appId).map(_.getValue).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
 
 }

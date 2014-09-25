@@ -310,11 +310,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // constructor
   taskScheduler.start()
 
-  val appId = taskScheduler.applicationId().getOrElse({
-    logWarning("Failed to get unique Application ID. " +
-      "Instead of Application ID, UNIX time is used for the prefix of the name of metrics.")
-    System.currentTimeMillis().toString
-  })
+  private val appId = taskScheduler.applicationId()
   conf.set("spark.app.id", appId)
 
   val metricsSystem = env.metricsSystem
@@ -1291,7 +1287,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName, taskScheduler.applicationId(),
+    listenerBus.post(SparkListenerApplicationStart(appName, Some(taskScheduler.applicationId()),
       startTime, sparkUser))
   }
 

@@ -70,6 +70,6 @@ private[spark] trait TaskScheduler {
    *
    * @return The application ID, or None if the backend does not provide an ID.
    */
-  def applicationId(): Option[String] = None
+  def applicationId(): String = System.currentTimeMillis.toString
 
 }

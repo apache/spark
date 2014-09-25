@@ -492,7 +492,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def applicationId(): Option[String] = backend.applicationId()
+  override def applicationId(): String = backend.applicationId()
 
 }
 
