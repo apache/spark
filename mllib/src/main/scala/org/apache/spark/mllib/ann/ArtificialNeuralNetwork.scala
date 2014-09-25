@@ -247,7 +247,7 @@ object ArtificialNeuralNetwork {
       hiddenLayersTopology: Array[Int],
       maxNumIterations: Int,
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
-    val topology = convertTopology(input, hiddenLayersTopology)
+    val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
       run(trainingRDD, randomWeights(topology))
   }
