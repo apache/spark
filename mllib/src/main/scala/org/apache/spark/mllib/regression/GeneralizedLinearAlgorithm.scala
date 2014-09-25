@@ -138,7 +138,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   private var warnOnUncachedInput = true
 
   /** Disable warnings about uncached input. */
-  def disableUncachedWarning() = {
+  private[spark] def disableUncachedWarning(): this.type = {
     warnOnUncachedInput = false
     this
   }

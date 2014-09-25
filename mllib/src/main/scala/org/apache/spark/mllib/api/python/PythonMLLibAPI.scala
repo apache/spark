@@ -247,12 +247,12 @@ class PythonMLLibAPI extends Serializable {
       runs: Int,
       initializationMode: String): KMeansModel = {
     val kMeansAlg = new KMeans()
-    kMeansAlg.setK(k)
-    kMeansAlg.setMaxIterations(maxIterations)
-    kMeansAlg.setRuns(runs)
-    kMeansAlg.setInitializationMode(initializationMode)
-    // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-    kMeansAlg.disableUncachedWarning()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
+      .disableUncachedWarning()
     return kMeansAlg.run(data.rdd)
   }
 
