@@ -79,7 +79,10 @@ private[tree] abstract class DTStatsAggregator(
       featureIndex: Int,
       binIndex: Int,
       label: Double,
-      instanceWeight: Double): Unit
+      instanceWeight: Double): Unit = {
+    val i = getNodeFeatureOffset(nodeIndex, featureIndex) + binIndex * statsSize
+    impurityAggregator.update(allStats, i, label, instanceWeight)
+  }
 
   /**
    * Pre-compute node offset for use with [[nodeUpdate]].
@@ -109,7 +112,13 @@ private[tree] abstract class DTStatsAggregator(
    * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
    * For unordered features only.
    */
-  def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int)
+  def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int) = {
+    require(isUnordered(featureIndex),
+      s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
+        s" but was called for ordered feature $featureIndex.")
+    val baseOffset = getNodeFeatureOffset(nodeIndex, featureIndex)
+    (baseOffset, baseOffset + (metadata.numBins(featureIndex) >> 1) * statsSize)
+  }
 
   /**
    * Faster version of [[update]].
@@ -176,7 +185,7 @@ private[tree] class DTStatsAggregatorFixedFeatures(
     numNodes: Int) extends DTStatsAggregator(metadata) {
 
   /**
-   * Offset for each feature for calculating indices into the [[_allStats]] array.
+   * Offset for each feature for calculating indices into the [[allStats]] array.
    * Mapping: featureIndex --> offset
    */
   private val featureOffsets: Array[Int] = {
@@ -184,14 +193,11 @@ private[tree] class DTStatsAggregatorFixedFeatures(
   }
 
   /**
-   * Number of elements for each node, corresponding to stride between nodes in [[_allStats]].
+   * Number of elements for each node, corresponding to stride between nodes in [[allStats]].
    */
   private val nodeStride: Int = featureOffsets.last
 
-  /**
-   * Total number of elements stored in this aggregator.
-   */
-  def allStatsSize: Int = numNodes * nodeStride
+  override val allStatsSize: Int = numNodes * nodeStride
 
   /**
    * Flat array of elements.
@@ -200,37 +206,11 @@ private[tree] class DTStatsAggregatorFixedFeatures(
    * Note: For unordered features, the left child stats precede the right child stats
    *       in the binIndex order.
    */
-  protected val _allStats: Array[Double] = new Array[Double](allStatsSize)
+  override protected val allStats: Array[Double] = new Array[Double](allStatsSize)
 
-  /**
-   * Get flat array of elements stored in this aggregator.
-   */
-  protected def allStats: Array[Double] = _allStats
+  override def getNodeOffset(nodeIndex: Int): Int = nodeIndex * nodeStride
 
-  /**
-   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
-   */
-  def update(
-      nodeIndex: Int,
-      featureIndex: Int,
-      binIndex: Int,
-      label: Double,
-      instanceWeight: Double): Unit = {
-    val i = nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(_allStats, i, label, instanceWeight)
-  }
-
-  /**
-   * Pre-compute node offset for use with [[nodeUpdate]].
-   */
-  def getNodeOffset(nodeIndex: Int): Int = nodeIndex * nodeStride
-
-  /**
-   * Faster version of [[update]].
-   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
-   * @param nodeOffset  Pre-computed node offset from [[getNodeOffset]].
-   */
-  def nodeUpdate(
+  override def nodeUpdate(
       nodeOffset: Int,
       nodeIndex: Int,
       featureIndex: Int,
@@ -238,30 +218,11 @@ private[tree] class DTStatsAggregatorFixedFeatures(
       label: Double,
       instanceWeight: Double): Unit = {
     val i = nodeOffset + featureOffsets(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(_allStats, i, label, instanceWeight)
+    impurityAggregator.update(allStats, i, label, instanceWeight)
   }
 
-  /**
-   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
-   * For ordered features only.
-   */
-  def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int = {
-    require(!isUnordered(featureIndex),
-      s"DTStatsAggregator.getNodeFeatureOffset is for ordered features only, but was called" +
-        s" for unordered feature $featureIndex.")
+  override def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int = {
     nodeIndex * nodeStride + featureOffsets(featureIndex)
-  }
-
-  /**
-   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
-   * For unordered features only.
-   */
-  def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int) = {
-    require(isUnordered(featureIndex),
-      s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
-        s" but was called for ordered feature $featureIndex.")
-    val baseOffset = nodeIndex * nodeStride + featureOffsets(featureIndex)
-    (baseOffset, baseOffset + (metadata.numBins(featureIndex) >> 1) * statsSize)
   }
 }
 
@@ -281,7 +242,7 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
     featuresForNodes: Map[Int, Map[Int, Array[Int]]]) extends DTStatsAggregator(metadata) {
 
   /**
-   * For each node, offset for each feature for calculating indices into the [[_allStats]] array.
+   * For each node, offset for each feature for calculating indices into the [[allStats]] array.
    * Mapping: nodeIndex --> featureIndex --> offset
    */
   private val featureOffsets: Array[Array[Int]] = {
@@ -297,14 +258,11 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
   }
 
   /**
-   * For each node, offset for each feature for calculating indices into the [[_allStats]] array.
+   * For each node, offset for each feature for calculating indices into the [[allStats]] array.
    */
   protected val nodeOffsets: Array[Int] = featureOffsets.map(_.last).scanLeft(0)(_ + _)
 
-  /**
-   * Total number of elements stored in this aggregator.
-   */
-  def allStatsSize: Int = nodeOffsets.last
+  override val allStatsSize: Int = nodeOffsets.last
 
   /**
    * Flat array of elements.
@@ -313,32 +271,9 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
    * Note: For unordered features, the left child stats precede the right child stats
    *       in the binIndex order.
    */
-  protected val _allStats: Array[Double] = new Array[Double](allStatsSize)
+  override protected val allStats: Array[Double] = new Array[Double](allStatsSize)
 
-  /**
-   * Get flat array of elements stored in this aggregator.
-   */
-  protected def allStats: Array[Double] = _allStats
-
-  /**
-   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
-   * @param featureIndex  Index of feature in featuresForNodes(nodeIndex).
-   *                      Note: This is NOT the original feature index.
-   */
-  def update(
-      nodeIndex: Int,
-      featureIndex: Int,
-      binIndex: Int,
-      label: Double,
-      instanceWeight: Double): Unit = {
-    val i = nodeOffsets(nodeIndex) + featureOffsets(nodeIndex)(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(_allStats, i, label, instanceWeight)
-  }
-
-  /**
-   * Pre-compute node offset for use with [[nodeUpdate]].
-   */
-  def getNodeOffset(nodeIndex: Int): Int = nodeOffsets(nodeIndex)
+  override def getNodeOffset(nodeIndex: Int): Int = nodeOffsets(nodeIndex)
 
   /**
    * Faster version of [[update]].
@@ -347,7 +282,7 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
    * @param featureIndex  Index of feature in featuresForNodes(nodeIndex).
    *                      Note: This is NOT the original feature index.
    */
-  def nodeUpdate(
+  override def nodeUpdate(
       nodeOffset: Int,
       nodeIndex: Int,
       featureIndex: Int,
@@ -355,7 +290,7 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
       label: Double,
       instanceWeight: Double): Unit = {
     val i = nodeOffset + featureOffsets(nodeIndex)(featureIndex) + binIndex * statsSize
-    impurityAggregator.update(_allStats, i, label, instanceWeight)
+    impurityAggregator.update(allStats, i, label, instanceWeight)
   }
 
   /**
@@ -364,27 +299,9 @@ private[tree] class DTStatsAggregatorSubsampledFeatures(
    * @param featureIndex  Index of feature in featuresForNodes(nodeIndex).
    *                      Note: This is NOT the original feature index.
    */
-  def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int = {
-    require(!isUnordered(featureIndex),
-      s"DTStatsAggregator.getNodeFeatureOffset is for ordered features only, but was called" +
-        s" for unordered feature $featureIndex.")
+  override def getNodeFeatureOffset(nodeIndex: Int, featureIndex: Int): Int = {
     nodeOffsets(nodeIndex) + featureOffsets(nodeIndex)(featureIndex)
   }
-
-  /**
-   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
-   * For unordered features only.
-   * @param featureIndex  Index of feature in featuresForNodes(nodeIndex).
-   *                      Note: This is NOT the original feature index.
-   */
-  def getLeftRightNodeFeatureOffsets(nodeIndex: Int, featureIndex: Int): (Int, Int) = {
-    require(isUnordered(featureIndex),
-      s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
-        s" but was called for ordered feature $featureIndex.")
-    val baseOffset = nodeOffsets(nodeIndex) + featureOffsets(nodeIndex)(featureIndex)
-    (baseOffset, baseOffset + (metadata.numBins(featureIndex) >> 1) * statsSize)
-  }
-
 }
 
 private[tree] object DTStatsAggregator extends Serializable {

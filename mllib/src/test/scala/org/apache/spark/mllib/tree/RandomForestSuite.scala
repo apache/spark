@@ -26,7 +26,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata}
-import org.apache.spark.mllib.tree.impurity.Gini
+import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.model.{Node, RandomForestModel}
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.util.StatCounter
@@ -55,8 +55,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, numSubsamples, seed = seed)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean, expectedStddev,
-        epsilon = 0.01)
+      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+        expectedStddev, epsilon = 0.01)
     }
   }
 
@@ -80,6 +80,31 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     RandomForestSuite.validateClassifier(rf, arr, 0.9)
     DecisionTreeSuite.validateClassifier(dt, arr, 0.9)
+
+    // Make sure trees are the same.
+    assert(rfTree.toString == dt.toString)
+  }
+
+  test("Regression with continuous features:" +
+    " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
+
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50)
+    val rdd = sc.parallelize(arr)
+    val categoricalFeaturesInfo = Map.empty[Int, Int]
+    val numTrees = 1
+
+    val strategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+
+    val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
+      featureSubsetStrategy = "auto", seed = 123)
+    assert(rf.trees.size === 1)
+    val rfTree = rf.trees(0)
+
+    val dt = DecisionTree.train(rdd, strategy)
+
+    RandomForestSuite.validateRegressor(rf, arr, 0.01)
+    DecisionTreeSuite.validateRegressor(dt, arr, 0.01)
 
     // Make sure trees are the same.
     assert(rfTree.toString == dt.toString)

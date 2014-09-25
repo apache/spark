@@ -482,10 +482,10 @@ object DecisionTree extends Serializable with Logging {
     var idx = 0
     val mutableGroupNodeIndex = new mutable.HashMap[Int, Map[Int, Int]]()
     val mutableGroupNodeMap = new mutable.HashMap[Int, Map[Int, Node]]()
-    nodesForGroup.foreach{ case (treeIndex, nodes) =>
+    nodesForGroup.foreach { case (treeIndex, nodes) =>
       val nodeIndexToAggIndex = new mutable.HashMap[Int, Int]()
       val nodeIndexToNode = new mutable.HashMap[Int, Node]()
-      nodes.foreach{ node =>
+      nodes.foreach { node =>
         nodeIndexToAggIndex(node.id) = idx
         nodeIndexToNode(node.id) = node
         idx += 1
@@ -556,8 +556,8 @@ object DecisionTree extends Serializable with Logging {
     timer.start("chooseSplits")
 
     // Iterate over all nodes in this group.
-    groupNodeIndex.foreach{ case (treeIndex, nodeIndexToAggIndex) =>
-      nodeIndexToAggIndex.foreach{ case (nodeIndex, aggNodeIndex) =>
+    groupNodeIndex.foreach { case (treeIndex, nodeIndexToAggIndex) =>
+      nodeIndexToAggIndex.foreach { case (nodeIndex, aggNodeIndex) =>
         val featuresForNode = if (featuresForNodes.nonEmpty) {
           Some(featuresForNodes.get.apply(treeIndex)(nodeIndex))
         } else {

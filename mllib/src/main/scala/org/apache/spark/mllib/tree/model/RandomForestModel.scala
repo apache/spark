@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.tree.model
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable
 
 /**
  * :: Experimental ::
@@ -33,8 +33,7 @@ import scala.collection.mutable
  * @param algo algorithm type -- classification or regression
  */
 @Experimental
-class RandomForestModel(private[tree] val trees: Array[DecisionTreeModel], val algo: Algo)
-  extends Serializable {
+class RandomForestModel(val trees: Array[DecisionTreeModel], val algo: Algo) extends Serializable {
 
   require(trees.size > 0, s"RandomForestModel cannot be created with empty trees collection.")
 

@@ -17,11 +17,11 @@
 
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.util.Utils
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest, DecisionTree, impurity}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * An example runner for decision trees and random forests. Run with
@@ -207,7 +208,8 @@ object DecisionTreeRunner {
       val model = DecisionTree.train(training, strategy)
       println(model)
       if (params.algo == Classification) {
-        val accuracy = accuracyScore(model, test)
+        val accuracy =
+          new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
         println(s"Test accuracy = $accuracy")
       }
       if (params.algo == Regression) {
@@ -220,7 +222,8 @@ object DecisionTreeRunner {
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
         println(model)
-        val accuracy = accuracyScore(model, test)
+        val accuracy =
+          new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
         println(s"Test accuracy = $accuracy")
       }
       if (params.algo == Regression) {
@@ -252,15 +255,6 @@ object DecisionTreeRunner {
       val err = tree.predict(y.features) - y.label
       err * err
     }.mean()
-  }
-
-  /**
-   * Calculates the classifier accuracy.
-   */
-  private def accuracyScore(model: RandomForestModel, data: RDD[LabeledPoint]): Double = {
-    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
-    val count = data.count()
-    correctCount.toDouble / count
   }
 
   /**

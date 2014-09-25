@@ -113,6 +113,7 @@ private class RandomForest (
       s"DecisionTree currently only supports maxDepth <= 30, but was given maxDepth = $maxDepth.")
 
     // Max memory usage for aggregates
+    // TODO: Calculate memory usage more precisely.
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     val maxMemoryPerNode = {
@@ -123,13 +124,12 @@ private class RandomForest (
       } else {
         None
       }
-      RandomForest.numElementsForNode(metadata, featureSubset) * 8L
+      RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
     }
     require(maxMemoryPerNode <= maxMemoryUsage,
       s"RandomForest/DecisionTree given maxMemoryInMB = ${strategy.maxMemoryInMB}," +
       " which is too small for the given features." +
       s"  Minimum value = ${maxMemoryPerNode / (1024L * 1024L)}")
-    // TODO: Calculate memory usage more precisely.
 
     timer.stop("init")
 
@@ -152,8 +152,7 @@ private class RandomForest (
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
-      val (nodesForGroup: Map[Int, Array[Node]],
-          featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]]) =
+      val (nodesForGroup, featuresForNodes) =
         RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.size > 0,
@@ -380,13 +379,13 @@ object RandomForest extends Serializable with Logging {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
-        // TODO: Use more efficient subsampling?
+        // TODO: Use more efficient subsampling?  (use selection-and-rejection or reservoir)
         Some(rng.shuffle(Range(0, metadata.numFeatures).toList)
           .take(metadata.numFeaturesPerNode).toArray)
       } else {
         None
       }
-      val nodeMemUsage = RandomForest.numElementsForNode(metadata, featureSubset) * 8L
+      val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
       if (memUsage + nodeMemUsage <= maxMemoryUsage) {
         nodeQueue.dequeue()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[Node]()) += node
@@ -412,7 +411,7 @@ object RandomForest extends Serializable with Logging {
    * @param featureSubset  Indices of features which may be split at this node.
    *                       If None, then use all features.
    */
-  private[tree] def numElementsForNode(
+  private[tree] def aggregateSizeForNode(
       metadata: DecisionTreeMetadata,
       featureSubset: Option[Array[Int]]): Long = {
     val totalBins = if (featureSubset.nonEmpty) {

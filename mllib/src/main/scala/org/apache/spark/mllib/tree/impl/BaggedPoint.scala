@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.impl
 
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -38,8 +39,7 @@ import org.apache.spark.util.Utils
  *       dataset support, update.  (We store subsampleWeights as Double for this future extension.)
  */
 private[tree] class BaggedPoint[Datum](val datum: Datum, val subsampleWeights: Array[Double])
-  extends Serializable {
-}
+  extends Serializable
 
 private[tree] object BaggedPoint {
 
@@ -57,11 +57,11 @@ private[tree] object BaggedPoint {
       input: RDD[Datum],
       numSubsamples: Int,
       seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
-    input.mapPartitionsWithIndex{ (partitionIndex, instances) =>
+    input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val poisson = new Poisson(1.0, new DRand(seed + partitionIndex + 1))
-      instances.map{ instance =>
+      instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
