@@ -37,6 +37,12 @@ private[spark] trait SortDataFormat[K, Buffer] extends Any {
   /** Return the sort key for the element at the given index. */
   protected def getKey(data: Buffer, pos: Int): K
 
+  protected def createNewMutableThingy(): K = null.asInstanceOf[K]
+
+  protected def getKey(data: Buffer, pos: Int, mutableThingy: K): K = {
+    getKey(data, pos)
+  }
+
   /** Swap two elements. */
   protected def swap(data: Buffer, pos0: Int, pos1: Int): Unit
 

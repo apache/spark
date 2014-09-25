@@ -162,10 +162,13 @@ class Sorter<K, Buffer> {
     if (start == lo)
       start++;
 
+    K mutableThiny1 = s.createNewMutableThingy();
+    K mutableThiny2 = s.createNewMutableThingy();
+
     Buffer pivotStore = s.allocate(1);
     for ( ; start < hi; start++) {
       s.copyElement(a, start, pivotStore, 0);
-      K pivot = s.getKey(pivotStore, 0);
+      K pivot = s.getKey(pivotStore, 0, mutableThiny1);
 
       // Set left (and right) to the index where a[start] (pivot) belongs
       int left = lo;
@@ -178,7 +181,7 @@ class Sorter<K, Buffer> {
        */
       while (left < right) {
         int mid = (left + right) >>> 1;
-        if (c.compare(pivot, s.getKey(a, mid)) < 0)
+        if (c.compare(pivot, s.getKey(a, mid, mutableThiny2)) < 0)
           right = mid;
         else
           left = mid + 1;
@@ -235,13 +238,16 @@ class Sorter<K, Buffer> {
     if (runHi == hi)
       return 1;
 
+    K mutableThiny1 = s.createNewMutableThingy();
+    K mutableThiny2 = s.createNewMutableThingy();
+
     // Find end of run, and reverse range if descending
-    if (c.compare(s.getKey(a, runHi++), s.getKey(a, lo)) < 0) { // Descending
-      while (runHi < hi && c.compare(s.getKey(a, runHi), s.getKey(a, runHi - 1)) < 0)
+    if (c.compare(s.getKey(a, runHi++, mutableThiny1), s.getKey(a, lo, mutableThiny2)) < 0) { // Descending
+      while (runHi < hi && c.compare(s.getKey(a, runHi, mutableThiny1), s.getKey(a, runHi - 1, mutableThiny2)) < 0)
         runHi++;
       reverseRange(a, lo, runHi);
     } else {                              // Ascending
-      while (runHi < hi && c.compare(s.getKey(a, runHi), s.getKey(a, runHi - 1)) >= 0)
+      while (runHi < hi && c.compare(s.getKey(a, runHi, mutableThiny1), s.getKey(a, runHi - 1, mutableThiny2)) >= 0)
         runHi++;
     }
 
@@ -468,11 +474,14 @@ class Sorter<K, Buffer> {
       }
       stackSize--;
 
+
+      K mutableThiny1 = s.createNewMutableThingy();
+
       /*
        * Find where the first element of run2 goes in run1. Prior elements
        * in run1 can be ignored (because they're already in place).
        */
-      int k = gallopRight(s.getKey(a, base2), a, base1, len1, 0, c);
+      int k = gallopRight(s.getKey(a, base2, mutableThiny1), a, base1, len1, 0, c);
       assert k >= 0;
       base1 += k;
       len1 -= k;
@@ -483,7 +492,7 @@ class Sorter<K, Buffer> {
        * Find where the last element of run1 goes in run2. Subsequent elements
        * in run2 can be ignored (because they're already in place).
        */
-      len2 = gallopLeft(s.getKey(a, base1 + len1 - 1), a, base2, len2, len2 - 1, c);
+      len2 = gallopLeft(s.getKey(a, base1 + len1 - 1, mutableThiny1), a, base2, len2, len2 - 1, c);
       assert len2 >= 0;
       if (len2 == 0)
         return;
@@ -517,10 +526,12 @@ class Sorter<K, Buffer> {
       assert len > 0 && hint >= 0 && hint < len;
       int lastOfs = 0;
       int ofs = 1;
-      if (c.compare(key, s.getKey(a, base + hint)) > 0) {
+      K mutableThiny1 = s.createNewMutableThingy();
+
+      if (c.compare(key, s.getKey(a, base + hint, mutableThiny1)) > 0) {
         // Gallop right until a[base+hint+lastOfs] < key <= a[base+hint+ofs]
         int maxOfs = len - hint;
-        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint + ofs)) > 0) {
+        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint + ofs, mutableThiny1)) > 0) {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
@@ -535,7 +546,7 @@ class Sorter<K, Buffer> {
       } else { // key <= a[base + hint]
         // Gallop left until a[base+hint-ofs] < key <= a[base+hint-lastOfs]
         final int maxOfs = hint + 1;
-        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint - ofs)) <= 0) {
+        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint - ofs, mutableThiny1)) <= 0) {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
@@ -560,7 +571,7 @@ class Sorter<K, Buffer> {
       while (lastOfs < ofs) {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
-        if (c.compare(key, s.getKey(a, base + m)) > 0)
+        if (c.compare(key, s.getKey(a, base + m, mutableThiny1)) > 0)
           lastOfs = m + 1;  // a[base + m] < key
         else
           ofs = m;          // key <= a[base + m]
@@ -587,10 +598,12 @@ class Sorter<K, Buffer> {
 
       int ofs = 1;
       int lastOfs = 0;
-      if (c.compare(key, s.getKey(a, base + hint)) < 0) {
+      K mutableThiny1 = s.createNewMutableThingy();
+
+      if (c.compare(key, s.getKey(a, base + hint, mutableThiny1)) < 0) {
         // Gallop left until a[b+hint - ofs] <= key < a[b+hint - lastOfs]
         int maxOfs = hint + 1;
-        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint - ofs)) < 0) {
+        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint - ofs, mutableThiny1)) < 0) {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
@@ -606,7 +619,7 @@ class Sorter<K, Buffer> {
       } else { // a[b + hint] <= key
         // Gallop right until a[b+hint + lastOfs] <= key < a[b+hint + ofs]
         int maxOfs = len - hint;
-        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint + ofs)) >= 0) {
+        while (ofs < maxOfs && c.compare(key, s.getKey(a, base + hint + ofs, mutableThiny1)) >= 0) {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
@@ -630,7 +643,7 @@ class Sorter<K, Buffer> {
       while (lastOfs < ofs) {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
-        if (c.compare(key, s.getKey(a, base + m)) < 0)
+        if (c.compare(key, s.getKey(a, base + m, mutableThiny1)) < 0)
           ofs = m;          // key < a[b + m]
         else
           lastOfs = m + 1;  // a[b + m] <= key
@@ -679,6 +692,9 @@ class Sorter<K, Buffer> {
         return;
       }
 
+      K mutableThiny1 = s.createNewMutableThingy();
+      K mutableThiny2 = s.createNewMutableThingy();
+
       Comparator<? super K> c = this.c;  // Use local variable for performance
       int minGallop = this.minGallop;    //  "    "       "     "      "
       outer:
@@ -692,7 +708,7 @@ class Sorter<K, Buffer> {
          */
         do {
           assert len1 > 1 && len2 > 0;
-          if (c.compare(s.getKey(a, cursor2), s.getKey(tmp, cursor1)) < 0) {
+          if (c.compare(s.getKey(a, cursor2, mutableThiny1), s.getKey(tmp, cursor1, mutableThiny2)) < 0) {
             s.copyElement(a, cursor2++, a, dest++);
             count2++;
             count1 = 0;
@@ -714,7 +730,7 @@ class Sorter<K, Buffer> {
          */
         do {
           assert len1 > 1 && len2 > 0;
-          count1 = gallopRight(s.getKey(a, cursor2), tmp, cursor1, len1, 0, c);
+          count1 = gallopRight(s.getKey(a, cursor2, mutableThiny1), tmp, cursor1, len1, 0, c);
           if (count1 != 0) {
             s.copyRange(tmp, cursor1, a, dest, count1);
             dest += count1;
@@ -727,7 +743,7 @@ class Sorter<K, Buffer> {
           if (--len2 == 0)
             break outer;
 
-          count2 = gallopLeft(s.getKey(tmp, cursor1), a, cursor2, len2, 0, c);
+          count2 = gallopLeft(s.getKey(tmp, cursor1, mutableThiny1), a, cursor2, len2, 0, c);
           if (count2 != 0) {
             s.copyRange(a, cursor2, a, dest, count2);
             dest += count2;
@@ -784,6 +800,10 @@ class Sorter<K, Buffer> {
       int cursor2 = len2 - 1;          // Indexes into tmp array
       int dest = base2 + len2 - 1;     // Indexes into a
 
+      K mutableThiny1 = s.createNewMutableThingy();
+      K mutableThiny2 = s.createNewMutableThingy();
+
+
       // Move last element of first run and deal with degenerate cases
       s.copyElement(a, cursor1--, a, dest--);
       if (--len1 == 0) {
@@ -811,7 +831,7 @@ class Sorter<K, Buffer> {
          */
         do {
           assert len1 > 0 && len2 > 1;
-          if (c.compare(s.getKey(tmp, cursor2), s.getKey(a, cursor1)) < 0) {
+          if (c.compare(s.getKey(tmp, cursor2, mutableThiny1), s.getKey(a, cursor1, mutableThiny2)) < 0) {
             s.copyElement(a, cursor1--, a, dest--);
             count1++;
             count2 = 0;
@@ -833,7 +853,7 @@ class Sorter<K, Buffer> {
          */
         do {
           assert len1 > 0 && len2 > 1;
-          count1 = len1 - gallopRight(s.getKey(tmp, cursor2), a, base1, len1, len1 - 1, c);
+          count1 = len1 - gallopRight(s.getKey(tmp, cursor2, mutableThiny1), a, base1, len1, len1 - 1, c);
           if (count1 != 0) {
             dest -= count1;
             cursor1 -= count1;
@@ -846,7 +866,7 @@ class Sorter<K, Buffer> {
           if (--len2 == 1)
             break outer;
 
-          count2 = len2 - gallopLeft(s.getKey(a, cursor1), tmp, 0, len2, len2 - 1, c);
+          count2 = len2 - gallopLeft(s.getKey(a, cursor1, mutableThiny1), tmp, 0, len2, len2 - 1, c);
           if (count2 != 0) {
             dest -= count2;
             cursor2 -= count2;
