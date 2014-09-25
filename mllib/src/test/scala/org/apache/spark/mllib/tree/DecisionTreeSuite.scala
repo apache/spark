@@ -431,22 +431,29 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     // Single group second level tree construction.
     val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
+    val treeToNodeToIndexInfo = Map((0, Map(
+      (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
+      (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
     val nodeQueue = new mutable.Queue[(Int, Node)]()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
-      nodesForGroup, None, splits, bins, nodeQueue)
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
     val children1 = new Array[Node](2)
     children1(0) = rootNode1.leftNode.get
     children1(1) = rootNode1.rightNode.get
 
     // Train one second-level node at a time.
     val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
+    val treeToNodeToIndexInfoA = Map((0, Map(
+      (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupA, None, splits, bins, nodeQueue)
+      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
     val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
+    val treeToNodeToIndexInfoB = Map((0, Map(
+      (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupB, None, splits, bins, nodeQueue)
+      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
     val children2 = new Array[Node](2)
     children2(0) = rootNode2.leftNode.get
     children2(1) = rootNode2.rightNode.get

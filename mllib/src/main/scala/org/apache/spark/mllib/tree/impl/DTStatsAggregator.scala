@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.impl
 
+import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.impurity._
 
 /**
@@ -231,26 +232,26 @@ private[tree] class DTStatsAggregatorFixedFeatures(
  * This holds a flat array of statistics for a set of (nodes, features, bins)
  * and helps with indexing.
  *
- * This instance of [[DTStatsAggregator]] is used when not subsampling features.
+ * This instance of [[DTStatsAggregator]] is used when subsampling features.
  *
- * @param groupNodeIndex  Mapping: treeIndex --> nodeIndex in tree --> node index in group
- * @param featuresForNodes Mapping: treeIndex --> nodeIndex in tree --> features for splits.
+ * @param treeToNodeToIndexInfo Mapping: treeIndex --> nodeIndex --> nodeIndexInfo,
+ *                              where nodeIndexInfo stores the index in the group and the
+ *                              feature subsets (if using feature subsets).
  */
 private[tree] class DTStatsAggregatorSubsampledFeatures(
     metadata: DecisionTreeMetadata,
-    groupNodeIndex: Map[Int, Map[Int, Int]],
-    featuresForNodes: Map[Int, Map[Int, Array[Int]]]) extends DTStatsAggregator(metadata) {
+    treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]]) extends DTStatsAggregator(metadata) {
 
   /**
    * For each node, offset for each feature for calculating indices into the [[allStats]] array.
    * Mapping: nodeIndex --> featureIndex --> offset
    */
   private val featureOffsets: Array[Array[Int]] = {
-    val numNodes: Int = groupNodeIndex.values.map(_.size).sum
+    val numNodes: Int = treeToNodeToIndexInfo.values.map(_.size).sum
     val offsets = new Array[Array[Int]](numNodes)
-    groupNodeIndex.foreach { case (treeIndex, globalToGroupNodeIndex) =>
-      globalToGroupNodeIndex.foreach { case (globalIndex, groupIndex) => // indices of node
-        offsets(groupIndex) = featuresForNodes(treeIndex)(globalIndex).map(metadata.numBins(_))
+    treeToNodeToIndexInfo.foreach { case (treeIndex, nodeToIndexInfo) =>
+      nodeToIndexInfo.foreach { case (globalNodeIndex, nodeInfo) =>
+        offsets(nodeInfo.nodeIndexInGroup) = nodeInfo.featureSubset.get.map(metadata.numBins(_))
           .scanLeft(0)((total, nBins) => total + statsSize * nBins)
       }
     }

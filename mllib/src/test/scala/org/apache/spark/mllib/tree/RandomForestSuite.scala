@@ -140,20 +140,19 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[Node]],
-        featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]]) =
+            treeToNodeToIndexInfo: Map[Int, Map[Int, RandomForest.NodeIndexInfo]]) =
           RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
 
         assert(nodesForGroup.size === numTrees, failString)
         assert(nodesForGroup.values.forall(_.size == 1), failString) // 1 node per tree
         if (numFeaturesPerNode == numFeatures) {
-          assert(featuresForNodes.isEmpty, failString)
+          // featureSubset values should all be None
+          assert(treeToNodeToIndexInfo.values.forall(_.values.forall(_.featureSubset.isEmpty)),
+            failString)
         } else {
           // Check number of features.
-          featuresForNodes.get.foreach { case (treeIndex, nodeToFeaturesMap) =>
-            nodeToFeaturesMap.foreach { case (nodeIndex, features) =>
-              assert(features.size === numFeaturesPerNode, failString)
-            }
-          }
+          assert(treeToNodeToIndexInfo.values.forall(_.values.forall(
+            _.featureSubset.get.size === numFeaturesPerNode)), failString)
         }
       }
     }

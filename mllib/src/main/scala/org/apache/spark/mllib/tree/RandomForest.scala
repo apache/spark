@@ -33,6 +33,7 @@ import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * :: Experimental ::
@@ -162,7 +163,8 @@ private class RandomForest (
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
-      val (nodesForGroup, featuresForNodes) =
+      // Each group of nodes may come from one or multiple trees, and at multiple levels.
+      val (nodesForGroup, treeToNodeToIndexInfo) =
         RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.size > 0,
@@ -171,7 +173,7 @@ private class RandomForest (
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
       DecisionTree.findBestSplits(baggedInput,
-        metadata, topNodes, nodesForGroup, featuresForNodes, splits, bins, nodeQueue, timer)
+        metadata, topNodes, nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
     }
 
@@ -367,28 +369,38 @@ object RandomForest extends Serializable with Logging {
   val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "sqrt", "log2", "onethird")
 
+  private[tree] class NodeIndexInfo(
+      val nodeIndexInGroup: Int,
+      val featureSubset: Option[Array[Int]]) extends Serializable
+
   /**
-   * Pull nodes off of the queue to split.
-   * Track memory usage for aggregates, and stop adding nodes when too large.
+   * Pull nodes off of the queue, and collect a group of nodes to be split on this iteration.
+   * This tracks the memory usage for aggregates and stops adding nodes when too much memory
+   * will be needed; this allows an adaptive number of nodes since different nodes may require
+   * different amounts of memory (if featureSubsetStrategy is not "all").
+   *
    * @param nodeQueue  Queue of nodes to split.
    * @param maxMemoryUsage  Bound on size of aggregate statistics.
-   * @return  (nodesForGroup, featuresForNodes).
+   * @return  (nodesForGroup, treeToNodeToIndexInfo).
    *          nodesForGroup holds the nodes to split: treeIndex --> nodes in tree.
-   *          featuresForNodes holds selected features for each node:
-   *            treeIndex --> node index --> feature indices.
-   *          featuresForNodes is only used when subsampling features;
-   *          it is empty if not subsampling.
+   *          treeToNodeToIndexInfo holds indices selected features for each node:
+   *            treeIndex --> (global) node index --> (node index in group, feature indices).
+   *          The (global) node index is the index in the tree; the node index in group is the
+   *           index in [0, numNodesInGroup) of the node in this group.
+   *          The feature indices are None if not subsampling features.
    */
   private[tree] def selectNodesToSplit(
       nodeQueue: mutable.Queue[(Int, Node)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
-      rng: scala.util.Random): (Map[Int, Array[Node]], Option[Map[Int, Map[Int, Array[Int]]]]) = {
+      rng: scala.util.Random): (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
     val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[Node]]()
-    val mutableFeaturesForNodes = new mutable.HashMap[Int, mutable.HashMap[Int, Array[Int]]]()
+    val mutableTreeToNodeToIndexInfo =
+      new mutable.HashMap[Int, mutable.HashMap[Int, NodeIndexInfo]]()
     var memUsage: Long = 0L
+    var numNodesInGroup = 0
     while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
@@ -399,25 +411,22 @@ object RandomForest extends Serializable with Logging {
       } else {
         None
       }
+      // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
       if (memUsage + nodeMemUsage <= maxMemoryUsage) {
         nodeQueue.dequeue()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[Node]()) += node
-        if (featureSubset.nonEmpty) {
-          mutableFeaturesForNodes
-            .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, Array[Int]]())(node.id)
-            = featureSubset.get
-        }
+        mutableTreeToNodeToIndexInfo
+          .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, NodeIndexInfo]())(node.id)
+          = new NodeIndexInfo(numNodesInGroup, featureSubset)
       }
+      numNodesInGroup += 1
       memUsage += nodeMemUsage
     }
+    // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[Node]] = mutableNodesForGroup.mapValues(_.toArray).toMap
-    val featuresForNodes = if (metadata.subsamplingFeatures) {
-      Some(mutableFeaturesForNodes.mapValues(_.toMap).toMap)
-    } else {
-      None
-    }
-    (nodesForGroup, featuresForNodes)
+    val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.mapValues(_.toMap).toMap
+    (nodesForGroup, treeToNodeToIndexInfo)
   }
 
   /**

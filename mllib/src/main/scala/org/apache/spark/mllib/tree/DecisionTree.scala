@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -433,7 +435,9 @@ object DecisionTree extends Serializable with Logging {
    * @param metadata Learning and dataset metadata
    * @param topNodes Root node for each tree.  Used for matching instances with nodes.
    * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
-   * @param featuresForNodes Mapping: treeIndex --> nodeIndex --> features to consider for splits.
+   * @param treeToNodeToIndexInfo Mapping: treeIndex --> nodeIndex --> nodeIndexInfo,
+   *                              where nodeIndexInfo stores the index in the group and the
+   *                              feature subsets (if using feature subsets).
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param nodeQueue  Queue of nodes to split, with values (treeIndex, node).
@@ -444,7 +448,7 @@ object DecisionTree extends Serializable with Logging {
       metadata: DecisionTreeMetadata,
       topNodes: Array[Node],
       nodesForGroup: Map[Int, Array[Node]],
-      featuresForNodes: Option[Map[Int, Map[Int, Array[Int]]]],
+      treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       nodeQueue: mutable.Queue[(Int, Node)],
@@ -475,27 +479,6 @@ object DecisionTree extends Serializable with Logging {
     // numNodes:  Number of nodes in this group
     val numNodes = nodesForGroup.values.map(_.size).sum
     logDebug("numNodes = " + numNodes)
-
-    // Create node index:
-    //  groupNodeIndex(treeIndex)(node index in tree) = node index in aggregate statistics
-    //  groupNodeMap(treeIndex)(node index in tree) = node
-    var idx = 0
-    val mutableGroupNodeIndex = new mutable.HashMap[Int, Map[Int, Int]]()
-    val mutableGroupNodeMap = new mutable.HashMap[Int, Map[Int, Node]]()
-    nodesForGroup.foreach { case (treeIndex, nodes) =>
-      val nodeIndexToAggIndex = new mutable.HashMap[Int, Int]()
-      val nodeIndexToNode = new mutable.HashMap[Int, Node]()
-      nodes.foreach { node =>
-        nodeIndexToAggIndex(node.id) = idx
-        nodeIndexToNode(node.id) = node
-        idx += 1
-      }
-      mutableGroupNodeIndex(treeIndex) = nodeIndexToAggIndex.toMap
-      mutableGroupNodeMap(treeIndex) = nodeIndexToNode.toMap
-    }
-    val groupNodeIndex: Map[Int, Map[Int, Int]] = mutableGroupNodeIndex.toMap
-    val groupNodeMap: Map[Int, Map[Int, Node]] = mutableGroupNodeMap.toMap
-
     logDebug("numFeatures = " + metadata.numFeatures)
     logDebug("numClasses = " + metadata.numClasses)
     logDebug("isMulticlass = " + metadata.isMulticlass)
@@ -516,17 +499,14 @@ object DecisionTree extends Serializable with Logging {
     def binSeqOp(
         agg: DTStatsAggregator,
         baggedPoint: BaggedPoint[TreePoint]): DTStatsAggregator = {
-      nodesForGroup.keys.foreach { treeIndex =>
+      treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
         val nodeIndex = predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures,
           bins, metadata.unorderedFeatures)
-        val aggNodeIndex = groupNodeIndex(treeIndex).getOrElse(nodeIndex, -1)
-        // If the example does not reach a node in this group, then aggNodeIndex < 0.
-        if (aggNodeIndex >= 0) {
-          val featuresForNode = if (featuresForNodes.nonEmpty) {
-            Some(featuresForNodes.get.apply(treeIndex)(nodeIndex))
-          } else {
-            None
-          }
+        val nodeInfo = nodeIndexToInfo.getOrElse(nodeIndex, null)
+        // If the example does not reach a node in this group, then nodeIndo = null.
+        if (nodeInfo != null) {
+          val aggNodeIndex = nodeInfo.nodeIndexInGroup
+          val featuresForNode = nodeInfo.featureSubset
           val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
           if (metadata.unorderedFeatures.isEmpty) {
             orderedBinSeqOp(agg, baggedPoint.datum, aggNodeIndex, instanceWeight, featuresForNode)
@@ -543,8 +523,7 @@ object DecisionTree extends Serializable with Logging {
     timer.start("aggregation")
     val binAggregates: DTStatsAggregator = {
       val initAgg = if (metadata.subsamplingFeatures) {
-        assert(featuresForNodes.nonEmpty)
-        new DTStatsAggregatorSubsampledFeatures(metadata, groupNodeIndex, featuresForNodes.get)
+        new DTStatsAggregatorSubsampledFeatures(metadata, treeToNodeToIndexInfo)
       } else {
         new DTStatsAggregatorFixedFeatures(metadata, numNodes)
       }
@@ -556,16 +535,14 @@ object DecisionTree extends Serializable with Logging {
     timer.start("chooseSplits")
 
     // Iterate over all nodes in this group.
-    groupNodeIndex.foreach { case (treeIndex, nodeIndexToAggIndex) =>
-      nodeIndexToAggIndex.foreach { case (nodeIndex, aggNodeIndex) =>
-        val featuresForNode = if (featuresForNodes.nonEmpty) {
-          Some(featuresForNodes.get.apply(treeIndex)(nodeIndex))
-        } else {
-          None
-        }
+    nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
+      nodesForTree.foreach { node =>
+        val nodeIndex = node.id
+        val nodeInfo = treeToNodeToIndexInfo(treeIndex)(nodeIndex)
+        val aggNodeIndex = nodeInfo.nodeIndexInGroup
+        val featuresForNode = nodeInfo.featureSubset
         val (split: Split, stats: InformationGainStats, predict: Predict) =
           binsToBestSplit(binAggregates, aggNodeIndex, splits, featuresForNode)
-        val node = groupNodeMap(treeIndex)(nodeIndex)
         logDebug("best split = " + split)
 
         // Extract info for this node.  Create children if not leaf.
