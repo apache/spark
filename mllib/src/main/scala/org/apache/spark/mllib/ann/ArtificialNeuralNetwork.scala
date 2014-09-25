@@ -201,10 +201,10 @@ object ArtificialNeuralNetwork {
    * Uses default convergence tolerance 1e-4 for LBFGS.
    */
   def train(
-      input: RDD[(Vector,Vector)],
+      trainingRDD: RDD[(Vector,Vector)],
       model: ArtificialNeuralNetworkModel,
       maxNumIterations: Int): ArtificialNeuralNetworkModel = {
-    train(input, model, maxNumIterations, defaultTolerance)
+    train(trainingRDD, model, maxNumIterations, defaultTolerance)
   }
 
   /**
@@ -221,12 +221,12 @@ object ArtificialNeuralNetwork {
    * @return Trained ANN as ArtificialNeuralNetworkModel.
    */
   def train(
-      input: RDD[(Vector,Vector)],
+      trainingRDD: RDD[(Vector,Vector)],
       model: ArtificialNeuralNetworkModel,
       maxNumIterations: Int,
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork( model.topology, maxNumIterations, convergenceTol ).
-      run(input, model.weights)
+      run(trainingRDD, model.weights)
   }
 
   /**
@@ -243,13 +243,13 @@ object ArtificialNeuralNetwork {
    * @return Trained ANN as ArtificialNeuralNetworkModel.
    */
   def train(
-      input: RDD[(Vector, Vector)],
+      trainingRDD: RDD[(Vector, Vector)],
       hiddenLayersTopology: Array[Int],
       maxNumIterations: Int,
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(input, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
-      run(input, randomWeights(topology))
+      run(trainingRDD, randomWeights(topology))
   }
 
   private def convertTopology( input: RDD[(Vector,Vector)],
