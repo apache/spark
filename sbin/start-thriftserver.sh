@@ -52,4 +52,4 @@ source "$FWDIR"/bin/utils.sh
 SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 
-exec "$FWDIR"/sbin/spark-daemon.sh start $CLASS 1 "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}"
+. "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1

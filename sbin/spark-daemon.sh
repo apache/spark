@@ -62,7 +62,7 @@ then
   shift
 fi
 
-startStop=$1
+option=$1
 shift
 command=$1
 shift
@@ -122,9 +122,9 @@ if [ "$SPARK_NICENESS" = "" ]; then
 fi
 
 
-case $startStop in
+case $option in
 
-  (start)
+  (start|spark-submit)
 
     mkdir -p "$SPARK_PID_DIR"
 
@@ -142,7 +142,7 @@ case $startStop in
 
     spark_rotate_log "$log"
     echo starting $command, logging to $log
-    if [ $command == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2" ]; then
+    if [ $option == spark-submit ]; then
       nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
         "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
     else
