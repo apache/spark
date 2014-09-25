@@ -298,6 +298,21 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  test("fullOuterJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.fullOuterJoin(rdd2).collect()
+    assert(joined.size === 6)
+    assert(joined.toSet === Set(
+      (1, (Some(1), Some('x'))),
+      (1, (Some(2), Some('x'))),
+      (2, (Some(1), Some('y'))),
+      (2, (Some(1), Some('z'))),
+      (3, (Some(1), None)),
+      (4, (None, Some('w')))
+    ))
+  }
+
   test("join with no matches") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((4, 'x'), (5, 'y'), (5, 'z'), (6, 'w')))
