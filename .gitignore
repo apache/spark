@@ -12,5 +12,7 @@ lib/
 work/
 # vim tmps
 .*.swp
+*.*~
+*~
 .Rproj.user
 SparkR-pkg.Rproj

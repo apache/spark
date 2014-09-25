@@ -24,11 +24,11 @@ endif
 
 all: $(TARGET_NAME)
 
-$(SBT_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
+$(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
 	./sbt/sbt assembly
 	cp -f $(SBT_TARGET_NAME) ../inst/
 
-$(MAVEN_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
+$(MAVEN_TARGET_NAME): pom.xml $(SCALA_FILES) $(RESOURCE_FILES)
 	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -DskipTests clean package shade:shade
 	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
 
