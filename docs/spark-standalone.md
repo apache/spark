@@ -62,7 +62,12 @@ Finally, the following configuration options can be passed to the master and wor
 
 # Cluster Launch Scripts
 
-To launch a Spark standalone cluster with the launch scripts, you need to create a file called `conf/slaves` in your Spark directory, which should contain the hostnames of all the machines where you would like to start Spark workers, one per line. The master machine must be able to access each of the slave machines via password-less `ssh` (using a private key). For testing, you can just put `localhost` in this file.
+To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/slaves in your Spark directory,
+which must contain the hostnames of all the machines where you intend to start Spark workers, one per line.
+If conf/slaves does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
+Note, the master machine accesses each of the worker machines via ssh. By default, ssh is run in parallel and requires password-less (using a private key) access to be setup.
+If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
+
 
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
 
