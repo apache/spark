@@ -42,7 +42,6 @@ if __name__ == "__main__":
     #  |-- age: integer (nullable = true)
     #  |-- name: string (nullable = true)
 
-
     # A JSON dataset is pointed to by path.
     # The path can be either a single text file or a directory storing text files.
     path = os.environ['SPARK_HOME'] + "examples/src/main/resources/people.json"
@@ -51,7 +50,6 @@ if __name__ == "__main__":
     # root
     #  |-- person_name: string (nullable = false)
     #  |-- person_age: integer (nullable = false)
-
 
     # The inferred schema can be visualized using the printSchema() method.
     people.printSchema()
