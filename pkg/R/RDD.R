@@ -186,8 +186,8 @@ setMethod("cache",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2L)
-#' cache(rdd) # rdd@env$isCached == TRUE
-#' unpersist(rdd) # rdd@env$isCached == FALSE
+#' cache(rdd) # rdd@@env$isCached == TRUE
+#' unpersist(rdd) # rdd@@env$isCached == FALSE
 #'}
 setGeneric("unpersist", function(rdd) { standardGeneric("unpersist") })
 
@@ -428,6 +428,20 @@ setMethod("lapplyPartition",
             lapplyPartitionsWithIndex(X, function(s, part) { FUN(part) })
           })
 
+#' mapPartitions is the same as lapplyPartition.
+#'
+#' @rdname lapplyPartition
+#' @export
+setGeneric("mapPartitions", function(X, FUN) {
+           standardGeneric("mapPartitions") })
+
+#' @rdname lapplyPartition
+#' @aliases mapPartitions,RDD,function-method
+setMethod("mapPartitions",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
+            lapplyPartition(X, FUN)
+          })
 
 #' Return a new RDD by applying a function to each partition of this RDD, while
 #' tracking the index of the original partition.
