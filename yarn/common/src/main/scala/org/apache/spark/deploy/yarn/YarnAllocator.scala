@@ -33,6 +33,7 @@ import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 
 object AllocationType extends Enumeration {
   type AllocationType = Value
@@ -95,8 +96,7 @@ private[yarn] abstract class YarnAllocator(
 
   // Additional memory overhead - in mb.
   protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((YarnSparkHadoopUtil.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, 
-    YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   private val launcherPool = new ThreadPoolExecutor(
     // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
