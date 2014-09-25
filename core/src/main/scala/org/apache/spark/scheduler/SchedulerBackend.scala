@@ -34,9 +34,11 @@ private[spark] trait SchedulerBackend {
 
   /**
    * The application ID associated with the job, if any.
+   * It is expected that the subclasses of TaskScheduler or SchedulerBackend
+   * override this method and return an unique application ID.
    *
-   * @return The application ID, or None if the backend does not provide an ID.
+   * @return The application ID, if the backend does not provide an ID.
    */
-  def applicationId(): Option[String] = None
+  def applicationId(): String = System.currentTimeMillis.toString
 
 }
