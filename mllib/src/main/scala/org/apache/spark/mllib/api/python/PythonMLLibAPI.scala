@@ -67,11 +67,13 @@ class PythonMLLibAPI extends Serializable {
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
   private def trainRegressionModel(
-      trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
+      learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
     val initialWeights = SerDe.loads(initialWeightsBA).asInstanceOf[Vector]
-    val model = trainFunc(data.rdd, initialWeights)
+    // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
+    learner.disableUncachedWarning()
+    val model = learner.run(data.rdd, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(SerDe.dumps(model.weights))
     ret.add(model.intercept: java.lang.Double)
@@ -106,8 +108,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        lrAlg.run(data, initialWeights),
+      lrAlg,
       data,
       initialWeightsBA)
   }
@@ -122,15 +123,14 @@ class PythonMLLibAPI extends Serializable {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val lassoAlg = new LassoWithSGD()
+    lassoAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     trainRegressionModel(
-      (data, initialWeights) =>
-        LassoWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+      lassoAlg,
       data,
       initialWeightsBA)
   }
@@ -145,15 +145,14 @@ class PythonMLLibAPI extends Serializable {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val ridgeAlg = new RidgeRegressionWithSGD()
+    ridgeAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     trainRegressionModel(
-      (data, initialWeights) =>
-        RidgeRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+      ridgeAlg,
       data,
       initialWeightsBA)
   }
@@ -186,8 +185,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        SVMAlg.run(data, initialWeights),
+      SVMAlg,
       data,
       initialWeightsBA)
   }
@@ -220,8 +218,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        LogRegAlg.run(data, initialWeights),
+      LogRegAlg,
       data,
       initialWeightsBA)
   }
@@ -249,7 +246,14 @@ class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    KMeans.train(data.rdd, k, maxIterations, runs, initializationMode)
+    val kMeansAlg = new KMeans()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
+      .disableUncachedWarning()
+    return kMeansAlg.run(data.rdd)
   }
 
   /**
