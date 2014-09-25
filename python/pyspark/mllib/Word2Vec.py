@@ -19,11 +19,11 @@
 Python package for Word2Vec in MLlib.
 """
 
-from pyspark.mllib._common import \
-    _serialize_double_vector, \
-    _deserialize_double_vector, \
-    _deserialize_string_seq, \
-    _get_unmangled_string_seq_rdd
+from functools import wraps
+
+from pyspark import PickleSerializer
+
+from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Word2Vec', 'Word2VecModel']
 
@@ -46,18 +46,19 @@ class Word2VecModel(object):
     def transform(self, word):
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
         result = pythonAPI.Word2VecModelTransform(self._java_model, word)
-        return _deserialize_double_vector(result)
+        return PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(result)))
 
     def findSynonyms(self, x, num):
+        SerDe = self._sc._jvm.SerDe
+        ser = PickleSerializer()
         pythonAPI = self._sc._jvm.PythonMLLibAPI()
         if type(x) == str:
-            result = pythonAPI.Word2VecModelSynonyms(self._java_model, x, num)
+            jlist = pythonAPI.Word2VecModelSynonyms(self._java_model, x, num)
         else:
-            xSer = _serialize_double_vector(x)
-            result = pythonAPI.Word2VecModelSynonyms(self._java_model, xSer, num)
-        words = _deserialize_string_seq(result[0])
-        similarity = _deserialize_double_vector(result[1])
-        return zip(words, similarity)
+            bytes = bytearray(ser.dumps(_convert_to_vector(x)))
+            vec = self._sc._jvm.SerDe.loads(bytes)
+            jlist = pythonAPI.Word2VecModelSynonyms(self._java_model, vec, num)
+        return PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(jlist)))
 
 
 class Word2Vec(object):
@@ -104,8 +105,7 @@ class Word2Vec(object):
         :param data: Input RDD
         """
         sc = data.context
-        dataBytes = _get_unmangled_string_seq_rdd(data)
-        model = sc._jvm.PythonMLLibAPI().trainWord2Vec(dataBytes._jrdd)
+        model = sc._jvm.PythonMLLibAPI().trainWord2Vec(data._to_java_object_rdd())
         return Word2VecModel(sc, model)
 
 

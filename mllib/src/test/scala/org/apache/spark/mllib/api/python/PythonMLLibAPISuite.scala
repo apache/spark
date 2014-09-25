@@ -91,11 +91,4 @@ class PythonMLLibAPISuite extends FunSuite {
     assert(bytes.length / 10 < 25) //  25 bytes per rating
 
   }
-
-  test("string seq serialization") {
-    val original = Array[String]("abc", "def", "ghi")
-    val bytes = SerDe.serializeSeqString(original)
-    val ss = SerDe.deserializeSeqString(bytes)
-    assert(ss === original)
-  }
 }

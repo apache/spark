@@ -46,7 +46,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-
 /**
  * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
@@ -290,13 +289,13 @@ class PythonMLLibAPI extends Serializable {
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
-   * @param dataBytesJRDD Input JavaRDD
+   * @param dataJRDD Input JavaRDD
    * @return A handle to java Word2VecModel instance at python side
    */
   def trainWord2Vec(
-    dataBytesJRDD: JavaRDD[Array[Byte]]
+    dataJRDD: JavaRDD[java.util.ArrayList[String]]
     ): Word2VecModel = {
-    val data = dataBytesJRDD.rdd.map(SerDe.deserializeSeqString)
+    val data = dataJRDD.rdd.map(_.toArray(new Array[String](0)).toSeq).cache()
     val word2vec = new Word2Vec()
     val model = word2vec.fit(data)
     model
@@ -311,8 +310,8 @@ class PythonMLLibAPI extends Serializable {
   def Word2VecModelTransform(
     model: Word2VecModel,
     word: String
-    ): Array[Byte] = {
-    SerDe.serializeDoubleVector(model.transform(word))
+    ): Vector = {
+    model.transform(word)
   }
 
   /**
@@ -332,8 +331,8 @@ class PythonMLLibAPI extends Serializable {
     val similarity = Vectors.dense(result.map(_._2))
     val words = result.map(_._1)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(SerDe.serializeSeqString(words))
-    ret.add(SerDe.serializeDoubleVector(similarity))
+    ret.add(words)
+    ret.add(similarity)
     ret
   }
 
@@ -347,16 +346,15 @@ class PythonMLLibAPI extends Serializable {
    */
   def Word2VecModelSynonyms(
     model: Word2VecModel,
-    vecBytes: Array[Byte],
+    vec: Vector,
     num: Int
     ): java.util.List[java.lang.Object] = {
-    val vec = SerDe.deserializeDoubleVector(vecBytes)
     val result = model.findSynonyms(vec, num)
     val similarity = Vectors.dense(result.map(_._2))
     val words = result.map(_._1)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(SerDe.serializeSeqString(words))
-    ret.add(SerDe.serializeDoubleVector(similarity))
+    ret.add(words)
+    ret.add(similarity)
     ret
   }
 
