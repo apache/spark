@@ -21,7 +21,7 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.collection._
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
@@ -68,6 +68,7 @@ object SparkSubmit {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
     exitFn()
+    // will only get here during testing - which overrides exitFn to do things other then exit
     throw new ApplicationExitException(str)
   }
 
@@ -88,12 +89,12 @@ object SparkSubmit {
    *           (4) the main class for the child
    */
   private[spark] def createLaunchEnv(args: SparkSubmitArguments)
-  : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
+      : (mutable.ArrayBuffer[String], mutable.ArrayBuffer[String], Map[String, String], String) = {
 
     // Values to return
-    val childArgs = new ArrayBuffer[String]()
-    val childClasspath = new ArrayBuffer[String]()
-    val sysProps = new HashMap[String, String]()
+    val childArgs = new mutable.ArrayBuffer[String]()
+    val childClasspath = new mutable.ArrayBuffer[String]()
+    val sysProps = new mutable.HashMap[String, String]()
     var childMainClass = ""
 
     // Set the cluster manager
@@ -144,9 +145,8 @@ object SparkSubmit {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
       case (_, CLUSTER) if args.isPython =>
-        printErrorAndExit(
-          "Cluster deploy mode is currently not supported for python applications.")
-      case (_, CLUSTER) if isShell(args.primaryResource.orNull) =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
+      case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case _ =>
     }
@@ -155,14 +155,14 @@ object SparkSubmit {
     if (args.isPython) {
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
-        args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
+        args.childArgs = mutable.ArrayBuffer("--die-on-broken-pipe", "0")
       } else {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource.getOrElse(""),
+        args.childArgs = mutable.ArrayBuffer(args.primaryResource,
           args.pyFiles.getOrElse("")) ++ args.childArgs
-        args.files = mergeFileLists(args.files.orNull, args.primaryResource.orNull)
+        args.files = mergeFileLists(args.files.orNull, args.primaryResource)
       }
       args.files = mergeFileLists(args.files.orNull, args.pyFiles.orNull)
       // Format python file paths properly before adding them to the PYTHONPATH
@@ -227,8 +227,8 @@ object SparkSubmit {
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
       childMainClass = args.mainClass.orNull
-      if (isUserJar(args.primaryResource.orNull)) {
-        childClasspath += args.primaryResource.orNull
+      if (isUserJar(args.primaryResource)) {
+        childClasspath += args.primaryResource
       }
 
       if (args.jars.isDefined) { childClasspath ++= args.jars.get.split(",") }
@@ -252,8 +252,8 @@ object SparkSubmit {
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
-      if (isUserJar(args.primaryResource.orNull)) {
-        jars = jars ++ Seq(args.primaryResource.orNull)
+      if (isUserJar(args.primaryResource)) {
+        jars = jars ++ Seq(args.primaryResource)
       }
       sysProps.put("spark.jars", jars.mkString(","))
     }
@@ -265,7 +265,7 @@ object SparkSubmit {
         childArgs += "--supervise"
       }
       childArgs += "launch"
-      childArgs += (args.master, args.primaryResource.orNull, args.mainClass.orNull)
+      childArgs += (args.master, args.primaryResource, args.mainClass.orNull)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -275,7 +275,7 @@ object SparkSubmit {
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource.getOrElse(""))
+        childArgs += ("--jar", args.primaryResource)
       }
       childArgs += ("--class", args.mainClass.getOrElse(""))
       if (args.childArgs != null) {
@@ -291,8 +291,8 @@ object SparkSubmit {
   }
 
   private def launch(
-                      childArgs: ArrayBuffer[String],
-                      childClasspath: ArrayBuffer[String],
+                      childArgs: mutable.ArrayBuffer[String],
+                      childClasspath: mutable.ArrayBuffer[String],
                       sysProps: Map[String, String],
                       childMainClass: String,
                       verbose: Boolean = false) {
@@ -343,7 +343,7 @@ object SparkSubmit {
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
-      case "file" | "local" =>ApplicationExitException
+      case "file" | "local" =>
         val file = new File(uri.getPath)
         if (file.exists()) {
           loader.addURL(file.toURI.toURL)

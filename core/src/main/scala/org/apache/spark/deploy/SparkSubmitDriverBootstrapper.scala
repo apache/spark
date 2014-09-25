@@ -71,13 +71,11 @@ private[spark] object SparkSubmitDriverBootstrapper {
       .filter( {case(varVariable, _) => varVariable.isDefined} )
       .map( {case(varVariable, propName) => (propName->varVariable.get)})
 
-     /* In order of lowest priority to highest, we merge config vars from
-      * 1. hard coded defaults in class path at spark-submit-defaults.prop
-      * 2. SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf
-      * 3. System config variables (eg by using -Dspark.var.name)
-      * 4. Environment variables (including legacy variable mappings)
-      * 5. properties file specified in SPARK_SUBMIT_PROPERTIES_FILE (specified as second arg(
-      * 6. All other SPARK_SUBMIT_* env variables (specified as first arg
+     /* See docco for SparkSubmitArguments to see the various config sources and their priority.
+      * Of note here is that we are explicitly treating SPARK_SUBMIT* environment vars
+      * as the highest priority source
+      * Followed by any property files located at SPARK_SUBMIT_PROPERTIES_FILE
+      * Followed by the standard priorities specified by the docco un SparkSubmitArguments
       */
     val conf = SparkSubmitArguments.mergeSparkProperties(Vector(submitEnvVars,
         Map(SparkPropertiesFile->sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE").get)))

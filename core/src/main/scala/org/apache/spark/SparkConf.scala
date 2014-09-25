@@ -17,10 +17,8 @@
 
 package org.apache.spark
 
-import org.apache.spark.deploy.SparkSubmitArguments
-
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap,Map}
+import scala.collection.mutable.HashMap
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -50,10 +48,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
-    val sparkConfigs = SparkSubmitArguments.mergeSparkProperties(Vector.empty)
     // Load any spark.* system properties
-    for ((k, v) <- sparkConfigs
-     if k.startsWith("spark.")) {
+    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
       settings(k) = v
     }
   }
@@ -192,18 +188,18 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."
     getAll.filter{case (k, v) => k.startsWith(prefix)}
-          .map{case (k, v) => (k.substring(prefix.length), v)}
+      .map{case (k, v) => (k.substring(prefix.length), v)}
   }
 
   /** Get all akka conf variables set on this SparkConf */
   def getAkkaConf: Seq[(String, String)] =
-    /* This is currently undocumented. If we want to make this public we should consider
-     * nesting options under the spark namespace to avoid conflicts with user akka options.
-     * Otherwise users configuring their own akka code via system properties could mess up
-     * spark's akka options.
-     *
-     *   E.g. spark.akka.option.x.y.x = "value"
-     */
+  /* This is currently undocumented. If we want to make this public we should consider
+   * nesting options under the spark namespace to avoid conflicts with user akka options.
+   * Otherwise users configuring their own akka code via system properties could mess up
+   * spark's akka options.
+   *
+   *   E.g. spark.akka.option.x.y.x = "value"
+   */
     getAll.filter { case (k, _) => isAkkaConf(k) }
 
   /** Does the configuration contain a given parameter? */
@@ -251,7 +247,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Validate memory fractions
     val memoryKeys = Seq(
       "spark.storage.memoryFraction",
-      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
@@ -334,9 +330,9 @@ private[spark] object SparkConf {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     isAkkaConf(name) ||
-    name.startsWith("spark.akka") ||
-    name.startsWith("spark.auth") ||
-    isSparkPortConf(name)
+      name.startsWith("spark.akka") ||
+      name.startsWith("spark.auth") ||
+      isSparkPortConf(name)
   }
 
   /**

@@ -26,7 +26,7 @@ import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, Thread
 import org.apache.log4j.PropertyConfigurator
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
+import scala.collection.{Seq, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -1479,6 +1479,14 @@ private[spark] object Utils extends Logging {
     PropertyConfigurator.configure(pro)
   }
 
+  /**
+   * Flatten a map of maps out into a single map, later maps in the propList
+   * have priority over older ones
+   * @param propList Seq of property maps[PropName->PropValue] to merge
+   */
+  private[spark] def mergePropertyMaps(propList: Seq[Map[String, String]]): Map[String, String] = {
+    propList.reverse.reduce(_ ++ _)
+  }
 }
 
 /**
@@ -1500,4 +1508,6 @@ private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: St
       }
     }
   }
+
+
 }
