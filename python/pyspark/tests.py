@@ -70,7 +70,7 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 class TestMerger(unittest.TestCase):
 
     def setUp(self):
-        self.N = 1 << 16
+        self.N = 1 << 12
         self.l = [i for i in xrange(self.N)]
         self.data = zip(self.l, self.l)
         self.agg = Aggregator(lambda x: [x],
