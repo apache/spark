@@ -141,7 +141,7 @@ class ArtificialNeuralNetwork private[mllib](
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
    *
-   * @param initialWeights: the initial weights of the ANN   
+   * @param initialWeights The initial weights of the ANN   
    *
    * @return Trained ANN as ArtificialNeuralNetworkModel.
    *
