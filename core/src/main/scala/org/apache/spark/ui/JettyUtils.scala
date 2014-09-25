@@ -21,6 +21,8 @@ import java.net.{InetSocketAddress, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import org.eclipse.jetty.util.ssl.SslContextFactory
+
 import scala.annotation.tailrec
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
@@ -186,7 +188,9 @@ private[spark] object JettyUtils extends Logging {
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server
-      server.addConnector(getConnector(currentPort, conf))
+      val connector = getConnector(currentPort, conf)
+      connector.setHost(hostName)
+      server.addConnector(connector)
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
@@ -222,26 +226,45 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
-  private def buildSslSelectChannelConnector(port: Int, conf: SparkConf): Connector =
-  {
-    val connector = new SslSelectChannelConnector
-    connector.setPort(port)
+  private def buildSslSelectChannelConnector(port: Int, conf: SparkConf): Connector =  {
 
-    val context = connector.getSslContextFactory
+    val ctxFactory = new SslContextFactory()
     val needAuth = conf.getBoolean("spark.client.https.need-auth", false)
 
-    context.setNeedClientAuth(needAuth)
-    context.setKeyManagerPassword(conf.get("spark.ssl.server.keystore.keypassword", "123456"))
-    context.setKeyStorePath(conf.get("spark.ssl.server.keystore.location"))
-    context.setKeyStorePassword(conf.get("spark.ssl.server.keystore.password", "123456"))
-    context.setKeyStoreType(conf.get("spark.ssl.server.keystore.type", "jks"))
+    conf.getAll
+      .filter { case (k, v) => k.startsWith("spark.ui.ssl.") }
+      .foreach { case (k, v) => setSslContextFactoryProps(k,v,ctxFactory) }
+
+    ctxFactory.setNeedClientAuth(needAuth)
+    ctxFactory.setKeyManagerPassword(conf.get("spark.ssl.server.keystore.keypassword", "123456"))
+    ctxFactory.setKeyStorePath(conf.get("spark.ssl.server.keystore.location"))
+    ctxFactory.setKeyStorePassword(conf.get("spark.ssl.server.keystore.password", "123456"))
+    ctxFactory.setKeyStoreType(conf.get("spark.ssl.server.keystore.type", "jks"))
 
     if (needAuth && conf.contains("spark.ssl.server.truststore.location")) {
-      context.setTrustStore(conf.get("spark.ssl.server.truststore.location"))
-      context.setTrustStorePassword(conf.get("spark.ssl.server.truststore.password"))
-      context.setTrustStoreType(conf.get("spark.ssl.server.truststore.type", "jks"))
+      ctxFactory.setTrustStore(conf.get("spark.ssl.server.truststore.location"))
+      ctxFactory.setTrustStorePassword(conf.get("spark.ssl.server.truststore.password"))
+      ctxFactory.setTrustStoreType(conf.get("spark.ssl.server.truststore.type", "jks"))
     }
+
+    val connector = new SslSelectChannelConnector(ctxFactory)
+    connector.setPort(port)
     connector
+  }
+
+  private def setSslContextFactoryProps(
+      key: String, value: String, ctxFactory:SslContextFactory) = {
+    key match {
+      case "spark.ui.ssl.server.keystore.keypassword" => ctxFactory.setKeyManagerPassword(value)
+      case "spark.ui.ssl.server.keystore.location" => ctxFactory.setKeyStorePath(value)
+      case "spark.ui.ssl.server.keystore.password" => ctxFactory.setKeyStorePassword(value)
+      case "spark.ui.ssl.server.keystore.type" => ctxFactory.setKeyStoreType(value)
+      case "spark.ui.ssl.server.truststore.location" => ctxFactory.setTrustStore(value)
+      case "spark.ui.ssl.server.truststore.password" => ctxFactory.setTrustStorePassword(value)
+      case "spark.ui.ssl.server.truststore.type" => ctxFactory.setTrustStoreType(value)
+    }
+    ctxFactory
+
   }
 
 }

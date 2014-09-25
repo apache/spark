@@ -92,7 +92,7 @@ private[spark] abstract class WebUI(
     }
   }
 
-  def appUiAddressPrefix = if(conf.get("spark.ui.https.enabled", "false").toBoolean) {
+  def appUiAddressPrefix = if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
     "https"
   } else {
     "http"
