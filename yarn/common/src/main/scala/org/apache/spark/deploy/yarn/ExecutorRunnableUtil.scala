@@ -98,7 +98,7 @@ trait ExecutorRunnableUtil extends Logging {
     */
 
     // For log4j configuration to reference
-    javaOpts += "-D=spark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR
+    javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
