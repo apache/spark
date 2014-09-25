@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.language.dynamics
 
+import org.json4s.JsonDSL._
+
 import org.apache.spark.sql.catalyst.types.DataType
 
 /**
