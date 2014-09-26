@@ -43,15 +43,15 @@ import scala.collection.BitSet
 
 object SparkGLRM {
   // Number of movies
-  var M = 100
+  var M = 1000000
   // Number of users
-  var U = 100
+  var U = 1000000
   // Number of nonzeros per row
-  var NNZ = 30
+  var NNZ = 10
   // Number of features
   var rank = 5
   // Number of iterations
-  var ITERATIONS = 30
+  var ITERATIONS = 3
   // Regularization parameter
   var REG = 0.1
   // Number of partitions for data
@@ -96,7 +96,7 @@ object SparkGLRM {
 
   /* End of GLRM libarry */
 
-  
+
 
   // Helper functions for updating
   def computeLossGrads(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
@@ -185,13 +185,13 @@ object SparkGLRM {
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
       // Comment this out in large runs to avoid an extra pass
-      errs(iter-1) = R.map { case (i, j, rij) =>
-        val err = msb.value(i).dot(usb.value(j)) - rij
-        err * err
-      }.mean()
+      //errs(iter-1) = R.map { case (i, j, rij) =>
+      //  val err = msb.value(i).dot(usb.value(j)) - rij
+      //  err * err
+      //}.mean()
     }
 
-    // Uncomments for debug output
+    // Uncomment for debug output
     //println("US factor")
     //println(us.mkString(", "))
     //println()
@@ -200,8 +200,8 @@ object SparkGLRM {
     //println(ms.mkString(", "))
     //println()
 
-    println("RMSE")
-    println(errs.mkString(", "))
+    //println("RMSE")
+    //println(errs.mkString(", "))
 
     sc.stop()
   }
