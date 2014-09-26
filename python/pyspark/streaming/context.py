@@ -22,6 +22,8 @@ from pyspark.streaming.duration import Duration, Seconds
 
 from py4j.java_collections import ListConverter
 
+__all__ = ["StreamingContext"]
+
 
 class StreamingContext(object):
     """
