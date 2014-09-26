@@ -53,7 +53,8 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   def copyTo(rdd: RDD[_]): PythonRDD = {
-    new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning, pythonExec, broadcastVars, accumulator)
+    new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning,
+      pythonExec, broadcastVars, accumulator)
   }
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)

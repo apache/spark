@@ -47,7 +47,7 @@ trait PythonRDDFunction {
  * @param cache
  */
 class PythonTransformedDStream (parent: DStream[_], parent2: DStream[_], func: PythonRDDFunction,
-                                cache: Boolean = false) //TODO: better name
+                                cache: Boolean = false)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   var lastResult: PythonRDD = _
