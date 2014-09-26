@@ -20,7 +20,6 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
-import atexit
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -31,6 +30,7 @@ from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, CompressedSerializer
 from pyspark.storagelevel import StorageLevel
+from pyspark import rdd
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
 
@@ -191,9 +191,6 @@ class SparkContext(object):
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
-
-        # profiling stats collected for each PythonRDD
-        self._profile_stats = []
 
     def _initialize_context(self, jconf):
         """
@@ -794,40 +791,6 @@ class SparkContext(object):
         mappedRDD = rdd.mapPartitions(partitionFunc)
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
-
-    def _add_profile(self, id, profileAcc):
-        if not self._profile_stats:
-            dump_path = self._conf.get("spark.python.profile.dump")
-            if dump_path:
-                atexit.register(self.dump_profiles, dump_path)
-            else:
-                atexit.register(self.show_profiles)
-
-        self._profile_stats.append([id, profileAcc, False])
-
-    def show_profiles(self):
-        """ Print the profile stats to stdout """
-        for i, (id, acc, showed) in enumerate(self._profile_stats):
-            stats = acc.value
-            if not showed and stats:
-                print "=" * 60
-                print "Profile of RDD<id=%d>" % id
-                print "=" * 60
-                stats.sort_stats("tottime", "cumtime").print_stats()
-                # mark it as showed
-                self._profile_stats[i][2] = True
-
-    def dump_profiles(self, path):
-        """ Dump the profile stats into directory `path`
-        """
-        if not os.path.exists(path):
-            os.makedirs(path)
-        for id, acc, _ in self._profile_stats:
-            stats = acc.value
-            if stats:
-                p = os.path.join(path, "rdd_%d.pstats" % id)
-                stats.dump_stats(p)
-        self._profile_stats = []
 
 
 def _test():
