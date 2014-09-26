@@ -249,11 +249,11 @@ worth optimizing.
 
 ## Data Locality
 
-One of the most important principles of distributed computing is data locality.  If data and the
-code that operates on it are together than computation tends to be fast.  But if code and data are
-separated, one must move to the other.  Typically it is faster to ship serialized code from place to
-place than a chunk of data because code size is much smaller than data.  Spark builds its scheduling
-around this general principle of data locality.
+Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
+operates on it are together than computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically it is faster to ship serialized code from place to place than
+a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
+this general principle of data locality.
 
 Data locality is how close data is to the code processing it.  There are several levels of
 locality based on the data's current location.  In order from closest to farthest:
