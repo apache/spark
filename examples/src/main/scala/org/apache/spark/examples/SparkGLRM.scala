@@ -43,17 +43,17 @@ import scala.collection.BitSet
 
 object SparkGLRM {
   // Number of movies
-  var M = 100000
+  var M = 100
   // Number of users
-  var U = 100000
+  var U = 100
   // Number of nonzeros per row
   var NNZ = 10
   // Number of features
-  var rank = 2
+  var rank = 20
   // Number of iterations
-  var ITERATIONS = 10
+  var ITERATIONS = 50
   // Regularization parameter
-  var REG = 10
+  var REG = 100
   // Number of partitions for data
   var NUMCHUNKS = 4
 
@@ -97,7 +97,7 @@ object SparkGLRM {
   }
 
 
-  // Simple L2 loss for convegence checking, NOT part of GLRM library
+  // Simple L2 loss for convergence checking, NOT part of GLRM library
   def computeL2Loss(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
                     R: RDD[(Int, Int, Double)]) : RDD[(Int, Int, Double)] = {
     R.map { case (i, j, rij) => (i, j, lossL2(i, j, ms.value(i).dot(us.value(j)), rij))}
@@ -139,16 +139,16 @@ object SparkGLRM {
 
       // Update ms
       println("Computing gradient losses")
-      var lg = computeLossGrads(msb, usb, R, lossL2Grad)
+      var lg = computeLossGrads(msb, usb, R, lossL2Grad)  // GLRM: Change loss here
       println("Updating M factors")
-      ms = update(usb, msb, lg, 1.0/iter, proxL2)
+      ms = update(usb, msb, lg, 1.0/iter, proxL2)  // GLRM: Change prox here
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
-      lg = computeLossGrads(usb, msb, RT, lossL2Grad)
+      lg = computeLossGrads(usb, msb, RT, lossL2Grad) // GLRM: Change loss here
       println("Updating U factors")
-      us = update(msb, usb, lg, 1.0/iter, proxL2)
+      us = update(msb, usb, lg, 1.0/iter, proxL2) // GLRM: Change prox here
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
       println("error = " + computeL2Loss(msb, usb, R).map { case (_, _, lij) => lij }.mean())
