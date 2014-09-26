@@ -201,7 +201,7 @@ private[spark] class ExternalSorter[K, V, C](
         elementsRead += 1
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
-        maybeSpill(usingMap = true)
+        maybeSpillCollection(usingMap = true)
       }
     } else {
       // Stick values into our buffer
@@ -209,7 +209,7 @@ private[spark] class ExternalSorter[K, V, C](
         elementsRead += 1
         val kv = records.next()
         buffer.insert((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
-        maybeSpill(usingMap = false)
+        maybeSpillCollection(usingMap = false)
       }
     }
   }
@@ -219,43 +219,32 @@ private[spark] class ExternalSorter[K, V, C](
    *
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
-  private def maybeSpill(usingMap: Boolean): Unit = {
+  private def maybeSpillCollection(usingMap: Boolean): Unit = {
     if (!spillingEnabled) {
       return
     }
 
     if (usingMap) {
-      map = maybeSpill(map)
+      if (maybeSpill(map, map.estimateSize())) {
+        map = new SizeTrackingAppendOnlyMap[(Int, K), C]
+      }
     } else {
-      buffer = maybeSpill(buffer)
+      if (maybeSpill(buffer, buffer.estimateSize())) {
+        buffer = new SizeTrackingPairBuffer[(Int, K), C]
+      }
     }
   }
 
   /**
    * Spill the current in-memory collection to disk, adding a new file to spills, and clear it.
    */
-  protected[this] def spill[A <: SizeTrackingPairCollection[(Int, K), C]](collection: A): A = {
-    val memorySize = collection.estimateSize()
-    val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory batch of %d MB to disk (%d spill%s so far)"
-      .format(threadId, memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
-
+  override protected[this] def spill(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
     if (bypassMergeSort) {
       spillToPartitionFiles(collection)
     } else {
       spillToMergeableFile(collection)
     }
-
-    newCollection[A](collection)
   }
-
-  private def newCollection[A](t: A): A =
-    t match {
-      case _: AppendOnlyMap[_, _] =>
-        new SizeTrackingAppendOnlyMap[(Int, K), C].asInstanceOf[A]
-      case _ =>
-        new SizeTrackingPairBuffer[(Int, K), C].asInstanceOf[A]
-    }
 
   /**
    * Spill our in-memory collection to a sorted file that we can merge later (normal code path).

@@ -69,7 +69,7 @@ class ExternalAppendOnlyMap[K, V, C](
   extends Iterable[(K, C)]
   with Serializable
   with Logging
-  with Spillable[SizeTrackingAppendOnlyMap[K, C]] {
+  with Spillable[SizeTracker] {
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
@@ -128,7 +128,9 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      currentMap = maybeSpill(currentMap)
+      if (maybeSpill(currentMap, currentMap.estimateSize())) {
+        currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      }
       currentMap.changeValue(curEntry._1, update)
       elementsRead += 1
     }
@@ -150,11 +152,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  protected[this] def spill[A <: SizeTrackingAppendOnlyMap[K, C]](collection: A): A = {
-    val mapSize = collection.estimateSize()
-    val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
-      .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+  override protected[this] def spill(collection: SizeTracker): Unit = {
     val (blockId, file) = diskBlockManager.createTempBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
@@ -213,8 +211,6 @@ class ExternalAppendOnlyMap[K, V, C](
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
 
     elementsRead = 0
-
-    new SizeTrackingAppendOnlyMap[K, C].asInstanceOf[A]
   }
 
   def diskBytesSpilled: Long = _diskBytesSpilled
