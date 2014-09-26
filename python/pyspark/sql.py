@@ -974,7 +974,7 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func, None,
+        command = (func,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
         ser = CloudPickleSerializer()
