@@ -480,8 +480,6 @@ class RowMatrix(
       10 * math.log(numCols()) / threshold
     }
 
-    println(s"gamma: $gamma")
-
     columnSimilaritiesDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
   }
 
@@ -504,9 +502,18 @@ class RowMatrix(
     require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
     require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
     val sg = math.sqrt(gamma) // sqrt(gamma) used many times
-    val p = colMags.map(c => sg / c)
-    val q = colMags.map(c => math.min(sg, c))
+
+    // Don't divide by zero for those columns with zero magnitude
+    val colMagsCorrected = colMags.map(x => if (x == 0) 1.0 else x)
+
+    val sc = rows.context
+    val pBV = sc.broadcast(colMagsCorrected.map(c => sg / c))
+    val qBV = sc.broadcast(colMagsCorrected.map(c => math.min(sg, c)))
+
     val sims = rows.mapPartitionsWithIndex { (indx, iter) =>
+      val p = pBV.value
+      val q = qBV.value
+
       val rand = new XORShiftRandom(indx)
       val scaled = new Array[Double](p.size)
       iter.flatMap { row =>
