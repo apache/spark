@@ -47,29 +47,51 @@ object SparkGLRM {
   // Number of users
   var U = 100
   // Number of nonzeros per row
-  var NNZ = 10
+  var NNZ = 30
   // Number of features
-  var rank = 20
+  var rank = 5
   // Number of iterations
-  var ITERATIONS = 50
+  var ITERATIONS = 30
   // Regularization parameter
-  var REG = 100
+  var REG = 0.1
   // Number of partitions for data
   var NUMCHUNKS = 4
 
-  /**
-   * Bank of loss functions
-   */
+  /*********************************
+   * GLRM: Bank of loss functions
+   *********************************/
   def lossL2Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     prediction - actual
   }
 
-  /**
-   * Bank of prox functions
-   */
+  def lossL1Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+    // gradient of L1 loss
+    math.signum(prediction - actual)
+  }
+
+  /***********************************
+   * GLRM: Bank of prox functions
+   **********************************/
+  // L2 prox
   def proxL2(v:BDV[Double], stepSize:Double): BDV[Double] = {
-    // L2 prox
-    v / (1.0 + stepSize * REG)
+    val arr = v.toArray.map(x => x / (1.0 + stepSize * REG))
+    new BDV[Double](arr)
+  }
+
+  // L1 prox
+  def proxL1(v:BDV[Double], stepSize:Double): BDV[Double] = {
+    val arr = v.toArray.map(x =>
+      if (math.abs(x) < REG) 0
+      else if (x < -REG) x + REG
+      else x - REG
+    )
+    new BDV[Double](arr)
+  }
+
+  // Non-negative prox
+  def proxNonneg(v:BDV[Double], stepSize:Double): BDV[Double] = {
+    val arr = v.toArray.map(x => math.max(x, 0))
+    new BDV[Double](arr)
   }
 
   // Helper functions for updating
@@ -82,33 +104,23 @@ object SparkGLRM {
   // Update factors
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
              loss_grads: RDD[(Int, Int, Double)], stepSize: Double,
+             norms: Array[Double],
              prox: (BDV[Double], Double) => BDV[Double])
   : Array[BDV[Double]] = {
     val ret = Array.fill(ms.value.size)(BDV.zeros[Double](rank))
 
-    val retu = loss_grads.map { case (i, j, lossij) => (i, us.value(j) * lossij)} // vector/scalar multiply
+    val retu = loss_grads.map { case (i, j, lossij) => (i, us.value(j) * lossij) } // vector/scalar multiply
                 .reduceByKey(_ + _).collect() // vector addition through breeze
 
     for (entry <- retu) {
-      ret(entry._1) = prox(ms.value(entry._1) - entry._2 * stepSize, stepSize)
+      ret(entry._1) = prox(ms.value(entry._1) - entry._2 * (stepSize / (norms(entry._1) + 1.0)), stepSize)
     }
 
     ret
   }
 
-
-  // Simple L2 loss for convergence checking, NOT part of GLRM library
-  def computeL2Loss(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
-                    R: RDD[(Int, Int, Double)]) : RDD[(Int, Int, Double)] = {
-    R.map { case (i, j, rij) => (i, j, lossL2(i, j, ms.value(i).dot(us.value(j)), rij))}
-  }
-
-  def lossL2(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    (prediction - actual) * (prediction - actual)
-  }
-
   def main(args: Array[String]) {
-    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
+    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%f\n", M, U, NNZ, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkGLRM")
     val sc = new SparkContext(sparkConf)
@@ -119,7 +131,6 @@ object SparkGLRM {
       while (inds.size < NNZ) {
         inds += scala.util.Random.nextInt(U)
       }
-
       inds.toArray.map(j => (i, j, scala.math.random))
     }
 
@@ -127,12 +138,30 @@ object SparkGLRM {
     val RT = R.map { case (i, j, rij) => (j, i, rij) }
 
     // Initialize m and u
-    var ms = Array.fill(M)(BDV[Double](Array.tabulate(rank)(x => math.random)))
-    var us = Array.fill(U)(BDV[Double](Array.tabulate(rank)(x => math.random)))
+    var ms = Array.fill(M)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
+    var us = Array.fill(U)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
+
+    // Compute number of nonzeros per row and column
+    val mCountRDD = R.map { case (i, j, rij) => (i, 1) }.reduceByKey(_ + _).collect()
+    val mCount = Array.ofDim[Double](M)
+    for (entry <- mCountRDD)
+      mCount(entry._1) = entry._2
+    val maxM = mCount.max
+    val uCountRDD = R.map { case (i, j, rij) => (j, 1) }.reduceByKey(_ + _).collect()
+    val uCount = Array.ofDim[Double](U)
+    for (entry <- uCountRDD)
+      uCount(entry._1) = entry._2
+    val maxU = uCount.max
+
 
     // Iteratively update movies then users
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
+
+    val errs = Array.ofDim[Double](ITERATIONS)
+
+    //val stepSize = 10.0 / (maxU + maxM)
+    val stepSize = 1.0
 
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
@@ -141,21 +170,34 @@ object SparkGLRM {
       println("Computing gradient losses")
       var lg = computeLossGrads(msb, usb, R, lossL2Grad)  // GLRM: Change loss here
       println("Updating M factors")
-      ms = update(usb, msb, lg, 1.0/iter, proxL2)  // GLRM: Change prox here
+      ms = update(usb, msb, lg, stepSize, mCount, proxL2)  // GLRM: Change prox here
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
       lg = computeLossGrads(usb, msb, RT, lossL2Grad) // GLRM: Change loss here
       println("Updating U factors")
-      us = update(msb, usb, lg, 1.0/iter, proxL2) // GLRM: Change prox here
+      us = update(msb, usb, lg, stepSize, uCount, proxL2) // GLRM: Change prox here
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
-      println("error = " + computeL2Loss(msb, usb, R).map { case (_, _, lij) => lij }.mean())
-      //println(us.mkString(", "))
-      //println(ms.mkString(", "))
-      println()
+      // Comment this out in large runs to avoid an extra pass
+      errs(iter-1) = R.map { case (i, j, rij) =>
+        val err = msb.value(i).dot(usb.value(j)) - rij
+        err * err
+      }.mean()
     }
+
+    // Uncomments for debug output
+    //println("US factor")
+    //println(us.mkString(", "))
+    //println()
+
+    //println("MS factor")
+    //println(ms.mkString(", "))
+    //println()
+
+    println("RMSE")
+    println(errs.mkString(", "))
 
     sc.stop()
   }
