@@ -455,7 +455,13 @@ class RowMatrix(
    *         between columns of this matrix.
    */
   def columnSimilarities(threshold: Double): CoordinateMatrix = {
-    require(threshold >= 0 && threshold <= 1, s"Threshold not in [0,1]: $threshold")
+    require(threshold >= 0, s"Threshold cannot be negative: $threshold")
+
+    if (threshold > 1) {
+      logWarning(s"Threshold is greater than 1: $threshold " +
+      "Computation will be more efficient with promoted sparsity, " +
+      " however there is no correctness guarantee.")
+    }
 
     val gamma = if (threshold < 1e-6) {
       Double.PositiveInfinity
