@@ -16,7 +16,7 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.{ConcurrentHashMap, Executors}
+import java.util.concurrent.{CountDownLatch, ConcurrentHashMap, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConversions._
@@ -58,7 +58,11 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   private val seqBase = RandomStringUtils.randomAlphanumeric(8)
   private val seqCounter = new AtomicLong(0)
 
+
   @volatile private var stopped = false
+
+  @volatile private var isTest = false
+  private var testLatch: CountDownLatch = null
 
   /**
    * Returns a bunch of events to Spark over Avro RPC.
@@ -90,6 +94,9 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
         val processor = new TransactionProcessor(
           channel, seq, n, transactionTimeout, backOffInterval, this)
         sequenceNumberToProcessor.put(seq, processor)
+        if (isTest) {
+          processor.countDownWhenBatchAcked(testLatch)
+        }
         Some(processor)
       } else {
         None
@@ -139,6 +146,11 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
     sequenceNumberToProcessor.synchronized {
       sequenceNumberToProcessor.remove(sequenceNumber.toString)
     }
+  }
+
+  private[sink] def countDownWhenBatchAcked(latch: CountDownLatch) {
+    testLatch = latch
+    isTest = true
   }
 
   /**
