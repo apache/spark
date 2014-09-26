@@ -9,10 +9,9 @@ R.
 ## Installing SparkR
 
 ### Requirements
-SparkR requires Scala 2.10 and Spark version >= 0.9.0. Note that as
-Spark 0.9.0 has not yet been released the current build uses the latest release
+SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses the 1.1.0
 candidate from the Apache staging repositories. You can also build SparkR against a
-different Spark version (>= 0.9) by modifying `pkg/src/build.sbt`.
+different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
 
 SparkR also requires the R package `rJava` to be installed. To install `rJava`,
 you can run the following command in R:
@@ -25,7 +24,7 @@ To develop SparkR, you can build the scala package and the R package using
 
     ./install-dev.sh
 
-If you wish to try out the package directly from github, you can use `install_github` from `devtools`
+If you wish to try out the package directly from github, you can use [`install_github`](http://www.inside-r.org/packages/cran/devtools/docs/install_github) from [`devtools`](http://www.inside-r.org/packages/cran/devtools). Note that you can specify which branch, tag etc to install from.
 
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
@@ -79,7 +78,7 @@ pass the variable `spark.executor.memory` to the SparkContext constructor.
 SparkR comes with several sample programs in the `examples` directory.
 To run one of them, use `./sparkR <filename> <args>`. For example:
 
-    ./sparkR examples/pi.R local[2]  
+    ./sparkR examples/pi.R local[2]
 
 You can also run the unit-tests for SparkR by running
 
