@@ -69,16 +69,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
    * This is intended to be called only after the provided arguments have been parsed.
    */
   private def validateArgs(): Unit = {
-    // TODO: memory checks are outdated (SPARK-3476)
-    Map[Boolean, String](
-      (numExecutors <= 0) -> "You must specify at least 1 executor!",
-      (amMemory <= amMemoryOverhead) -> s"AM memory must be > $amMemoryOverhead MB",
-      (executorMemory <= executorMemoryOverhead) ->
-        s"Executor memory must be > $executorMemoryOverhead MB"
-    ).foreach { case (errorCondition, errorMessage) =>
-      if (errorCondition) {
-        throw new IllegalArgumentException(errorMessage + "\n" + getUsageMessage())
-      }
+    if (numExecutors <= 0) {
+      throw new IllegalArgumentException(
+        "You must specify at least 1 executor!\n" + getUsageMessage())
     }
   }
 
