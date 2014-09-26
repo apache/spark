@@ -330,6 +330,9 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("timestamp cast #8",
     "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
 
+  createQueryTest("select null from table",
+    "SELECT null FROM src LIMIT 1")
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
