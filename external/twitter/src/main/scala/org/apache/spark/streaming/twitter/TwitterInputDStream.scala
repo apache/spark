@@ -52,6 +52,12 @@ class TwitterInputDStream(
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
+  def this(ssc_ : StreamingContext,
+           twitterAuth: Option[Authorization],
+           filters: Seq[String],
+           storageLevel: StorageLevel) =
+    this(ssc_, twitterAuth, filters, 0, Nil, storageLevel)
+
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
   }
@@ -71,6 +77,11 @@ class TwitterReceiver(
     locations: Seq[BoundingBox],
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
+
+  def this(twitterAuth: Authorization,
+           filters: Seq[String],
+           storageLevel: StorageLevel) =
+    this(twitterAuth, filters, 0, Nil, storageLevel)
 
   @volatile private var twitterStream: TwitterStream = _
   @volatile private var stopped = false
