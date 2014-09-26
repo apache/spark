@@ -43,9 +43,9 @@ import scala.collection.BitSet
 
 object SparkGLRM {
   // Number of movies
-  var M = 1000000
+  var M = 100000
   // Number of users
-  var U = 1000000
+  var U = 100000
   // Number of nonzeros per row
   var NNZ = 10
   // Number of features
@@ -57,40 +57,32 @@ object SparkGLRM {
   // Number of partitions for data
   var NUMCHUNKS = 4
 
-
-
-  /*
-   * GLRM settings: Change the Loss function and prox here
+  /**
+   * Bank of loss functions
    */
-
-  def loss(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    (prediction - actual) * (prediction - actual)
-  }
-
-  def loss_grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+  def lossL2Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     prediction - actual
   }
 
-  def computeLossGrads(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
-                       R: RDD[(Int, Int, Double)])
-  : RDD[(Int, Int, Double)] = {
-    R.map { case (i, j, rij) => (i, j, loss_grad(i, j, ms.value(i).dot(us.value(j)), rij))}
-  }
-
-  def computeLoss(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
-                   R: RDD[(Int, Int, Double)])
-  : RDD[(Int, Int, Double)] = {
-    R.map { case (i, j, rij) => (i, j, loss(i, j, ms.value(i).dot(us.value(j)), rij))}
-  }
-
+  /**
+   * Bank of prox functions
+   */
   def proxL2(v:BDV[Double], stepSize:Double): BDV[Double] = {
     // L2 prox
     v / (1.0 + stepSize * REG)
   }
 
+  // Helper functions for updating
+  def computeLossGrads(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
+                       R: RDD[(Int, Int, Double)],
+                       lossGrad: (Int, Int, Double, Double) => Double) : RDD[(Int, Int, Double)] = {
+    R.map { case (i, j, rij) => (i, j, lossGrad(i, j, ms.value(i).dot(us.value(j)), rij))}
+  }
+
   // Update factors
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
-             loss_grads: RDD[(Int, Int, Double)], stepSize: Double, prox: (BDV[Double], Double) => BDV[Double])
+             loss_grads: RDD[(Int, Int, Double)], stepSize: Double,
+             prox: (BDV[Double], Double) => BDV[Double])
   : Array[BDV[Double]] = {
     val ret = Array.fill(ms.value.size)(BDV.zeros[Double](rank))
 
@@ -104,6 +96,16 @@ object SparkGLRM {
     ret
   }
 
+
+  // Simple L2 loss for convegence checking, NOT part of GLRM library
+  def computeL2Loss(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
+                    R: RDD[(Int, Int, Double)]) : RDD[(Int, Int, Double)] = {
+    R.map { case (i, j, rij) => (i, j, lossL2(i, j, ms.value(i).dot(us.value(j)), rij))}
+  }
+
+  def lossL2(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+    (prediction - actual) * (prediction - actual)
+  }
 
   def main(args: Array[String]) {
     printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
@@ -137,19 +139,19 @@ object SparkGLRM {
 
       // Update ms
       println("Computing gradient losses")
-      var lg = computeLossGrads(msb, usb, R)
+      var lg = computeLossGrads(msb, usb, R, lossL2Grad)
       println("Updating M factors")
       ms = update(usb, msb, lg, 1.0/iter, proxL2)
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
-      lg = computeLossGrads(usb, msb, RT)
+      lg = computeLossGrads(usb, msb, RT, lossL2Grad)
       println("Updating U factors")
       us = update(msb, usb, lg, 1.0/iter, proxL2)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
-      println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij }.mean())
+      println("error = " + computeL2Loss(msb, usb, R).map { case (_, _, lij) => lij }.mean())
       //println(us.mkString(", "))
       //println(ms.mkString(", "))
       println()
