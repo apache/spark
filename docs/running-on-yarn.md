@@ -11,7 +11,7 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 
 Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the Spark project website. 
-To build Spark yourself, refer to the [building with Maven guide](building-with-maven.html).
+To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 # Configuration
 
@@ -204,6 +204,8 @@ To use a custom log4j configuration for the application master or executors, the
 Note that for the first option, both executors and the application master will share the same
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
 to the same log file).
+
+If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use "${spark.yarn.app.container.log.dir}" in your log4j.properties. For example, log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log. For streaming application, configuring RollingFileAppender and setting file location to YARN's log directory will avoid disk overflow caused by large log file, and logs can be accessed using YARN's log utility.
 
 # Important notes
 

@@ -215,6 +215,21 @@ FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
+class PStatsParam(AccumulatorParam):
+    """PStatsParam is used to merge pstats.Stats"""
+
+    @staticmethod
+    def zero(value):
+        return None
+
+    @staticmethod
+    def addInPlace(value1, value2):
+        if value1 is None:
+            return value2
+        value1.add(value2)
+        return value1
+
+
 class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
     """

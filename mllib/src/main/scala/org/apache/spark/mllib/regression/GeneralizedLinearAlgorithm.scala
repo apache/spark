@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -133,6 +134,15 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     this
   }
 
+  /** Whether a warning should be logged if the input RDD is uncached. */
+  private var warnOnUncachedInput = true
+
+  /** Disable warnings about uncached input. */
+  private[spark] def disableUncachedWarning(): this.type = {
+    warnOnUncachedInput = false
+    this
+  }
+
   /**
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
@@ -148,6 +158,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
+
+    if (warnOnUncachedInput && input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
 
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
@@ -221,6 +236,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      */
     if (useFeatureScaling) {
       weights = scaler.transform(weights)
+    }
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (warnOnUncachedInput && input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
     }
 
     createModel(weights, intercept)
