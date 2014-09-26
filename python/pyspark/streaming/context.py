@@ -15,12 +15,7 @@
 # limitations under the License.
 #
 
-import sys
-from signal import signal, SIGTERM, SIGINT
-import atexit
-import time
-
-from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
+from pyspark.serializers import UTF8Deserializer
 from pyspark.context import SparkContext
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.duration import Duration, Seconds

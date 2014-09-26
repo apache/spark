@@ -213,6 +213,32 @@ class TestBasicOperations(PySparkStreamingTestCase):
                     [("a", "11"), ("b", "1"), ("", "111")]]
         self._test_func(input, func, expected, sort=True)
 
+    def test_union(self):
+        input1 = [range(3), range(5), range(1)]
+        input2 = [range(3, 6), range(5, 6), range(1, 6)]
+
+        d1 = self.ssc._makeStream(input1)
+        d2 = self.ssc._makeStream(input2)
+        d = d1.union(d2)
+        result = d.collect()
+        expected = [range(6), range(6), range(6)]
+
+        self.ssc.start()
+        start_time = time.time()
+        # Loop until get the expected the number of the result from the stream.
+        while True:
+            current_time = time.time()
+            # Check time out.
+            if (current_time - start_time) > self.timeout * 2:
+                break
+            # StreamingContext.awaitTermination is not used to wait because
+            # if py4j server is called every 50 milliseconds, it gets an error.
+            time.sleep(0.05)
+            # Check if the output is the same length of expected output.
+            if len(expected) == len(result):
+                break
+        self.assertEqual(expected, result)
+
     def _sort_result_based_on_key(self, outputs):
         """Sort the list base onf first value."""
         for output in outputs:

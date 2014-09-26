@@ -28,9 +28,36 @@ class RDDFunction(object):
         self.func = func
         self.deserializer = jrdd_deserializer
 
-    def call(self, jrdd, jrdd2, milliseconds):
+    def call(self, jrdd, milliseconds):
         try:
             rdd = RDD(jrdd, self.ctx, self.deserializer)
+            r = self.func(rdd, milliseconds)
+            if r:
+                return r._jrdd
+        except:
+            import traceback
+            traceback.print_exc()
+
+    def __repr__(self):
+        return "RDDFunction(%s, %s)" % (str(self.deserializer), str(self.func))
+
+    class Java:
+        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
+
+
+class RDDFunction2(object):
+    """
+    This class is for py4j callback. This class is related with
+    org.apache.spark.streaming.api.python.PythonRDDFunction2.
+    """
+    def __init__(self, ctx, func, jrdd_deserializer):
+        self.ctx = ctx
+        self.func = func
+        self.deserializer = jrdd_deserializer
+
+    def call(self, jrdd, jrdd2, milliseconds):
+        try:
+            rdd = RDD(jrdd, self.ctx, self.deserializer) if jrdd else None
             other = RDD(jrdd2, self.ctx, self.deserializer) if jrdd2 else None
             r = self.func(rdd, other, milliseconds)
             if r:
@@ -43,7 +70,7 @@ class RDDFunction(object):
         return "RDDFunction(%s, %s)" % (str(self.deserializer), str(self.func))
 
     class Java:
-        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
+        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction2']
 
 
 def rddToFileName(prefix, suffix, time):

@@ -15,21 +15,15 @@
 # limitations under the License.
 #
 
-from collections import defaultdict
 from itertools import chain, ifilter, imap
 import operator
 
 from pyspark import RDD
-from pyspark.serializers import NoOpSerializer,\
-    BatchedSerializer, CloudPickleSerializer, pack_long,\
-    CompressedSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.resultiterable import ResultIterable
-from pyspark.streaming.util import rddToFileName, RDDFunction
-from pyspark.rdd import portable_hash, _parse_memory
-from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.streaming.util import rddToFileName, RDDFunction, RDDFunction2
+from pyspark.rdd import portable_hash
+from pyspark.streaming.duration import Seconds
 
-from py4j.java_collections import ListConverter, MapConverter
 
 __all__ = ["DStream"]
 
@@ -42,7 +36,6 @@ class DStream(object):
         self._jrdd_deserializer = jrdd_deserializer
         self.is_cached = False
         self.is_checkpointed = False
-        self._partitionFunc = None
 
     def context(self):
         """
@@ -159,7 +152,7 @@ class DStream(object):
         This is an output operator, so this DStream will be registered as an output
         stream and there materialized.
         """
-        jfunc = RDDFunction(self.ctx, lambda a, b, t: func(a, t), self._jrdd_deserializer)
+        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer)
         self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), jfunc)
 
     def pyprint(self):
@@ -306,19 +299,19 @@ class DStream(object):
         return result
 
     def transform(self, func):
-        return TransformedRDD(self, lambda a, b, t: func(a), cache=True)
-
-    def transformWith(self, func, other):
-        return TransformedRDD(self, lambda a, b, t: func(a, b), other)
+        return TransformedRDD(self, lambda a, t: func(a), True)
 
     def transformWithTime(self, func):
-        return TransformedRDD(self, lambda a, b, t: func(a, t))
+        return TransformedRDD(self, func, False)
+
+    def transformWith(self, func, other, keepSerializer=False):
+        return Transformed2RDD(self, lambda a, b, t: func(a, b), other, keepSerializer)
 
     def repartitions(self, numPartitions):
         return self.transform(lambda rdd: rdd.repartition(numPartitions))
 
     def union(self, other):
-        return self.transformWith(lambda a, b: a.union(b), other)
+        return self.transformWith(lambda a, b: a.union(b), other, True)
 
     def cogroup(self, other):
         return self.transformWith(lambda a, b: a.cogroup(b), other)
@@ -329,10 +322,34 @@ class DStream(object):
     def rightOuterJoin(self, other):
         return self.transformWith(lambda a, b: a.rightOuterJoin(b), other)
 
-    def slice(self, fromTime, toTime):
-        jrdds = self._jdstream.slice(fromTime._jtime, toTime._jtime)
-        # FIXME: serializer
-        return [RDD(jrdd, self.ctx, self.ctx.serializer) for jrdd in jrdds]
+    def _jtime(self, milliseconds):
+        return self.ctx._jvm.Time(milliseconds)
+
+    def slice(self, begin, end):
+        jrdds = self._jdstream.slice(self._jtime(begin), self._jtime(end))
+        return [RDD(jrdd, self.ctx, self._jrdd_deserializer) for jrdd in jrdds]
+
+    def window(self, windowDuration, slideDuration=None):
+        d = Seconds(windowDuration)
+        if slideDuration is None:
+            return DStream(self._jdstream.window(d), self._ssc, self._jrdd_deserializer)
+        s = Seconds(slideDuration)
+        return DStream(self._jdstream.window(d, s), self._ssc, self._jrdd_deserializer)
+
+    def reduceByWindow(self, reduceFunc, inReduceFunc, windowDuration, slideDuration):
+        pass
+
+    def countByWindow(self, window, slide):
+        pass
+
+    def countByValueAndWindow(self, window, slide, numPartitions=None):
+        pass
+
+    def groupByKeyAndWindow(self, window, slide, numPartitions=None):
+        pass
+
+    def reduceByKeyAndWindow(self, reduceFunc, inReduceFunc, window, slide, numPartitions=None):
+        pass
 
     def updateStateByKey(self, updateFunc):
         # FIXME: convert updateFunc to java JFunction2
@@ -340,21 +357,44 @@ class DStream(object):
         return self._jdstream.updateStateByKey(jFunc)
 
 
-# Window Operations
-# TODO: implement window
-# TODO: implement groupByKeyAndWindow
-# TODO: implement reduceByKeyAndWindow
-# TODO: implement countByValueAndWindow
-# TODO: implement countByWindow
-# TODO: implement reduceByWindow
-
-
 class TransformedRDD(DStream):
-    # TODO: better name for cache
-    def __init__(self, prev, func, other=None, cache=False):
-        # TODO: combine transformed RDD
+    def __init__(self, prev, func, reuse=False):
         ssc = prev._ssc
-        t = RDDFunction(ssc._sc, func, prev._jrdd_deserializer)
-        jdstream = ssc._jvm.PythonTransformedDStream(prev._jdstream.dstream(),
-                                                     other and other._jdstream, t, cache)
-        DStream.__init__(self, jdstream.asJavaDStream(), ssc, ssc._sc.serializer)
+        self._ssc = ssc
+        self.ctx = ssc._sc
+        self._jrdd_deserializer = self.ctx.serializer
+        self.is_cached = False
+        self.is_checkpointed = False
+
+        if isinstance(prev, TransformedRDD) and not prev.is_cached and not prev.is_checkpointed:
+            prev_func = prev.func
+            old_func = func
+            func = lambda rdd, t: old_func(prev_func(rdd, t), t)
+            reuse = reuse and prev.reuse
+            prev = prev.prev
+
+        self.prev = prev
+        self.func = func
+        self.reuse = reuse
+        self._jdstream_val = None
+
+    @property
+    def _jdstream(self):
+        if self._jdstream_val is not None:
+            return self._jdstream_val
+
+        jfunc = RDDFunction(self.ctx, self.func, self.prev._jrdd_deserializer)
+        jdstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(),
+                                                          jfunc, self.reuse).asJavaDStream()
+        self._jdstream_val = jdstream
+        return jdstream
+
+
+class Transformed2RDD(DStream):
+    def __init__(self, prev, func, other, keepSerializer=False):
+        ssc = prev._ssc
+        jfunc = RDDFunction2(ssc._sc, func, prev._jrdd_deserializer)
+        jdstream = ssc._jvm.PythonTransformed2DStream(prev._jdstream.dstream(),
+                                                      other._jdstream.dstream(), jfunc)
+        jrdd_serializer = prev._jrdd_deserializer if keepSerializer else ssc._sc.serializer
+        DStream.__init__(self, jdstream.asJavaDStream(), ssc, jrdd_serializer)

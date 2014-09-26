@@ -28,69 +28,83 @@ import org.apache.spark.streaming.api.java._
 
 
 /**
- * Interface for Python callback function
+ * Interface for Python callback function with two arguments
  */
 trait PythonRDDFunction {
-  def call(rdd: JavaRDD[_], rdd2: JavaRDD[_], time: Long): JavaRDD[Array[Byte]]
+  def call(rdd: JavaRDD[_], time: Long): JavaRDD[Array[Byte]]
 }
 
+/**
+ * Interface for Python callback function with three arguments
+ */
+trait PythonRDDFunction2 {
+  def call(rdd: JavaRDD[_], rdd2: JavaRDD[_], time: Long): JavaRDD[Array[Byte]]
+}
 
 /**
  * Transformed DStream in Python.
  *
  * If the result RDD is PythonRDD, then it will cache it as an template for future use,
  * this can reduce the Python callbacks.
- *
- * @param parent
- * @param parent2
- * @param func
- * @param cache
  */
-class PythonTransformedDStream (parent: DStream[_], parent2: DStream[_], func: PythonRDDFunction,
-                                cache: Boolean = false)
+class PythonTransformedDStream (parent: DStream[_], func: PythonRDDFunction,
+                                var reuse: Boolean = false)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   var lastResult: PythonRDD = _
 
-  override def dependencies = {
-    if (parent2 == null) {
-      List(parent)
-    } else {
-      List(parent, parent2)
-    }
-  }
+  override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     val rdd1 = parent.getOrCompute(validTime).getOrElse(null)
-    val rdd2 = if (parent2 != null) parent2.getOrCompute(validTime).getOrElse(null) else null
-
-    val r = if (rdd2 != null) {
-      func.call(JavaRDD.fromRDD(rdd1), JavaRDD.fromRDD(rdd2), validTime.milliseconds)
-    } else if (cache && lastResult != null) {
-      lastResult.copyTo(rdd1).asJavaRDD
+    if (reuse && lastResult != null) {
+      Some(lastResult.copyTo(rdd1))
     } else {
-      func.call(JavaRDD.fromRDD(rdd1), null, validTime.milliseconds)
-    }
-    if (r != null) {
-      if (lastResult == null && r.isInstanceOf[PythonRDD]) {
-        lastResult = r.asInstanceOf[PythonRDD]
+      val r = func.call(JavaRDD.fromRDD(rdd1), validTime.milliseconds).rdd
+      if (reuse && lastResult == null) {
+        r match {
+          case rdd: PythonRDD =>
+            if (rdd.parent(0) == rdd1) {
+              // only one PythonRDD
+              lastResult = rdd
+            } else {
+              // may have multiple stages
+              reuse = false
+            }
+        }
       }
       Some(r)
-    } else {
-      None
     }
   }
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
+/**
+ * Transformed from two DStreams in Python.
+ */
+class PythonTransformed2DStream (parent: DStream[_], parent2: DStream[_], func: PythonRDDFunction2)
+  extends DStream[Array[Byte]] (parent.ssc) {
+
+  override def dependencies = List(parent, parent2)
+
+  override def slideDuration: Duration = parent.slideDuration
+
+  override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    def resultRdd(stream: DStream[_]): JavaRDD[_] = stream.getOrCompute(validTime) match {
+      case Some(rdd) => JavaRDD.fromRDD(rdd)
+      case None => null
+    }
+    Some(func.call(resultRdd(parent), resultRdd(parent2), validTime.milliseconds))
+  }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
 
 /**
  * This is used for foreachRDD() in Python
- * @param prev
- * @param foreachFunction
  */
 class PythonForeachDStream(
     prev: DStream[Array[Byte]],
@@ -98,7 +112,7 @@ class PythonForeachDStream(
   ) extends ForEachDStream[Array[Byte]](
     prev,
     (rdd: RDD[Array[Byte]], time: Time) => {
-      foreachFunction.call(rdd.toJavaRDD(), null, time.milliseconds)
+      foreachFunction.call(rdd.toJavaRDD(), time.milliseconds)
     }
   ) {
 
