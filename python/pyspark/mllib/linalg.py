@@ -76,6 +76,9 @@ class Vector(object):
 
 
 class DenseVector(Vector):
+    """
+    A dense vector represented by a value array.
+    """
     def __init__(self, ar):
         if not isinstance(ar, array.array):
             ar = array.array('d', ar)
@@ -101,6 +104,7 @@ class DenseVector(Vector):
         >>> dense.dot(np.array(range(1, 3)))
         5.0
         """
+        assert len(self) == len(other), "vector sizes mismatch"
         if isinstance(other, SparseVector):
             return other.dot(self)
         elif _have_scipy and scipy.sparse.issparse(other):
@@ -127,6 +131,7 @@ class DenseVector(Vector):
         >>> dense1.squared_distance(sparse1)
         2.0
         """
+        assert len(self) == len(other), "vector sizes mismatch"
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
@@ -165,12 +170,10 @@ class DenseVector(Vector):
 
 
 class SparseVector(Vector):
-
     """
     A simple sparse vector class for passing data to MLlib. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
     """
-
     def __init__(self, size, *args):
         """
         Create a sparse vector, using either a dictionary, a list of
@@ -223,6 +226,7 @@ class SparseVector(Vector):
         >>> a.dot(np.array([[1, 1], [2, 2], [3, 3], [4, 4]]))
         array([ 22.,  22.])
         """
+        assert len(self) == len(other), "vector sizes mismatch"
         if type(other) == np.ndarray:
             if other.ndim == 1:
                 result = 0.0
@@ -348,7 +352,6 @@ class SparseVector(Vector):
         >>> v1 != v2
         False
         """
-
         return (isinstance(other, self.__class__)
                 and other.size == self.size
                 and other.indices == self.indices
@@ -414,23 +417,32 @@ class Vectors(object):
 
 
 class Matrix(object):
-    """ the Matrix """
-    def __init__(self, nRow, nCol):
-        self.nRow = nRow
-        self.nCol = nCol
+    """
+    Represents a local matrix.
+    """
+
+    def __init__(self, numRows, numCols):
+        self.numRows = numRows
+        self.numCols = numCols
 
     def toArray(self):
+        """
+        Returns its elements in a NumPy ndarray.
+        """
         raise NotImplementedError
 
 
 class DenseMatrix(Matrix):
-    def __init__(self, nRow, nCol, values):
-        Matrix.__init__(self, nRow, nCol)
-        assert len(values) == nRow * nCol
+    """
+    Column-majored dense matrix.
+    """
+    def __init__(self, numRows, numCols, values):
+        Matrix.__init__(self, numRows, numCols)
+        assert len(values) == numRows * numCols
         self.values = values
 
     def __reduce__(self):
-        return DenseMatrix, (self.nRow, self.nCol, self.values)
+        return DenseMatrix, (self.numRows, self.numCols, self.values)
 
     def toArray(self):
         """
@@ -439,10 +451,11 @@ class DenseMatrix(Matrix):
         >>> arr = array.array('d', [float(i) for i in range(4)])
         >>> m = DenseMatrix(2, 2, arr)
         >>> m.toArray()
-        array([[ 0.,  1.],
-               [ 2.,  3.]])
+        array([[ 0.,  2.],
+               [ 1.,  3.]])
         """
-        return np.ndarray((self.nRow, self.nCol), np.float64, buffer=self.values.tostring())
+        return np.ndarray((self.numRows, self.numCols), np.float64,
+                          order='F', buffer=self.values.tostring())
 
 
 def _test():
