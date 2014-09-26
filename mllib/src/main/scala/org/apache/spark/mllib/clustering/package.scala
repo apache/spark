@@ -42,7 +42,8 @@ package object base {
    * A mutable point in homogeneous coordinates that is lazily initialized.
    */
   private[mllib] class Centroid extends Serializable {
-    override def toString: String = weight + (if(raw != null) ("," + raw.toArray mkString ",") else "")
+    override def toString: String = weight +
+      (if(raw != null) ("," + raw.toArray mkString ",") else "")
 
     def isEmpty = weight == Zero
 
@@ -86,6 +87,7 @@ package object base {
   }
 
   private[mllib] trait PointOps[P <: FP, C <: FP] {
+
     def distance(p: P, c: C, upperBound: Double): Double
 
     def arrayToPoint(v: Array[Double]): P
