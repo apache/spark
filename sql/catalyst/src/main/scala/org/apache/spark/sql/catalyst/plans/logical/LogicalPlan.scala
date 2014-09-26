@@ -146,10 +146,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           parts
         }
 
-      if (resolver(option.name, remainingParts.head)) {
-        // Preserve the case of the user's attribute reference.
-        (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
+      if(resolver(option.name, remainingParts.head)) {
+        if(remainingParts.length == 1) {
+          //for simple data type
+          (option.withName(remainingParts.head), Nil) :: Nil
+        } else if (option.dataType.isInstanceOf[StructType]) {
+          //for complex data type
+          (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
+        } else {
+          //for simple data type but multiple parts remaining
+          Nil
+        }
       } else {
+        //did not match column name
         Nil
       }
     }
