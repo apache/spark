@@ -106,12 +106,23 @@ public class TaskContext implements Serializable {
   private static ThreadLocal<TaskContext> taskContext =
     new ThreadLocal<TaskContext>();
 
+  /**
+  * :: Internal API ::
+  * This is spark internal API, not intended to be called from user programs.
+  */
   public static void setTaskContext(TaskContext tc) {
     taskContext.set(tc);
   }
 
   public static TaskContext get() {
     return taskContext.get();
+  }
+
+  /** 
+  * :: Internal API ::
+  */
+  public static void remove() {
+    taskContext.remove();
   }
 
   // List of callback functions to execute when the task completes.
@@ -151,7 +162,7 @@ public class TaskContext implements Serializable {
 
   /**
    * Add a listener in the form of a Scala closure to be executed on task completion.
-   * This will be called in all situation - success, failure, or cancellation.
+   * This will be called in all situations - success, failure, or cancellation.
    * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
@@ -170,6 +181,8 @@ public class TaskContext implements Serializable {
    * is for HadoopRDD to register a callback to close the input stream.
    * Will be called in any situation - success, failure, or cancellation.
    *
+   * Deprecated: use addTaskCompletionListener
+   * 
    * @param f Callback function.
    */
   @Deprecated
@@ -193,7 +206,7 @@ public class TaskContext implements Serializable {
     List<TaskCompletionListener> revlist =
       new ArrayList<TaskCompletionListener>(onCompleteCallbacks);
     Collections.reverse(revlist);
-    for (TaskCompletionListener tcl : revlist) {
+    for (TaskCompletionListener tcl: revlist) {
       try {
         tcl.onTaskCompletion(this);
       } catch (Throwable e) {
@@ -204,7 +217,6 @@ public class TaskContext implements Serializable {
     if (!errorMsgs.isEmpty()) {
       throw new TaskCompletionListenerException(JavaConversions.asScalaBuffer(errorMsgs));
     }
-    taskContext.remove();
   }
 
   /**
@@ -215,21 +227,45 @@ public class TaskContext implements Serializable {
     interrupted = true;
   }
 
+  @Deprecated
+  /** Deprecated: use getStageId() */
   public int stageId() {
     return stageId;
   }
 
+  @Deprecated
+  /** Deprecated: use getPartitionId() */
   public int partitionId() {
     return partitionId;
   }
 
+  @Deprecated
+  /** Deprecated: use getAttemptId() */
   public long attemptId() {
     return attemptId;
   }
 
+  @Deprecated
+  /** Deprecated: use getRunningLocally() */
   public boolean runningLocally() {
     return runningLocally;
   }
+
+  public boolean getRunningLocally() {
+    return runningLocally;
+  }
+
+  public int getStageId() {
+    return stageId;
+  }
+
+  public int getPartitionId() {
+    return partitionId;
+  }
+
+  public long getAttemptId() {
+    return attemptId;
+  }  
 
   /** ::Internal API:: */
   public TaskMetrics taskMetrics() {
