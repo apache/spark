@@ -33,42 +33,64 @@ from pyspark.streaming.duration import Seconds
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
+
+    timeout = 10  # seconds
+
     def setUp(self):
         class_name = self.__class__.__name__
         self.sc = SparkContext(appName=class_name)
+        self.sc.setCheckpointDir("/tmp")
         self.ssc = StreamingContext(self.sc, duration=Seconds(1))
 
     def tearDown(self):
-        # Do not call pyspark.streaming.context.StreamingContext.stop directly because
-        # we do not wait to shutdown py4j client.
         self.ssc.stop()
         self.sc.stop()
-        time.sleep(1)
 
     @classmethod
     def tearDownClass(cls):
         # Make sure tp shutdown the callback server
         SparkContext._gateway._shutdown_callback_server()
 
+    def _test_func(self, input, func, expected, numSlices=None, sort=False):
+        """
+        Start stream and return the result.
+        @param input: dataset for the test. This should be list of lists.
+        @param func: wrapped function. This function should return PythonDStream object.
+        @param expected: expected output for this testcase.
+        @param numSlices: the number of slices in the rdd in the dstream.
+        """
+        # Generate input stream with user-defined input.
+        input_stream = self.ssc._makeStream(input, numSlices)
+        # Apply test function to stream.
+        stream = func(input_stream)
+        result = stream.collect()
+        self.ssc.start()
+
+        start_time = time.time()
+        # Loop until get the expected the number of the result from the stream.
+        while True:
+            current_time = time.time()
+            # Check time out.
+            if (current_time - start_time) > self.timeout:
+                break
+            # StreamingContext.awaitTermination is not used to wait because
+            # if py4j server is called every 50 milliseconds, it gets an error.
+            time.sleep(0.05)
+            # Check if the output is the same length of expected output.
+            if len(expected) == len(result):
+                break
+        if sort:
+            self._sort_result_based_on_key(result)
+            self._sort_result_based_on_key(expected)
+        self.assertEqual(expected, result)
+
+    def _sort_result_based_on_key(self, outputs):
+        """Sort the list based on first value."""
+        for output in outputs:
+            output.sort(key=lambda x: x[0])
+
 
 class TestBasicOperations(PySparkStreamingTestCase):
-    """
-    2 tests for each function for batach deserializer and unbatch deserilizer because
-    the deserializer is not changed dunamically after streaming process starts.
-    Default numInputPartitions is 2.
-    If the number of input element is over 3, that DStream use batach deserializer.
-    If not, that DStream use unbatch deserializer.
-
-    All tests input should have list of lists(3 lists are default). This list represents stream.
-    Every batch interval, the first object of list are chosen to make DStream.
-    e.g The first list in the list is input of the first batch.
-    Please see the BasicTestSuits in Scala which is close to this implementation.
-    """
-    def setUp(self):
-        PySparkStreamingTestCase.setUp(self)
-        self.timeout = 10  # seconds
-        self.numInputPartitions = 2
-
     def test_map(self):
         """Basic operation test for DStream.map."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
@@ -239,54 +261,41 @@ class TestBasicOperations(PySparkStreamingTestCase):
                 break
         self.assertEqual(expected, result)
 
-    def _sort_result_based_on_key(self, outputs):
-        """Sort the list base onf first value."""
-        for output in outputs:
-            output.sort(key=lambda x: x[0])
 
-    def _test_func(self, input, func, expected, numSlices=None, sort=False):
-        """
-        Start stream and return the result.
-        @param input: dataset for the test. This should be list of lists.
-        @param func: wrapped function. This function should return PythonDStream object.
-        @param expected: expected output for this testcase.
-        @param numSlices: the number of slices in the rdd in the dstream.
-        """
-        # Generate input stream with user-defined input.
-        numSlices = numSlices or self.numInputPartitions
-        input_stream = self.ssc._makeStream(input, numSlices)
-        # Apply test function to stream.
-        stream = func(input_stream)
-        result = stream.collect()
-        self.ssc.start()
+class TestWindowFunctions(PySparkStreamingTestCase):
 
-        start_time = time.time()
-        # Loop until get the expected the number of the result from the stream.
-        while True:
-            current_time = time.time()
-            # Check time out.
-            if (current_time - start_time) > self.timeout:
-                break
-            # StreamingContext.awaitTermination is not used to wait because
-            # if py4j server is called every 50 milliseconds, it gets an error.
-            time.sleep(0.05)
-            # Check if the output is the same length of expected output.
-            if len(expected) == len(result):
-                break
-        if sort:
-            self._sort_result_based_on_key(result)
-            self._sort_result_based_on_key(expected)
-        self.assertEqual(expected, result)
+    timeout = 15
+
+    def test_count_by_window(self):
+        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+
+        def func(dstream):
+            return dstream.countByWindow(4, 1)
+
+        expected = [[1], [3], [6], [9], [12], [15], [11], [6]]
+        self._test_func(input, func, expected)
+
+    def test_count_by_window_large(self):
+        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+
+        def func(dstream):
+            return dstream.countByWindow(6, 1)
+
+        expected = [[1], [3], [6], [10], [15], [20], [18], [15], [11], [6]]
+        self._test_func(input, func, expected)
+
+    def test_group_by_key_and_window(self):
+        input = [[('a', i)] for i in range(5)]
+
+        def func(dstream):
+            return dstream.groupByKeyAndWindow(4, 1).mapValues(list)
+
+        expected = [[('a', [0])], [('a', [0, 1])], [('a', [0, 1, 2])], [('a', [1, 2, 3])],
+                    [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]
+        self._test_func(input, func, expected)
 
 
 class TestStreamingContext(unittest.TestCase):
-    """
-    Should we have conf property in  SparkContext?
-    @property
-    def conf(self):
-        return self._conf
-
-    """
     def setUp(self):
         self.sc = SparkContext(master="local[2]", appName=self.__class__.__name__)
         self.batachDuration = Seconds(1)

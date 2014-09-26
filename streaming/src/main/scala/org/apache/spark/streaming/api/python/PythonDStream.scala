@@ -19,12 +19,17 @@ package org.apache.spark.streaming.api.python
 
 import java.util.{ArrayList => JArrayList}
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.Partitioner
+import org.apache.spark.rdd.{CoGroupedRDD, UnionRDD, PartitionerAwareUnionRDD, RDD}
 import org.apache.spark.api.java._
 import org.apache.spark.api.python._
-import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Interval, Duration, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
+
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 
 /**
@@ -47,7 +52,7 @@ trait PythonRDDFunction2 {
  * If the result RDD is PythonRDD, then it will cache it as an template for future use,
  * this can reduce the Python callbacks.
  */
-class PythonTransformedDStream (parent: DStream[_], func: PythonRDDFunction,
+private[spark] class PythonTransformedDStream (parent: DStream[_], func: PythonRDDFunction,
                                 var reuse: Boolean = false)
   extends DStream[Array[Byte]] (parent.ssc) {
 
@@ -59,6 +64,9 @@ class PythonTransformedDStream (parent: DStream[_], func: PythonRDDFunction,
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     val rdd1 = parent.getOrCompute(validTime).getOrElse(null)
+    if (rdd1 == null) {
+      return None
+    }
     if (reuse && lastResult != null) {
       Some(lastResult.copyTo(rdd1))
     } else {
@@ -85,7 +93,7 @@ class PythonTransformedDStream (parent: DStream[_], func: PythonRDDFunction,
 /**
  * Transformed from two DStreams in Python.
  */
-class PythonTransformed2DStream (parent: DStream[_], parent2: DStream[_], func: PythonRDDFunction2)
+private[spark] class PythonTransformed2DStream (parent: DStream[_], parent2: DStream[_], func: PythonRDDFunction2)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   override def dependencies = List(parent, parent2)
@@ -102,6 +110,111 @@ class PythonTransformed2DStream (parent: DStream[_], parent2: DStream[_], func: 
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
+
+
+/**
+ * Copied from ReducedWindowedDStream
+ */
+private[spark]
+class PythonReducedWindowedDStream(
+                                  parent: DStream[Array[Byte]],
+                                  reduceFunc: PythonRDDFunction,
+                                  invReduceFunc: PythonRDDFunction2,
+                                  _windowDuration: Duration,
+                                  _slideDuration: Duration
+                                  ) extends DStream[Array[Byte]](parent.ssc) {
+
+  assert(_windowDuration.isMultipleOf(parent.slideDuration),
+    "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
+  )
+
+  assert(_slideDuration.isMultipleOf(parent.slideDuration),
+    "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
+  )
+
+
+  // Persist RDDs to memory by default as these RDDs are going to be reused.
+  super.persist(StorageLevel.MEMORY_ONLY)
+
+  def windowDuration: Duration =  _windowDuration
+
+  override def dependencies = List(parent)
+
+  override def slideDuration: Duration = _slideDuration
+
+  override val mustCheckpoint = true
+
+  override def parentRememberDuration: Duration = rememberDuration + windowDuration
+
+  override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    None
+    val reduceF = reduceFunc
+    val invReduceF = invReduceFunc
+
+    val currentTime = validTime
+    val currentWindow = new Interval(currentTime - windowDuration + parent.slideDuration,
+      currentTime)
+    val previousWindow = currentWindow - slideDuration
+
+    logDebug("Window time = " + windowDuration)
+    logDebug("Slide time = " + slideDuration)
+    logDebug("ZeroTime = " + zeroTime)
+    logDebug("Current window = " + currentWindow)
+    logDebug("Previous window = " + previousWindow)
+
+    //  _____________________________
+    // |  previous window   _________|___________________
+    // |___________________|       current window        |  --------------> Time
+    //                     |_____________________________|
+    //
+    // |________ _________|          |________ _________|
+    //          |                             |
+    //          V                             V
+    //       old RDDs                     new RDDs
+    //
+
+
+    // Get the RDD of the reduced value of the previous window
+    val previousWindowRDD =
+      getOrCompute(previousWindow.endTime)
+
+    if (windowDuration > slideDuration * 5 && previousWindowRDD.isDefined) {
+      // subtle the values from old RDDs
+      val oldRDDs =
+        parent.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideDuration)
+      val subbed = if (oldRDDs.size > 0) {
+        invReduceFunc.call(JavaRDD.fromRDD(previousWindowRDD.get),
+          JavaRDD.fromRDD(ssc.sc.union(oldRDDs)), validTime.milliseconds).rdd
+      } else {
+        previousWindowRDD.get
+      }
+
+      // add the RDDs of the reduced values in "new time steps"
+      val newRDDs =
+        parent.slice(previousWindow.endTime, currentWindow.endTime - parent.slideDuration)
+
+      if (newRDDs.size > 0) {
+        Some(reduceFunc.call(JavaRDD.fromRDD(ssc.sc.union(newRDDs).union(subbed)), validTime.milliseconds))
+      } else {
+        Some(subbed)
+      }
+    } else {
+      // Get the RDDs of the reduced values in current window
+      val currentRDDs =
+        parent.slice(currentWindow.beginTime, currentWindow.endTime - parent.slideDuration)
+      if (currentRDDs.size > 0) {
+        Some(reduceFunc.call(JavaRDD.fromRDD(ssc.sc.union(currentRDDs)), validTime.milliseconds))
+      } else {
+        None
+      }
+    }
+  }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
 
 /**
  * This is used for foreachRDD() in Python
