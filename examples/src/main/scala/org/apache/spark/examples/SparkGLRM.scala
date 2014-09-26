@@ -94,6 +94,10 @@ object SparkGLRM {
     new BDV[Double](arr)
   }
 
+  /* End of GLRM libarry */
+
+  
+
   // Helper functions for updating
   def computeLossGrads(ms: Broadcast[Array[BDV[Double]]], us: Broadcast[Array[BDV[Double]]],
                        R: RDD[(Int, Int, Double)],
