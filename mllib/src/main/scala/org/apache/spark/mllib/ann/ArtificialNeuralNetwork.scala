@@ -75,11 +75,10 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 
 /**
- * Contains the parameters of an Artificial Neural Network (ANN)
+ * Artificial neural network (ANN) model
  * 
- * @param weights The weights between the neurons in the ANN.
- * 
- * @param topology Array containing the number of nodes per layer in the network, including
+ * @param weights the weights between the neurons in the ANN.
+ * @param topology array containing the number of nodes per layer in the network, including
  * the nodes in the input and output layer, but excluding the bias nodes.
  */
 class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topology: Array[Int])
@@ -88,9 +87,8 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
   /**
    * Predicts values for a single data point using the trained model.
    *
-   * @param testData Represents a single data point.
-   *
-   * @return Prediction using the trained model.
+   * @param testData represents a single data point.
+   * @return prediction using the trained model.
    */
   def predict(testData: Vector): Vector = {
     Vectors.dense(computeValues(testData.toArray, weights.toArray))
@@ -100,7 +98,6 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
    * Predict values for an RDD of data points using the trained model.
    *
    * @param testDataRDD RDD representing the input vectors.
-   *
    * @return RDD with predictions using the trained model as (input, output) pairs.
    */
   def predict(testDataRDD: RDD[Vector]): RDD[(Vector,Vector)] = {
@@ -111,7 +108,6 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     val arrNodes = forwardRun(arrData, arrWeights)
     arrNodes.slice(arrNodes.size - topology(L), arrNodes.size)
   }
-
 }
 
 /**
@@ -119,9 +115,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
  *
  * @param topology A vector containing the number of nodes per layer in the network, including
  * the nodes in the input and output layer, but excluding the bias nodes.
- * 
- * @param maxNumItereations The maximum number of iterations for the training phase.
- * 
+ * @param maxNumIterations The maximum number of iterations for the training phase.
  * @param convergenceTol Convergence tolerance for LBFGS. Smaller value for closer convergence.
  */
 class ArtificialNeuralNetwork private[mllib](
@@ -134,18 +128,15 @@ class ArtificialNeuralNetwork private[mllib](
   private val updater = new ANNUpdater()
   private val optimizer = new LBFGS(gradient, updater).
     setConvergenceTol(convergenceTol).
-    setNumIterations(maxNumIterations)
+    setMaxNumIterations(maxNumIterations)
 
  /**
-   * Trains the ANN.
+   * Trains the ANN model.
+   * Uses default convergence tolerance 1e-4 for LBFGS.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
-   *
-   * @param initialWeights The initial weights of the ANN   
-   *
-   * @return Trained ANN as ArtificialNeuralNetworkModel.
-   *
-   * Uses default convergence tolerance 1e-4 for LBFGS.
+   * @param initialWeights the initial weights of the ANN
+   * @return ANN model.
    */
   private def run(trainingRDD: RDD[(Vector, Vector)], initialWeights: Vector):
       ArtificialNeuralNetworkModel = {
@@ -161,7 +152,7 @@ class ArtificialNeuralNetwork private[mllib](
 }
 
 /**
- * Interface to the Artificial Neural Network (ANN)
+ * Top level methods for training the artificial neural network (ANN)
  */
 object ArtificialNeuralNetwork {
 
@@ -169,16 +160,12 @@ object ArtificialNeuralNetwork {
 
   /**
    * Trains an ANN.
+   * Uses default convergence tolerance 1e-4 for LBFGS.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
-   *
-   * @param hiddenLayersTopology Number of nodes per hidden layer, excluding the bias nodes.
-   *
-   * @param maxNumIterations Specifies maximum number of training iterations.
-   *
-   * @return Trained ANN as ArtificialNeuralNetworkModel.
-   *
-   * Uses default convergence tolerance 1e-4 for LBFGS.
+   * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
+   * @param maxNumIterations specifies maximum number of training iterations.
+   * @return ANN model.
    */
   def train(
       trainingRDD: RDD[(Vector, Vector)],
@@ -189,16 +176,12 @@ object ArtificialNeuralNetwork {
 
   /**
    * Continues training of an ANN.
+   * Uses default convergence tolerance 1e-4 for LBFGS.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
-   *
-   * @param model Model of an already partly trained ANN.
-   *
-   * @param maxNumIterations Int Maximum number of training iterations.
-   *
-   * @return Trained ANN as ArtificialNeuralNetworkModel.
-   *
-   * Uses default convergence tolerance 1e-4 for LBFGS.
+   * @param model model of an already partly trained ANN.
+   * @param maxNumIterations maximum number of training iterations.
+   * @return ANN model.
    */
   def train(
       trainingRDD: RDD[(Vector,Vector)],
@@ -211,14 +194,10 @@ object ArtificialNeuralNetwork {
    * Trains an ANN using customized convergence tolerance.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
-   *
-   * @param hiddenLayersTopology Number of nodes per hidden layer, excluding the bias nodes.
-   *
-   * @param maxNumIterations Maximum number of training iterations.
-   *
-   * @param convergenceTol Convergence tolerance for LBFGS. Smaller value for closer convergence.
-   *
-   * @return Trained ANN as ArtificialNeuralNetworkModel.
+   * @param model model of an already partly trained ANN.
+   * @param maxNumIterations maximum number of training iterations.
+   * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
+   * @return ANN model.
    */
   def train(
       trainingRDD: RDD[(Vector,Vector)],
@@ -233,14 +212,10 @@ object ArtificialNeuralNetwork {
    * Continues training of an ANN using customized convergence tolerance.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
-   *
-   * @param model Model of an already partly trained ANN.
-   *
-   * @param maxNumIterations Maximum number of training iterations.
-   *
-   * @param convergenceTol Convergence tolerance for LBFGS. Smaller value for closer convergence.
-   *
-   * @return Trained ANN as ArtificialNeuralNetworkModel.
+   * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
+   * @param maxNumIterations maximum number of training iterations.
+   * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
+   * @return ANN model.
    */
   def train(
       trainingRDD: RDD[(Vector, Vector)],
@@ -260,10 +235,8 @@ object ArtificialNeuralNetwork {
 
   private def randomWeights(topology: Array[Int]): Vector = {
     val rand = new XORShiftRandom()
-
     var i: Int = 0
     var l: Int = 0
-
     val noWeights = {
       var tmp = 0
       var i = 1
@@ -273,10 +246,8 @@ object ArtificialNeuralNetwork {
       }
       tmp
     }
-
     val initialWeightsArr = new Array[Double](noWeights)
     var pos = 0
-
     l = 1
     while (l < topology.length) {
       i = 0
@@ -291,11 +262,13 @@ object ArtificialNeuralNetwork {
   }
 }
 
+/**
+ * Helper methods for ANN
+ */
 private[ann] trait ANNHelper {
   protected val topology: Array[Int]
   protected def g(x: Double) = 1.0 / (1.0 + math.exp(-x))
   protected val L = topology.length - 1
-
   protected val noWeights = {
     var tmp = 0
     var l = 1
@@ -305,7 +278,6 @@ private[ann] trait ANNHelper {
     }
     tmp
   }
-
   protected val ofsWeight: Array[Int] = {
     val tmp = new Array[Int](L + 1)
     var curPos = 0
@@ -318,7 +290,6 @@ private[ann] trait ANNHelper {
     }
     tmp
   }
-
   protected val noNodes: Int = {
     var tmp: Integer = 0
     var l = 0
@@ -328,7 +299,6 @@ private[ann] trait ANNHelper {
     }
     tmp
   }
-
   protected val ofsNode: Array[Int] = {
     val tmp = new Array[Int](L + 1)
     tmp(0) = 0
@@ -377,7 +347,6 @@ private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val arrData = data.toArray
     val arrWeights = weights.toArray
-
     var i: Int = 0
     var j: Int = 0
     var l: Int = 0
@@ -389,7 +358,6 @@ private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient
       arrDiff(j) = arrNodes(ofsNode(L) + j) - arrData(topology(0) + j)
       j += 1
     }
-
     var err: Double = 0
     j = 0
     while (j < topology(L)) {
@@ -470,5 +438,4 @@ private class ANNUpdater extends Updater {
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
     (Vectors.fromBreeze(brzWeights), 0)
   }
-
 }
