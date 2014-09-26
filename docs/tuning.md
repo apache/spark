@@ -275,8 +275,8 @@ server, or b) immediately start a new task in a farther away place that requires
 
 What Spark typically does is wait a bit in the hopes that a busy CPU frees up.  Once that timeout
 expires, it starts moving the data from far away to the free CPU.  The wait timeout for fallback
-between each level can be configured individually via `spark.locality.wait.process` and
-`spark.locality.wait.node` and `spark.locality.wait.rack`, or all together via `spark.locality.wait`
+between each level can be configured individually or all together in one parameter; see the
+`spark.locality` parameters on the [configuration page](configuration.html#scheduling) for details.
 You should increase these settings if your tasks are long and see poor locality, but the default
 usually works well.
 
