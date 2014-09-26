@@ -158,7 +158,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           Nil
         }
       } else {
-        //did not match column name
+        // did not match column name
         Nil
       }
     }

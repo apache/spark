@@ -118,8 +118,8 @@ class SQLQuerySuite extends QueryTest {
 
   test("test particular table alias") {
     checkAnswer(
-      sql("SELECT key.value, count(1) FROM src key join src b GROUP BY key.value"),
-      sql("SELECT a.value, count(1) FROM src a join src b GROUP BY a.value").collect().toSeq)
+      sql("SELECT key.value, COUNT(1) FROM src key JOIN src b GROUP BY key.value"),
+      sql("SELECT a.value, COUNT(1) FROM src a JOIN src b GROUP BY a.value").collect().toSeq)
   }
 
   test("test CTAS") {
