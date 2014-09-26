@@ -130,7 +130,8 @@ private[spark] trait IndexedRDDPartitionLike[
         } else {
           // Existing key - just need to set value and ensure it appears in newMask
           val pos = newIndex.focus
-          newValues = newValues.updated(pos, merge(id, newValues(pos), otherValue))
+          val newValue = if (newMask.get(pos)) merge(id, newValues(pos), otherValue) else otherValue
+          newValues = newValues.updated(pos, newValue)
           newMask = newMask.set(pos)
         }
       }
