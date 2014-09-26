@@ -140,7 +140,6 @@
         <configuration>
           <environmentVariables>
             <SPARK_HOME>${basedir}/../..</SPARK_HOME>
-            <SPARK_CLASSPATH>${spark.classpath}</SPARK_CLASSPATH>
           </environmentVariables>
         </configuration>
       </plugin>
@@ -148,7 +147,7 @@
 
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-  
+
     <resources>
       <resource>
         <directory>../common/src/main/resources</directory>
