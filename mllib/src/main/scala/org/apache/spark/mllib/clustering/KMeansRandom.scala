@@ -21,6 +21,7 @@ import org.apache.spark.mllib.base.{FP, PointOps}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
+import scala.collection.immutable.IndexedSeq
 import scala.reflect.ClassTag
 
 /**
@@ -43,11 +44,21 @@ private[mllib] class KMeansRandom[P <: FP : ClassTag, C <: FP : ClassTag](
   extends KMeansInitializer[P,C] {
 
   def init(data: RDD[P], seed: Int): Array[Array[C]] = {
-    // Sample all the cluster centers in one pass to avoid repeated scans
-    val x = data.takeSample(withReplacement=true, runs * k,
-      new XORShiftRandom().nextInt()).withFilter( x => x.weight > 0)
-    val centers = x.map(pointOps.pointToCenter).toSeq
-    Array.tabulate(runs)(r => centers.slice(r * k, (r + 1) * k).toArray)
+
+    val filtered = data.filter(_.weight > 0)
+    val count = filtered.count()
+    if( runs * k <= count ) {
+      val x = filtered.takeSample(withReplacement=false, runs * k, new XORShiftRandom().nextInt())
+      val centers = x.map(pointOps.pointToCenter).toSeq
+      Array.tabulate(runs)(r => centers.slice(r * k, (r + 1) * k).toArray)
+    } else if( k < count ) {
+      (0 to runs).toArray.map{ _ => {filtered.takeSample(withReplacement=false, k,
+        new XORShiftRandom().nextInt()).map(pointOps.pointToCenter)}}
+    } else {
+      (0 to runs).toArray.map { _ =>  filtered.collect().map(pointOps.pointToCenter) }
+    }
   }
+
+
 }
 
