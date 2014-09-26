@@ -112,7 +112,8 @@ private[spark] class BlockManager(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
-  private val cachedPeers = new mutable.HashSet[BlockManagerId]
+  @volatile private var cachedPeers: Seq[BlockManagerId] = _
+  private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
   initialize()
@@ -792,18 +793,17 @@ private[spark] class BlockManager(
   /**
    * Get peer block managers in the system.
    */
-  private def getPeers(forceFetch: Boolean): mutable.HashSet[BlockManagerId] = {
-    cachedPeers.synchronized {
+  private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
+    peerFetchLock.synchronized {
       val cachedPeersTtl = conf.getInt("spark.storage.cachedPeersTtl", 60 * 1000) // milliseconds
       val timeout = System.currentTimeMillis - lastPeerFetchTime > cachedPeersTtl
-      if (cachedPeers.isEmpty || forceFetch || timeout) {
-        cachedPeers.clear()
-        cachedPeers ++= master.getPeers(blockManagerId).sortBy(_.hashCode)
+      if (cachedPeers == null || forceFetch || timeout) {
+        cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
         lastPeerFetchTime = System.currentTimeMillis
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
+      cachedPeers
     }
-    cachedPeers
   }
 
   /**
