@@ -366,8 +366,9 @@ class DStream(object):
                              windowDuration, slideDuration, numPartitions=None):
         reduced = self.reduceByKey(func)
 
-        def reduceFunc(a, t):
-            return a.reduceByKey(func, numPartitions)
+        def reduceFunc(a, b, t):
+            b = b.reduceByKey(func, numPartitions)
+            return a.union(b).reduceByKey(func, numPartitions) if a else b
 
         def invReduceFunc(a, b, t):
             b = b.reduceByKey(func, numPartitions)
@@ -378,19 +379,30 @@ class DStream(object):
             windowDuration = Seconds(windowDuration)
         if not isinstance(slideDuration, Duration):
             slideDuration = Seconds(slideDuration)
-        serializer = reduced._jrdd_deserializer
-        jreduceFunc = RDDFunction(self.ctx, reduceFunc, reduced._jrdd_deserializer)
+        jreduceFunc = RDDFunction2(self.ctx, reduceFunc, reduced._jrdd_deserializer)
         jinvReduceFunc = RDDFunction2(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonReducedWindowedDStream(reduced._jdstream.dstream(),
                                                              jreduceFunc, jinvReduceFunc,
                                                              windowDuration._jduration,
                                                              slideDuration._jduration)
-        return DStream(dstream.asJavaDStream(), self._ssc, serializer)
+        return DStream(dstream.asJavaDStream(), self._ssc, self.ctx.serializer)
 
-    def updateStateByKey(self, updateFunc):
-        # FIXME: convert updateFunc to java JFunction2
-        jFunc = updateFunc
-        return self._jdstream.updateStateByKey(jFunc)
+    def updateStateByKey(self, updateFunc, numPartitions=None):
+        """
+        :param updateFunc: [(k, vs, s)] -> [(k, s)]
+        """
+        def reduceFunc(a, b, t):
+            if a is None:
+                g = b.groupByKey(numPartitions).map(lambda (k, vs): (k, list(vs), None))
+            else:
+                g = a.cogroup(b).map(lambda (k, (va, vb)):
+                                            (k, list(vb), list(va)[0] if len(va) else None))
+            return g.mapPartitions(lambda x: updateFunc(x) or [])
+
+        jreduceFunc = RDDFunction2(self.ctx, reduceFunc,
+                                   self.ctx.serializer, self._jrdd_deserializer)
+        dstream = self.ctx._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
+        return DStream(dstream.asJavaDStream(), self._ssc, self.ctx.serializer)
 
 
 class TransformedDStream(DStream):
