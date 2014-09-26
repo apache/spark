@@ -11,7 +11,7 @@ R.
 ### Requirements
 SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses the 1.1.0
 candidate from the Apache staging repositories. You can also build SparkR against a
-different Spark version (>= 1.1.0) by modifying `pkg/src/build.sbt`.
+different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
 
 SparkR also requires the R package `rJava` to be installed. To install `rJava`,
 you can run the following command in R:
