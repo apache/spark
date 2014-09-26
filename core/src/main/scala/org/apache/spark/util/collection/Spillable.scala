@@ -29,7 +29,7 @@ import scala.language.reflectiveCalls
 private[spark] trait Spillable[C <: { def estimateSize(): Long }] {
 
   // Number of elements read from input since last spill
-  protected[this] var elementsRead: Long
+  protected var elementsRead: Long
 
   // Memory manager that can be used to acquire/release memory
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
@@ -53,7 +53,7 @@ private[spark] trait Spillable[C <: { def estimateSize(): Long }] {
    * @tparam A type of collection to be spilled
    * @return if spilled, a new empty collection instance; otherwise, the same collection instance
    */
-  protected[this] def maybeSpill[A <: C](collection: A): A = {
+  protected def maybeSpill[A <: C](collection: A): A = {
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
@@ -80,12 +80,12 @@ private[spark] trait Spillable[C <: { def estimateSize(): Long }] {
    * @param collection collection to spill to disk
    * @return new, empty collection
    */
-  protected[this] def spill[A <: C](collection: A): A
+  protected def spill[A <: C](collection: A): A
 
   /**
    * @return total number of times this collection was spilled
    */
-  protected[this] def spillCount: Int = _spillCount
+  protected def spillCount: Int = _spillCount
 
   /**
    * @return number of bytes spilled in total
