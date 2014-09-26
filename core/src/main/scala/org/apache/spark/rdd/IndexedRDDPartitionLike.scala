@@ -99,45 +99,49 @@ private[spark] trait IndexedRDDPartitionLike[
       // Pure updates can be implemented by modifying only the values
       join(kvs.iterator)(merge)
     } else {
-      var newIndex = self.index
-      var newValues = self.values
-      var newMask = self.mask
-
-      var preMoveValues: ImmutableVector[V] = null
-      var preMoveMask: ImmutableBitSet = null
-      def grow(newSize: Int) {
-        preMoveValues = newValues
-        preMoveMask = newMask
-
-        newValues = ImmutableVector.fill(newSize)(null.asInstanceOf[V])
-        newMask = new ImmutableBitSet(newSize)
-      }
-      def move(oldPos: Int, newPos: Int) {
-        newValues = newValues.updated(newPos, preMoveValues(oldPos))
-        if (preMoveMask.get(oldPos)) newMask = newMask.set(newPos)
-      }
-
-      for (kv <- kvs) {
-        val id = kv._1
-        val otherValue = kv._2
-        newIndex = newIndex.addWithoutResize(id)
-        if ((newIndex.focus & OpenHashSet.NONEXISTENCE_MASK) != 0) {
-          // This is a new key - need to update index
-          val pos = newIndex.focus & OpenHashSet.POSITION_MASK
-          newValues = newValues.updated(pos, otherValue)
-          newMask = newMask.set(pos)
-          newIndex = newIndex.rehashIfNeeded(grow, move)
-        } else {
-          // Existing key - just need to set value and ensure it appears in newMask
-          val pos = newIndex.focus
-          val newValue = if (newMask.get(pos)) merge(id, newValues(pos), otherValue) else otherValue
-          newValues = newValues.updated(pos, newValue)
-          newMask = newMask.set(pos)
-        }
-      }
-
-      this.withIndex(newIndex).withValues(newValues).withMask(newMask)
+      multiputIterator(kvs.iterator, merge)
     }
+  }
+
+  private def multiputIterator(kvs: Iterator[(Id, V)], merge: (Id, V, V) => V): Self[V] = {
+    var newIndex = self.index
+    var newValues = self.values
+    var newMask = self.mask
+
+    var preMoveValues: ImmutableVector[V] = null
+    var preMoveMask: ImmutableBitSet = null
+    def grow(newSize: Int) {
+      preMoveValues = newValues
+      preMoveMask = newMask
+
+      newValues = ImmutableVector.fill(newSize)(null.asInstanceOf[V])
+      newMask = new ImmutableBitSet(newSize)
+    }
+    def move(oldPos: Int, newPos: Int) {
+      newValues = newValues.updated(newPos, preMoveValues(oldPos))
+      if (preMoveMask.get(oldPos)) newMask = newMask.set(newPos)
+    }
+
+    for (kv <- kvs) {
+      val id = kv._1
+      val otherValue = kv._2
+      newIndex = newIndex.addWithoutResize(id)
+      if ((newIndex.focus & OpenHashSet.NONEXISTENCE_MASK) != 0) {
+        // This is a new key - need to update index
+        val pos = newIndex.focus & OpenHashSet.POSITION_MASK
+        newValues = newValues.updated(pos, otherValue)
+        newMask = newMask.set(pos)
+        newIndex = newIndex.rehashIfNeeded(grow, move)
+      } else {
+        // Existing key - just need to set value and ensure it appears in newMask
+        val pos = newIndex.focus
+        val newValue = if (newMask.get(pos)) merge(id, newValues(pos), otherValue) else otherValue
+        newValues = newValues.updated(pos, newValue)
+        newMask = newMask.set(pos)
+      }
+    }
+
+    this.withIndex(newIndex).withValues(newValues).withMask(newMask)
   }
 
   /** Deletes the specified keys. Returns a new IndexedRDDPartition that reflects the deletions. */
