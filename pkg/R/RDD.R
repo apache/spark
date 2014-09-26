@@ -291,6 +291,38 @@ setMethod("collectPartition",
           })
 
 
+#' Look up elements of a key in an RDD
+#'
+#' @description
+#' \code{lookup} returns a list of values in this RDD for key key.
+#'
+#' @param rdd The RDD to collect
+#' @param key The key to look up for
+#' @return a list of values in this RDD for key key
+#' @rdname lookup
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' pairs <- list(c(1, 1), c(2, 2), c(1, 3))
+#' rdd <- parallelize(sc, pairs)
+#' lookup(rdd, 1) # list(1, 3)
+#'}
+setGeneric("lookup", function(rdd, key) { standardGeneric("lookup") })
+
+#' @rdname lookup
+#' @aliases lookup,RDD-method
+setMethod("lookup",
+          signature(rdd = "RDD", key = "ANY"),
+          function(rdd, key) {
+            partitionFunc <- function(part) {
+              filtered <- part[unlist(lapply(part, function(x) identical(key, x[[1]])))]
+              lapply(filtered, function(x) x[[2]])
+            }
+            valsRDD <- lapplyPartition(rdd, partitionFunc)
+            collect(valsRDD)
+          })
+
 #' Return the number of elements in the RDD.
 #'
 #' @param rdd The RDD to count
