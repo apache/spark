@@ -219,6 +219,60 @@ private[spark] trait IndexedRDDPartitionLike[
     }
   }
 
+  /** Joins `this` with `other`, running `f` on the values of all keys in both sets. */
+  def fullOuterJoin[V2: ClassTag, W: ClassTag]
+      (other: Self[V2])
+      (f: (Id, Option[V], Option[V2]) => W): Self[W] = {
+    if (self.index != other.index) {
+      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
+      val newValues = new Array[W](self.capacity)
+
+      // First run on all values in `this`. No need to modify the index or mask.
+      self.mask.iterator.foreach { selfI =>
+        val vid = self.index.getValue(selfI)
+        val otherI =
+          if (other.index.getValue(selfI) == vid) {
+            if (other.mask.get(selfI)) selfI else -1
+          } else {
+            if (other.isDefined(vid)) other.index.getPos(vid) else -1
+          }
+        val otherValue = if (otherI != -1) Some(other.values(otherI)) else None
+        newValues(selfI) = f(vid, Some(self.values(selfI)), otherValue)
+      }
+
+      // Then run on all values in `other` that are not in `this`.
+      val newOtherIter = other.mask.iterator.flatMap { otherI =>
+        val vid = other.index.getValue(otherI)
+        if (!this.isDefined(vid)) {
+          Some(Tuple2(vid, f(vid, None, Some(other.values(otherI)))))
+        } else {
+          None
+        }
+      }
+
+      this.withValues(ImmutableVector.fromArray(newValues))
+        .multiputIterator(newOtherIter, (id, a, b) => throw new Exception(
+          "merge function was called but newOtherIter should only contain new elements"))
+    } else {
+      val newValues = new Array[W](self.capacity)
+      val newMask = self.mask | other.mask
+
+      (self.mask & other.mask).iterator.foreach { i =>
+        newValues(i) = f(self.index.getValue(i), Some(self.values(i)), Some(other.values(i)))
+      }
+
+      self.mask.andNot(other.mask).iterator.foreach { i =>
+        newValues(i) = f(self.index.getValue(i), Some(self.values(i)), None)
+      }
+
+      other.mask.andNot(self.mask).iterator.foreach { i =>
+        newValues(i) = f(self.index.getValue(i), None, Some(other.values(i)))
+      }
+
+      this.withValues(ImmutableVector.fromArray(newValues)).withMask(newMask)
+    }
+  }
+
   /**
    * Left outer joins `this` with `other`, running `f` on the values of corresponding keys. Because
    * values in `this` with no corresponding entries in `other` are preserved, `f` cannot change the

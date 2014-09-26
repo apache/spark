@@ -65,6 +65,23 @@ private[spark] class ImmutableBitSet(val numBits: Int, val words: ImmutableVecto
     new ImmutableBitSet(math.max(numBits, other.numBits), ImmutableVector.fromArray(newWords))
   }
 
+  /** Returns the difference of the two sets by performing bit-wise AND-NOT. */
+  def andNot(other: ImmutableBitSet): ImmutableBitSet = {
+    val newWords = new Array[Long](math.max(numWords, other.numWords))
+    val thisWordsIter = words.iterator
+    val otherWordsIter = other.words.iterator
+    var i = 0
+    while (thisWordsIter.hasNext && otherWordsIter.hasNext) {
+      newWords(i) = thisWordsIter.next() & ~otherWordsIter.next()
+      i += 1
+    }
+    while (thisWordsIter.hasNext) {
+      newWords(i) = thisWordsIter.next()
+      i += 1
+    }
+    new ImmutableBitSet(math.max(numBits, other.numBits), ImmutableVector.fromArray(newWords))
+  }
+
   /** Returns a new ImmutableBitSet where the bit at the specified index is set to true. */
   def set(index: Int): ImmutableBitSet = {
     val wordIdx = index >> 6         // div by 64
