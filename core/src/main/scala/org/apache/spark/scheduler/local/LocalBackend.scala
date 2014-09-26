@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
 
-import org.apache.spark.{Logging, SparkEnv, TaskState}
+import org.apache.spark.{ApplicationId, Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
@@ -115,6 +115,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
     localActor ! StatusUpdate(taskId, state, serializedData)
   }
 
-  override def applicationId: String = "local-" + System.currentTimeMillis
+  override def applicationId =
+    new ApplicationId("local-" + System.currentTimeMillis)
 
 }

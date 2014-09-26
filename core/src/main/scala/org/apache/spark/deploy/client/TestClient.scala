@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{ApplicationId, SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] object TestClient {
 
   class TestListener extends AppClientListener with Logging {
-    def connected(id: String) {
+    def connected(id: ApplicationId) {
       logInfo("Connected to master, got app ID " + id)
     }
 

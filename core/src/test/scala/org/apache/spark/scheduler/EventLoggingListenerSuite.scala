@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{ApplicationId, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.SPARK_VERSION
@@ -169,7 +169,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify logging directory exists
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(new ApplicationId("test"), "test", conf)
     eventLogger.start()
     val logPath = new Path(eventLogger.logDir)
     assert(fileSystem.exists(logPath))
@@ -209,7 +209,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify that all information is correctly parsed before stop()
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(new ApplicationId("test"), "testdir", conf)
     eventLogger.start()
     var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assertInfoCorrect(eventLoggingInfo, loggerStopped = false)
@@ -228,7 +228,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(new ApplicationId("test"), "testdir", conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey")

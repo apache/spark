@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.ApplicationId
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
@@ -72,6 +73,6 @@ private[spark] trait TaskScheduler {
    *
    * @return The application ID, if the backend does not provide an ID.
    */
-  def applicationId(): String = System.currentTimeMillis.toString
+  def applicationId() = new ApplicationId(System.currentTimeMillis.toString)
 
 }

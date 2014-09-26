@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{ApplicationId, SparkContext}
 import org.apache.spark.deploy.yarn.ApplicationMasterArguments
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.IntParam
@@ -48,15 +48,17 @@ private[spark] class YarnClusterSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
-  override def applicationId(): String =
+  override def applicationId() =
     /**
      *  In YARN Cluster mode, spark.yarn.app.id is expect to be set
      *  before user application is launched.
      *  So, if spark.yarn.app.id is not set, it is something wrong.
      */
-    sc.getConf.getOption("spark.yarn.app.id").getOrElse {
-      logError("Application ID is not set.")
-      super.applicationId
-    }
+      sc.getConf.getOption("spark.yarn.app.id")
+        .map(strAppId => new ApplicationId(strAppId))
+        .getOrElse {
+          logError("Application ID is not set.")
+          super.applicationId
+      }
 
 }

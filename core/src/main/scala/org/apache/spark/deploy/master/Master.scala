@@ -32,9 +32,8 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState,
-  SparkHadoopUtil}
+import org.apache.spark.{ApplicationId, Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -69,13 +68,13 @@ private[spark] class Master(
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
-  val idToApp = new HashMap[String, ApplicationInfo]
+  val idToApp = new HashMap[ApplicationId, ApplicationInfo]
   val actorToApp = new HashMap[ActorRef, ApplicationInfo]
   val addressToApp = new HashMap[Address, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
-  val appIdToUI = new HashMap[String, SparkUI]
+  val appIdToUI = new HashMap[ApplicationId, SparkUI]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -693,16 +692,18 @@ private[spark] class Master(
       app.desc.appUiUrl = notFoundBasePath
       return false
     }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir,
+
+    val appEventLogDir = EventLoggingListener.getLogDirName(eventLogDir, app.id)
+    val fileSystem = Utils.getHadoopFileSystem(appEventLogDir,
       SparkHadoopUtil.get.newConfiguration(conf))
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
+    val eventLogInfo = EventLoggingListener.parseLoggingInfo(appEventLogDir, fileSystem)
     val eventLogPaths = eventLogInfo.logPaths
     val compressionCodec = eventLogInfo.compressionCodec
 
     if (eventLogPaths.isEmpty) {
       // Event logging is enabled for this application, but no event logs are found
       val title = s"Application history not found (${app.id})"
-      var msg = s"No event logs found for application $appName in $eventLogDir."
+      var msg = s"No event logs found for application $appName in $appEventLogDir."
       logWarning(msg)
       msg += " Did you specify the correct logging directory?"
       msg = URLEncoder.encode(msg, "UTF-8")
@@ -734,10 +735,10 @@ private[spark] class Master(
   }
 
   /** Generate a new app ID given a app's submission date */
-  def newApplicationId(submitDate: Date): String = {
+  def newApplicationId(submitDate: Date) = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
-    appId
+    new ApplicationId(appId)
   }
 
   /** Check for, and remove, any timed-out workers */

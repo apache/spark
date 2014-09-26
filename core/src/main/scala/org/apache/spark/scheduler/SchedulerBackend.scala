@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.ApplicationId
+
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
  * TaskSchedulerImpl. We assume a Mesos-like model where the application gets resource offers as
@@ -39,6 +41,6 @@ private[spark] trait SchedulerBackend {
    *
    * @return The application ID, if the backend does not provide an ID.
    */
-  def applicationId(): String = System.currentTimeMillis.toString
+  def applicationId() = new ApplicationId(System.currentTimeMillis.toString)
 
 }
