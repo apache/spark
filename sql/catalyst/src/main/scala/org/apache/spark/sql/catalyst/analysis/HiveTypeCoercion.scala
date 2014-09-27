@@ -351,8 +351,9 @@ trait HiveTypeCoercion {
       case d: Divide if d.resolved && d.dataType == DoubleType => d
       case d: Divide if d.resolved && d.dataType == DecimalType => d
 
-      case Divide(l, r) if l.dataType == DecimalType || r.dataType == DecimalType =>
-        Divide(Cast(l, DecimalType), Cast(r, DecimalType))
+      case Divide(l, r) if l.dataType == DecimalType => Divide(l, Cast(r, DecimalType))
+      case Divide(l, r) if r.dataType == DecimalType => Divide(Cast(l, DecimalType), r)
+
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
   }
