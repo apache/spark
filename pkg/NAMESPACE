@@ -15,6 +15,7 @@ exportMethods(
               "lapply",
               "lapplyPartition",
               "lapplyPartitionsWithIndex",
+              "lookup",
               "map",
               "mapPartitions",
               "mapPartitionsWithIndex",

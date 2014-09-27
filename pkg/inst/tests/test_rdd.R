@@ -7,6 +7,9 @@ sc <- sparkR.init()
 nums <- 1:10
 rdd <- parallelize(sc, nums, 2L)
 
+intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
+intRdd <- parallelize(sc, intPairs, 2L)
+
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
@@ -28,6 +31,14 @@ test_that("mapPartitions on RDD", {
   sums <- mapPartitions(rdd, function(part) { sum(unlist(part)) })
   actual <- collect(sums)
   expect_equal(actual, list(15, 40))
+})
+
+test_that("lookup on RDD", {
+  vals <- lookup(intRdd, 1L)
+  expect_equal(vals, list(-1, 200))
+  
+  vals <- lookup(intRdd, 3L)
+  expect_equal(vals, list())
 })
 
 test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
