@@ -18,8 +18,11 @@
 """
 Python package for Word2Vec in MLlib.
 """
+from numpy import random
 
-from pyspark import PickleSerializer
+from sys import maxint
+
+from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
 from pyspark.mllib.linalg import _convert_to_vector
 
@@ -42,10 +45,18 @@ class Word2VecModel(object):
         self._sc._gateway.detach(self._java_model)
 
     def transform(self, word):
+        """
+        local use only
+        TODO: make transform usable in RDD operations from python side
+        """
         result = self._java_model.transform(word)
         return PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(result)))
 
     def findSynonyms(self, x, num):
+        """
+        local use only
+        TODO: make findSynonyms usable in RDD operations from python side
+        """
         jlist = self._java_model.findSynonyms(x, num)
         words, similarity = PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(jlist)))
         return zip(words, similarity)
@@ -67,6 +78,7 @@ class Word2Vec(object):
     Efficient Estimation of Word Representations in Vector Space
     and
     Distributed Representations of Words and Phrases and their Compositionality.
+
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
@@ -76,13 +88,18 @@ class Word2Vec(object):
     'b'
     >>> str(syms[1][0])
     'c'
+    >>> len(syms)
+    2
+    >>> vec = model.transform("a")
+    >>> len(vec)
+    10
     """
     def __init__(self):
         self.vectorSize = 100
         self.startingAlpha = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = 42L
+        self.seed = random.randint(0, high=maxint)
 
     def setVectorSize(self, vectorSize):
         self.vectorSize = vectorSize
@@ -106,7 +123,17 @@ class Word2Vec(object):
 
     def fit(self, data):
         sc = data.context
-        model = sc._jvm.PythonMLLibAPI().trainWord2Vec(data._to_java_object_rdd())
+        ser = PickleSerializer()
+        vectorSize = self.vectorSize
+        startingAlpha = self.startingAlpha
+        numPartitions = self.numPartitions
+        numIterations = self.numIterations
+        seed = self.seed
+
+        # cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
+        model = sc._jvm.PythonMLLibAPI().trainWord2Vec(
+            data._to_java_object_rdd(), vectorSize,
+            startingAlpha, numPartitions, numIterations, seed)
         return Word2VecModel(sc, model)
 
 

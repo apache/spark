@@ -248,7 +248,7 @@ class Word2Vec extends Serializable with Logging {
    */
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
-    val words = dataset.flatMap(x => x).cache()
+    val words = dataset.flatMap(x => x)
 
     learnVocab(words)
     
@@ -281,9 +281,7 @@ class Word2Vec extends Serializable with Logging {
       }
     }
     
-    val newSentences = sentences.repartition(numPartitions)
-    words.unpersist()
-    newSentences.cache()
+    val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
