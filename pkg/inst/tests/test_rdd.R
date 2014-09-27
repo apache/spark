@@ -36,6 +36,9 @@ test_that("mapPartitions on RDD", {
 test_that("lookup on RDD", {
   vals <- lookup(intRdd, 1L)
   expect_equal(vals, list(-1, 200))
+  
+  vals <- lookup(intRdd, 3L)
+  expect_equal(vals, list())
 })
 
 test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {

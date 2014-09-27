@@ -316,8 +316,8 @@ setMethod("lookup",
           signature(rdd = "RDD", key = "ANY"),
           function(rdd, key) {
             partitionFunc <- function(part) {
-              filtered <- part[unlist(lapply(part, function(x) identical(key, x[[1]])))]
-              lapply(filtered, function(x) x[[2]])
+              filtered <- part[unlist(lapply(part, function(x) { identical(key, x[[1]]) }))]
+              lapply(filtered, function(x) { x[[2]] })
             }
             valsRDD <- lapplyPartition(rdd, partitionFunc)
             collect(valsRDD)
