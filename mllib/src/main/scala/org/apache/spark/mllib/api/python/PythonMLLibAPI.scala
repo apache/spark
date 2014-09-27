@@ -29,6 +29,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -40,8 +42,6 @@ import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
-import org.apache.spark.mllib.feature.Word2Vec
-import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -290,72 +290,34 @@ class PythonMLLibAPI extends Serializable {
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    * @param dataJRDD Input JavaRDD
-   * @return A handle to java Word2VecModel instance at python side
+   * @return A handle to java Word2VecModelWrapper instance at python side
    */
-  def trainWord2Vec(
-    dataJRDD: JavaRDD[java.util.ArrayList[String]]
-    ): Word2VecModel = {
-    val data = dataJRDD.rdd.map(_.toArray(new Array[String](0)).toSeq).cache()
+  def trainWord2Vec(dataJRDD: JavaRDD[java.util.ArrayList[String]]): Word2VecModelWrapper = {
+    val data = dataJRDD.rdd.cache()
     val word2vec = new Word2Vec()
     val model = word2vec.fit(data)
-    model
+    new Word2VecModelWrapper(model)
   }
 
-  /**
-   * Java stub for Python mllib Word2VecModel transform
-   * @param model Word2VecModel instance
-   * @param word a word
-   * @return serialized vector representation of word
-   */
-  def Word2VecModelTransform(
-    model: Word2VecModel,
-    word: String
-    ): Vector = {
-    model.transform(word)
-  }
+  private[python] class Word2VecModelWrapper(model: Word2VecModel) {
+    def transform(word: String): Vector = {
+      model.transform(word)
+    }
 
-  /**
-   * Java stub for Python mllib Word2VecModel findSynonyms
-   * @param model Word2VecModel instance
-   * @param word a word
-   * @param num number of synonyms to find
-   * @return a java LinkedList containing serialized version of
-   * synonyms and similarities
-   */
-  def Word2VecModelSynonyms(
-    model: Word2VecModel,
-    word: String,
-    num: Int
-    ): java.util.List[java.lang.Object] = {
-    val result = model.findSynonyms(word, num)
-    val similarity = Vectors.dense(result.map(_._2))
-    val words = result.map(_._1)
-    val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(words)
-    ret.add(similarity)
-    ret
-  }
+    def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {
+      val vec = transform(word)
+      findSynonyms(vec, num)
+    }
 
-  /**
-   * Java stub for Python mllib Word2VecModel findSynonyms
-   * @param model Word2VecModel instance
-   * @param vecBytes serialization of vector representation of words
-   * @param num number of synonyms to find
-   * @return a java LinkedList containing serialized version of
-   * synonyms and similarities
-   */
-  def Word2VecModelSynonyms(
-    model: Word2VecModel,
-    vec: Vector,
-    num: Int
-    ): java.util.List[java.lang.Object] = {
-    val result = model.findSynonyms(vec, num)
-    val similarity = Vectors.dense(result.map(_._2))
-    val words = result.map(_._1)
-    val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(words)
-    ret.add(similarity)
-    ret
+    def findSynonyms(vector: Vector, num: Int): java.util.List[java.lang.Object] = {
+      val result = model.findSynonyms(vector, num)
+      val similarity = Vectors.dense(result.map(_._2))
+      val words = result.map(_._1)
+      val ret = new java.util.LinkedList[java.lang.Object]()
+      ret.add(words)
+      ret.add(similarity)
+      ret
+    }
   }
 
   /**

@@ -19,8 +19,6 @@
 Python package for Word2Vec in MLlib.
 """
 
-from functools import wraps
-
 from pyspark import PickleSerializer
 
 from pyspark.mllib.linalg import _convert_to_vector
@@ -44,21 +42,13 @@ class Word2VecModel(object):
         self._sc._gateway.detach(self._java_model)
 
     def transform(self, word):
-        pythonAPI = self._sc._jvm.PythonMLLibAPI()
-        result = pythonAPI.Word2VecModelTransform(self._java_model, word)
+        result = self._java_model.transform(word)
         return PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(result)))
 
     def findSynonyms(self, x, num):
-        SerDe = self._sc._jvm.SerDe
-        ser = PickleSerializer()
-        pythonAPI = self._sc._jvm.PythonMLLibAPI()
-        if type(x) == str:
-            jlist = pythonAPI.Word2VecModelSynonyms(self._java_model, x, num)
-        else:
-            bytes = bytearray(ser.dumps(_convert_to_vector(x)))
-            vec = self._sc._jvm.SerDe.loads(bytes)
-            jlist = pythonAPI.Word2VecModelSynonyms(self._java_model, vec, num)
-        return PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(jlist)))
+        jlist = self._java_model.findSynonyms(x, num)
+        words, similarity = PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(jlist)))
+        return zip(words, similarity)
 
 
 class Word2Vec(object):
@@ -77,12 +67,22 @@ class Word2Vec(object):
     Efficient Estimation of Word Representations in Vector Space
     and
     Distributed Representations of Words and Phrases and their Compositionality.
+    >>> sentence = "a b " * 100 + "a c " * 10
+    >>> localDoc = [sentence, sentence]
+    >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
+    >>> model = Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
+    >>> syms = model.findSynonyms("a", 2)
+    >>> str(syms[0][0])
+    'b'
+    >>> str(syms[1][0])
+    'c'
     """
     def __init__(self):
         self.vectorSize = 100
         self.startingAlpha = 0.025
         self.numPartitions = 1
         self.numIterations = 1
+        self.seed = 42L
 
     def setVectorSize(self, vectorSize):
         self.vectorSize = vectorSize
@@ -100,10 +100,11 @@ class Word2Vec(object):
         self.numIterations = numIterations
         return self
 
+    def setSeed(self, seed):
+        self.seed = seed
+        return self
+
     def fit(self, data):
-        """
-        :param data: Input RDD
-        """
         sc = data.context
         model = sc._jvm.PythonMLLibAPI().trainWord2Vec(data._to_java_object_rdd())
         return Word2VecModel(sc, model)
