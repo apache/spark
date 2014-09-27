@@ -131,7 +131,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       input: Seq[Attribute],
       resolver: Resolver): Option[NamedExpression] = {
 
-    val parts = name.split("\\.")
+    val parts = name.split("\\.").toList
 
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
@@ -147,33 +147,33 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         }
 
       if (resolver(option.name, remainingParts.head)) {
-        if (remainingParts.length == 1) {
-          // for simple data type
-          (option.withName(remainingParts.head), Nil) :: Nil
-        } else if (option.dataType.isInstanceOf[StructType] &&
-          option.dataType.asInstanceOf[StructType].isValidField(remainingParts.drop(1).mkString("."), resolver)) {
-          // for complex data type
-          (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
-        } else {
-          // for simple data type but multiple parts remaining
-          Nil
+        (option.dataType, remainingParts) match {
+          // No nesting
+          case (_, _ :: Nil) => (option, Nil) :: Nil
+          // Points to nested field(s) of a structure
+          case (_: StructType, _ :: tail) => {
+            try {
+              (resolveNesting(tail, option, resolver), tail.last) :: Nil
+            } catch {
+              case _ => Nil
+            }
+          }
+          // Invalid
+          case _ => Nil
         }
       } else {
-        // did not match column name
         Nil
       }
     }
 
     options.distinct match {
       // One match, no nested fields, use it.
-      case Seq((a, Nil)) => Some(a)
+      case Seq((a:Attribute, Nil)) => Some(a)
 
       // One match, but we also need to extract the requested nested field.
-      case Seq((a, nestedFields)) =>
+      case Seq((nestedExpression, last:String)) =>
         val aliased =
-          Alias(
-            resolveNesting(nestedFields, a, resolver),
-            nestedFields.last)() // Preserve the case of the user's field access.
+          Alias(nestedExpression, last)() // Preserve the case of the user's field access.
         Some(aliased)
 
       // No matches.
