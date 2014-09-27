@@ -151,7 +151,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
     override def get(): AnyRef = wrap(func())
   }
 
-  val dataType: DataType = inspectorToDataType(returnInspector)
+  lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
