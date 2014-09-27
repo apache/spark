@@ -22,7 +22,6 @@ from pyspark import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.util import rddToFileName, RDDFunction, RDDFunction2
 from pyspark.rdd import portable_hash
-from pyspark.streaming.duration import Duration, Seconds
 from pyspark.resultiterable import ResultIterable
 
 __all__ = ["DStream"]
@@ -334,10 +333,10 @@ class DStream(object):
         return [RDD(jrdd, self.ctx, self._jrdd_deserializer) for jrdd in jrdds]
 
     def window(self, windowDuration, slideDuration=None):
-        d = Seconds(windowDuration)
+        d = self._ssc._jduration(windowDuration)
         if slideDuration is None:
             return DStream(self._jdstream.window(d), self._ssc, self._jrdd_deserializer)
-        s = Seconds(slideDuration)
+        s = self._ssc._jduration(slideDuration)
         return DStream(self._jdstream.window(d, s), self._ssc, self._jrdd_deserializer)
 
     def reduceByWindow(self, reduceFunc, invReduceFunc, windowDuration, slideDuration):
@@ -375,16 +374,12 @@ class DStream(object):
             joined = a.leftOuterJoin(b, numPartitions)
             return joined.mapValues(lambda (v1, v2): invFunc(v1, v2) if v2 is not None else v1)
 
-        if not isinstance(windowDuration, Duration):
-            windowDuration = Seconds(windowDuration)
-        if not isinstance(slideDuration, Duration):
-            slideDuration = Seconds(slideDuration)
         jreduceFunc = RDDFunction2(self.ctx, reduceFunc, reduced._jrdd_deserializer)
         jinvReduceFunc = RDDFunction2(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonReducedWindowedDStream(reduced._jdstream.dstream(),
                                                              jreduceFunc, jinvReduceFunc,
-                                                             windowDuration._jduration,
-                                                             slideDuration._jduration)
+                                                             self._ssc._jduration(windowDuration),
+                                                             self._ssc._jduration(slideDuration))
         return DStream(dstream.asJavaDStream(), self._ssc, self.ctx.serializer)
 
     def updateStateByKey(self, updateFunc, numPartitions=None):

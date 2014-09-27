@@ -41,7 +41,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         self.sc = SparkContext(appName=class_name)
         self.sc.setCheckpointDir("/tmp")
         # TODO: decrease duration to speed up tests
-        self.ssc = StreamingContext(self.sc, duration=Seconds(1))
+        self.ssc = StreamingContext(self.sc, duration=1)
 
     def tearDown(self):
         self.ssc.stop()
@@ -315,7 +315,7 @@ class TestWindowFunctions(PySparkStreamingTestCase):
 class TestStreamingContext(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext(master="local[2]", appName=self.__class__.__name__)
-        self.batachDuration = Seconds(0.1)
+        self.batachDuration = 0.1
         self.ssc = StreamingContext(self.sc, self.batachDuration)
 
     def tearDown(self):

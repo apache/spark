@@ -16,11 +16,10 @@
 #
 
 from pyspark import RDD
-from pyspark.serializers import UTF8Deserializer, BatchedSerializer
+from pyspark.serializers import UTF8Deserializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
-from pyspark.streaming.duration import Seconds
 
 from py4j.java_collections import ListConverter
 
@@ -76,9 +75,6 @@ class StreamingContext(object):
         @param duration: A L{Duration} object or seconds for SparkStreaming.
 
         """
-        if isinstance(duration, (int, long, float)):
-            duration = Seconds(duration)
-
         self._sc = sparkContext
         self._jvm = self._sc._jvm
         self._start_callback_server()
@@ -93,7 +89,10 @@ class StreamingContext(object):
             gw._python_proxy_port = gw._callback_server.port  # update port with real port
 
     def _initialize_context(self, sc, duration):
-        return self._jvm.JavaStreamingContext(sc._jsc, duration._jduration)
+        return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
+
+    def _jduration(self, seconds):
+        return self._jvm.Duration(int(seconds * 1000))
 
     @property
     def sparkContext(self):
@@ -111,12 +110,12 @@ class StreamingContext(object):
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
-        @param timeout: time to wait in milliseconds
+        @param timeout: time to wait in seconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            self._jssc.awaitTermination(timeout)
+            self._jssc.awaitTermination(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -139,10 +138,7 @@ class StreamingContext(object):
         @param duration Minimum duration (in seconds) that each DStream
                         should remember its RDDs
         """
-        if isinstance(duration, (int, long, float)):
-            duration = Seconds(duration)
-
-        self._jssc.remember(duration._jduration)
+        self._jssc.remember(self._jduration(duration))
 
     def checkpoint(self, directory):
         """
