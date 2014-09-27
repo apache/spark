@@ -434,7 +434,7 @@ class Matrix(object):
 
 class DenseMatrix(Matrix):
     """
-    Column-majored dense matrix.
+    Column-major dense matrix.
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
