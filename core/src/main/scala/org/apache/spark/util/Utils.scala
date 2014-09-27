@@ -1417,7 +1417,7 @@ private[spark] object Utils extends Logging {
    * already set. Return the path of the properties file used.
    */
   def loadDefaultSparkProperties(conf: SparkConf, filePath: String = null): String = {
-    val path = Option(filePath).getOrElse(getDefaultPropertiesFile)
+    val path = Option(filePath).getOrElse(getDefaultPropertiesFile())
     Option(path).foreach { confFile =>
       getPropertiesFromFile(confFile).filter { case (k, v) =>
         k.startsWith("spark.")
@@ -1449,23 +1449,13 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return the path of the default Spark properties file. */
-  def getDefaultPropertiesFile(): String = {
-    val s = File.separator
-    def getAbsolutePath(filePath: String): String = {
-      Option(filePath)
-        .map(t => new File(t))
-        .filter(_.isFile)
-        .map(_.getAbsolutePath).orNull
-    }
-
-    val configFile = sys.env.get("SPARK_CONF_DIR")
-      .map(t => s"$t${s}spark-defaults.conf")
-      .map(getAbsolutePath).orNull
-
-    Option(configFile).getOrElse(sys.env.get("SPARK_HOME")
-      .map(t => s"${t}${s}conf${s}spark-defaults.conf")
-      .map(getAbsolutePath)
-      .orNull)
+  def getDefaultPropertiesFile(env: Map[String, String] = sys.env): String = {
+    env.get("SPARK_CONF_DIR")
+      .orElse(env.get("SPARK_HOME").map { t => s"$t${File.separator}conf" })
+      .map { t => new File(s"$t${File.separator}spark-defaults.conf")}
+      .filter(_.isFile)
+      .map(_.getAbsolutePath)
+      .orNull
   }
 
   /** Return a nice string representation of the exception, including the stack trace. */

@@ -86,7 +86,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
    */
   private def mergeSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
-    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile)
+    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
 
     val properties = HashMap[String, String]()
     properties.putAll(defaultSparkProperties)
