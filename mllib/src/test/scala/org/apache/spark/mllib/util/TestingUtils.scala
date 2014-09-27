@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.scalatest.exceptions.TestFailedException
 
 object TestingUtils {
@@ -163,6 +163,69 @@ object TestingUtils {
      */
     def relTol(eps: Double): CompareVectorRightSide = CompareVectorRightSide(
       (x: Vector, y: Vector, eps: Double) => {
+        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
+      }, x, eps, REL_TOL_MSG)
+
+    override def toString = x.toString
+  }
+
+  case class CompareMatrixRightSide(
+     fun: (Matrix, Matrix, Double) => Boolean, y: Matrix, eps: Double, method: String)
+
+  /**
+   * Implicit class for comparing two matrices using relative tolerance or absolute tolerance.
+   */
+  implicit class MatrixWithAlmostEquals(val x: Matrix) {
+
+    /**
+     * When the difference of two vectors are within eps, returns true; otherwise, returns false.
+     */
+    def ~=(r: CompareMatrixRightSide): Boolean = r.fun(x, r.y, r.eps)
+
+    /**
+     * When the difference of two vectors are within eps, returns false; otherwise, returns true.
+     */
+    def !~=(r: CompareMatrixRightSide): Boolean = !r.fun(x, r.y, r.eps)
+
+    /**
+     * Throws exception when the difference of two vectors are NOT within eps;
+     * otherwise, returns true.
+     */
+    def ~==(r: CompareMatrixRightSide): Boolean = {
+      if (!r.fun(x, r.y, r.eps)) {
+        throw new TestFailedException(
+          s"Expected \n$x\n and \n${r.y}\n to be within ${r.eps}${r.method} for all elements.", 0)
+      }
+      true
+    }
+
+    /**
+     * Throws exception when the difference of two matrices are within eps; otherwise, returns true.
+     */
+    def !~==(r: CompareMatrixRightSide): Boolean = {
+      if (r.fun(x, r.y, r.eps)) {
+        throw new TestFailedException(
+          s"Did not expect \n$x\n and \n${r.y}\n to be within " +
+            "${r.eps}${r.method} for all elements.", 0)
+      }
+      true
+    }
+
+    /**
+     * Comparison using absolute tolerance.
+     */
+    def absTol(eps: Double): CompareMatrixRightSide = CompareMatrixRightSide(
+      (x: Matrix, y: Matrix, eps: Double) => {
+        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 absTol eps)
+      }, x, eps, ABS_TOL_MSG)
+
+    /**
+     * Comparison using relative tolerance. Note that comparing against sparse vector
+     * with elements having value of zero will raise exception because it involves with
+     * comparing against zero.
+     */
+    def relTol(eps: Double): CompareMatrixRightSide = CompareMatrixRightSide(
+      (x: Matrix, y: Matrix, eps: Double) => {
         x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
