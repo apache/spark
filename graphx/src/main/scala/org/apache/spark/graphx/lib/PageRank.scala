@@ -140,7 +140,7 @@ object PageRank extends Logging {
     def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
       val newPR = oldPR + (1.0 - resetProb) * msgSum
-      (newPR, Math.abs(newPR - oldPR))
+      (newPR, newPR - oldPR)
     }
 
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
