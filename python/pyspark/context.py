@@ -814,7 +814,7 @@ class SparkContext(object):
                 print "=" * 60
                 print "Profile of RDD<id=%d>" % id
                 print "=" * 60
-                stats.sort_stats("tottime", "cumtime").print_stats()
+                stats.sort_stats("time", "cumulative").print_stats()
                 # mark it as showed
                 self._profile_stats[i][2] = True
 
