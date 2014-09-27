@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.catalyst.types._
 
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
@@ -33,6 +34,12 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
+  val testRelation2 = LocalRelation(
+    AttributeReference("a", StringType)(),
+    AttributeReference("b", StringType)(),
+    AttributeReference("c", DoubleType)(),
+    AttributeReference("d", DecimalType)(),
+    AttributeReference("e", ShortType)())
 
   before {
     caseSensitiveCatalog.registerTable(None, "TaBlE", testRelation)
@@ -74,7 +81,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     val e = intercept[RuntimeException] {
       caseSensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None))
     }
-    assert(e.getMessage === "Table Not Found: tAbLe")
+    assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
       caseSensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
@@ -105,5 +112,32 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       caseSensitiveAnalyze(UnresolvedTestPlan())
     }
     assert(e.getMessage().toLowerCase.contains("unresolved plan"))
+  }
+
+  test("divide should be casted into fractional types") {
+    val testRelation2 = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", StringType)(),
+      AttributeReference("c", DoubleType)(),
+      AttributeReference("d", DecimalType)(),
+      AttributeReference("e", ShortType)())
+
+    val expr0 = 'a / 2
+    val expr1 = 'a / 'b
+    val expr2 = 'a / 'c
+    val expr3 = 'a / 'd
+    val expr4 = 'e / 'e
+    val plan = caseInsensitiveAnalyze(Project(
+      Alias(expr0, s"Analyzer($expr0)")() ::
+      Alias(expr1, s"Analyzer($expr1)")() ::
+      Alias(expr2, s"Analyzer($expr2)")() ::
+      Alias(expr3, s"Analyzer($expr3)")() ::
+      Alias(expr4, s"Analyzer($expr4)")() :: Nil, testRelation2))
+    val pl = plan.asInstanceOf[Project].projectList
+    assert(pl(0).dataType == DoubleType)
+    assert(pl(1).dataType == DoubleType)
+    assert(pl(2).dataType == DoubleType)
+    assert(pl(3).dataType == DecimalType)
+    assert(pl(4).dataType == DoubleType)
   }
 }
