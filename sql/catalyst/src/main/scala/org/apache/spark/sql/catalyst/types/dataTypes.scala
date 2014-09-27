@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
+import org.apache.spark.sql.catalyst.analysis._
+
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -416,6 +418,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   lazy val fieldNames: Seq[String] = fields.map(_.name)
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
@@ -459,6 +462,16 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
       ("fields" -> fields.map(_.jsonValue))
+
+  private lazy val validReference: Seq[String] = fields.flatMap( x => x.dataType match {
+    case st:StructType => st.validReference.map(y => x.name + "." + y) ++ Seq(x.name)
+    case _ => Seq(x.name)
+  })
+
+  def isValidField(ref: String, resolver: Resolver): Boolean =
+    validReference.count(resolver(_, ref)) == 1
+
+  def simpleString: String = "struct"
 }
 
 object MapType {

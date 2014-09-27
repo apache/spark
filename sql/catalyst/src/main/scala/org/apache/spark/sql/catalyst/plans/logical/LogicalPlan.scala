@@ -150,7 +150,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         if (remainingParts.length == 1) {
           // for simple data type
           (option.withName(remainingParts.head), Nil) :: Nil
-        } else if (option.dataType.isInstanceOf[StructType]) {
+        } else if (option.dataType.isInstanceOf[StructType] &&
+          option.dataType.asInstanceOf[StructType].isValidField(remainingParts.drop(1).mkString("."), resolver)) {
           // for complex data type
           (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
         } else {
