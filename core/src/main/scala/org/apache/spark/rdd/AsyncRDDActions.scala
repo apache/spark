@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 import org.apache.spark.annotation.Experimental
 
@@ -38,29 +39,30 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for counting the number of elements in the RDD.
    */
   def countAsync(): FutureAction[Long] = {
-    val totalCount = new AtomicLong
-    self.context.submitJob(
-      self,
-      (iter: Iterator[T]) => {
-        var result = 0L
-        while (iter.hasNext) {
-          result += 1L
-          iter.next()
-        }
-        result
-      },
-      Range(0, self.partitions.size),
-      (index: Int, data: Long) => totalCount.addAndGet(data),
-      totalCount.get())
+    val f = new ComplexFutureAction[Long]
+    f.run {
+      val totalCount = new AtomicLong
+      f.runJob(self,
+               (iter: Iterator[T]) => Utils.getIteratorSize(iter),
+               Range(0, self.partitions.size),
+               (index: Int, data: Long) => totalCount.addAndGet(data),
+               totalCount.get())
+    }
   }
 
   /**
    * Returns a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = {
-    val results = new Array[Array[T]](self.partitions.size)
-    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.size),
-      (index, data) => results(index) = data, results.flatten.toSeq)
+    val f = new ComplexFutureAction[Seq[T]]
+    f.run {
+      val results = new Array[Array[T]](self.partitions.size)
+      f.runJob(self,
+               (iter: Iterator[T]) => iter.toArray,
+               Range(0, self.partitions.size),
+               (index: Int, data: Array[T]) => results(index) = data,
+               results.flatten.toSeq)
+    }
   }
 
   /**
@@ -104,24 +106,34 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       }
       results.toSeq
     }
-
-    f
   }
 
   /**
    * Applies a function f to all elements of this RDD.
    */
-  def foreachAsync(f: T => Unit): FutureAction[Unit] = {
-    val cleanF = self.context.clean(f)
-    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.size),
-      (index, data) => Unit, Unit)
+  def foreachAsync(expr: T => Unit): FutureAction[Unit] = {
+    val f = new ComplexFutureAction[Unit]
+    val exprClean = self.context.clean(expr)
+    f.run {
+      f.runJob(self,
+               (iter: Iterator[T]) => iter.foreach(exprClean),
+               Range(0, self.partitions.size),
+               (index: Int, data: Unit) => Unit,
+               Unit)
+    }
   }
 
   /**
    * Applies a function f to each partition of this RDD.
    */
-  def foreachPartitionAsync(f: Iterator[T] => Unit): FutureAction[Unit] = {
-    self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.size),
-      (index, data) => Unit, Unit)
+  def foreachPartitionAsync(expr: Iterator[T] => Unit): FutureAction[Unit] = {
+    val f = new ComplexFutureAction[Unit]
+    f.run {
+      f.runJob(self,
+               expr,
+               Range(0, self.partitions.size),
+               (index: Int, data: Unit) => Unit,
+               Unit)
+    }
   }
 }
