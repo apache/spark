@@ -27,7 +27,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark.{FutureAction, Partition, SparkContext, TaskContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
@@ -81,7 +81,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def mapPartitionsWithIndex[R](
       f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
+    new JavaRDD(rdd.mapPartitionsWithIndex(((a, b) => f(a, asJavaIterator(b))),
         preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
@@ -183,6 +183,39 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
     JavaPairRDD.fromRDD(
       rdd.mapPartitions(fn, preservesPartitioning))(fakeClassTag[K2], fakeClassTag[V2])
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
+   * mapPartitions that also passes the TaskContext into the closure.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   */
+  @DeveloperApi
+  def mapPartitionsWithContext[R](
+      f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[R]],
+      preservesPartitioning: Boolean): JavaRDD[R] = {
+
+    new JavaRDD(rdd.mapPartitionsWithContext(
+      ((a, b) => f(a, asJavaIterator(b))), preservesPartitioning)(fakeClassTag))(fakeClassTag)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Return a new JavaPairRDD by applying a function to each partition of this RDD. This is a
+   * variant of mapPartitions that also passes the TaskContext into the closure.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   */
+  @DeveloperApi
+  def mapPartitionsToPairWithContext[K2, V2](
+      f: JFunction2[TaskContext, java.util.Iterator[T], java.util.Iterator[(K2, V2)]],
+      preservesPartitioning: Boolean): JavaPairRDD[K2, V2] = {
+
+    JavaPairRDD.fromJavaRDD(mapPartitionsWithContext(f, preservesPartitioning))
   }
 
   /**
