@@ -872,12 +872,12 @@ that these options will be deprecated in future release as more optimizations ar
 Spark SQL also supports interfaces for running SQL queries directly without the need to write any
 code.
 
-## Running the Thrift JDBC server
+## Running the Thrift JDBC/ODBC server
 
-The Thrift JDBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
+The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
 in Hive 0.12. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.12.
 
-To start the JDBC server, run the following in the Spark directory:
+To start the JDBC/ODBC server, run the following in the Spark directory:
 
     ./sbin/start-thriftserver.sh
 
@@ -906,11 +906,11 @@ or system properties:
 ```
 {% endhighlight %}
 
-Now you can use beeline to test the Thrift JDBC server:
+Now you can use beeline to test the Thrift JDBC/ODBC server:
 
     ./bin/beeline
 
-Connect to the JDBC server in beeline with:
+Connect to the JDBC/ODBC server in beeline with:
 
     beeline> !connect jdbc:hive2://localhost:10000
 
