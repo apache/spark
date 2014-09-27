@@ -52,7 +52,12 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     if (_killed) {
       kill(interruptThread = false)
     }
-    runTask(context)
+    try {
+      runTask(context)
+    } finally {
+      context.markTaskCompleted()
+      TaskContext.unset()
+    }
   }
 
   def runTask(context: TaskContext): T
@@ -93,7 +98,6 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-    TaskContext.remove()
   }  
 }
 

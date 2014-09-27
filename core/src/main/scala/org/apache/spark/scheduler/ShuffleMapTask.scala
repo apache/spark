@@ -78,8 +78,6 @@ private[spark] class ShuffleMapTask(
             log.debug("Could not stop writer", e)
         }
         throw e
-    } finally {
-      context.markTaskCompleted()
     }
   }
 
