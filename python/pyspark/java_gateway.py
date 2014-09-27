@@ -23,6 +23,7 @@ import shlex
 import platform
 from subprocess import Popen, PIPE
 from threading import Thread
+
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
 
@@ -108,9 +109,6 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
-    java_import(gateway.jvm, "org.apache.spark.streaming.*")
-    java_import(gateway.jvm, "org.apache.spark.streaming.api.java.*")
-    java_import(gateway.jvm, "org.apache.spark.streaming.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.sql.SQLContext")
     java_import(gateway.jvm, "org.apache.spark.sql.hive.HiveContext")

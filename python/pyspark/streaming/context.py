@@ -22,6 +22,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 
 from py4j.java_collections import ListConverter
+from py4j.java_gateway import java_import
 
 __all__ = ["StreamingContext"]
 
@@ -72,7 +73,7 @@ class StreamingContext(object):
         should be set, either through the named parameters here or through C{conf}.
 
         @param sparkContext: L{SparkContext} object.
-        @param duration: A L{Duration} object or seconds for SparkStreaming.
+        @param duration: seconds for SparkStreaming.
 
         """
         self._sc = sparkContext
@@ -89,6 +90,9 @@ class StreamingContext(object):
             gw._python_proxy_port = gw._callback_server.port  # update port with real port
 
     def _initialize_context(self, sc, duration):
+        java_import(self._jvm, "org.apache.spark.streaming.*")
+        java_import(self._jvm, "org.apache.spark.streaming.api.java.*")
+        java_import(self._jvm, "org.apache.spark.streaming.api.python.*")
         return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
 
     def _jduration(self, seconds):
@@ -217,7 +221,6 @@ class StreamingContext(object):
             raise ValueError("should have at least one DStream to union")
         if len(dstreams) == 1:
             return dstreams[0]
-        self._check_serialzers(dstreams)
         first = dstreams[0]
         jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
                                         SparkContext._gateway._gateway_client)
