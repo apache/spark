@@ -619,6 +619,7 @@ abstract class RDD[T: ClassTag](
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
+  @deprecated("use TaskContext.get", "1.2.0")
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {
