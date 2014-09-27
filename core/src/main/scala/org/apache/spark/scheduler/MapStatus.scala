@@ -94,7 +94,9 @@ private[spark] class DetailedMapStatus(
 
   override def location: BlockManagerId = loc
 
-  override def getSizeForBlock(reduceId: Int): Long = compressedSizes(reduceId)
+  override def getSizeForBlock(reduceId: Int): Long = {
+    MapStatus.decompressSize(compressedSizes(reduceId))
+  }
 
   override def writeExternal(out: ObjectOutput) {
     loc.writeExternal(out)
