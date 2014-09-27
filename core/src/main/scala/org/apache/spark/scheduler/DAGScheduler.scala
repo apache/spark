@@ -641,7 +641,7 @@ class DAGScheduler(
         job.listener.taskSucceeded(0, result)
       } finally {
         taskContext.markTaskCompleted()
-        TaskContext.remove()
+        TaskContext.unset()
       }
     } catch {
       case e: Exception =>

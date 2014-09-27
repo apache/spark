@@ -56,7 +56,7 @@ public class TaskContext implements Serializable {
    * @param taskMetrics performance metrics of the task
    */
   @DeveloperApi
-  public TaskContext(Integer stageId, Integer partitionId, Long attemptId, Boolean runningLocally,
+  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally,
                      TaskMetrics taskMetrics) {
     this.attemptId = attemptId;
     this.partitionId = partitionId;
@@ -64,7 +64,6 @@ public class TaskContext implements Serializable {
     this.stageId = stageId;
     this.taskMetrics = taskMetrics;
   }
-
 
   /**
    * :: DeveloperApi ::
@@ -76,15 +75,13 @@ public class TaskContext implements Serializable {
    * @param runningLocally whether the task is running locally in the driver JVM
    */
   @DeveloperApi
-  public TaskContext(Integer stageId, Integer partitionId, Long attemptId,
-                     Boolean runningLocally) {
+  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally) {
     this.attemptId = attemptId;
     this.partitionId = partitionId;
     this.runningLocally = runningLocally;
     this.stageId = stageId;
     this.taskMetrics = TaskMetrics.empty();
   }
-
 
   /**
    * :: DeveloperApi ::
@@ -95,7 +92,7 @@ public class TaskContext implements Serializable {
    * @param attemptId the number of attempts to execute this task
    */
   @DeveloperApi
-  public TaskContext(Integer stageId, Integer partitionId, Long attemptId) {
+  public TaskContext(int stageId, int partitionId, long attemptId) {
     this.attemptId = attemptId;
     this.partitionId = partitionId;
     this.runningLocally = false;
@@ -107,9 +104,9 @@ public class TaskContext implements Serializable {
     new ThreadLocal<TaskContext>();
 
   /**
-  * :: Internal API ::
-  * This is spark internal API, not intended to be called from user programs.
-  */
+   * :: Internal API ::
+   * This is spark internal API, not intended to be called from user programs.
+   */
   public static void setTaskContext(TaskContext tc) {
     taskContext.set(tc);
   }
@@ -118,10 +115,8 @@ public class TaskContext implements Serializable {
     return taskContext.get();
   }
 
-  /** 
-  * :: Internal API ::
-  */
-  public static void remove() {
+  /** :: Internal API ::  */
+  public static void unset() {
     taskContext.remove();
   }
 
@@ -130,22 +125,22 @@ public class TaskContext implements Serializable {
     new ArrayList<TaskCompletionListener>();
 
   // Whether the corresponding task has been killed.
-  private volatile Boolean interrupted = false;
+  private volatile boolean interrupted = false;
 
   // Whether the task has completed.
-  private volatile Boolean completed = false;
+  private volatile boolean completed = false;
 
   /**
    * Checks whether the task has completed.
    */
-  public Boolean isCompleted() {
+  public boolean isCompleted() {
     return completed;
   }
 
   /**
    * Checks whether the task has been killed.
    */
-  public Boolean isInterrupted() {
+  public boolean isInterrupted() {
     return interrupted;
   }
 
@@ -246,12 +241,12 @@ public class TaskContext implements Serializable {
   }
 
   @Deprecated
-  /** Deprecated: use getRunningLocally() */
+  /** Deprecated: use isRunningLocally() */
   public boolean runningLocally() {
     return runningLocally;
   }
 
-  public boolean getRunningLocally() {
+  public boolean isRunningLocally() {
     return runningLocally;
   }
 
