@@ -315,16 +315,16 @@ class DStream(object):
         return self.transform(lambda rdd: rdd.repartition(numPartitions))
 
     def union(self, other):
-        return self.transformWith(lambda a, b: a.union(b), other, True)
+        return self.transformWith(lambda a, b, t: a.union(b), other, True)
 
     def cogroup(self, other):
-        return self.transformWith(lambda a, b: a.cogroup(b), other)
+        return self.transformWith(lambda a, b, t: a.cogroup(b), other)
 
     def leftOuterJoin(self, other):
-        return self.transformWith(lambda a, b: a.leftOuterJion(b), other)
+        return self.transformWith(lambda a, b, t: a.leftOuterJion(b), other)
 
     def rightOuterJoin(self, other):
-        return self.transformWith(lambda a, b: a.rightOuterJoin(b), other)
+        return self.transformWith(lambda a, b, t: a.rightOuterJoin(b), other)
 
     def _jtime(self, milliseconds):
         return self.ctx._jvm.Time(milliseconds)

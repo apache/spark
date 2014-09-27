@@ -40,27 +40,25 @@ class PySparkStreamingTestCase(unittest.TestCase):
         class_name = self.__class__.__name__
         self.sc = SparkContext(appName=class_name)
         self.sc.setCheckpointDir("/tmp")
+        # TODO: decrease duration to speed up tests
         self.ssc = StreamingContext(self.sc, duration=Seconds(1))
 
     def tearDown(self):
         self.ssc.stop()
-        self.sc.stop()
 
     @classmethod
     def tearDownClass(cls):
         # Make sure tp shutdown the callback server
         SparkContext._gateway._shutdown_callback_server()
 
-    def _test_func(self, input, func, expected, numSlices=None, sort=False):
+    def _test_func(self, input, func, expected, sort=False):
         """
-        Start stream and return the result.
         @param input: dataset for the test. This should be list of lists.
         @param func: wrapped function. This function should return PythonDStream object.
         @param expected: expected output for this testcase.
-        @param numSlices: the number of slices in the rdd in the dstream.
         """
         # Generate input stream with user-defined input.
-        input_stream = self.ssc._makeStream(input, numSlices)
+        input_stream = self.ssc.queueStream(input)
         # Apply test function to stream.
         stream = func(input_stream)
         result = stream.collect()
@@ -121,7 +119,7 @@ class TestBasicOperations(PySparkStreamingTestCase):
 
     def test_count(self):
         """Basic operation test for DStream.count."""
-        input = [range(1, 5), range(1, 10), range(1, 20)]
+        input = [range(5), range(10), range(20)]
 
         def func(dstream):
             return dstream.count()
@@ -178,24 +176,24 @@ class TestBasicOperations(PySparkStreamingTestCase):
     def test_glom(self):
         """Basic operation test for DStream.glom."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
-        numSlices = 2
+        rdds = [self.sc.parallelize(r, 2) for r in input]
 
         def func(dstream):
             return dstream.glom()
         expected = [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]
-        self._test_func(input, func, expected, numSlices)
+        self._test_func(rdds, func, expected)
 
     def test_mapPartitions(self):
         """Basic operation test for DStream.mapPartitions."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
-        numSlices = 2
+        rdds = [self.sc.parallelize(r, 2) for r in input]
 
         def func(dstream):
             def f(iterator):
                 yield sum(iterator)
             return dstream.mapPartitions(f)
         expected = [[3, 7], [11, 15], [19, 23]]
-        self._test_func(input, func, expected, numSlices)
+        self._test_func(rdds, func, expected)
 
     def test_countByValue(self):
         """Basic operation test for DStream.countByValue."""
@@ -236,14 +234,14 @@ class TestBasicOperations(PySparkStreamingTestCase):
         self._test_func(input, func, expected, sort=True)
 
     def test_union(self):
-        input1 = [range(3), range(5), range(1)]
+        input1 = [range(3), range(5), range(1), range(6)]
         input2 = [range(3, 6), range(5, 6), range(1, 6)]
 
-        d1 = self.ssc._makeStream(input1)
-        d2 = self.ssc._makeStream(input2)
+        d1 = self.ssc.queueStream(input1)
+        d2 = self.ssc.queueStream(input2)
         d = d1.union(d2)
         result = d.collect()
-        expected = [range(6), range(6), range(6)]
+        expected = [range(6), range(6), range(6), range(6)]
 
         self.ssc.start()
         start_time = time.time()
@@ -317,33 +315,49 @@ class TestWindowFunctions(PySparkStreamingTestCase):
 class TestStreamingContext(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext(master="local[2]", appName=self.__class__.__name__)
-        self.batachDuration = Seconds(1)
-        self.ssc = None
+        self.batachDuration = Seconds(0.1)
+        self.ssc = StreamingContext(self.sc, self.batachDuration)
 
     def tearDown(self):
-        if self.ssc is not None:
-            self.ssc.stop()
+        self.ssc.stop()
         self.sc.stop()
 
     def test_stop_only_streaming_context(self):
-        self.ssc = StreamingContext(self.sc, self.batachDuration)
-        self._addInputStream(self.ssc)
+        self._addInputStream()
         self.ssc.start()
         self.ssc.stop(False)
         self.assertEqual(len(self.sc.parallelize(range(5), 5).glom().collect()), 5)
 
     def test_stop_multiple_times(self):
-        self.ssc = StreamingContext(self.sc, self.batachDuration)
-        self._addInputStream(self.ssc)
+        self._addInputStream()
         self.ssc.start()
         self.ssc.stop()
         self.ssc.stop()
 
-    def _addInputStream(self, s):
+    def _addInputStream(self):
         # Make sure each length of input is over 3
         inputs = map(lambda x: range(1, x), range(5, 101))
-        stream = s._makeStream(inputs)
+        stream = self.ssc.queueStream(inputs)
         stream.collect()
+
+    def test_queueStream(self):
+        input = [range(i) for i in range(3)]
+        dstream = self.ssc.queueStream(input)
+        result = dstream.collect()
+        self.ssc.start()
+        time.sleep(1)
+        self.assertEqual(input, result)
+
+    def test_union(self):
+        input = [range(i) for i in range(3)]
+        dstream = self.ssc.queueStream(input)
+        dstream2 = self.ssc.union(dstream, dstream)
+        result = dstream.collect()
+        self.ssc.start()
+        time.sleep(1)
+        expected = [i * 2 for i in input]
+        self.assertEqual(input, result)
+
 
 if __name__ == "__main__":
     unittest.main()

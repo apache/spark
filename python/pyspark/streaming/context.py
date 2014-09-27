@@ -15,14 +15,49 @@
 # limitations under the License.
 #
 
-from pyspark.serializers import UTF8Deserializer
+from pyspark import RDD
+from pyspark.serializers import UTF8Deserializer, BatchedSerializer
 from pyspark.context import SparkContext
+from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
-from pyspark.streaming.duration import Duration, Seconds
+from pyspark.streaming.duration import Seconds
 
 from py4j.java_collections import ListConverter
 
 __all__ = ["StreamingContext"]
+
+
+def _daemonize_callback_server():
+    """
+    Hack Py4J to daemonize callback server
+    """
+    # TODO: create a patch for Py4J
+    import socket
+    import py4j.java_gateway
+    logger = py4j.java_gateway.logger
+    from py4j.java_gateway import Py4JNetworkError
+    from threading import Thread
+
+    def start(self):
+        """Starts the CallbackServer. This method should be called by the
+        client instead of run()."""
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
+                                      1)
+        try:
+            self.server_socket.bind((self.address, self.port))
+            # self.port = self.server_socket.getsockname()[1]
+        except Exception:
+            msg = 'An error occurred while trying to start the callback server'
+            logger.exception(msg)
+            raise Py4JNetworkError(msg)
+
+        # Maybe thread needs to be cleanup up?
+        self.thread = Thread(target=self.run)
+        self.thread.daemon = True
+        self.thread.start()
+
+    py4j.java_gateway.CallbackServer.start = start
 
 
 class StreamingContext(object):
@@ -53,7 +88,9 @@ class StreamingContext(object):
         gw = self._sc._gateway
         # getattr will fallback to JVM
         if "_callback_server" not in gw.__dict__:
+            _daemonize_callback_server()
             gw._start_callback_server(gw._python_proxy_port)
+            gw._python_proxy_port = gw._callback_server.port  # update port with real port
 
     def _initialize_context(self, sc, duration):
         return self._jvm.JavaStreamingContext(sc._jsc, duration._jduration)
@@ -92,26 +129,44 @@ class StreamingContext(object):
 
     def remember(self, duration):
         """
-        Set each DStreams in this context to remember RDDs it generated in the last given duration.
-        DStreams remember RDDs only for a limited duration of time and releases them for garbage
-        collection. This method allows the developer to specify how to long to remember the RDDs (
-        if the developer wishes to query old data outside the DStream computation).
-        @param duration pyspark.streaming.duration.Duration object or seconds.
-               Minimum duration that each DStream should remember its RDDs
+        Set each DStreams in this context to remember RDDs it generated
+        in the last given duration. DStreams remember RDDs only for a
+        limited duration of time and releases them for garbage collection.
+        This method allows the developer to specify how to long to remember
+        the RDDs ( if the developer wishes to query old data outside the
+        DStream computation).
+
+        @param duration Minimum duration (in seconds) that each DStream
+                        should remember its RDDs
         """
         if isinstance(duration, (int, long, float)):
             duration = Seconds(duration)
 
         self._jssc.remember(duration._jduration)
 
-    # TODO: add storageLevel
-    def socketTextStream(self, hostname, port):
+    def checkpoint(self, directory):
+        """
+        Sets the context to periodically checkpoint the DStream operations for master
+        fault-tolerance. The graph will be checkpointed every batch interval.
+
+        @param directory HDFS-compatible directory where the checkpoint data
+                         will be reliably stored
+        """
+        self._jssc.checkpoint(directory)
+
+    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
         """
         Create an input from TCP source hostname:port. Data is received using
         a TCP socket and receive byte is interpreted as UTF8 encoded '\n' delimited
         lines.
+
+        @param hostname      Hostname to connect to for receiving data
+        @param port          Port to connect to for receiving data
+        @param storageLevel  Storage level to use for storing the received objects
         """
-        return DStream(self._jssc.socketTextStream(hostname, port), self, UTF8Deserializer())
+        jlevel = self._sc._getJavaStorageLevel(storageLevel)
+        return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
+                       UTF8Deserializer())
 
     def textFileStream(self, directory):
         """
@@ -122,14 +177,52 @@ class StreamingContext(object):
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
-    def _makeStream(self, inputs, numSlices=None):
+    def _check_serialzers(self, rdds):
+        # make sure they have same serializer
+        if len(set(rdd._jrdd_deserializer for rdd in rdds)):
+            for i in range(len(rdds)):
+                # reset them to sc.serializer
+                rdds[i] = rdds[i].map(lambda x: x, preservesPartitioning=True)
+
+    def queueStream(self, queue, oneAtATime=False, default=None):
         """
-        This function is only for unittest.
-        It requires a list as input, and returns the i_th element at the i_th batch
-        under manual clock.
+        Create an input stream from an queue of RDDs or list. In each batch,
+        it will process either one or all of the RDDs returned by the queue.
+
+        NOTE: changes to the queue after the stream is created will not be recognized.
+        @param queue      Queue of RDDs
+        @tparam T         Type of objects in the RDD
         """
-        rdds = [self._sc.parallelize(input, numSlices) for input in inputs]
+        if queue and not isinstance(queue[0], RDD):
+            rdds = [self._sc.parallelize(input) for input in queue]
+        else:
+            rdds = queue
+        self._check_serialzers(rdds)
         jrdds = ListConverter().convert([r._jrdd for r in rdds],
                                         SparkContext._gateway._gateway_client)
-        jdstream = self._jvm.PythonDataInputStream(self._jssc, jrdds).asJavaDStream()
-        return DStream(jdstream, self, rdds[0]._jrdd_deserializer)
+        jdstream = self._jvm.PythonDataInputStream(self._jssc, jrdds, oneAtATime,
+                                                   default and default._jrdd)
+        return DStream(jdstream.asJavaDStream(), self, rdds[0]._jrdd_deserializer)
+
+    def transform(self, dstreams, transformFunc):
+        """
+        Create a new DStream in which each RDD is generated by applying a function on RDDs of
+        the DStreams. The order of the JavaRDDs in the transform function parameter will be the
+        same as the order of corresponding DStreams in the list.
+        """
+        # TODO
+
+    def union(self, *dstreams):
+        """
+        Create a unified DStream from multiple DStreams of the same
+        type and same slide duration.
+        """
+        if not dstreams:
+            raise ValueError("should have at least one DStream to union")
+        if len(dstreams) == 1:
+            return dstreams[0]
+        self._check_serialzers(dstreams)
+        first = dstreams[0]
+        jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
+                                        SparkContext._gateway._gateway_client)
+        return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)

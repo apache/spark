@@ -30,7 +30,10 @@ class RDDFunction(object):
 
     def call(self, jrdd, milliseconds):
         try:
-            rdd = RDD(jrdd, self.ctx, self.deserializer)
+            emptyRDD = getattr(self.ctx, "_emptyRDD", None)
+            if emptyRDD is None:
+                self.ctx._emptyRDD = emptyRDD = self.ctx.parallelize([]).cache()
+            rdd = RDD(jrdd, self.ctx, self.deserializer) if jrdd else emptyRDD
             r = self.func(rdd, milliseconds)
             if r:
                 return r._jrdd
@@ -58,8 +61,12 @@ class RDDFunction2(object):
 
     def call(self, jrdd, jrdd2, milliseconds):
         try:
-            rdd = RDD(jrdd, self.ctx, self.jrdd_deserializer) if jrdd else None
-            other = RDD(jrdd2, self.ctx, self.jrdd_deserializer2) if jrdd2 else None
+            emptyRDD = getattr(self.ctx, "_emptyRDD", None)
+            if emptyRDD is None:
+                self.ctx._emptyRDD = emptyRDD = self.ctx.parallelize([]).cache()
+
+            rdd = RDD(jrdd, self.ctx, self.jrdd_deserializer) if jrdd else emptyRDD
+            other = RDD(jrdd2, self.ctx, self.jrdd_deserializer2) if jrdd2 else emptyRDD
             r = self.func(rdd, other, milliseconds)
             if r:
                 return r._jrdd
