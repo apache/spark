@@ -33,7 +33,8 @@ object TwitterUtils {
    *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    *        twitter4j.oauth.accessTokenSecret
    * @param filters Set of filter strings to get only those tweets that match them
-   * @param count Indicates the number of previous statuses to stream before transitioning to the live stream
+   * @param count Indicates the number of previous statuses to stream before transitioning to the
+   *        live stream
    * @param locations   Bounding boxes to get only geotagged tweets within them. Example: 
             Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. If locations and
             filters are both nonempty, then any tweet matching either condition may be returned.
