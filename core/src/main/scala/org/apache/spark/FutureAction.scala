@@ -208,7 +208,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R) {
+      resultFunc: => R): R = {
     // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
     // command need to be in an atomic block.
     val job = this.synchronized {
@@ -223,7 +223,10 @@ class ComplexFutureAction[T] extends FutureAction[T] {
     // cancel the job and stop the execution. This is not in a synchronized block because
     // Await.ready eventually waits on the monitor in FutureJob.jobWaiter.
     try {
-      Await.ready(job, Duration.Inf)
+      Await.ready(job, Duration.Inf).value.get match {
+        case scala.util.Failure(e) => throw e
+        case scala.util.Success(v) => v
+      }
     } catch {
       case e: InterruptedException =>
         job.cancel()
