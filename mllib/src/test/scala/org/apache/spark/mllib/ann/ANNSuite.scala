@@ -69,7 +69,7 @@ class ANNSuite extends FunSuite with LocalSparkContext {
       val arrWeights = new Array[Double](noWeights)
       var w = 0
       while(w < noWeights) {
-        arrWeights(w) = rnd.nextDouble()
+        arrWeights(w) = rnd.nextDouble() * 4.8 - 2.4
         w += 1
       }
       val arrInp = new Array[Double](noInp)
