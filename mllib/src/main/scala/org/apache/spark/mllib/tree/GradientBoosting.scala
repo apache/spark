@@ -95,7 +95,7 @@ object GradientBoosting extends Logging {
       val checkpointingPeriod = boostingStrategy.checkpointPeriod
       // TODO: Need to find good defaults for checkpointPeriod
       if (m % checkpointingPeriod == 0) {
-        data.checkpoint()
+        //data.checkpoint()
       }
       logDebug(data.first.toString)
       m += 1
