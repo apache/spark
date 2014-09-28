@@ -502,7 +502,7 @@ object DecisionTree extends Serializable with Logging {
         val nodeIndex = predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures,
           bins, metadata.unorderedFeatures)
         val nodeInfo = nodeIndexToInfo.getOrElse(nodeIndex, null)
-        // If the example does not reach a node in this group, then nodeIndo = null.
+        // If the example does not reach a node in this group, then nodeIndex = null.
         if (nodeInfo != null) {
           val aggNodeIndex = nodeInfo.nodeIndexInGroup
           val featuresForNode = nodeInfo.featureSubset
