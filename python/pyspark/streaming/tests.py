@@ -346,17 +346,18 @@ class TestStreamingContext(unittest.TestCase):
         result = dstream.collect()
         self.ssc.start()
         time.sleep(1)
-        self.assertEqual(input, result)
+        self.assertEqual(input, result[:3])
 
     def test_union(self):
         input = [range(i) for i in range(3)]
         dstream = self.ssc.queueStream(input)
-        dstream2 = self.ssc.union(dstream, dstream)
-        result = dstream.collect()
+        dstream2 = self.ssc.queueStream(input)
+        dstream3 = self.ssc.union(dstream, dstream2)
+        result = dstream3.collect()
         self.ssc.start()
         time.sleep(1)
         expected = [i * 2 for i in input]
-        self.assertEqual(input, result)
+        self.assertEqual(expected, result[:3])
 
 
 if __name__ == "__main__":

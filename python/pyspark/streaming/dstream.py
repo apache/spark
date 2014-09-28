@@ -21,7 +21,7 @@ from datetime import datetime
 
 from pyspark import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.streaming.util import rddToFileName, RDDFunction, RDDFunction2
+from pyspark.streaming.util import rddToFileName, RDDFunction
 from pyspark.rdd import portable_hash
 from pyspark.resultiterable import ResultIterable
 
@@ -141,7 +141,7 @@ class DStream(object):
         This is an output operator, so this DStream will be registered as an output
         stream and there materialized.
         """
-        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer)
+        jfunc = RDDFunction(self.ctx, lambda a, _, t: func(a, t), self._jrdd_deserializer)
         self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), jfunc)
 
     def pprint(self):
@@ -294,7 +294,7 @@ class DStream(object):
         return TransformedDStream(self, func, False)
 
     def transformWith(self, func, other, keepSerializer=False):
-        jfunc = RDDFunction2(self.ctx, func, self._jrdd_deserializer)
+        jfunc = RDDFunction(self.ctx, lambda a, b, t: func(a, b), self._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonTransformed2DStream(self._jdstream.dstream(),
                                                           other._jdstream.dstream(), jfunc)
         jrdd_serializer = self._jrdd_deserializer if keepSerializer else self.ctx.serializer
@@ -304,16 +304,16 @@ class DStream(object):
         return self.transform(lambda rdd: rdd.repartition(numPartitions))
 
     def union(self, other):
-        return self.transformWith(lambda a, b, t: a.union(b), other, True)
+        return self.transformWith(lambda a, b: a.union(b), other, True)
 
     def cogroup(self, other):
-        return self.transformWith(lambda a, b, t: a.cogroup(b), other)
+        return self.transformWith(lambda a, b: a.cogroup(b), other)
 
     def leftOuterJoin(self, other):
-        return self.transformWith(lambda a, b, t: a.leftOuterJion(b), other)
+        return self.transformWith(lambda a, b: a.leftOuterJion(b), other)
 
     def rightOuterJoin(self, other):
-        return self.transformWith(lambda a, b, t: a.rightOuterJoin(b), other)
+        return self.transformWith(lambda a, b: a.rightOuterJoin(b), other)
 
     def _jtime(self, milliseconds):
         return self.ctx._jvm.Time(milliseconds)
@@ -364,8 +364,8 @@ class DStream(object):
             joined = a.leftOuterJoin(b, numPartitions)
             return joined.mapValues(lambda (v1, v2): invFunc(v1, v2) if v2 is not None else v1)
 
-        jreduceFunc = RDDFunction2(self.ctx, reduceFunc, reduced._jrdd_deserializer)
-        jinvReduceFunc = RDDFunction2(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
+        jreduceFunc = RDDFunction(self.ctx, reduceFunc, reduced._jrdd_deserializer)
+        jinvReduceFunc = RDDFunction(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonReducedWindowedDStream(reduced._jdstream.dstream(),
                                                              jreduceFunc, jinvReduceFunc,
                                                              self._ssc._jduration(windowDuration),
@@ -384,8 +384,8 @@ class DStream(object):
                                             (k, list(vb), list(va)[0] if len(va) else None))
             return g.mapPartitions(lambda x: updateFunc(x) or [])
 
-        jreduceFunc = RDDFunction2(self.ctx, reduceFunc,
-                                   self.ctx.serializer, self._jrdd_deserializer)
+        jreduceFunc = RDDFunction(self.ctx, reduceFunc,
+                                  self.ctx.serializer, self._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
         return DStream(dstream.asJavaDStream(), self._ssc, self.ctx.serializer)
 
@@ -417,7 +417,8 @@ class TransformedDStream(DStream):
         if self._jdstream_val is not None:
             return self._jdstream_val
 
-        jfunc = RDDFunction(self.ctx, self.func, self.prev._jrdd_deserializer)
+        func = self.func
+        jfunc = RDDFunction(self.ctx, lambda a, _, t: func(a, t), self.prev._jrdd_deserializer)
         jdstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(),
                                                           jfunc, self.reuse).asJavaDStream()
         self._jdstream_val = jdstream
