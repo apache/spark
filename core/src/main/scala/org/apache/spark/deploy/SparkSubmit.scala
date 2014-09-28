@@ -56,11 +56,11 @@ object SparkSubmit {
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
-  // Exposed for testing
-  // testing currently disabled exitFn() from working, so we need to stop execution
-  // some other way
+  // Unit tests for deploy currently disable exitFn() from working, so we need to stop execution
+  // via generating this exception.
   private[spark] case class ApplicationExitException(s: String) extends Exception
 
+  // Exposed for testing purposed.
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
   private[spark] var printStream: PrintStream = System.err
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
@@ -68,7 +68,7 @@ object SparkSubmit {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
     exitFn()
-    // will only get here during testing - which overrides exitFn to do things other then exit
+    // We will only get here during testing - which overrides exitFn to do things other then exit.
     throw new ApplicationExitException(str)
   }
 
@@ -291,11 +291,11 @@ object SparkSubmit {
   }
 
   private def launch(
-                      childArgs: mutable.ArrayBuffer[String],
-                      childClasspath: mutable.ArrayBuffer[String],
-                      sysProps: Map[String, String],
-                      childMainClass: String,
-                      verbose: Boolean = false) {
+               childArgs: mutable.ArrayBuffer[String],
+               childClasspath: mutable.ArrayBuffer[String],
+               sysProps: Map[String, String],
+               childMainClass: String,
+               verbose: Boolean = false) {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
@@ -403,9 +403,8 @@ object SparkSubmit {
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
  */
-private[spark] case class OptionAssigner(
-                                          value: String,
-                                          clusterManager: Int,
-                                          deployMode: Int,
-                                          clOption: String = null,
-                                          sysProp: String = null)
+private[spark] case class OptionAssigner(value: String,
+                                         clusterManager: Int,
+                                         deployMode: Int,
+                                         clOption: String = null,
+                                         sysProp: String = null)

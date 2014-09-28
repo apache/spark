@@ -44,12 +44,12 @@ import org.apache.spark.util.Utils
  *
  * A property file specified by one of the means listed above gets read in and the properties are
  * considered to be at the priority of the method that specified the files. A property specified in
- * a property file will not override an existing config value at that same level
+ * a property file will not override an existing config value at that same level.
 */
 private[spark] class SparkSubmitArguments(args: Seq[String]) {
   /**
    * Stores all configuration items except for child arguments,
-   * referenced by the constants defined in ConfigConstants.scala
+   * referenced by the constants defined in ConfigConstants.scala.
    */
   val conf = new mutable.HashMap[String, String]()
 
@@ -113,44 +113,54 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def pyFiles = conf.get(SparkSubmitPyFiles)
   def pyFiles_= (value: String):Unit = conf.put(SparkSubmitPyFiles, value)
 
-  lazy val verbose: Boolean =  SparkVerbose == true.toString
-  lazy val isPython: Boolean = primaryResource != null &&
-    SparkSubmit.isPython(primaryResource)
+  lazy val verbose = conf(SparkVerbose) == true.toString
+  lazy val isPython = primaryResource != null && SparkSubmit.isPython(primaryResource)
 
-  var childArgs = new mutable.ArrayBuffer[String]()
+  var childArgs = new mutable.ArrayBuffer[String]
   
   /**
    * Used to store parameters parsed from command line (except for --conf and child arguments)
    */
-  private val cmdLineConfig = new mutable.HashMap[String, String]()
+  private val cmdLineConfig = new mutable.HashMap[String, String]
 
   /**
    * arguments passed via --conf command line options
     */
-  private val cmdLineConfConfig = new mutable.HashMap[String, String]()
+  private val cmdLineConfConfig = new mutable.HashMap[String, String]
+
+  /**
+   * Values from a property file specified with --properties
+   */
+  private val cmdLinePropertyFileValues = new mutable.HashMap[String,String]
 
   try {
+    // parse command line options
     parseOpts(args.toList)
 
-    // see comments at start of class definition detailing the location and priority of configuration sources
+    // if property file exists then update the command line arguments, but don't override
+    // existing arguments
+    cmdLinePropertyFileValues.foreach{ case(k,v) =>
+      cmdLineConfig.getOrElseUpdate(k,v)
+    }
+
+    // See comments at start of class definition for the location and priority of configuration sources.
     conf ++= SparkSubmitArguments.mergeSparkProperties(Seq(cmdLineConfig, cmdLineConfConfig))
 
-    // some configuration items can be derived if there are not present
+    // Some configuration items can be derived here if they are not yet present.
     deriveConfigurations()
 
     checkRequiredArguments()
   } catch {
     case e: SparkSubmit.ApplicationExitException =>
-      // should only get here during test running
+      // We should only get here during test running.
   }
 
   private def deriveConfigurations() = {
-
-    // These config items point to file paths, but may need to be converted to absolute file uris
+    // These config items point to file paths, but may need to be converted to absolute file uris.
     val configFileUris = List(SparkFiles, SparkSubmitPyFiles, SparkYarnDistArchives,
       SparkJars, SparkAppPrimaryResource)
 
-    // update configFileUris with resolvedURIs if present
+    // Process configFileUris with resolvedURIs function if they are present.
     configFileUris
       .filter { key => conf.contains(key) &&
         ((key != SparkAppPrimaryResource) || (!SparkSubmit.isInternalOrShell(conf(key))))}
@@ -158,11 +168,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         conf.put(key, Utils.resolveURIs(conf(key), testWindows=false))
       }
 
-    // Try to set main class from JAR if no --class argument is given
+    // Try to set main class from JAR if no --class argument is given.
     if (mainClass == null && !isPython && primaryResource != null) {
       try {
         val jar = new JarFile(primaryResource)
-        // Note that this might still return null if no main-class is set; we catch that later
+        // Note that this might still return null if no main-class is set; we catch that later.
         val manifestMainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
         if (manifestMainClass != null && !manifestMainClass.isEmpty) {
           mainClass = manifestMainClass
@@ -172,35 +182,36 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
           SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
       }
     }
-    if (master == "yarn-standalone") {
-      SparkSubmit.printWarning("'yarn-standalone' is deprecated. Use 'yarn-cluster' instead.")
-      master = "yarn-cluster"
+    conf.get(SparkMaster) match {
+       case Some("yarn-standalone") =>
+          SparkSubmit.printWarning("'yarn-standalone' is deprecated. Use 'yarn-cluster' instead.")
+          master = "yarn-cluster"
+       case _ =>
     }
-    if (name.isEmpty && primaryResource != null) {
-      name = Utils.stripDirectory(primaryResource)
-    }
+    // Set name from main class if not given.
+    name = conf.get(SparkAppName)
+      .orElse( conf.get(SparkAppClass))
+      .getOrElse(if (conf.contains(SparkAppPrimaryResource))
+      Utils.stripDirectory(primaryResource)
+      else null)
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def checkRequiredArguments() = {
-    conf.get(SparkPropertiesFile).foreach{propFilePath =>
+    conf.get(SparkPropertiesFile).foreach{ propFilePath =>
       val propFile = new File(propFilePath)
       if (!propFile.exists()) {
         SparkSubmit.printErrorAndExit(s"--property-file $propFilePath does not exists")
       }
     }
-
     if (!conf.isDefinedAt(SparkAppPrimaryResource)) {
-      SparkSubmit.printErrorAndExit("No primaryResource has been given")
+      SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
     }
     if (!conf.isDefinedAt(SparkAppClass)) {
       SparkSubmit.printErrorAndExit("No main class")
     }
     if (deployMode != "client" && deployMode != "cluster") {
       SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
-    }
-    if (!conf.isDefinedAt(SparkAppPrimaryResource)) {
-      SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
     }
     if (!conf.isDefinedAt(SparkAppClass) && !isPython) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
@@ -209,7 +220,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
 
-    // Require all python files to be local, so we can add them to the PYTHONPATH
+    // Require all python files to be local, so we can add them to the PYTHONPATH.
     if (isPython) {
       if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
         SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
@@ -235,9 +246,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     conf.mkString("\n")
   }
 
-  /**
-   * Fill in values by parsing user options.
-   * */
+  /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
     val EQ_SEPARATED_OPT="""(--[^=]+)=(.+)""".r
 
@@ -302,7 +311,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--properties-file") :: value :: tail =>
-        cmdLineConfig.put(SparkPropertiesFile, value)
+        // Process the property file options after we have finished the rest of the command line
+        cmdLinePropertyFileValues ++= SparkSubmitArguments.getPropertyValuesFromFile(value)
         parse(tail)
 
       case ("--supervise") :: tail =>
@@ -424,21 +434,23 @@ private[spark] object SparkSubmitArguments {
    * A property file specified by one of the means listed above gets read in and the properties are
    * considered to be at the priority of the method that specified the files.
    * A property specified in a property file will not override an existing
-   * config value at that same level
+   * config value at that same level.
    *
    * @param additionalConfigs Seq of additional Map[ConfigName->ConfigValue] in order of highest
-   *                          priority to lowest this will have priority over internal sources
-   * @return Map[propName->propFile] containing values merged from all sources in order of priority
+   *                          priority to lowest this will have priority over internal sources.
+   * @return Map[propName->propFile] containing values merged from all sources in order of priority.
    */
   def mergeSparkProperties(additionalConfigs: Seq [Map[String,String]]) = {
     // Configuration read in from spark-submit-defaults.prop file found on the classpath
     var hardCodedDefaultConfig: Option[Map[String,String]] = None
+
+
     var is: InputStream = null
     var isr: Option[InputStreamReader] = None
     try {
       is = Thread.currentThread().getContextClassLoader.getResourceAsStream(ClassPathSparkSubmitDefaults)
 
-      // only open InputStreamReader if InputStream was successfully opened
+      // Only open InputStreamReader if the InputStream was successfully opened.
       isr = Option(is).map{is: InputStream =>
         new InputStreamReader(is, CharEncoding.UTF_8)
       }
@@ -454,33 +466,28 @@ private[spark] object SparkSubmitArguments {
       throw new IllegalStateException(s"Default values not found at classpath $ClassPathSparkSubmitDefaults")
     }
 
-    // Configuration read in from defaults file if it exists
+    // Read in configuration from the spark defaults conf file if it exists.
     var sparkDefaultConfig = SparkSubmitArguments.getSparkDefaultFileConfig
 
-    if (sparkDefaultConfig.isDefinedAt(SparkPropertiesFile))  {
-      SparkSubmitArguments.getPropertyValuesFromFile(
-          sparkDefaultConfig.get(SparkPropertiesFile).get)
-    } else {
-      Map.empty
-    }
+    // Read in configuration info from the java system properties.
+    val systemPropertyConfig = sys.props
 
-    // Configuration from java system properties
-    val systemPropertyConfig = SparkSubmitArguments.getPropertyMap(System.getProperties)
-
-    // Configuration variables from the environment
-    // support legacy variables
+    // Read in Configuration variables from the environment to support legacy variables.
     val environmentConfig = System.getenv().asScala
 
-    val legacyEnvVars = Seq("MASTER"->SparkMaster, "DEPLOY_MODE"->SparkDeployMode,
-      "SPARK_DRIVER_MEMORY"->SparkDriverMemory, "SPARK_EXECUTOR_MEMORY"->SparkExecutorMemory)
+    val legacyEnvVars = Seq(
+      "MASTER" -> SparkMaster,
+      "DEPLOY_MODE" -> SparkDeployMode,
+      "SPARK_DRIVER_MEMORY" -> SparkDriverMemory,
+      "SPARK_EXECUTOR_MEMORY" -> SparkExecutorMemory)
 
-    // legacy variables act at the priority of a system property
-    val propsWithEnvVars : mutable.Map[String,String] = new mutable.HashMap() ++ systemPropertyConfig ++ legacyEnvVars
-      .map( {case(varName, propName) => (environmentConfig.get(varName), propName) })
+    // Legacy variables act at the priority of a system property.
+    val propsWithEnvVars = new mutable.HashMap() ++ systemPropertyConfig ++
+      legacyEnvVars.map( {case(varName, propName) => (environmentConfig.get(varName), propName) })
       .filter( {case(varVariable, _) => varVariable.isDefined && !varVariable.get.isEmpty} )
       .map{case(varVariable, propName) => (propName, varVariable.get)}
 
-    val ConfigSources  = additionalConfigs ++ Seq (
+    val configSources  = additionalConfigs ++ Seq (
       environmentConfig,
       propsWithEnvVars,
       sparkDefaultConfig,
@@ -490,12 +497,10 @@ private[spark] object SparkSubmitArguments {
     // Load properties file at priority level of source that specified the property file
     // loaded property file configs will not override existing configs at the priority
     // level the property file was specified at
-    val processedConfigSource = ConfigSources
+    val processedConfigSource = configSources
       .map( configMap => getFileBasedPropertiesIfSpecified(configMap) ++ configMap)
 
-    val test = Utils.mergePropertyMaps(processedConfigSource)
-
-    test
+    Utils.mergePropertyMaps(processedConfigSource)
   }
 
   /**
@@ -516,18 +521,20 @@ private[spark] object SparkSubmitArguments {
    * Gets configuration from reading SPARK_CONF_DIR/spark-defaults.conf if it exists
    * otherwise reads SPARK_HOME/conf/spark-defaults.conf if it exists
    * otherwise returns an empty config structure
-   * @return Map[PropName->PropValue]
+   * @return Map[PropName->PropValue] or empty map if file does not exist
    */
   def getSparkDefaultFileConfig: Map[String, String] = {
     val baseConfDir: Option[String] = sys.env.get(EnvSparkHome).map(_ + File.separator + DirNameSparkConf)
     val altConfDir: Option[String] = sys.env.get(EnvAltSparkConfPath)
     val confDir: Option[String] = altConfDir.orElse(baseConfDir)
 
-    confDir.flatMap(path => Some(path + File.separator + FileNameSparkDefaultsConf))
-      .flatMap(path => Some(new File(path)))
-      .filter(confFile => confFile.exists())
+    confDir.map(path => path + File.separator + FileNameSparkDefaultsConf)
+      .flatMap{path: String =>
+        val file = new File(path)
+        if (file.exists) Some(file) else None
+      }
       .map(confFile => loadPropFile(confFile))
-      .get
+      .getOrElse(Map.empty)
   }
     
   /**
@@ -552,7 +559,7 @@ private[spark] object SparkSubmitArguments {
 
     try {
       fis = new FileInputStream(propFile)
-      isr = Option(fis).flatMap( fis => Some(new InputStreamReader(fis, CharEncoding.UTF_8))).get
+      isr = Option(fis).map( fis => new InputStreamReader(fis, CharEncoding.UTF_8)).get
 
       propValues = getPropertyValuesFromStream(isr)
     } finally {
@@ -570,15 +577,6 @@ private[spark] object SparkSubmitArguments {
   def getPropertyValuesFromStream(isr: InputStreamReader ) = {
     val prop = new Properties()
     prop.load(isr)
-    getPropertyMap(prop)
-  }
-
-  /**
-   * Converts the passed java property object into a scale Map[String, String]
-   * @param prop Java properties object
-   * @return Map[propName->propValue]
-   */
-  def getPropertyMap(prop: Properties): Map[String,String] = {
-    prop.entrySet.map(entry => entry.getKey.toString -> entry.getValue.toString).toMap
+    prop.asInstanceOf[java.util.Map[String, String]]
   }
 }
