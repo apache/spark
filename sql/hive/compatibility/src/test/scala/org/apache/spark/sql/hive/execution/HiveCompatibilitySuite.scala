@@ -850,7 +850,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_when",
     "udf_xpath",
     "udf_xpath_boolean",
-    "udf_xpath_double",
     "udf_xpath_float",
     "udf_xpath_int",
     "udf_xpath_long",
