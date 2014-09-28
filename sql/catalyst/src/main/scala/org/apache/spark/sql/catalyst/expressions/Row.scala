@@ -99,7 +99,6 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  def setAs[T](ordinal: Int, value: T) = update(ordinal, value)
 }
 
 /**
@@ -184,11 +183,6 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
-  override def getAs[T](i: Int): T = {
-    if (values(i) == null) sys.error("Failed to check null bit for generic value.")
-    values(i).asInstanceOf[T]
-  }
-
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
@@ -232,7 +226,6 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
   override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
-  override def setAs[T](ordinal: Int, value: T): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 

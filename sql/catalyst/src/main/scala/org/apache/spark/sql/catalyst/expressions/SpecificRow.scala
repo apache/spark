@@ -307,8 +307,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).asInstanceOf[MutableByte].value
   }
 
-  override def setAs[T](ordinal: Int, value: T): Unit = update(ordinal, value)
-
   override def getAs[T](i: Int): T = {
     values(i).asInstanceOf[MutableAny].value.asInstanceOf[T]
   }
