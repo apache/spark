@@ -41,7 +41,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
-    //TestHive.cacheTables = true
+    TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -306,7 +306,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer10",
     "correlationoptimizer11",
     "correlationoptimizer13",
-    "correlationoptimizer14",
+    //"correlationoptimizer14",
     "correlationoptimizer15",
     "correlationoptimizer2",
     "correlationoptimizer3",
