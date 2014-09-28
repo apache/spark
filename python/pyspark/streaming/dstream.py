@@ -142,7 +142,8 @@ class DStream(object):
         stream and there materialized.
         """
         jfunc = RDDFunction(self.ctx, lambda a, _, t: func(a, t), self._jrdd_deserializer)
-        self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), jfunc)
+        api = self._ssc._jvm.PythonDStream
+        api.callForeachRDD(self._jdstream, jfunc)
 
     def pprint(self):
         """
