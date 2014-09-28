@@ -24,7 +24,7 @@ import org.apache.spark.SparkContext._
 
 import util.ManualClock
 import org.apache.spark.{SparkException, SparkConf}
-import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
+import org.apache.spark.streaming.dstream.{UpdateDStream, WindowedDStream, DStream}
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.reflect.ClassTag
 import org.apache.spark.storage.StorageLevel
@@ -225,6 +225,48 @@ class BasicOperationsSuite extends TestSuiteBase {
       )
     }
     testOperation(inputData1, inputData2, operation, outputData, true)
+  }
+
+  test("update rdd within dstream") {
+    val conf = new SparkConf().setMaster("local[4]").setAppName("BasicOperationsSuite")
+    val ssc = new StreamingContext(conf, Seconds(3))
+    val data = ssc.sparkContext.makeRDD(1 to 2, 1)
+    val input = Seq(Seq(1, 2), Seq(3, 4), Seq(5, 6), Seq(7, 8))
+    val stream = new TestInputStream[Int](ssc, input, 1)
+
+    val updateFunc = (rdd1: Option[RDD[Int]], rdd2: RDD[Int]) => {
+      rdd1 match {
+        case Some(rdd) =>
+          val r = rdd.repartition(rdd2.partitions.length)
+          rdd2.zipPartitions(r, true) {
+            (first, second) =>
+              first.zip(second)
+          }
+        case None => rdd2.map(e => (e, -1))
+      }
+    }
+
+    val updateStream = stream.updateRDD(data, updateFunc).asInstanceOf[UpdateDStream[(Int, Int), Int, Int]]
+    ssc.start()
+    Thread.sleep(4000)
+    var updatedData = updateStream.getUpdatedRDD.collect()
+    assert(updatedData(0) === (1, 1))
+    assert(updatedData(1) === (2, 2))
+
+    Thread.sleep(3000)
+    updatedData = updateStream.getUpdatedRDD.collect()
+    assert(updatedData(0) === (1, 3))
+    assert(updatedData(1) === (2, 4))
+
+    Thread.sleep(3000)
+    updatedData = updateStream.getUpdatedRDD.collect()
+    assert(updatedData(0) === (1, 5))
+    assert(updatedData(1) === (2, 6))
+
+    Thread.sleep(3000)
+    updatedData = updateStream.getUpdatedRDD.collect()
+    assert(updatedData(0) === (1, 7))
+    assert(updatedData(1) === (2, 8))
   }
 
   test("StreamingContext.transform") {
