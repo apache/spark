@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.BooleanType
-
+import scala.collection.immutable.HashSet
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -92,6 +92,21 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def eval(input: Row): Any = {
     val evaluatedValue = value.eval(input)
     list.exists(e => e.eval(input) == evaluatedValue)
+  }
+}
+
+/**
+ * Evaluates to `true` if `list` contains `value`.
+ */
+case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+    extends Predicate {
+  def children = child
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value IN ${hset.mkString("(", ",", ")")}"
+
+  override def eval(input: Row): Any = {
+    hset.contains(value.eval(input))
   }
 }
 

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 
+import scala.collection.immutable.HashSet
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
@@ -977,7 +978,15 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
-      In(nodeToExpr(value), list.map(nodeToExpr))
+      val valExpr = nodeToExpr(value)
+      val listMap = list.map(nodeToExpr)
+      if (listMap.exists(e => !e.isInstanceOf[Literal]) == false){
+        val hSet = listMap.map(e => e.eval(null))
+        InSet(valExpr, HashSet() ++ hSet, valExpr +: listMap)
+      }
+      else{
+        In(valExpr, listMap)
+      }
     case Token("TOK_FUNCTION",
            Token(BETWEEN(), Nil) ::
            Token("KW_FALSE", Nil) ::
