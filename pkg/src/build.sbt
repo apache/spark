@@ -27,8 +27,8 @@ libraryDependencies ++= Seq(
   val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
   val defaultHadoopVersion = "1.0.4"
   val defaultSparkVersion = "1.1.0"
-  val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
   val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
+  val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
   libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
   libraryDependencies += "org.apache.spark" % "spark-core_2.10" % sparkVersion
 }
