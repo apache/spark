@@ -191,7 +191,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     val input = Seq(1 to 4, 101 to 104, 201 to 204)
     val output = Seq(1 to 12, 101 to 112, 201 to 212)
     // union over 3 DStreams
-    testOperation(
+    testOperation(4
       input,
       (s: DStream[Int]) => s.context.union(Seq(s, s.map(_ + 4), s.map(_ + 8))),
       output
@@ -228,6 +228,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("update rdd within dstream") {
+    val conf = new SparkConf().setMaster("local[4]").setAppName("BasicOperationsSuite")
     val ssc = new StreamingContext(conf, Seconds(3))
     val data = ssc.sparkContext.makeRDD(1 to 2, 1)
     val input = Seq(Seq(1, 2), Seq(3, 4), Seq(5, 6), Seq(7, 8))
