@@ -191,7 +191,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     val input = Seq(1 to 4, 101 to 104, 201 to 204)
     val output = Seq(1 to 12, 101 to 112, 201 to 212)
     // union over 3 DStreams
-    testOperation(4
+    testOperation(
       input,
       (s: DStream[Int]) => s.context.union(Seq(s, s.map(_ + 4), s.map(_ + 8))),
       output
