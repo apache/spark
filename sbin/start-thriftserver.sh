@@ -48,8 +48,6 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-source "$FWDIR"/bin/utils.sh
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
+export SUBMIT_USAGE_FUNCTION=usage
 
-. "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1
+exec "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1 "$@"
