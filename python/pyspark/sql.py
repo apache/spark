@@ -67,7 +67,8 @@ class DataType(object):
         return self.simpleString
 
     def jsonString(self):
-        return json.dumps(self.jsonValue(), separators=(',',':'), sort_keys=True)
+        return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
+
 
 class PrimitiveTypeSingleton(type):
 
@@ -242,6 +243,7 @@ class ArrayType(DataType):
                 'containsNull': self.containsNull
             }
         }
+
 
 class MapType(DataType):
 
@@ -444,13 +446,13 @@ def _parse_datatype_json_value(json_value):
         value_type = _parse_datatype_json_value(map_type['value'])
         value_contains_null = map_type['valueContainsNull']
         return MapType(key_type, value_type, value_contains_null)
-    elif 'field' in json_value: 
+    elif 'field' in json_value:
         field = json_value['field']
         name = field['name']
         datatype = _parse_datatype_json_value(field['type'])
         nullable = field['nullable']
         return StructField(name, datatype, nullable)
-    elif 'struct' in json_value: 
+    elif 'struct' in json_value:
         struct_type = json_value['struct']
         fields = map(_parse_datatype_json_value, struct_type['fields'])
         return StructType(fields)
