@@ -44,13 +44,15 @@ class TwitterStreamSuite extends TestSuiteBase {
     val test6: ReceiverInputDStream[Status] = TwitterUtils.createStream(
       ssc, Some(authorization), filters, StorageLevel.MEMORY_AND_DISK_SER_2)
     val test7: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, locations)
+      TwitterUtils.createStream(ssc, None, filters, 0)
     val test8: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
-    val test9: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, Some(authorization), filters, locations)
-    val test10: ReceiverInputDStream[Status] = TwitterUtils.createStream(
-      ssc, Some(authorization), filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+      TwitterUtils.createStream(ssc, None, filters, 0, locations)
+    val test9: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, None, filters, 0, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test10: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization), filters, 0 locations)
+    val test11: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), filters, 0, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // Note that actually testing the data receiving is hard as authentication keys are
     // necessary for accessing Twitter live stream
