@@ -149,7 +149,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       if (resolver(option.name, remainingParts.head)) {
         (option.dataType, remainingParts) match {
           // No nesting
-          case (_, _ :: Nil) => (option, Nil) :: Nil
+          case (_, _ :: Nil) => (option.withName(remainingParts.head), Nil) :: Nil
           // Points to nested field(s) of a structure
           case (_: StructType, _ :: tail) => {
             try {
