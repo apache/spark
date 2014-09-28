@@ -28,7 +28,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.storage.{BlockObjectWriter, BlockId}
+import org.apache.spark.storage.{BlockSerializer, DiskBlockObjectWriter, BlockObjectWriter, BlockId}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -92,13 +92,13 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
-  private val ser = Serializer.getSerializer(serializer)
-  private val serInstance = ser.newInstance()
 
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
   private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
+
+  private val ser = new BlockSerializer(conf, Serializer.getSerializer(serializer))
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -269,7 +269,8 @@ private[spark] class ExternalSorter[K, V, C](
     // createTempShuffleBlock here; see SPARK-3426 for more context.
     val (blockId, file) = diskBlockManager.createTempShuffleBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
+    var writer = new DiskBlockObjectWriter(conf, blockId, file, fileBufferSize, ser,
+      curWriteMetrics)
     var objectsWritten = 0   // Objects written since the last flush
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -305,7 +306,8 @@ private[spark] class ExternalSorter[K, V, C](
         if (objectsWritten == serializerBatchSize) {
           flush()
           curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
+          writer = new DiskBlockObjectWriter(conf, blockId, file, fileBufferSize, ser,
+            curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
@@ -350,7 +352,7 @@ private[spark] class ExternalSorter[K, V, C](
         // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
         // createTempShuffleBlock here; see SPARK-3426 for more context.
         val (blockId, file) = diskBlockManager.createTempShuffleBlock()
-        blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics).open()
+        new DiskBlockObjectWriter(conf, blockId, file, fileBufferSize, ser, curWriteMetrics).open()
       }
     }
 
@@ -556,8 +558,7 @@ private[spark] class ExternalSorter[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = blockManager.wrapForCompression(spill.blockId, bufferedStream)
-        serInstance.deserializeStream(compressedStream)
+        ser.dataDeserializeStream(spill.blockId,  bufferedStream)
       } else {
         // No more batches left
         cleanup()
@@ -738,8 +739,9 @@ private[spark] class ExternalSorter[K, V, C](
       // partition and just write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
         if (elements.hasNext) {
-          val writer = blockManager.getDiskWriter(
-            blockId, outputFile, ser, fileBufferSize, context.taskMetrics.shuffleWriteMetrics.get)
+
+          val writer = new DiskBlockObjectWriter(conf, blockId, outputFile, fileBufferSize, ser,
+            context.taskMetrics.shuffleWriteMetrics.get)
           for (elem <- elements) {
             writer.write(elem)
           }

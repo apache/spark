@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
+import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
@@ -77,7 +77,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       SparkEnv.get.blockManager.shuffleClient,
       blockManager,
       blocksByAddress,
-      serializer,
+      new BlockSerializer(SparkEnv.get.conf, serializer),
       SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 

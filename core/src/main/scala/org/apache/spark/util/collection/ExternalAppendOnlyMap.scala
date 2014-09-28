@@ -29,7 +29,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
-import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.storage.{DiskBlockObjectWriter, BlockSerializer, BlockId, BlockManager}
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 import org.apache.spark.executor.ShuffleWriteMetrics
 
@@ -71,6 +71,7 @@ class ExternalAppendOnlyMap[K, V, C](
   with Logging
   with Spillable[SizeTracker] {
 
+
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
@@ -100,7 +101,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
   private val keyComparator = new HashComparator[K]
-  private val ser = serializer.newInstance()
+  private val blockSerde = new BlockSerializer(sparkConf, serializer)
 
   /**
    * Insert the given key and value into the map.
@@ -155,7 +156,7 @@ class ExternalAppendOnlyMap[K, V, C](
   override protected[this] def spill(collection: SizeTracker): Unit = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
+    var writer = new DiskBlockObjectWriter(sparkConf, blockId, file, fileBufferSize, blockSerde,
       curWriteMetrics)
     var objectsWritten = 0
 
@@ -183,7 +184,7 @@ class ExternalAppendOnlyMap[K, V, C](
         if (objectsWritten == serializerBatchSize) {
           flush()
           curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
+          writer = new DiskBlockObjectWriter(sparkConf, blockId, file, fileBufferSize, blockSerde,
             curWriteMetrics)
         }
       }
@@ -424,8 +425,7 @@ class ExternalAppendOnlyMap[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = blockManager.wrapForCompression(blockId, bufferedStream)
-        ser.deserializeStream(compressedStream)
+        blockSerde.dataDeserializeStream(blockId, bufferedStream)
       } else {
         // No more batches left
         cleanup()

@@ -104,6 +104,7 @@ class FileShuffleBlockManager(conf: SparkConf)
    */
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics) = {
+    val blockSerde = new BlockSerializer(conf, serializer)
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
@@ -113,7 +114,7 @@ class FileShuffleBlockManager(conf: SparkConf)
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize,
+          new DiskBlockObjectWriter(conf, blockId, fileGroup(bucketId), bufferSize, blockSerde,
             writeMetrics)
         }
       } else {
@@ -129,7 +130,7 @@ class FileShuffleBlockManager(conf: SparkConf)
               logWarning(s"Failed to remove existing shuffle file $blockFile")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize, writeMetrics)
+          new DiskBlockObjectWriter(conf, blockId, blockFile, bufferSize, blockSerde, writeMetrics)
         }
       }
 

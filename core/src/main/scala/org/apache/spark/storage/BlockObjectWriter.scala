@@ -18,9 +18,9 @@
 package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, FileOutputStream, File, OutputStream}
-import java.nio.channels.FileChannel
+import java.nio.channels.{ClosedByInterruptException, FileChannel}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.serializer.{SerializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
 
@@ -67,12 +67,11 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
  * BlockObjectWriter which writes directly to a file on disk. Appends to the given file.
  */
 private[spark] class DiskBlockObjectWriter(
+    conf: SparkConf,
     blockId: BlockId,
     file: File,
-    serializer: Serializer,
     bufferSize: Int,
-    compressStream: OutputStream => OutputStream,
-    syncWrites: Boolean,
+    blockSerde: BlockSerializer,
     // These write metrics concurrently shared with other active BlockObjectWriter's who
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics)
@@ -90,11 +89,12 @@ private[spark] class DiskBlockObjectWriter(
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
-  private var bs: OutputStream = null
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
+
+  private val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
 
   /**
    * Cursors used to represent positions in the file.
@@ -123,8 +123,8 @@ private[spark] class DiskBlockObjectWriter(
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
-    bs = compressStream(new BufferedOutputStream(ts, bufferSize))
-    objOut = serializer.newInstance().serializeStream(bs)
+    val bos = new BufferedOutputStream(ts, bufferSize)
+    objOut = blockSerde.dataSerializeStream(blockId, bos)
     initialized = true
     this
   }
@@ -140,7 +140,6 @@ private[spark] class DiskBlockObjectWriter(
       objOut.close()
 
       channel = null
-      bs = null
       fos = null
       ts = null
       objOut = null
@@ -152,10 +151,7 @@ private[spark] class DiskBlockObjectWriter(
 
   override def commitAndClose(): Unit = {
     if (initialized) {
-      // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
-      //       serializer stream and the lower level stream.
       objOut.flush()
-      bs.flush()
       close()
     }
     finalPosition = file.length()
@@ -171,7 +167,6 @@ private[spark] class DiskBlockObjectWriter(
 
       if (initialized) {
         objOut.flush()
-        bs.flush()
         close()
       }
 
@@ -182,6 +177,9 @@ private[spark] class DiskBlockObjectWriter(
         truncateStream.close()
       }
     } catch {
+      case e @ (_: InterruptedException | _: ClosedByInterruptException) =>
+        logDebug("Interrupted while reverting partial writes to file " + file, e)
+
       case e: Exception =>
         logError("Uncaught exception while reverting partial writes to file " + file, e)
     }
@@ -225,6 +223,5 @@ private[spark] class DiskBlockObjectWriter(
   // For testing
   private[spark] def flush() {
     objOut.flush()
-    bs.flush()
   }
 }

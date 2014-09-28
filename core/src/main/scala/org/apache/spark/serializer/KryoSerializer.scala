@@ -129,7 +129,15 @@ class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends Seria
     this
   }
 
-  override def flush() { output.flush() }
+  override def flush() {
+    output.flush()
+    // Kryo does not flush its underlying stream, so let's do that manually to preserve the expected
+    // semantics.
+    val underlyingStream = output.getOutputStream
+    if (underlyingStream != null) {
+      underlyingStream.flush()
+    }
+  }
   override def close() { output.close() }
 }
 

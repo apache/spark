@@ -93,7 +93,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     val blockId = partition.blockId
     blockManager.get(blockId) match {
       case Some(block) => // Data is in Block Manager
-        val iterator = block.data.asInstanceOf[Iterator[T]]
+        val iterator = block.dataAsIterator().asInstanceOf[Iterator[T]]
         logDebug(s"Read partition data of $this from block manager, block $blockId")
         iterator
       case None => // Data not found in Block Manager, grab it from write ahead log file
@@ -106,7 +106,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
           dataRead.rewind()
         }
-        blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+        blockManager.blockSerde.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
     }
   }
 

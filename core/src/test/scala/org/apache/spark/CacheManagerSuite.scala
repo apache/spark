@@ -22,6 +22,7 @@ import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.TestSerializer
 import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
@@ -71,13 +72,15 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     val getValue = blockManager.get(RDDBlockId(rdd.id, split.index))
     assert(computeValue.toList === List(1, 2, 3, 4))
     assert(getValue.isDefined, "Block cached from getOrCompute is not found!")
-    assert(getValue.get.data.toList === List(1, 2, 3, 4))
+    assert(getValue.get.dataAsIterator().toList === List(1, 2, 3, 4))
   }
 
   test("get cached rdd") {
     expecting {
-      val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
-      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(result))
+      val blockId = RDDBlockId(0, 0)
+      val result = BlockResult(blockId, IteratorValue(Array(5, 6, 7).iterator),
+        new BlockSerializer(sc.conf, new TestSerializer), DataReadMethod.Memory, 12)
+      blockManager.get(blockId).andReturn(Some(result))
     }
 
     whenExecuting(blockManager) {

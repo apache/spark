@@ -45,7 +45,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
         context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
-        new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
+        new InterruptibleIterator(context, blockResult.dataAsIterator().asInstanceOf[Iterator[T]])
 
       case None =>
         // Acquire a lock for loading this partition
@@ -114,7 +114,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
           loading.add(id)
         }
-        values.map(_.data.asInstanceOf[Iterator[T]])
+        values.map(_.dataAsIterator().asInstanceOf[Iterator[T]])
       }
     }
   }
@@ -144,7 +144,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       updatedBlocks ++=
         blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
-        case Some(v) => v.data.asInstanceOf[Iterator[T]]
+        case Some(v) => v.dataAsIterator().asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")
