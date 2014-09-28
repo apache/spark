@@ -31,14 +31,12 @@ import org.apache.spark.util.IntParam
 /**
  * Counts words in text encoded with UTF8 received from the network every second.
  *
- * Usage: NetworkWordCount <hostname> <port> <checkpoint-directory> <output-file>
+ * Usage: RecoverableNetworkWordCount <hostname> <port> <checkpoint-directory> <output-file>
  *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
  *   data. <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
  *   <output-file> file to which the word counts will be appended
  *
- * In local mode, <master> should be 'local[n]' with n > 1
  * <checkpoint-directory> and <output-file> must be absolute paths
- *
  *
  * To run this on your local machine, you need to first run a Netcat server
  *
@@ -66,7 +64,6 @@ import org.apache.spark.util.IntParam
  *
  * Refer to the online documentation for more details.
  */
-
 object RecoverableNetworkWordCount {
 
   def createContext(ip: String, port: Int, outputPath: String) = {
