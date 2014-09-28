@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 class DataTypeSuite extends FunSuite {
@@ -53,6 +55,46 @@ class DataTypeSuite extends FunSuite {
     assert(expectedStruct === struct(Set("b", "d")))
     intercept[IllegalArgumentException] {
       struct(Set("b", "d", "e", "f"))
+    }
+  }
+
+  test("StructField.toString") {
+    def structFieldWithName(name: String) = StructField(name, StringType, nullable = true)
+
+    assertResult("""StructField("a",StringType,true)""") {
+      structFieldWithName("a").toString
+    }
+
+    assertResult("""StructField("(a)",StringType,true)""") {
+      structFieldWithName("(a)").toString
+    }
+
+    assertResult("""StructField("a\\b\"",StringType,true)""") {
+      structFieldWithName("""a\b"""").toString
+    }
+  }
+
+  test("parsing StructField strings") {
+    def randomFieldName = {
+      val mustHave = "\\\" ".toArray
+      Random.shuffle(Seq.fill(64)(Random.nextPrintableChar()) ++ mustHave).mkString
+    }
+
+    def escape(str: String) = str.flatMap {
+      case '\"' => "\\\""
+      case '\\' => "\\\\"
+      case ch => s"$ch"
+    }
+
+    (0 until 100).foreach { _ =>
+      val name = randomFieldName
+      val expected = StructType(Seq(StructField(name, StringType, true)))
+      val structFieldString = {
+        val quotedEscapedName = "\"" + escape(name) + "\""
+        s"StructField($quotedEscapedName,StringType,true)"
+      }
+      val structTypeString = s"StructType(List($structFieldString))"
+      assert(catalyst.types.DataType(structTypeString) === expected)
     }
   }
 }

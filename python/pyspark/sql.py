@@ -280,8 +280,23 @@ class StructField(DataType):
         self.nullable = nullable
 
     def __repr__(self):
-        return "StructField(%s,%s,%s)" % (self.name, self.dataType,
-                                          str(self.nullable).lower())
+        """
+        >>> 'StructField("f1",StringType,True)'
+        ...      == StructField("f1", StringType, True)
+        True
+        >>> 'StructField("f 1",StringType,True)'
+        ...      == StructField("f 1", StringType, True)
+        True
+        >>> 'StructField("f \\"1\\"",StringType,True)'
+        ...      == StructField('f "1"', StringType, True)
+        True
+        >>> 'StructField("f \\\\1",StringType,True)'
+        ...      == StructField('f \\1', StringType, True)
+        True
+        """
+        escapedName = self.name.replace('\\', '\\\\').replace('"', '\\"')
+        return 'StructField("%s",%s,%s)' % (escapedName, self.dataType,
+                                            str(self.nullable).lower())
 
 
 class StructType(DataType):
