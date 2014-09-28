@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.analysis._
-
 import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -418,7 +416,6 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   lazy val fieldNames: Seq[String] = fields.map(_.name)
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
