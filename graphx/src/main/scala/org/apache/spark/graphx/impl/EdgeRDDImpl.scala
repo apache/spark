@@ -64,6 +64,10 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
+  override def checkpoint(): Unit = {
+    partitionsRDD.checkpoint()
+  }
+
   /** Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)

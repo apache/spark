@@ -96,6 +96,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def cache(): Graph[VD, ED]
 
+  def checkpoint():Unit
+
   /**
    * Uncaches only the vertices of this graph, leaving the edges alone. This is useful in iterative
    * algorithms that modify the vertex attributes but reuse the edges. This method can be used to

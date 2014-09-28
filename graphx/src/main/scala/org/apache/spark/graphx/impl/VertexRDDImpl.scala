@@ -65,6 +65,10 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
+  override def checkpoint(): Unit = {
+    partitionsRDD.checkpoint()
+  }
+
   /** Persists the vertex partitions at `targetStorageLevel`, which defaults to MEMORY_ONLY. */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)

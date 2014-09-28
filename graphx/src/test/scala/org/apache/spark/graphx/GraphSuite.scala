@@ -19,6 +19,8 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
+import com.google.common.io.Files
+
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
@@ -362,6 +364,30 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         .collect.toSet
       assert(triplets ===
         Set((1: VertexId, 2: VertexId, "a", "b"), (2: VertexId, 1: VertexId, "b", "a")))
+    }
+  }
+
+  test("checkpoint") {
+    val checkpointDir = Files.createTempDir()
+    checkpointDir.deleteOnExit()
+    withSpark { sc =>
+      sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+      val ring = (0L to 100L).zip((1L to 99L) :+ 0L).map { case (a, b) => Edge(a, b, 1)}
+      val rdd = sc.parallelize(ring)
+      val graph = Graph.fromEdges(rdd, 1.0F)
+      graph.checkpoint()
+      val edgesDependencies = graph.edges.partitionsRDD.dependencies
+      val verticesDependencies = graph.vertices.partitionsRDD.dependencies
+      val edges = graph.edges.collect().map(_.attr)
+      val vertices = graph.vertices.collect().map(_._2)
+
+      graph.vertices.count()
+      graph.edges.count()
+
+      assert(graph.edges.partitionsRDD.dependencies != edgesDependencies)
+      assert(graph.vertices.partitionsRDD.dependencies != verticesDependencies)
+      assert(graph.vertices.collect().map(_._2) === vertices)
+      assert(graph.edges.collect().map(_.attr) === edges)
     }
   }
 
