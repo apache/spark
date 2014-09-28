@@ -292,6 +292,12 @@ class TestWindowFunctions(PySparkStreamingTestCase):
                     [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]
         self._test_func(input, func, expected)
 
+    def test_reduce_by_invalid_window(self):
+        input1 = [range(3), range(5), range(1), range(6)]
+        d1 = self.ssc.queueStream(input1)
+        self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 0.1, 0.1))
+        self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 1, 0.1))
+
     def update_state_by_key(self):
 
         def updater(it):

@@ -92,7 +92,8 @@ private[spark] object PythonDStream {
  * If the result RDD is PythonRDD, then it will cache it as an template for future use,
  * this can reduce the Python callbacks.
  */
-private[spark] class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
+private[spark]
+class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
                                 var reuse: Boolean = false)
   extends PythonDStream(parent) {
 
@@ -179,16 +180,6 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
                                    _windowDuration: Duration,
                                    _slideDuration: Duration
                                    ) extends PythonStateDStream(parent, preduceFunc) {
-
-  assert(_windowDuration.isMultipleOf(parent.slideDuration),
-    "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
-      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
-  )
-
-  assert(_slideDuration.isMultipleOf(parent.slideDuration),
-    "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
-      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
-  )
 
   val invReduceFunc = new RDDFunction(pinvReduceFunc)
 

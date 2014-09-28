@@ -354,6 +354,15 @@ class DStream(object):
 
     def reduceByKeyAndWindow(self, func, invFunc,
                              windowDuration, slideDuration, numPartitions=None):
+
+        duration = self._jdstream.dstream().slideDuration().milliseconds()
+        if int(windowDuration * 1000) % duration != 0:
+            raise ValueError("windowDuration must be multiple of the slide duration (%d ms)"
+                             % duration)
+        if int(slideDuration * 1000) % duration != 0:
+            raise ValueError("slideDuration must be multiple of the slide duration (%d ms)"
+                             % duration)
+
         reduced = self.reduceByKey(func)
 
         def reduceFunc(a, b, t):
