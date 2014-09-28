@@ -221,7 +221,8 @@ object SQL {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+    cleanupCommands in console := "sparkContext.stop()"
   )
 }
 
@@ -249,7 +250,8 @@ object Hive {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+    cleanupCommands in console := "sparkContext.stop()"
   )
 
 }

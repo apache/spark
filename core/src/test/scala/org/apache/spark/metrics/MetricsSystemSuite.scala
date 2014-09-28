@@ -17,17 +17,22 @@
 
 package org.apache.spark.metrics
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.apache.spark.metrics.source.Source
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.MasterSource
 
-class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
+import scala.collection.mutable.ArrayBuffer
+
+
+class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
   var conf: SparkConf = null
   var securityMgr: SecurityManager = null
 
   before {
-    filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile()
+    filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile
     conf = new SparkConf(false).set("spark.metrics.conf", filePath)
     securityMgr = new SecurityManager(conf)
   }
@@ -36,27 +41,27 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
     metricsSystem.registerSources()
     metricsSystem.registerSinks()
-    val sources = metricsSystem.sources
-    val sinks = metricsSystem.sinks
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(sources.length === 0)
-    assert(sinks.length === 0)
-    assert(!metricsSystem.getServletHandlers.isEmpty)
+    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sinks()).length === 0)
+    assert(metricsSystem.getServletHandlers.nonEmpty)
   }
 
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
     metricsSystem.registerSources()
     metricsSystem.registerSinks()
-    val sources = metricsSystem.sources
-    val sinks = metricsSystem.sinks
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(sources.length === 0)
-    assert(sinks.length === 1)
-    assert(!metricsSystem.getServletHandlers.isEmpty)
+    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sinks()).length === 1)
+    assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(sources.length === 1)
+    assert(metricsSystem.invokePrivate(sources()).length === 1)
   }
 }
