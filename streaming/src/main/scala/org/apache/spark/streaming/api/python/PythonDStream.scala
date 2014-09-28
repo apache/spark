@@ -207,8 +207,10 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
     // Get the RDD of the reduced value of the previous window
     val previousWindowRDD = getOrCompute(previousWindow.endTime)
 
-    // for small window, reduce once will be better than twice
-    if (windowDuration > slideDuration * 5 && previousWindowRDD.isDefined) {
+    if (pinvReduceFunc != null && previousWindowRDD.isDefined
+        // for small window, reduce once will be better than twice
+        && windowDuration > slideDuration * 5) {
+
       // subtract the values from old RDDs
       val oldRDDs =
         parent.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideDuration)

@@ -89,6 +89,21 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
 
 class TestBasicOperations(PySparkStreamingTestCase):
+
+    def test_take(self):
+        input = [range(i) for i in range(3)]
+        dstream = self.ssc.queueStream(input)
+        rdds = dstream.take(3)
+        self.assertEqual(3, len(rdds))
+        for d, rdd in zip(input, rdds):
+            self.assertEqual(d, rdd.collect())
+
+    def test_first(self):
+        input = [range(10)]
+        dstream = self.ssc.queueStream(input)
+        rdd = dstream.first()
+        self.assertEqual(range(10), rdd.collect())
+
     def test_map(self):
         """Basic operation test for DStream.map."""
         input = [range(1, 5), range(5, 9), range(9, 13)]

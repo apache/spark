@@ -96,6 +96,9 @@ class StreamingContext(object):
         return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
 
     def _jduration(self, seconds):
+        """
+        Create Duration object given number of seconds
+        """
         return self._jvm.Duration(int(seconds * 1000))
 
     @property
