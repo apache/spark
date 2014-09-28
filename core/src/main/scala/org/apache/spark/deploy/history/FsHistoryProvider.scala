@@ -39,7 +39,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // One day
   private val DEFAULT_SPARK_HISTORY_FS_CLEANER_INTERVAL_S = Duration(1, TimeUnit.DAYS).toSeconds
 
-  // One weeks
+  // One week
   private val DEFAULT_SPARK_HISTORY_FS_MAXAGE_S = Duration(7, TimeUnit.DAYS).toSeconds
 
   // Interval between each check for event log updates
