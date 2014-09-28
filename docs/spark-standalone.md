@@ -247,7 +247,7 @@ To run an interactive Spark shell against the cluster, run the following command
 
     ./bin/spark-shell --master spark://IP:PORT
 
-You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
 # Launching Compiled Spark Applications
 

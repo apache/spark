@@ -29,6 +29,10 @@ import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
 import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
 
+import org.apache.spark.SparkContext.rddToAsyncRDDActions
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
  * Maps each key to a partition ID, from 0 to `numPartitions - 1`.
@@ -113,8 +117,12 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private var rangeBounds: Array[K] = {
-    if (partitions <= 1) {
+  @volatile private var valRB: Array[K] = null
+
+  private def rangeBounds: Array[K] = this.synchronized {
+    if (valRB != null) return valRB
+
+    valRB = if (partitions <= 1) {
       Array.empty
     } else {
       // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
@@ -152,6 +160,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         RangePartitioner.determineBounds(candidates, partitions)
       }
     }
+
+    valRB
   }
 
   def numPartitions = rangeBounds.length + 1
@@ -222,7 +232,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = this.synchronized {
+    if (valRB != null) return
     val sfactory = SparkEnv.get.serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
@@ -234,7 +245,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         val ser = sfactory.newInstance()
         Utils.deserializeViaNestedStream(in, ser) { ds =>
           implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
-          rangeBounds = ds.readObject[Array[K]]()
+          valRB = ds.readObject[Array[K]]()
         }
     }
   }
@@ -254,12 +265,18 @@ private[spark] object RangePartitioner {
       sampleSizePerPartition: Int): (Long, Array[(Int, Int, Array[K])]) = {
     val shift = rdd.id
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
-    val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
+    // use collectAsync here to run this job as a future, which is cancellable
+    val sketchFuture = rdd.mapPartitionsWithIndex { (idx, iter) =>
       val seed = byteswap32(idx ^ (shift << 16))
       val (sample, n) = SamplingUtils.reservoirSampleAndCount(
         iter, sampleSizePerPartition, seed)
       Iterator((idx, n, sample))
-    }.collect()
+    }.collectAsync()
+    // We do need the future's value to continue any further
+    val sketched = Await.ready(sketchFuture, Duration.Inf).value.get match {
+      case scala.util.Success(v) => v.toArray
+      case scala.util.Failure(e) => throw e
+    }
     val numItems = sketched.map(_._2.toLong).sum
     (numItems, sketched)
   }

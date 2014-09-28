@@ -20,6 +20,7 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
@@ -142,15 +143,21 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
   test("sum") {
     checkAnswer(
       sql("SELECT SUM(intField) FROM partitioned_parquet WHERE intField IN (1,2,3) AND p = 1"),
-      1 + 2 + 3
-    )
+      1 + 2 + 3)
+  }
+
+  test("hive udfs") {
+    checkAnswer(
+      sql("SELECT concat(stringField, stringField) FROM partitioned_parquet"),
+      sql("SELECT stringField FROM partitioned_parquet").map {
+        case Row(s: String) => Row(s + s)
+      }.collect().toSeq)
   }
 
   test("non-part select(*)") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM normal_parquet"),
-      10
-    )
+      10)
   }
 
   test("conversion is working") {
