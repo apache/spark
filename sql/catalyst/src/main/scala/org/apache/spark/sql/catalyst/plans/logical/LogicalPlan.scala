@@ -155,7 +155,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
             try {
               (resolveNesting(tail, option, resolver), tail.last) :: Nil
             } catch {
-              case _ => Nil
+              case _: Throwable => Nil
             }
           }
           // Invalid

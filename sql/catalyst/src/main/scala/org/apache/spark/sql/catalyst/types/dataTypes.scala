@@ -463,14 +463,6 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     ("type" -> typeName) ~
       ("fields" -> fields.map(_.jsonValue))
 
-  private lazy val validReference: Seq[String] = fields.flatMap( x => x.dataType match {
-    case st:StructType => st.validReference.map(y => x.name + "." + y) ++ Seq(x.name)
-    case _ => Seq(x.name)
-  })
-
-  def isValidField(ref: String, resolver: Resolver): Boolean =
-    validReference.count(resolver(_, ref)) == 1
-
   def simpleString: String = "struct"
 }
 
