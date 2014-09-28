@@ -24,6 +24,7 @@ import decimal
 import datetime
 import keyword
 import warnings
+import json
 from array import array
 from operator import itemgetter
 
@@ -62,6 +63,11 @@ class DataType(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def jsonValue(self):
+        return self.simpleString
+
+    def jsonString(self):
+        return json.dumps(self.jsonValue(), separators=(',',':'), sort_keys=True)
 
 class PrimitiveTypeSingleton(type):
 
@@ -93,6 +99,8 @@ class StringType(PrimitiveType):
     The data type representing string values.
     """
 
+    simpleString = 'string'
+
 
 class BinaryType(PrimitiveType):
 
@@ -100,6 +108,8 @@ class BinaryType(PrimitiveType):
 
     The data type representing bytearray values.
     """
+
+    simpleString = 'binary'
 
 
 class BooleanType(PrimitiveType):
@@ -109,6 +119,8 @@ class BooleanType(PrimitiveType):
     The data type representing bool values.
     """
 
+    simpleString = 'boolean'
+
 
 class TimestampType(PrimitiveType):
 
@@ -116,6 +128,8 @@ class TimestampType(PrimitiveType):
 
     The data type representing datetime.datetime values.
     """
+
+    simpleString = 'timestamp'
 
 
 class DecimalType(PrimitiveType):
@@ -125,6 +139,8 @@ class DecimalType(PrimitiveType):
     The data type representing decimal.Decimal values.
     """
 
+    simpleString = 'decimal'
+
 
 class DoubleType(PrimitiveType):
 
@@ -132,6 +148,8 @@ class DoubleType(PrimitiveType):
 
     The data type representing float values.
     """
+
+    simpleString = 'double'
 
 
 class FloatType(PrimitiveType):
@@ -141,6 +159,8 @@ class FloatType(PrimitiveType):
     The data type representing single precision floating-point values.
     """
 
+    simpleString = 'float'
+
 
 class ByteType(PrimitiveType):
 
@@ -149,6 +169,8 @@ class ByteType(PrimitiveType):
     The data type representing int values with 1 singed byte.
     """
 
+    simpleString = 'byte'
+
 
 class IntegerType(PrimitiveType):
 
@@ -156,6 +178,8 @@ class IntegerType(PrimitiveType):
 
     The data type representing int values.
     """
+
+    simpleString = 'integer'
 
 
 class LongType(PrimitiveType):
@@ -167,6 +191,8 @@ class LongType(PrimitiveType):
     please use DecimalType.
     """
 
+    simpleString = 'long'
+
 
 class ShortType(PrimitiveType):
 
@@ -174,6 +200,8 @@ class ShortType(PrimitiveType):
 
     The data type representing int values with 2 signed bytes.
     """
+
+    simpleString = 'short'
 
 
 class ArrayType(DataType):
@@ -205,6 +233,15 @@ class ArrayType(DataType):
         return "ArrayType(%s,%s)" % (self.elementType,
                                      str(self.containsNull).lower())
 
+    simpleString = 'array'
+
+    def jsonValue(self):
+        return {
+            self.simpleString: {
+                'type': self.elementType.jsonValue(),
+                'containsNull': self.containsNull
+            }
+        }
 
 class MapType(DataType):
 
@@ -245,6 +282,17 @@ class MapType(DataType):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
                                       str(self.valueContainsNull).lower())
 
+    simpleString = 'map'
+
+    def jsonValue(self):
+        return {
+            self.simpleString: {
+                'key': self.keyType.jsonValue(),
+                'value': self.valueType.jsonValue(),
+                'valueContainsNull': self.valueContainsNull
+            }
+        }
+
 
 class StructField(DataType):
 
@@ -283,6 +331,15 @@ class StructField(DataType):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
                                           str(self.nullable).lower())
 
+    def jsonValue(self):
+        return {
+            'field': {
+                'name': self.name,
+                'type': self.dataType.jsonValue(),
+                'nullable': self.nullable
+            }
+        }
+
 
 class StructType(DataType):
 
@@ -312,42 +369,27 @@ class StructType(DataType):
         return ("StructType(List(%s))" %
                 ",".join(str(field) for field in self.fields))
 
+    simpleString = 'struct'
 
-def _parse_datatype_list(datatype_list_string):
-    """Parses a list of comma separated data types."""
-    index = 0
-    datatype_list = []
-    start = 0
-    depth = 0
-    while index < len(datatype_list_string):
-        if depth == 0 and datatype_list_string[index] == ",":
-            datatype_string = datatype_list_string[start:index].strip()
-            datatype_list.append(_parse_datatype_string(datatype_string))
-            start = index + 1
-        elif datatype_list_string[index] == "(":
-            depth += 1
-        elif datatype_list_string[index] == ")":
-            depth -= 1
-
-        index += 1
-
-    # Handle the last data type
-    datatype_string = datatype_list_string[start:index].strip()
-    datatype_list.append(_parse_datatype_string(datatype_string))
-    return datatype_list
+    def jsonValue(self):
+        return {
+            self.simpleString: {
+                'fields': map(lambda f: f.jsonValue(), self.fields)
+            }
+        }
 
 
-_all_primitive_types = dict((k, v) for k, v in globals().iteritems()
+_all_primitive_types = dict((v.simpleString, v) for v in globals().itervalues()
                             if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
 
 
-def _parse_datatype_string(datatype_string):
-    """Parses the given data type string.
-
+def _parse_datatype_json_string(json_string):
+    """Parses the given data type JSON string.
     >>> def check_datatype(datatype):
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(str(datatype))
-    ...     python_datatype = _parse_datatype_string(
-    ...                          scala_datatype.toString())
+    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(
+    ...                          datatype.jsonString())
+    ...     python_datatype = _parse_datatype_json_string(
+    ...                          scala_datatype.jsonString())
     ...     return datatype == python_datatype
     >>> all(check_datatype(cls()) for cls in _all_primitive_types.values())
     True
@@ -385,50 +427,32 @@ def _parse_datatype_string(datatype_string):
     >>> check_datatype(complex_maptype)
     True
     """
-    index = datatype_string.find("(")
-    if index == -1:
-        # It is a primitive type.
-        index = len(datatype_string)
-    type_or_field = datatype_string[:index]
-    rest_part = datatype_string[index + 1:len(datatype_string) - 1].strip()
+    return _parse_datatype_json_value(json.loads(json_string))
 
-    if type_or_field in _all_primitive_types:
-        return _all_primitive_types[type_or_field]()
 
-    elif type_or_field == "ArrayType":
-        last_comma_index = rest_part.rfind(",")
-        containsNull = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            containsNull = False
-        elementType = _parse_datatype_string(
-            rest_part[:last_comma_index].strip())
-        return ArrayType(elementType, containsNull)
-
-    elif type_or_field == "MapType":
-        last_comma_index = rest_part.rfind(",")
-        valueContainsNull = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            valueContainsNull = False
-        keyType, valueType = _parse_datatype_list(
-            rest_part[:last_comma_index].strip())
-        return MapType(keyType, valueType, valueContainsNull)
-
-    elif type_or_field == "StructField":
-        first_comma_index = rest_part.find(",")
-        name = rest_part[:first_comma_index].strip()
-        last_comma_index = rest_part.rfind(",")
-        nullable = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            nullable = False
-        dataType = _parse_datatype_string(
-            rest_part[first_comma_index + 1:last_comma_index].strip())
-        return StructField(name, dataType, nullable)
-
-    elif type_or_field == "StructType":
-        # rest_part should be in the format like
-        # List(StructField(field1,IntegerType,false)).
-        field_list_string = rest_part[rest_part.find("(") + 1:-1]
-        fields = _parse_datatype_list(field_list_string)
+def _parse_datatype_json_value(json_value):
+    if json_value in _all_primitive_types.keys():
+        return _all_primitive_types[json_value]()
+    elif 'array' in json_value:
+        array_type = json_value['array']
+        element_type = _parse_datatype_json_value(array_type['type'])
+        contains_null = array_type['containsNull']
+        return ArrayType(element_type, contains_null)
+    elif 'map' in json_value:
+        map_type = json_value['map']
+        key_type = _parse_datatype_json_value(map_type['key'])
+        value_type = _parse_datatype_json_value(map_type['value'])
+        value_contains_null = map_type['valueContainsNull']
+        return MapType(key_type, value_type, value_contains_null)
+    elif 'field' in json_value: 
+        field = json_value['field']
+        name = field['name']
+        datatype = _parse_datatype_json_value(field['type'])
+        nullable = field['nullable']
+        return StructField(name, datatype, nullable)
+    elif 'struct' in json_value: 
+        struct_type = json_value['struct']
+        fields = map(_parse_datatype_json_value, struct_type['fields'])
         return StructType(fields)
 
 
@@ -983,7 +1007,7 @@ class SQLContext(object):
                                       self._sc.pythonExec,
                                       broadcast_vars,
                                       self._sc._javaAccumulator,
-                                      str(returnType))
+                                      returnType.jsonString())
 
     def inferSchema(self, rdd):
         """Infer and apply a schema to an RDD of L{Row}.
@@ -1119,7 +1143,7 @@ class SQLContext(object):
 
         batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
         jrdd = self._pythonToJava(rdd._jrdd, batched)
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.jsonString())
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
     def registerRDDAsTable(self, rdd, tableName):
@@ -1209,7 +1233,7 @@ class SQLContext(object):
         if schema is None:
             srdd = self._ssql_ctx.jsonFile(path)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
+            scala_datatype = self._ssql_ctx.parseDataType(schema.jsonString())
             srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
@@ -1279,7 +1303,7 @@ class SQLContext(object):
         if schema is None:
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
+            scala_datatype = self._ssql_ctx.parseDataType(schema.jsonString())
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
@@ -1614,7 +1638,7 @@ class SchemaRDD(RDD):
     def schema(self):
         """Returns the schema of this SchemaRDD (represented by
         a L{StructType})."""
-        return _parse_datatype_string(self._jschema_rdd.baseSchemaRDD().schema().toString())
+        return _parse_datatype_json_string(self._jschema_rdd.baseSchemaRDD().schema().jsonString())
 
     def schemaString(self):
         """Returns the output schema in the tree format."""

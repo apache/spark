@@ -73,6 +73,8 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(DoubleType)
   checkDataTypeJsonRepr(DecimalType)
   checkDataTypeJsonRepr(TimestampType)
+  checkDataTypeJsonRepr(StringType)
+  checkDataTypeJsonRepr(BinaryType)
   checkDataTypeJsonRepr(ArrayType(DoubleType, true))
   checkDataTypeJsonRepr(ArrayType(StringType, false))
   checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))

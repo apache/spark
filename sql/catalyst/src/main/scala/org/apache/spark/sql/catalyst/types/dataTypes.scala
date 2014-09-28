@@ -37,6 +37,13 @@ import org.apache.spark.util.Utils
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  private object JSortedObject {
+    def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
+      case JObject(seq) => Some(seq.toList.sortBy(_._1))
+      case _ => None
+    }
+  }
+
   private def parseDataType(asJValue: JValue): DataType = asJValue match {
     case JString("boolean") => BooleanType
     case JString("byte") => ByteType
@@ -47,22 +54,24 @@ object DataType {
     case JString("double") => DoubleType
     case JString("decimal") => DecimalType
     case JString("string") => StringType
+    case JString("binary") => BinaryType
     case JString("timestamp") => TimestampType
     case JString("null") => NullType
-    case JObject(Seq(("array", JObject(Seq(("type", t), ("containsNull", JBool(n))))))) =>
+    case JObject(List(("array", JSortedObject(
+        ("containsNull", JBool(n)), ("type", t: JValue))))) =>
       ArrayType(parseDataType(t), n)
-    case JObject(Seq(("struct", JObject(Seq(("fields", JArray(fields))))))) =>
+    case JObject(List(("struct", JObject(List(("fields", JArray(fields))))))) =>
       StructType(fields.map(parseStructField))
-    case JObject(Seq(("map", JObject(Seq(
-        ("key", k), ("value", v), ("valueContainsNull", JBool(n))))))) =>
+    case JObject(List(("map", JSortedObject(
+        ("key", k: JValue), ("value", v: JValue), ("valueContainsNull", JBool(n)))))) =>
       MapType(parseDataType(k), parseDataType(v), n)
   }
 
   private def parseStructField(asJValue: JValue): StructField = asJValue match {
-    case JObject(Seq(("field", JObject(Seq(
-    ("name", JString(name)),
-    ("type", dataType),
-    ("nullable", JBool(nullable))))))) =>
+    case JObject(Seq(("field", JSortedObject(
+        ("name", JString(name)),
+        ("nullable", JBool(nullable)),
+        ("type", dataType: JValue))))) =>
       StructField(name, parseDataType(dataType), nullable)
   }
 
