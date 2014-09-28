@@ -62,15 +62,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   val createTime = System.currentTimeMillis()
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
-
     override protected def log = CoarseGrainedSchedulerBackend.this.log
-
-    private val executorActor = new HashMap[String, ActorRef]
-    private val executorAddress = new HashMap[String, Address]
-    private val executorHost = new HashMap[String, String]
-    private val freeCores = new HashMap[String, Int]
-    private val totalCores = new HashMap[String, Int]
     private val addressToExecutorId = new HashMap[Address, String]
+    private val executorDataMap = new HashMap[String, ExecutorData]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -85,16 +79,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     def receiveWithLogging = {
       case RegisterExecutor(executorId, hostPort, cores) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
-        if (executorActor.contains(executorId)) {
+        if (executorDataMap.contains(executorId)) {
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor
-          executorActor(executorId) = sender
-          executorHost(executorId) = Utils.parseHostPort(hostPort)._1
-          totalCores(executorId) = cores
-          freeCores(executorId) = cores
-          executorAddress(executorId) = sender.path.address
+          executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
+            Utils.parseHostPort(hostPort)._1, cores, cores))
+
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
@@ -104,13 +96,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
-          if (executorActor.contains(executorId)) {
-            freeCores(executorId) += scheduler.CPUS_PER_TASK
-            makeOffers(executorId)
-          } else {
-            // Ignoring the update since we don't know about the executor.
-            val msg = "Ignored task status update (%d state %s) from unknown executor %s with ID %s"
-            logWarning(msg.format(taskId, state, sender, executorId))
+          executorDataMap.get(executorId) match {
+            case Some(executorInfo) =>
+              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              makeOffers(executorId)
+            case None =>
+              // Ignoring the update since we don't know about the executor.
+              logWarning(s"Ignored task status update ($taskId state $state) " +
+                "from unknown executor $sender with ID $executorId")
           }
         }
 
@@ -118,7 +111,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
-        executorActor(executorId) ! KillTask(taskId, executorId, interruptThread)
+        executorDataMap(executorId).executorActor ! KillTask(taskId, executorId, interruptThread)
 
       case StopDriver =>
         sender ! true
@@ -126,8 +119,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
-        for (executor <- executorActor.values) {
-          executor ! StopExecutor
+        for ((_, executorData) <- executorDataMap) {
+          executorData.executorActor ! StopExecutor
         }
         sender ! true
 
@@ -138,6 +131,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
         sender ! true
+
       case DisassociatedEvent(_, address, _) =>
         addressToExecutorId.get(address).foreach(removeExecutor(_,
           "remote Akka client disassociated"))
@@ -149,13 +143,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
+        executorDataMap.map {case (id, executorData) =>
+          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)}.toSeq))
     }
 
     // Make fake resource offers on just one executor
     def makeOffers(executorId: String) {
+      val executorData = executorDataMap(executorId)
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
+        Seq(new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))))
     }
 
     // Launch tasks returned by a set of resource offers
@@ -179,25 +175,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           }
         }
         else {
-          freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
-          executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
+          val executorData = executorDataMap(task.executorId)
+          executorData.freeCores -= scheduler.CPUS_PER_TASK
+          executorData.executorActor ! LaunchTask(new SerializableBuffer(serializedTask))
         }
       }
     }
 
     // Remove a disconnected slave from the cluster
     def removeExecutor(executorId: String, reason: String) {
-      if (executorActor.contains(executorId)) {
-        logInfo("Executor " + executorId + " disconnected, so removing it")
-        val numCores = totalCores(executorId)
-        executorActor -= executorId
-        executorHost -= executorId
-        addressToExecutorId -= executorAddress(executorId)
-        executorAddress -= executorId
-        totalCores -= executorId
-        freeCores -= executorId
-        totalCoreCount.addAndGet(-numCores)
-        scheduler.executorLost(executorId, SlaveLost(reason))
+      executorDataMap.get(executorId) match {
+        case Some(executorInfo) =>
+          executorDataMap -= executorId
+          totalCoreCount.addAndGet(-executorInfo.totalCores)
+          scheduler.executorLost(executorId, SlaveLost(reason))
+        case None => logError(s"Asked to remove non existant executor $executorId")
       }
     }
   }
