@@ -545,6 +545,45 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.diskStore.ids</code></td>
+  <td>defaultDiskStore1</td>
+  <td>
+    The ids for hierarchy diskStores, it can be a comma-separated list of multiple diskStores.
+    The order of the id decide the priority of the corresponding store. spark will try to write data
+    to store in the list by order,if the data written to one store reach its quota limitations, then
+    further data will be written to next store in list. The last one should always be considered as no
+    quota limitations.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.diskStore.specificID.class</code></td>
+  <td>none</td>
+  <td>
+    The specific class implemented the diskStore represented by specificID.
+    specificID here refer to one of the id list in spark.diskStore.ids.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.diskStore.specificID.size</code></td>
+  <td>0</td>
+  <td>
+    The disk size quota of the diskStore represented by specificID.
+    0 by default means no limit.
+    specificID here refer to one of the id list in spark.diskStore.ids.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.defaultDiskStore.specificID.dir</code></td>
+  <td><code>spark.local.dir</code></td>
+  <td>
+    The Directories of defaultDiskStore represented by specificID. Can be a comma-separated list of
+    multiple directories.
+    Notice that this is used by org.apache.spark.storage.DefaultDiskStore, the other possible disk
+    store implementation does not necessary use this.
+    specificID here refer to one of the id list in spark.diskStore.ids.
+  </td>
+</tr>
+<tr>
   <td><code>spark.tachyonStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>

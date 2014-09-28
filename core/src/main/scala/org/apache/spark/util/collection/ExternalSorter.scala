@@ -85,7 +85,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val shouldPartition = numPartitions > 1
 
   private val blockManager = SparkEnv.get.blockManager
-  private val diskBlockManager = blockManager.diskBlockManager
+  private val diskBlockManager = blockManager.shuffleStore.getDiskBlockManager
   private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
@@ -789,7 +789,8 @@ private[spark] class ExternalSorter[K, V, C](
     if (writer.isOpen) {
       writer.commitAndClose()
     }
-    blockManager.diskStore.getValues(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
+    blockManager.diskStoreManager.getValues(writer.blockId, ser).get
+      .asInstanceOf[Iterator[Product2[K, C]]]
   }
 
   def stop(): Unit = {
