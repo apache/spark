@@ -16,8 +16,7 @@ scalaVersion := "2.10.3"
 
 libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.2",
-  "org.slf4j" % "slf4j-log4j12" % "1.7.2",
-  "org.apache.spark" % "spark-core_2.10" % "1.1.0"
+  "org.slf4j" % "slf4j-log4j12" % "1.7.2"
 )
 
 {
@@ -27,9 +26,11 @@ libraryDependencies ++= Seq(
   val excludeAsm = ExclusionRule(organization = "asm")
   val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
   val defaultHadoopVersion = "1.0.4"
-  val hadoopVersion =
-    scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
+  val defaultSparkVersion = "1.1.0"
+  val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
+  val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
   libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
+  libraryDependencies += "org.apache.spark" % "spark-core_2.10" % sparkVersion
 }
 
 resolvers ++= Seq(

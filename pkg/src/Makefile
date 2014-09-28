@@ -1,3 +1,4 @@
+
 SCALA_VERSION := 2.10
 SPARKR_VERSION := 0.1
 JAR_NAME := sparkr-assembly-$(SPARKR_VERSION).jar
