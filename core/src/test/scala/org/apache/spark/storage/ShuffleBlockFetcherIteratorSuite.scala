@@ -93,7 +93,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
+      new BlockSerializer(conf, new TestSerializer),
       48 * 1024 * 1024)
 
     // 3 local blocks fetched in initialization
@@ -160,7 +160,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
+      new BlockSerializer(conf, new TestSerializer),
       48 * 1024 * 1024)
 
     // Exhaust the first block, and then it should be released.
@@ -223,7 +223,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      new TestSerializer,
+      new BlockSerializer(conf, new TestSerializer),
       48 * 1024 * 1024)
 
     // Continue only after the mock calls onBlockFetchFailure

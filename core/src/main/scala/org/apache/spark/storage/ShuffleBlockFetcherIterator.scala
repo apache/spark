@@ -44,7 +44,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage.
- * @param serializer serializer used to deserialize the data.
+ * @param blockSerde serializer used to deserialize the data.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  */
 private[spark]
@@ -53,7 +53,7 @@ final class ShuffleBlockFetcherIterator(
     shuffleClient: ShuffleClient,
     blockManager: BlockManager,
     blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-    serializer: Serializer,
+    blockSerde: BlockSerializer,
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
 
@@ -286,8 +286,8 @@ final class ShuffleBlockFetcherIterator(
     val iteratorOpt: Option[Iterator[Any]] = if (result.failed) {
       None
     } else {
-      val is = blockManager.wrapForCompression(result.blockId, result.buf.createInputStream())
-      val iter = serializer.newInstance().deserializeStream(is).asIterator
+      val is = result.buf.createInputStream()
+      val iter = blockSerde.dataDeserializeStream(result.blockId, is).asIterator
       Some(CompletionIterator[Any, Iterator[Any]](iter, {
         // Once the iterator is exhausted, release the buffer and set currentResult to null
         // so we don't release it again in cleanup.

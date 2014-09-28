@@ -26,9 +26,11 @@ class BlockObjectWriterSuite extends FunSuite {
   test("verify write metrics") {
     val file = new File("somefile")
     file.deleteOnExit()
+
+    val conf = new SparkConf().set("spark.shuffle.sync", "true")
     val writeMetrics = new ShuffleWriteMetrics()
-    val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
-      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
+    val writer = new DiskBlockObjectWriter(conf, new TestBlockId("0"), file,
+      1024, new BlockSerializer(conf, new JavaSerializer(conf)), writeMetrics)
 
     writer.write(Long.box(20))
     // Metrics don't update on every write
@@ -46,10 +48,11 @@ class BlockObjectWriterSuite extends FunSuite {
   test("verify write metrics on revert") {
     val file = new File("somefile")
     file.deleteOnExit()
-    val writeMetrics = new ShuffleWriteMetrics()
-    val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
-      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
 
+    val conf = new SparkConf().set("spark.shuffle.sync", "true")
+    val writeMetrics = new ShuffleWriteMetrics()
+    val writer = new DiskBlockObjectWriter(conf, new TestBlockId("0"), file,
+      1024, new BlockSerializer(conf, new JavaSerializer(conf)), writeMetrics)
     writer.write(Long.box(20))
     // Metrics don't update on every write
     assert(writeMetrics.shuffleBytesWritten == 0)

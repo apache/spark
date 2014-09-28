@@ -21,23 +21,43 @@ import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
 /**
  * Stores BlockManager blocks on disk.
  */
-private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
-  extends BlockStore(blockManager) with Logging {
+private[spark] class DiskStore(
+    conf: SparkConf,
+    blockSerde: BlockSerializer,
+    diskManager: DiskBlockManager)
+  extends BlockStore with Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+  val minMemoryMapBytes = conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
 
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def put(
+      blockId: BlockId,
+      value: BlockValue,
+      level: StorageLevel,
+      pin: Boolean): PutResult = value match {
+    case ByteBufferValue(bytes) =>
+      putBytes(blockId, bytes, level, pin)
+    case IteratorValue(iterator) =>
+      putIterator(blockId, iterator, level, pin)
+    case ArrayValue(array) =>
+      putIterator(blockId, array.iterator, level, pin)
+  }
+
+  private def putBytes(
+      blockId: BlockId,
+      _bytes: ByteBuffer,
+      level: StorageLevel,
+      pin: Boolean): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -52,22 +72,14 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
-    PutResult(bytes.limit(), Right(bytes.duplicate()))
+    SuccessfulPut(PutStatistics(bytes.limit(), Nil))
   }
 
-  override def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIterator(blockId, values.toIterator, level, returnValues)
-  }
-
-  override def putIterator(
+  private def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean): PutResult = {
+      pin: Boolean): SuccessfulPut = {
 
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
@@ -75,7 +87,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val outputStream = new FileOutputStream(file)
     try {
       try {
-        blockManager.dataSerializeStream(blockId, outputStream, values)
+        blockSerde.dataSerializeStream(blockId, outputStream, values)
       } finally {
         // Close outputStream here because it should be closed before file is deleted.
         outputStream.close()
@@ -93,14 +105,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val timeTaken = System.currentTimeMillis - startTime
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(length), timeTaken))
-
-    if (returnValues) {
-      // Return a byte buffer for the contents of the file
-      val buffer = getBytes(blockId).get
-      PutResult(length, Right(buffer))
-    } else {
-      PutResult(length, null)
-    }
+    SuccessfulPut(PutStatistics(length, Nil))
   }
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
@@ -127,7 +132,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  private def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = diskManager.getFile(blockId.name)
     getBytes(file, 0, file.length)
   }
@@ -136,18 +141,14 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(segment.file, segment.offset, segment.length)
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
-  }
-
   /**
    * A version of getValues that allows a custom serializer. This is used as part of the
    * shuffle short-circuit code.
    */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId, serde: BlockSerializer): Option[Iterator[Any]] = {
     // TODO: Should bypass getBytes and use a stream based implementation, so that
     // we won't use a lot of memory during e.g. external sort merge.
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+    getBytes(blockId).map(bytes => serde.dataDeserialize(blockId, bytes))
   }
 
   override def remove(blockId: BlockId): Boolean = {
@@ -165,5 +166,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   override def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()
+  }
+
+  override def get(blockId: BlockId): Option[BlockValue] = {
+    getBytes(blockId).map(ByteBufferValue.apply)
   }
 }
