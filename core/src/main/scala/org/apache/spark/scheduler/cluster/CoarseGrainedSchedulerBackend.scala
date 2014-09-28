@@ -84,7 +84,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor
-          executorDataMap.put(executorId,  new ExecutorData(sender, sender.path.address,
+          executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
             Utils.parseHostPort(hostPort)._1, cores, cores))
 
           addressToExecutorId(sender.path.address) = executorId
@@ -102,9 +102,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
-              val msg = "Ignored task status update (%d state %s) " +
-                "from unknown executor %s with ID %s"
-              logWarning(msg.format(taskId, state, sender, executorId))
+              logWarning(s"Ignored task status update ($taskId state $state) " +
+                "from unknown executor $sender with ID $executorId")
           }
         }
 
@@ -120,7 +119,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
-        for ((_,executorData) <- executorDataMap) {
+        for ((_, executorData) <- executorDataMap) {
           executorData.executorActor ! StopExecutor
         }
         sender ! true
@@ -144,8 +143,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        executorDataMap.map{ case(id, executorData) =>
-          new WorkerOffer( id, executorData.executorHost, executorData.freeCores)}.toSeq))
+        executorDataMap.map {case (id, executorData) =>
+          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)}.toSeq))
     }
 
     // Make fake resource offers on just one executor
@@ -176,9 +175,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           }
         }
         else {
-          val executorInfo = executorDataMap(task.executorId)
-          executorInfo.freeCores -= scheduler.CPUS_PER_TASK
-          executorInfo.executorActor ! LaunchTask(new SerializableBuffer(serializedTask))
+          val executorData = executorDataMap(task.executorId)
+          executorData.freeCores -= scheduler.CPUS_PER_TASK
+          executorData.executorActor ! LaunchTask(new SerializableBuffer(serializedTask))
         }
       }
     }
@@ -187,9 +186,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     def removeExecutor(executorId: String, reason: String) {
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
-          val numCores = executorInfo.totalCores
           executorDataMap -= executorId
-          totalCoreCount.addAndGet(-numCores)
+          totalCoreCount.addAndGet(-executorInfo.totalCores)
           scheduler.executorLost(executorId, SlaveLost(reason))
         case None => logError(s"Asked to remove non existant executor $executorId")
       }
@@ -290,7 +288,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
   }
 }
-
 
 private[spark] object CoarseGrainedSchedulerBackend {
   val ACTOR_NAME = "CoarseGrainedScheduler"

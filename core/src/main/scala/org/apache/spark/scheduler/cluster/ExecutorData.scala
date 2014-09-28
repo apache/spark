@@ -19,10 +19,20 @@ package org.apache.spark.scheduler.cluster
 
 import akka.actor.{Address, ActorRef}
 
+/**
+ * Grouping of data that is accessed by a CourseGrainedScheduler. This class
+ * is stored in a Map keyed by an executorID
+ *
+ * @param executorActor The actorRef representing this executor
+ * @param executorAddress The network address of this executor
+ * @param executorHost The hostname that this executor is running on
+ * @param freeCores  The current number of cores available for work on the executor
+ * @param totalCores The total number of cores available to the executor
+ */
 private[cluster] class ExecutorData(
-   var executorActor: ActorRef,
-   var executorAddress: Address,
-   var executorHost: String ,
+   val executorActor: ActorRef,
+   val executorAddress: Address,
+   val executorHost: String ,
    var freeCores: Int,
-   var totalCores: Int
-) {}
+   val totalCores: Int
+)
