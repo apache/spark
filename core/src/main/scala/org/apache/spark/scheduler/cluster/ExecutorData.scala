@@ -20,10 +20,9 @@ package org.apache.spark.scheduler.cluster
 import akka.actor.{Address, ActorRef}
 
 /**
- * Grouping of data that is accessed by a CourseGrainedScheduler. This class
- * is stored in a Map keyed by an executorID
+ * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
  *
- * @param executorActor The actorRef representing this executor
+ * @param executorActor The ActorRef representing this executor
  * @param executorAddress The network address of this executor
  * @param executorHost The hostname that this executor is running on
  * @param freeCores  The current number of cores available for work on the executor

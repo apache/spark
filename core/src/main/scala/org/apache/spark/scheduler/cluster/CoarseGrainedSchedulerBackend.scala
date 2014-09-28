@@ -142,9 +142,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
     // Make fake resource offers on all executors
     def makeOffers() {
-      launchTasks(scheduler.resourceOffers(
-        executorDataMap.map {case (id, executorData) =>
-          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)}.toSeq))
+      launchTasks(scheduler.resourceOffers(executorDataMap.map { case (id, executorData) =>
+        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+      }.toSeq))
     }
 
     // Make fake resource offers on just one executor
