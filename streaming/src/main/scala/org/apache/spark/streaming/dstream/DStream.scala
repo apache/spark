@@ -602,6 +602,18 @@ abstract class DStream[T: ClassTag] (
   }
 
   /**
+   * Return a new UpdateDStream in which each RDD is used to update the original rdd by
+   * applying a function on each RDD of 'this' DStream.
+   */
+  def updateRDD[U: ClassTag, V: ClassTag](
+      rdd: RDD[V],
+      updateFunc: (Option[RDD[T]], RDD[V]) => RDD[U]
+    ): DStream[T] = {
+    val cleanF = ssc.sparkContext.clean(updateFunc)
+    new UpdateDStream[U, T, V](this, cleanF, rdd).register()
+  }
+
+  /**
    * Print the first ten elements of each RDD generated in this DStream. This is an output
    * operator, so this DStream will be registered as an output stream and there materialized.
    */
