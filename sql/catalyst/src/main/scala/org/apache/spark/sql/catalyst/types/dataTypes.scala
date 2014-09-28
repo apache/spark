@@ -256,7 +256,7 @@ case object DateType extends NativeType {
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
   private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Date, y: Date) = x.compareTo(y)
+    def compare(x: Date, y: Date) = x.toString.compareTo(y.toString)
   }
 
   def simpleString: String = "date"

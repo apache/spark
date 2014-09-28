@@ -174,7 +174,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // Date cannot be cast to double, according to hive
   private[this] def dateToDouble(d: Date) = null
 
-  // Converts Timestamp to string according to Hive TimestampWritable convention
+  // Converts Date to string according to Hive DateWritable convention
   private[this] def dateToString(d: Date): String = {
     Cast.threadLocalDateFormat.get.format(d)
   }

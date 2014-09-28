@@ -220,8 +220,7 @@ trait HiveTypeCoercion {
       case a: BinaryArithmetic if a.right.dataType == StringType =>
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
-      // we should cast all timestamp/date/string compare into string compare,
-      // even if both sides are of same type, as Hive use xxxwritable to compare.
+      // we should cast all timestamp/date/string compare into string compare
       case p: BinaryPredicate if p.left.dataType == StringType
         && p.right.dataType == DateType =>
         p.makeCopy(Array(p.left, Cast(p.right, StringType)))
@@ -238,13 +237,6 @@ trait HiveTypeCoercion {
         && p.right.dataType == DateType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
       case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == TimestampType =>
-        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
-      // same type
-      case p: BinaryPredicate if p.left.dataType == DateType
-        && p.right.dataType == DateType =>
-        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
-      case p: BinaryPredicate if p.left.dataType == TimestampType
         && p.right.dataType == TimestampType =>
         p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
 
