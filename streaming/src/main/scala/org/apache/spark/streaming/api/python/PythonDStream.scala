@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.api.python
 
 import java.util.{ArrayList => JArrayList}
+import scala.collection.JavaConversions._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java._
@@ -63,6 +64,16 @@ abstract class PythonDStream(parent: DStream[_]) extends DStream[Array[Byte]] (p
   override def slideDuration: Duration = parent.slideDuration
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
+object PythonDStream {
+
+  // convert list of RDD into queue of RDDs, for ssc.queueStream()
+  def toRDDQueue(rdds: JArrayList[JavaRDD[Array[Byte]]]): java.util.Queue[JavaRDD[Array[Byte]]] = {
+    val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
+    rdds.forall(queue.add(_))
+    queue
+  }
 }
 
 /**
@@ -243,46 +254,4 @@ class PythonForeachDStream(
   ) {
 
   this.register()
-}
-
-
-/**
- * similar to QueueInputStream
- */
-class PythonDataInputStream(
-    ssc_ : JavaStreamingContext,
-    inputRDDs: JArrayList[JavaRDD[Array[Byte]]],
-    oneAtAtime: Boolean,
-    defaultRDD: JavaRDD[Array[Byte]]
-  ) extends InputDStream[Array[Byte]](JavaStreamingContext.toStreamingContext(ssc_)) {
-
-  val emptyRDD = if (defaultRDD != null) {
-    Some(defaultRDD.rdd)
-  } else {
-    Some(ssc.sparkContext.emptyRDD[Array[Byte]])
-  }
-
-  def start() {}
-
-  def stop() {}
-
-  def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
-    val index = ((validTime - zeroTime) / slideDuration - 1).toInt
-    if (oneAtAtime) {
-      if (index == 0) {
-        val rdds = inputRDDs.toArray.map(_.asInstanceOf[JavaRDD[Array[Byte]]].rdd).toSeq
-        Some(ssc.sparkContext.union(rdds))
-      } else {
-        emptyRDD
-      }
-    } else {
-      if (index < inputRDDs.size()) {
-        Some(inputRDDs.get(index).rdd)
-      } else {
-        emptyRDD
-      }
-    }
-  }
-
-  val asJavaDStream  = JavaDStream.fromDStream(this)
 }

@@ -184,7 +184,7 @@ class StreamingContext(object):
                 # reset them to sc.serializer
                 rdds[i] = rdds[i].map(lambda x: x, preservesPartitioning=True)
 
-    def queueStream(self, queue, oneAtATime=False, default=None):
+    def queueStream(self, queue, oneAtATime=True, default=None):
         """
         Create an input stream from an queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
@@ -200,9 +200,12 @@ class StreamingContext(object):
         self._check_serialzers(rdds)
         jrdds = ListConverter().convert([r._jrdd for r in rdds],
                                         SparkContext._gateway._gateway_client)
-        jdstream = self._jvm.PythonDataInputStream(self._jssc, jrdds, oneAtATime,
-                                                   default and default._jrdd)
-        return DStream(jdstream.asJavaDStream(), self, rdds[0]._jrdd_deserializer)
+        queue = self._jvm.PythonDStream.toRDDQueue(jrdds)
+        if default:
+            jdstream = self._jssc.queueStream(queue, oneAtATime, default._jrdd)
+        else:
+            jdstream = self._jssc.queueStream(queue, oneAtATime)
+        return DStream(jdstream, self, rdds[0]._jrdd_deserializer)
 
     def transform(self, dstreams, transformFunc):
         """
