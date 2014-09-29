@@ -18,6 +18,7 @@
 package org.apache.spark.network
 
 import java.io.Closeable
+import java.nio.ByteBuffer
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
@@ -94,7 +95,9 @@ abstract class BlockTransferService extends Closeable {
       }
       override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
         lock.synchronized {
-          result = Left(data)
+          val ret = ByteBuffer.allocate(data.size.toInt)
+          ret.put(data.nioByteBuffer())
+          result = Left(new NioManagedBuffer(ret))
           lock.notify()
         }
       }
