@@ -508,7 +508,7 @@ def tag_instance(instance, name):
             break
         except:
             print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-            if (i == 5):
+            if i == 5:
                 raise "Error - failed max attempts to add name tag"
             time.sleep(5)
 
@@ -530,7 +530,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             for res in reservations:
                 active = [i for i in res.instances if is_active(i)]
                 for instance in active:
-                    if (instance.tags.get(u'Name') is None):
+                    if instance.tags.get(u'Name') is None:
                         tag_instance(instance, name)
     # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
@@ -545,7 +545,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             elif name.startswith(cluster_name + "-slave"):
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
-        print ("Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)))
+        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
     if master_nodes != [] or not die_on_error:
         return (master_nodes, slave_nodes)
     else:
@@ -626,43 +626,43 @@ def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
 def get_num_disks(instance_type):
     # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
     # Updated 2014-6-20
+    # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
-        "m1.small":    1,
-        "m1.medium":   1,
-        "m1.large":    2,
-        "m1.xlarge":   4,
-        "t1.micro":    1,
         "c1.medium":   1,
         "c1.xlarge":   4,
-        "m2.xlarge":   1,
-        "m2.2xlarge":  1,
-        "m2.4xlarge":  2,
-        "cc1.4xlarge": 2,
-        "cc2.8xlarge": 4,
-        "cg1.4xlarge": 2,
-        "hs1.8xlarge": 24,
-        "cr1.8xlarge": 2,
-        "hi1.4xlarge": 2,
-        "m3.medium":   1,
-        "m3.large":    1,
-        "m3.xlarge":   2,
-        "m3.2xlarge":  2,
-        "i2.xlarge":   1,
-        "i2.2xlarge":  2,
-        "i2.4xlarge":  4,
-        "i2.8xlarge":  8,
-        "c3.large":    2,
-        "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
         "c3.8xlarge":  2,
-        "r3.large":    1,
-        "r3.xlarge":   1,
+        "c3.large":    2,
+        "c3.xlarge":   2,
+        "cc1.4xlarge": 2,
+        "cc2.8xlarge": 4,
+        "cg1.4xlarge": 2,
+        "cr1.8xlarge": 2,
+        "g2.2xlarge":  1,
+        "hi1.4xlarge": 2,
+        "hs1.8xlarge": 24,
+        "i2.2xlarge":  2,
+        "i2.4xlarge":  4,
+        "i2.8xlarge":  8,
+        "i2.xlarge":   1,
+        "m1.large":    2,
+        "m1.medium":   1,
+        "m1.small":    1,
+        "m1.xlarge":   4,
+        "m2.2xlarge":  1,
+        "m2.4xlarge":  2,
+        "m2.xlarge":   1,
+        "m3.2xlarge":  2,
+        "m3.large":    1,
+        "m3.medium":   1,
+        "m3.xlarge":   2,
         "r3.2xlarge":  1,
         "r3.4xlarge":  1,
         "r3.8xlarge":  2,
-        "g2.2xlarge":  1,
-        "t1.micro":    0
+        "r3.large":    1,
+        "r3.xlarge":   1,
+        "t1.micro":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
@@ -785,7 +785,7 @@ def ssh(host, opts, command):
                 ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host),
                                      stringify_command(command)])
         except subprocess.CalledProcessError as e:
-            if (tries > 5):
+            if tries > 5:
                 # If this was an ssh failure, provide the user with hints.
                 if e.returncode == 255:
                     raise UsageError(
@@ -820,18 +820,18 @@ def ssh_read(host, opts, command):
         ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)])
 
 
-def ssh_write(host, opts, command, input):
+def ssh_write(host, opts, command, arguments):
     tries = 0
     while True:
         proc = subprocess.Popen(
             ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)],
             stdin=subprocess.PIPE)
-        proc.stdin.write(input)
+        proc.stdin.write(arguments)
         proc.stdin.close()
         status = proc.wait()
         if status == 0:
             break
-        elif (tries > 5):
+        elif tries > 5:
             raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
         else:
             print >> stderr, \
