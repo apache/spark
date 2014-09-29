@@ -49,12 +49,12 @@ trait YarnRMClient {
       securityMgr: SecurityManager): YarnAllocator
 
   /**
-   * Shuts down the AM. Guaranteed to only be called once.
+   * Unregister the AM. Guaranteed to only be called once.
    *
    * @param status The final status of the AM.
    * @param diagnostics Diagnostics message to include in the final status.
    */
-  def shutdown(status: FinalApplicationStatus, diagnostics: String = ""): Unit
+  def unregister(status: FinalApplicationStatus, diagnostics: String = ""): Unit
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId
