@@ -149,8 +149,10 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if (type(other) == np.ndarray and other.ndim > 1) or \
-                (_have_scipy and scipy.sparse.issparse(other)):
+        if type(other) == np.ndarray and other.ndim > 1:
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.toArray(), other)
+        elif _have_scipy and scipy.sparse.issparse(other):
             assert len(self) == other.shape[0], "dimension mismatch"
             return other.transpose().dot(self.toArray())
         else:
