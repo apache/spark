@@ -22,21 +22,25 @@ class RDDFunction(object):
     """
     This class is for py4j callback.
     """
-    def __init__(self, ctx, func, deserializer, deserializer2=None):
+    def __init__(self, ctx, func, *deserializers):
         self.ctx = ctx
         self.func = func
-        self.deserializer = deserializer
-        self.deserializer2 = deserializer2 or deserializer
+        self.deserializers = deserializers
+        emptyRDD = getattr(self.ctx, "_emptyRDD", None)
+        if emptyRDD is None:
+            self.ctx._emptyRDD = emptyRDD = self.ctx.parallelize([]).cache()
+        self.emptyRDD = emptyRDD
 
-    def call(self, jrdd, jrdd2, milliseconds):
+    def call(self, milliseconds, jrdds):
         try:
-            emptyRDD = getattr(self.ctx, "_emptyRDD", None)
-            if emptyRDD is None:
-                self.ctx._emptyRDD = emptyRDD = self.ctx.parallelize([]).cache()
+            # extend deserializers with the first one
+            sers = self.deserializers
+            if len(sers) < len(jrdds):
+                sers += (sers[0],) * (len(jrdds) - len(sers))
 
-            rdd = RDD(jrdd, self.ctx, self.deserializer) if jrdd else emptyRDD
-            other = RDD(jrdd2, self.ctx, self.deserializer2) if jrdd2 else emptyRDD
-            r = self.func(rdd, other, milliseconds)
+            rdds = [RDD(jrdd, self.ctx, ser) if jrdd else self.emptyRDD
+                    for jrdd, ser in zip(jrdds, sers)]
+            r = self.func(milliseconds, *rdds)
             if r:
                 return r._jrdd
         except Exception:
@@ -44,7 +48,7 @@ class RDDFunction(object):
             traceback.print_exc()
 
     def __repr__(self):
-        return "RDDFunction2(%s)" % (str(self.func))
+        return "RDDFunction(%s)" % (str(self.func))
 
     class Java:
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']

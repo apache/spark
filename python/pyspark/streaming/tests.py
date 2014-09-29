@@ -374,6 +374,19 @@ class TestStreamingContext(unittest.TestCase):
         expected = [i * 2 for i in input]
         self.assertEqual(expected, result[:3])
 
+    def test_transform(self):
+        dstream1 = self.ssc.queueStream([[1]])
+        dstream2 = self.ssc.queueStream([[2]])
+        dstream3 = self.ssc.queueStream([[3]])
+
+        def func(rdds):
+            rdd1, rdd2, rdd3 = rdds
+            return rdd2.union(rdd3).union(rdd1)
+
+        dstream = self.ssc.transform([dstream1, dstream2, dstream3], func)
+
+        self.assertEqual([2, 3, 1], dstream.first().collect())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.api.python
 
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.api.java._
-import org.apache.spark.api.java.function.{Function2 => JFunction2}
 import org.apache.spark.api.python._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -29,18 +30,19 @@ import org.apache.spark.streaming.{Interval, Duration, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
 
+
 /**
  * Interface for Python callback function with three arguments
  */
 trait PythonRDDFunction {
-  def call(rdd: JavaRDD[_], rdd2: JavaRDD[_], time: Long): JavaRDD[Array[Byte]]
+  def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
 }
 
-class RDDFunction(pfunc: PythonRDDFunction) extends Serializable {
-
-  def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-      apply(rdd, None, time)
-  }
+/**
+ * Wrapper for PythonRDDFunction
+ */
+class RDDFunction(pfunc: PythonRDDFunction)
+  extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
 
   def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
     if (rdd.isDefined) {
@@ -50,13 +52,24 @@ class RDDFunction(pfunc: PythonRDDFunction) extends Serializable {
     }
   }
 
-  def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    val r = pfunc.call(wrapRDD(rdd), wrapRDD(rdd2), time.milliseconds)
-    if (r != null) {
-      Some(r.rdd)
+  def some(jrdd: JavaRDD[Array[Byte]]): Option[RDD[Array[Byte]]] = {
+    if (jrdd != null) {
+      Some(jrdd.rdd)
     } else {
       None
     }
+  }
+
+  def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
+    some(pfunc.call(time.milliseconds, List(wrapRDD(rdd)).asJava))
+  }
+
+  def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
+    some(pfunc.call(time.milliseconds, List(wrapRDD(rdd), wrapRDD(rdd2)).asJava))
+  }
+
+  def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
+    pfunc.call(time.milliseconds, rdds)
   }
 }
 
@@ -74,8 +87,16 @@ private[spark] object PythonDStream {
 
   // helper function for DStream.foreachRDD(),
   // cannot be `foreachRDD`, it will confusing py4j
-  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pyfunc: PythonRDDFunction): Unit = {
-    jdstream.dstream.foreachRDD((rdd, time) => pyfunc.call(rdd, null, time.milliseconds))
+  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pyfunc: PythonRDDFunction){
+    val func = new RDDFunction(pyfunc)
+    jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
+  }
+
+  // helper function for ssc.transform()
+  def callTransform(ssc: JavaStreamingContext, jdsteams: JList[JavaDStream[_]], pyfunc: PythonRDDFunction)
+    :JavaDStream[Array[Byte]] = {
+    val func = new RDDFunction(pyfunc)
+    ssc.transform(jdsteams, func)
   }
 
   // convert list of RDD into queue of RDDs, for ssc.queueStream()
