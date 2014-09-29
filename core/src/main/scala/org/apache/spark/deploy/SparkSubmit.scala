@@ -179,7 +179,7 @@ object SparkSubmit {
 
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
-      OptionAssigner(args.name.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.app.name"),
       OptionAssigner(args.jars.orNull, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
@@ -204,7 +204,7 @@ object SparkSubmit {
       OptionAssigner(args.archives.orNull, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
 
       // Yarn cluster only
-      OptionAssigner(args.name.orNull, YARN, CLUSTER, clOption = "--name"),
+      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),

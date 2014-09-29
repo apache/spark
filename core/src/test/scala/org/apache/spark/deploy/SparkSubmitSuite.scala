@@ -92,7 +92,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "userjar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.jars.get should include regex (".*one.jar,.*two.jar,.*three.jar")
-    appArgs.name.get should be ("myApp")
+    appArgs.name should be ("myApp")
   }
 
   test("handles arguments to user program") {

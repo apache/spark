@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{InputStreamReader, File, FileInputStream, InputStream}
+import java.io._
 import java.util.jar.JarFile
 import java.util.Properties
 
@@ -38,13 +38,10 @@ import org.apache.spark.util.Utils
  * 1. entries specified on the command line (except from --conf entries)
  * 2. Entries specified on the command line with --conf
  * 3. Environment variables (including legacy variable mappings)
- * 4. System config variables (eg by using -Dspark.var.name)
+ * 4. System config properties (eg by using -Dspark.var.name)
  * 5  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
  * 6. hard coded defaults in class path at spark-submit-defaults.prop
  *
- * A property file specified by one of the means listed above gets read in and the properties are
- * considered to be at the priority of the method that specified the files. A property specified in
- * a property file will not override an existing config value at that same level.
 */
 private[spark] class SparkSubmitArguments(args: Seq[String]) {
   /**
@@ -101,10 +98,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def mainClass = conf.get(SparkAppClass)
   def mainClass_= (value: String):Unit = conf.put(SparkAppClass, value)
 
-  def primaryResource = conf.get(SparkAppPrimaryResource).get
+  def primaryResource = conf(SparkAppPrimaryResource)
   def primaryResource_= (value: String):Unit = conf.put(SparkAppPrimaryResource, value)
 
-  def name = conf.get(SparkAppName)
+  def name = conf(SparkAppName)
   def name_= (value: String):Unit = conf.put(SparkAppName, value)
 
   def jars = conf.get(SparkJars)
@@ -151,8 +148,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
     checkRequiredArguments()
   } catch {
+    // ApplicationExitExceptions should only occur during debugging.
     case e: SparkSubmit.ApplicationExitException =>
-      // We should only get here during test running.
+    // IOException are possible when we are attempting to read property files.
+    case e: IOException => SparkSubmit.printErrorAndExit(e.getLocalizedMessage)
   }
 
   private def deriveConfigurations() = {
@@ -189,18 +188,18 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
        case _ =>
     }
     // Set name from main class if not given.
+    // Todo: test main spark app name alternatives
     name = conf.get(SparkAppName)
       .orElse( conf.get(SparkAppClass))
-      .getOrElse(if (conf.contains(SparkAppPrimaryResource))
-      Utils.stripDirectory(primaryResource)
-      else null)
+      .orElse( conf.get(SparkAppPrimaryResource).map(Utils.stripDirectory(_)) )
+      .orNull
+
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def checkRequiredArguments() = {
     conf.get(SparkPropertiesFile).foreach{ propFilePath =>
-      val propFile = new File(propFilePath)
-      if (!propFile.exists()) {
+      if (!new File(propFilePath).exists()) {
         SparkSubmit.printErrorAndExit(s"--property-file $propFilePath does not exists")
       }
     }
@@ -311,7 +310,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--properties-file") :: value :: tail =>
-        // Process the property file options after we have finished the rest of the command line
+        /*  We merge the property file config options into the rest of the command lines options
+         *  after we have finished the rest of the command line processing as property files
+         *  cannot override explicit command line options .
+         */
         cmdLinePropertyFileValues ++= SparkSubmitArguments.getPropertyValuesFromFile(value)
         parse(tail)
 
@@ -422,19 +424,68 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 }
 
+
 private[spark] object SparkSubmitArguments {
+  /**
+   * Function returns the spark submit default config map (Map[configName->ConfigValue])
+   * from the classpath
+   * Function is over-writable to allow for easier debugging
+   */
+  private[spark] var getDefaultValues: () => Map[String, String] = () => {
+    val hardCodedDefaultConfig = new mutable.HashMap[String, String]
+    val is = Thread.currentThread().getContextClassLoader.getResourceAsStream(ClassPathSparkSubmitDefaults)
+    val isr = new InputStreamReader(is, CharEncoding.UTF_8)
+    try {
+      hardCodedDefaultConfig ++= SparkSubmitArguments.getPropertyValuesFromStream(isr)
+    } finally {
+      // InputStreamReader should also close its contained inputStream
+      isr.close()
+    }
+    hardCodedDefaultConfig
+  }
+
+  /**
+   * System environment variables.
+   * Function is over-writable to allow for easier debugging
+   */
+  private[spark] var genEnvVars: () => Map[String, String] = () => sys.env
+
+  /**
+   * Gets configuration from reading SPARK_CONF_DIR/spark-defaults.conf if it exists
+   * otherwise reads SPARK_HOME/conf/spark-defaults.conf if it exists
+   * otherwise returns an empty config structure
+   * Function is over-writable to allow for easier debugging
+   * @return Map[PropName->PropValue] or empty map if file does not exist
+   * @throws IOException if unable to access a specified spark-defaults.conf file
+   */
+  private[spark] var getSparkDefaultFileConfig: () => Map[String, String] = () => {
+    val baseConfDir: Option[String] = sys.env.get(EnvSparkHome).map(_ + File.separator + DirNameSparkConf)
+    val altConfDir: Option[String] = sys.env.get(EnvAltSparkConfPath)
+    val confDir: Option[String] = altConfDir.orElse(baseConfDir)
+    val confPath =  confDir.map(path => path + File.separator + FileNameSparkDefaultsConf)
+    var retval: Map[String, String] = Map.empty
+    try {
+      retval = confPath.flatMap { path: String =>
+        val file = new File(path)
+        if (file.exists) Some(file) else None
+      }
+        .map(confFile => loadPropFile(confFile))
+        .getOrElse(Map.empty)
+    } catch {
+      // If an IOException occurs, report which file we were trying to open.
+      case e: IOException => throw new IOException("IOException reading spark-defaults.conf file at " +
+        confPath.getOrElse("unknown address"), e)
+    }
+    retval
+  }
+
   /**
    * Resolves Configuration sources in order of highest to lowest
    * 1. Each map passed in as additionalConfig from first to last
    * 2. Environment variables (including legacy variable mappings)
-   * 3. System config variables (eg by using -Dspark.var.name)
+   * 3. System config properties (eg by using -Dspark.var.name)
    * 4  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf
    * 5. hard coded defaults in class path at spark-submit-defaults.prop
-   *
-   * A property file specified by one of the means listed above gets read in and the properties are
-   * considered to be at the priority of the method that specified the files.
-   * A property specified in a property file will not override an existing
-   * config value at that same level.
    *
    * @param additionalConfigs Seq of additional Map[ConfigName->ConfigValue] in order of highest
    *                          priority to lowest this will have priority over internal sources.
@@ -442,105 +493,40 @@ private[spark] object SparkSubmitArguments {
    */
   def mergeSparkProperties(additionalConfigs: Seq [Map[String,String]]) = {
     // Configuration read in from spark-submit-defaults.prop file found on the classpath
-    var hardCodedDefaultConfig: Option[Map[String,String]] = None
+    val hardCodedDefaultConfig: Map[String,String] = getDefaultValues()
 
-
-    var is: InputStream = null
-    var isr: Option[InputStreamReader] = None
-    try {
-      is = Thread.currentThread().getContextClassLoader.getResourceAsStream(ClassPathSparkSubmitDefaults)
-
-      // Only open InputStreamReader if the InputStream was successfully opened.
-      isr = Option(is).map{is: InputStream =>
-        new InputStreamReader(is, CharEncoding.UTF_8)
-      }
-
-      hardCodedDefaultConfig = isr.map( defaultValueStream =>
-        SparkSubmitArguments.getPropertyValuesFromStream(defaultValueStream))
-    } finally {
-      Option(is).foreach(_.close)
-      isr.foreach(_.close)
-    }
-
-    if (hardCodedDefaultConfig.isEmpty || (hardCodedDefaultConfig.get.size == 0)) {
+    if (hardCodedDefaultConfig.size == 0) {
       throw new IllegalStateException(s"Default values not found at classpath $ClassPathSparkSubmitDefaults")
     }
 
     // Read in configuration from the spark defaults conf file if it exists.
-    var sparkDefaultConfig = SparkSubmitArguments.getSparkDefaultFileConfig
+    val sparkDefaultConfig = getSparkDefaultFileConfig()
 
-    // Read in configuration info from the java system properties.
-    val systemPropertyConfig = sys.props
-
-    // Read in Configuration variables from the environment to support legacy variables.
-    val environmentConfig = System.getenv().asScala
-
+    // Map legacy variables to their equivalent full name config variable
     val legacyEnvVars = Seq(
       "MASTER" -> SparkMaster,
       "DEPLOY_MODE" -> SparkDeployMode,
       "SPARK_DRIVER_MEMORY" -> SparkDriverMemory,
       "SPARK_EXECUTOR_MEMORY" -> SparkExecutorMemory)
 
-    // Legacy variables act at the priority of a system property.
-    val propsWithEnvVars = new mutable.HashMap() ++ systemPropertyConfig ++
-      legacyEnvVars.map( {case(varName, propName) => (environmentConfig.get(varName), propName) })
-      .filter( {case(varVariable, _) => varVariable.isDefined && !varVariable.get.isEmpty} )
-      .map{case(varVariable, propName) => (propName, varVariable.get)}
+    var envVarConfig = genEnvVars() ++ legacyEnvVars
+      .filter { case (k, _) => sys.env.contains(k) }
+      .map { case (k, v) => (v, sys.env(k)) }
 
-    val configSources  = additionalConfigs ++ Seq (
-      environmentConfig,
-      propsWithEnvVars,
+    Utils.mergePropertyMaps( additionalConfigs ++ Seq(
+      envVarConfig,
+      sys.props,
       sparkDefaultConfig,
-      hardCodedDefaultConfig.get
-    )
-
-    // Load properties file at priority level of source that specified the property file
-    // loaded property file configs will not override existing configs at the priority
-    // level the property file was specified at
-    val processedConfigSource = configSources
-      .map( configMap => getFileBasedPropertiesIfSpecified(configMap) ++ configMap)
-
-    Utils.mergePropertyMaps(processedConfigSource)
+      hardCodedDefaultConfig
+    ))
   }
 
-  /**
-   * Returns a map of config values from a property file if
-   * the passed configMap has a SparkPropertiesFile defined pointing to a file
-   * @param configMap Map of config values to check for file path from
-   * @return Map of config values if map holds a valid SparkPropertiesFile, Map.Empty otherwise
-   */
-  def getFileBasedPropertiesIfSpecified(configMap: Map[String, String]) = {
-    if (configMap.contains(SparkPropertiesFile)) {
-      SparkSubmitArguments.getPropertyValuesFromFile(configMap.get(SparkPropertiesFile).get)
-    } else {
-      Map.empty
-    }
-  }
-
-  /**
-   * Gets configuration from reading SPARK_CONF_DIR/spark-defaults.conf if it exists
-   * otherwise reads SPARK_HOME/conf/spark-defaults.conf if it exists
-   * otherwise returns an empty config structure
-   * @return Map[PropName->PropValue] or empty map if file does not exist
-   */
-  def getSparkDefaultFileConfig: Map[String, String] = {
-    val baseConfDir: Option[String] = sys.env.get(EnvSparkHome).map(_ + File.separator + DirNameSparkConf)
-    val altConfDir: Option[String] = sys.env.get(EnvAltSparkConfPath)
-    val confDir: Option[String] = altConfDir.orElse(baseConfDir)
-
-    confDir.map(path => path + File.separator + FileNameSparkDefaultsConf)
-      .flatMap{path: String =>
-        val file = new File(path)
-        if (file.exists) Some(file) else None
-      }
-      .map(confFile => loadPropFile(confFile))
-      .getOrElse(Map.empty)
-  }
-    
   /**
    * Parses a property file using the java properties file parser
    * @param filePath Path to property file
-   * @return Map of config values parsed from file, empty map if file does not exist
+   * @return Map of config values parsed from file
+   * @throws FileNotFoundException if file does not exist
+   * @throws IOException if file exists but is not accessible
    */
   def getPropertyValuesFromFile(filePath: String): Map[String, String] = {
     val propFile = new File(filePath)
@@ -551,32 +537,28 @@ private[spark] object SparkSubmitArguments {
    * returns a loaded property file
    * @param propFile File object pointing to properties file
    * @return java properties object
+   * @throws FileNotFoundException if file does not exist
+   * @throws IOException if file exists but is not accessible
    */
   def loadPropFile(propFile: File): Map[String, String] = {
-    var fis: FileInputStream = null
-    var isr: InputStreamReader = null
     var propValues: Map[String, String] = Map.empty
-
+    var isr: InputStreamReader = new InputStreamReader(new FileInputStream(propFile), CharEncoding.UTF_8)
     try {
-      fis = new FileInputStream(propFile)
-      isr = Option(fis).map( fis => new InputStreamReader(fis, CharEncoding.UTF_8)).get
-
       propValues = getPropertyValuesFromStream(isr)
     } finally {
-      Option(isr).foreach( _.close )
-      Option(fis).foreach( _.close )
+      isr.close()
     }
     propValues
   }
 
   /**
    * Loads property object from stream. the passed InputStreamReader is not closed
-   * @param isr Input stream reader to load property file from
+   * @param r Reader to load property file from
    * @return Map[PropName->PropValue]
    */
-  def getPropertyValuesFromStream(isr: InputStreamReader ) = {
+  def getPropertyValuesFromStream(r: Reader ) = {
     val prop = new Properties()
-    prop.load(isr)
+    prop.load(r)
     prop.asInstanceOf[java.util.Map[String, String]]
   }
 }
