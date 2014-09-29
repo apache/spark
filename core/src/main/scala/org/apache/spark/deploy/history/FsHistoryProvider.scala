@@ -38,7 +38,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
 
-  private val logDir = conf.get("spark.history.fs.logDirectory", null)
+  private val logDir =
+    conf.get("spark.history.fs.logDirectory", conf.get("spark.eventLog.dir", null))
   private val resolvedLogDir = Option(logDir)
     .map { d => Utils.resolveURI(d) }
     .getOrElse { throw new IllegalArgumentException("Logging directory must be specified.") }
