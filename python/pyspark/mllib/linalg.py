@@ -97,7 +97,7 @@ def _vector_size(v):
     else:
         raise TypeError("Cannot treat type %s as a vector" % type(v))
 
-        
+
 class Vector(object):
     """
     Abstract class for DenseVector and SparseVector
@@ -150,7 +150,7 @@ class DenseVector(Vector):
         AssertionError: dimension mismatch
         """
         if (type(other) == np.ndarray and other.ndim > 1) or \
-            (_have_scipy and scipy.sparse.issparse(other)):
+                (_have_scipy and scipy.sparse.issparse(other)):
             assert len(self) == other.shape[0], "dimension mismatch"
             return other.transpose().dot(self.toArray())
         else:
@@ -306,7 +306,7 @@ class SparseVector(Vector):
                 raise ValueError("Cannot call dot with %d-dimentaional array" % other.ndim)
 
         assert len(self) == _vector_size(other), "dimension mismatch"
-                        
+
         if type(other) in (np.ndarray, array.array, DenseVector):
             result = 0.0
             for i in xrange(len(self.indices)):
