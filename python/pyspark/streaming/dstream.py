@@ -286,7 +286,7 @@ class DStream(object):
         Save this DStream as a text file, using string representations of elements.
         """
 
-        def saveAsTextFile(rdd, time):
+        def saveAsTextFile(time, rdd):
             """
             Closure to save element in RDD in DStream as Pickled data in file.
             This closure is called by py4j callback server.
@@ -303,7 +303,7 @@ class DStream(object):
         is 10.
         """
 
-        def saveAsPickleFile(rdd, time):
+        def saveAsPickleFile(time, rdd):
             """
             Closure to save element in RDD in the DStream as Pickled data in file.
             This closure is called by py4j callback server.
@@ -388,7 +388,7 @@ class DStream(object):
         Hash partitioning is used to generate the RDDs with `numPartitions`
          partitions.
         """
-        return self.transformWith(lambda a, b: a.leftOuterJion(b, numPartitions), other)
+        return self.transformWith(lambda a, b: a.leftOuterJoin(b, numPartitions), other)
 
     def rightOuterJoin(self, other, numPartitions=None):
         """
@@ -502,7 +502,7 @@ class DStream(object):
         @param numPartitions  number of partitions of each RDD in the new DStream.
         """
         keyed = self.map(lambda x: (x, 1))
-        counted = keyed.reduceByKeyAndWindow(lambda a, b: a + b, lambda a, b: a - b,
+        counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
                                              windowDuration, slideDuration, numPartitions)
         return counted.filter(lambda (k, v): v > 0).count()
 

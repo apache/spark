@@ -93,7 +93,8 @@ private[spark] object PythonDStream {
   }
 
   // helper function for ssc.transform()
-  def callTransform(ssc: JavaStreamingContext, jdsteams: JList[JavaDStream[_]], pyfunc: PythonRDDFunction)
+  def callTransform(ssc: JavaStreamingContext, jdsteams: JList[JavaDStream[_]],
+                    pyfunc: PythonRDDFunction)
     :JavaDStream[Array[Byte]] = {
     val func = new RDDFunction(pyfunc)
     ssc.transform(jdsteams, func)
@@ -210,9 +211,9 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     val currentTime = validTime
-    val currentWindow = new Interval(currentTime - windowDuration + parent.slideDuration,
+    val current = new Interval(currentTime - windowDuration,
       currentTime)
-    val previousWindow = currentWindow - slideDuration
+    val previous = current - slideDuration
 
     //  _____________________________
     // |  previous window   _________|___________________
@@ -225,35 +226,30 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
     //       old RDDs                     new RDDs
     //
 
-    // Get the RDD of the reduced value of the previous window
-    val previousWindowRDD = getOrCompute(previousWindow.endTime)
+    val previousRDD = getOrCompute(previous.endTime)
 
-    if (pinvReduceFunc != null && previousWindowRDD.isDefined
+    if (pinvReduceFunc != null && previousRDD.isDefined
         // for small window, reduce once will be better than twice
-        && windowDuration > slideDuration * 5) {
+        && windowDuration >= slideDuration * 5) {
 
       // subtract the values from old RDDs
-      val oldRDDs =
-        parent.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideDuration)
-      val subbed = if (oldRDDs.size > 0) {
-        invReduceFunc(previousWindowRDD, Some(ssc.sc.union(oldRDDs)), validTime)
+      val oldRDDs = parent.slice(previous.beginTime + parent.slideDuration, current.beginTime)
+      val subtracted = if (oldRDDs.size > 0) {
+        invReduceFunc(previousRDD, Some(ssc.sc.union(oldRDDs)), validTime)
       } else {
-        previousWindowRDD
+        previousRDD
       }
 
       // add the RDDs of the reduced values in "new time steps"
-      val newRDDs =
-        parent.slice(previousWindow.endTime, currentWindow.endTime - parent.slideDuration)
-
+      val newRDDs = parent.slice(previous.endTime + parent.slideDuration, current.endTime)
       if (newRDDs.size > 0) {
-        reduceFunc(subbed, Some(ssc.sc.union(newRDDs)), validTime)
+        reduceFunc(subtracted, Some(ssc.sc.union(newRDDs)), validTime)
       } else {
-        subbed
+        subtracted
       }
     } else {
       // Get the RDDs of the reduced values in current window
-      val currentRDDs =
-        parent.slice(currentWindow.beginTime, currentWindow.endTime - parent.slideDuration)
+      val currentRDDs = parent.slice(current.beginTime + parent.slideDuration, current.endTime)
       if (currentRDDs.size > 0) {
         reduceFunc(None, Some(ssc.sc.union(currentRDDs)), validTime)
       } else {

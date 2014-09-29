@@ -15,17 +15,12 @@
 # limitations under the License.
 #
 
-"""
-Unit tests for Python SparkStreaming; additional tests are implemented as doctests in
-individual modules.
-
-Callback server is sometimes unstable sometimes, which cause error in test case.
-But this is very rare case.
-"""
+import os
 from itertools import chain
 import time
 import operator
 import unittest
+import tempfile
 
 from pyspark.context import SparkContext
 from pyspark.streaming.context import StreamingContext
@@ -45,16 +40,20 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def tearDown(self):
         self.ssc.stop()
 
-    def _test_func(self, input, func, expected, sort=False):
+    def _test_func(self, input, func, expected, sort=False, input2=None):
         """
         @param input: dataset for the test. This should be list of lists.
         @param func: wrapped function. This function should return PythonDStream object.
         @param expected: expected output for this testcase.
         """
-        # Generate input stream with user-defined input.
         input_stream = self.ssc.queueStream(input)
+        input_stream2 = self.ssc.queueStream(input2) if input2 is not None else None
         # Apply test function to stream.
-        stream = func(input_stream)
+        if input2:
+            stream = func(input_stream, input_stream2)
+        else:
+            stream = func(input_stream)
+
         result = stream.collect()
         self.ssc.start()
 
@@ -92,7 +91,7 @@ class TestBasicOperations(PySparkStreamingTestCase):
     def test_first(self):
         input = [range(10)]
         dstream = self.ssc.queueStream(input)
-        self.assertEqual(0, dstream)
+        self.assertEqual(0, dstream.first())
 
     def test_map(self):
         """Basic operation test for DStream.map."""
@@ -238,53 +237,120 @@ class TestBasicOperations(PySparkStreamingTestCase):
                     [("a", "11"), ("b", "1"), ("", "111")]]
         self._test_func(input, func, expected, sort=True)
 
+    def test_repartition(self):
+        input = [range(1, 5), range(5, 9)]
+        rdds = [self.sc.parallelize(r, 2) for r in input]
+
+        def func(dstream):
+            return dstream.repartitions(1).glom()
+        expected = [[[1, 2, 3, 4]], [[5, 6, 7, 8]]]
+        self._test_func(rdds, func, expected)
+
     def test_union(self):
-        input1 = [range(3), range(5), range(1), range(6)]
-        input2 = [range(3, 6), range(5, 6), range(1, 6)]
+        input1 = [range(3), range(5), range(6)]
+        input2 = [range(3, 6), range(5, 6)]
 
-        d1 = self.ssc.queueStream(input1)
-        d2 = self.ssc.queueStream(input2)
-        d = d1.union(d2)
-        result = d.collect()
-        expected = [range(6), range(6), range(6), range(6)]
+        def func(d1, d2):
+            return d1.union(d2)
 
-        self.ssc.start()
-        start_time = time.time()
-        # Loop until get the expected the number of the result from the stream.
-        while True:
-            current_time = time.time()
-            # Check time out.
-            if (current_time - start_time) > self.timeout * 2:
-                break
-            # StreamingContext.awaitTermination is not used to wait because
-            # if py4j server is called every 50 milliseconds, it gets an error.
-            time.sleep(0.05)
-            # Check if the output is the same length of expected output.
-            if len(expected) == len(result):
-                break
-        self.assertEqual(expected, result)
+        expected = [range(6), range(6), range(6)]
+        self._test_func(input1, func, expected, input2=input2)
+
+    def test_cogroup(self):
+        input = [[(1, 1), (2, 1), (3, 1)],
+                 [(1, 1), (1, 1), (1, 1), (2, 1)],
+                 [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 1)]]
+        input2 = [[(1, 2)],
+                  [(4, 1)],
+                  [("a", 1), ("a", 1), ("b", 1), ("", 1), ("", 2)]]
+
+        def func(d1, d2):
+            return d1.cogroup(d2).mapValues(lambda vs: tuple(map(list, vs)))
+
+        expected = [[(1, ([1], [2])), (2, ([1], [])), (3, ([1], []))],
+                    [(1, ([1, 1, 1], [])), (2, ([1], [])), (4, ([], [1]))],
+                    [("a", ([1, 1], [1, 1])), ("b", ([1], [1])), ("", ([1, 1], [1, 2]))]]
+        self._test_func(input, func, expected, sort=True, input2=input2)
+
+    def test_join(self):
+        input = [[('a', 1), ('b', 2)]]
+        input2 = [[('b', 3), ('c', 4)]]
+
+        def func(a, b):
+            return a.join(b)
+
+        expected = [[('b', (2, 3))]]
+        self._test_func(input, func, expected, True, input2)
+
+    def test_left_outer_join(self):
+        input = [[('a', 1), ('b', 2)]]
+        input2 = [[('b', 3), ('c', 4)]]
+
+        def func(a, b):
+            return a.leftOuterJoin(b)
+
+        expected = [[('a', (1, None)), ('b', (2, 3))]]
+        self._test_func(input, func, expected, True, input2)
+
+    def test_right_outer_join(self):
+        input = [[('a', 1), ('b', 2)]]
+        input2 = [[('b', 3), ('c', 4)]]
+
+        def func(a, b):
+            return a.rightOuterJoin(b)
+
+        expected = [[('b', (2, 3)), ('c', (None, 4))]]
+        self._test_func(input, func, expected, True, input2)
+
+    def test_full_outer_join(self):
+        input = [[('a', 1), ('b', 2)]]
+        input2 = [[('b', 3), ('c', 4)]]
+
+        def func(a, b):
+            return a.fullOuterJoin(b)
+
+        expected = [[('a', (1, None)), ('b', (2, 3)), ('c', (None, 4))]]
+        self._test_func(input, func, expected, True, input2)
 
 
 class TestWindowFunctions(PySparkStreamingTestCase):
 
-    timeout = 15
+    timeout = 20
 
-    def test_count_by_window(self):
-        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+    def test_window(self):
+        input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.countByWindow(4, 1)
+            return dstream.window(3, 1).count()
 
-        expected = [[1], [3], [6], [9], [12], [15], [11], [6]]
+        expected = [[1], [3], [6], [9], [12], [9], [5]]
+        self._test_func(input, func, expected)
+
+    def test_count_by_window(self):
+        input = [range(1), range(2), range(3), range(4), range(5)]
+
+        def func(dstream):
+            return dstream.countByWindow(3, 1)
+
+        expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
 
     def test_count_by_window_large(self):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByWindow(6, 1)
+            return dstream.countByWindow(5, 1)
 
         expected = [[1], [3], [6], [10], [15], [20], [18], [15], [11], [6]]
+        self._test_func(input, func, expected)
+
+    def test_count_by_value_and_window(self):
+        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+
+        def func(dstream):
+            return dstream.countByValueAndWindow(6, 1)
+
+        expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):
@@ -358,6 +424,20 @@ class TestStreamingContext(unittest.TestCase):
         self.ssc.start()
         time.sleep(1)
         self.assertEqual(input, result[:3])
+
+    # TODO: test textFileStream
+    # def test_textFileStream(self):
+    #     input = [range(i) for i in range(3)]
+    #     dstream = self.ssc.queueStream(input)
+    #     d = os.path.join(tempfile.gettempdir(), str(id(self)))
+    #     if not os.path.exists(d):
+    #         os.makedirs(d)
+    #     dstream.saveAsTextFiles(os.path.join(d, 'test'))
+    #     dstream2 = self.ssc.textFileStream(d)
+    #     result = dstream2.collect()
+    #     self.ssc.start()
+    #     time.sleep(2)
+    #     self.assertEqual(input, result[:3])
 
     def test_union(self):
         input = [range(i) for i in range(3)]
