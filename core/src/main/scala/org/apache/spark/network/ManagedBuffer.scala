@@ -27,7 +27,7 @@ import scala.util.Try
 import com.google.common.io.ByteStreams
 import io.netty.buffer.{ByteBufInputStream, ByteBuf}
 
-import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
 
 
 /**
@@ -83,7 +83,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
         }
     } finally {
       if (channel != null) {
-        channel.close()
+        Utils.tryLog(channel.close())
       }
     }
   }
@@ -97,7 +97,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     } catch {
       case e: IOException =>
         if (is != null) {
-          is.close()
+          Utils.tryLog(is.close())
         }
         Try(file.length).toOption match {
           case Some(fileLen) =>
@@ -107,7 +107,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
         }
       case e: Throwable =>
         if (is != null) {
-          is.close()
+          Utils.tryLog(is.close())
         }
         throw e
     }
