@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * 3. Environment variables (including legacy variable mappings)
  * 4. System config properties (eg by using -Dspark.var.name)
  * 5  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
- * 6. hard coded defaults in class path at spark-submit-defaults.prop
+ * 6. hard coded defaults
  *
 */
 private[spark] class SparkSubmitArguments(args: Seq[String]) {
@@ -427,21 +427,28 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
 private[spark] object SparkSubmitArguments {
   /**
+   * Default property values - string literals are defined in ConfigConstants.scala
+   */
+  val DEFAULTS = Map(
+    SparkMaster -> "local[*]",
+    SparkVerbose -> "false",
+    SparkDeployMode -> "client",
+    SparkExecutorMemory -> "1G",
+    SparkExecutorCores -> "1" ,
+    SparkExecutorInstances -> "2",
+    SparkDriverMemory -> "512M",
+    SparkDriverCores -> "1",
+    SparkDriverSupervise -> "false",
+    SparkYarnQueue -> "default",
+    SparkExecutorInstances -> "2"
+  )
+
+  /**
    * Function returns the spark submit default config map (Map[configName->ConfigValue])
-   * from the classpath
    * Function is over-writable to allow for easier debugging
    */
   private[spark] var getDefaultValues: () => Map[String, String] = () => {
-    val hardCodedDefaultConfig = new mutable.HashMap[String, String]
-    val is = Thread.currentThread().getContextClassLoader.getResourceAsStream(ClassPathSparkSubmitDefaults)
-    val isr = new InputStreamReader(is, CharEncoding.UTF_8)
-    try {
-      hardCodedDefaultConfig ++= SparkSubmitArguments.getPropertyValuesFromStream(isr)
-    } finally {
-      // InputStreamReader should also close its contained inputStream
-      isr.close()
-    }
-    hardCodedDefaultConfig
+    DEFAULTS
   }
 
   /**
@@ -485,19 +492,14 @@ private[spark] object SparkSubmitArguments {
    * 2. Environment variables (including legacy variable mappings)
    * 3. System config properties (eg by using -Dspark.var.name)
    * 4  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf
-   * 5. hard coded defaults in class path at spark-submit-defaults.prop
+   * 5. hard coded defaults
    *
    * @param additionalConfigs Seq of additional Map[ConfigName->ConfigValue] in order of highest
    *                          priority to lowest this will have priority over internal sources.
    * @return Map[propName->propFile] containing values merged from all sources in order of priority.
    */
   def mergeSparkProperties(additionalConfigs: Seq [Map[String,String]]) = {
-    // Configuration read in from spark-submit-defaults.prop file found on the classpath
     val hardCodedDefaultConfig: Map[String,String] = getDefaultValues()
-
-    if (hardCodedDefaultConfig.size == 0) {
-      throw new IllegalStateException(s"Default values not found at classpath $ClassPathSparkSubmitDefaults")
-    }
 
     // Read in configuration from the spark defaults conf file if it exists.
     val sparkDefaultConfig = getSparkDefaultFileConfig()

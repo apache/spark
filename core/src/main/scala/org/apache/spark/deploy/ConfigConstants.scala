@@ -160,10 +160,4 @@ private[spark] object ConfigConstants {
    * will be used
    */
   val FileNameSparkDefaultsConf: String = "spark-defaults.conf"
-
-  /**
-   * Name of the spark submit defaults resource
-   */
-  val ClassPathSparkSubmitDefaults: String = """org/apache/spark/deploy/spark-submit-defaults.prop"""
-
 }
