@@ -59,8 +59,16 @@ object RDDRelation {
     // Write out an RDD as a parquet file.
     rdd.saveAsParquetFile("pair.parquet")
 
+    // Write out an RDD as a orc file.
+    rdd.saveAsOrcFile("pair.orc")
+
+
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
     val parquetFile = sqlContext.parquetFile("pair.parquet")
+
+    // Read in orc file.  orc files are self-describing so the schmema is preserved.
+    val orcFile = sqlContext.orcFile("pair.orc")
+
 
     // Queries can be run using the DSL on parequet files just like the original RDD.
     parquetFile.where('key === 1).select('value as 'a).collect().foreach(println)
@@ -68,5 +76,8 @@ object RDDRelation {
     // These files can also be registered as tables.
     parquetFile.registerTempTable("parquetFile")
     sql("SELECT * FROM parquetFile").collect().foreach(println)
+
+    orcFile.registerTempTable("orcFile")
+    sql("SELECT * FROM orcFile").collect().foreach(println)
   }
 }
