@@ -113,8 +113,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
             if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-              cleanupStagingDir()
               unregister(finalStatus, finalMsg)
+              cleanupStagingDir()
             }
           }
         }
