@@ -174,18 +174,19 @@ class DStream(object):
         """
         Return the first `n` RDDs in the stream (will start and stop).
         """
-        rdds = []
+        results = []
 
         def take(_, rdd):
-            if rdd and len(rdds) < n:
-                rdds.append(rdd)
+            if rdd and len(results) < n:
+                results.extend(rdd.take(n - len(results)))
+
         self.foreachRDD(take)
 
         self._ssc.start()
-        while len(rdds) < n:
+        while len(results) < n:
             time.sleep(0.01)
         self._ssc.stop(False, True)
-        return rdds
+        return results
 
     def collect(self):
         """
