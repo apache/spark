@@ -732,7 +732,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 <div data-lang="scala"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
+adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a HiveContext.  When not configured by the
 hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
 directory.
@@ -753,7 +753,7 @@ sqlContext.sql("FROM src SELECT key, value").collect().foreach(println)
 <div data-lang="java"  markdown="1">
 
 When working with Hive one must construct a `JavaHiveContext`, which inherits from `JavaSQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `JavaHiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
@@ -774,7 +774,7 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 <div data-lang="python"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `HiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
