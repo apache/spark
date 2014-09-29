@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -380,7 +383,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.exists(_ == "== Physical Plan ==")
+    explanation.contains("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -568,6 +571,91 @@ class HiveQuerySuite extends HiveComparisonTest {
   case class LogEntry(filename: String, message: String)
   case class LogFile(name: String)
 
+  createQueryTest("dynamic_partition",
+    """
+      |DROP TABLE IF EXISTS dynamic_part_table;
+      |CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT);
+      |
+      |SET hive.exec.dynamic.partition.mode=nonstrict;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, 1, 1 FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, NULL, 1 FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, 1, NULL FROM src WHERE key=150;
+      |
+      |INSERT INTO TABLe dynamic_part_table PARTITION(partcol1, partcol2)
+      |SELECT 1, NULL, NULL FROM src WHERE key=150;
+      |
+      |DROP TABLE IF EXISTS dynamic_part_table;
+    """.stripMargin)
+
+  test("Dynamic partition folder layout") {
+    sql("DROP TABLE IF EXISTS dynamic_part_table")
+    sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+
+    val data = Map(
+      Seq("1", "1") -> 1,
+      Seq("1", "NULL") -> 2,
+      Seq("NULL", "1") -> 3,
+      Seq("NULL", "NULL") -> 4)
+
+    data.foreach { case (parts, value) =>
+      sql(
+        s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
+           |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
+         """.stripMargin)
+
+      val partFolder = Seq("partcol1", "partcol2")
+        .zip(parts)
+        .map { case (k, v) =>
+          if (v == "NULL") {
+            s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultVal}"
+          } else {
+            s"$k=$v"
+          }
+        }
+        .mkString("/")
+
+      // Loads partition data to a temporary table to verify contents
+      val path = s"$warehousePath/dynamic_part_table/$partFolder/part-00000"
+
+      sql("DROP TABLE IF EXISTS dp_verify")
+      sql("CREATE TABLE dp_verify(intcol INT)")
+      sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
+
+      assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+    }
+  }
+
+  test("Partition spec validation") {
+    sql("DROP TABLE IF EXISTS dp_test")
+    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
+    sql("SET hive.exec.dynamic.partition.mode=strict")
+
+    // Should throw when using strict dynamic partition mode without any static partition
+    intercept[SparkException] {
+      sql(
+        """INSERT INTO TABLE dp_test PARTITION(dp)
+          |SELECT key, value, key % 5 FROM src
+        """.stripMargin)
+    }
+
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+
+    // Should throw when a static partition appears after a dynamic partition
+    intercept[SparkException] {
+      sql(
+        """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+          |SELECT key, value, key % 5 FROM src
+        """.stripMargin)
+    }
+  }
+
   test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
     sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
     sparkContext.makeRDD(Seq.empty[LogFile]).registerTempTable("logFiles")
@@ -625,27 +713,27 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(sql("SET").collect().size == 0)
 
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey=$testVal"))
+      collectResults(sql(s"SET $testKey=$testVal"))
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql("SET"))
+      collectResults(sql("SET"))
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(hql("SET"))
+      collectResults(sql("SET"))
     }
 
     // "set key"
     assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey"))
+      collectResults(sql(s"SET $testKey"))
     }
 
     assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(hql(s"SET $nonexistentKey"))
+      collectResults(sql(s"SET $nonexistentKey"))
     }
 
     // Assert that sql() should have the same effects as sql() by repeating the above using sql().
