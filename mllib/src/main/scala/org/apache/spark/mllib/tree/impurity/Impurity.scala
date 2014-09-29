@@ -78,7 +78,7 @@ private[tree] abstract class ImpurityAggregator(val statsSize: Int) extends Seri
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double): Unit
+  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit
 
   /**
    * Get an [[ImpurityCalculator]] for a (node, feature, bin).
