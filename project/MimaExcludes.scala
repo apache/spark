@@ -44,6 +44,13 @@ object MimaExcludes {
             // Ignore SparkContext.createTaskScheduler because it's a private method.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+          ) ++
+          Seq(
+            // Added normL1 and normL2 to trait MultivariateStatisticalSummary
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2")
           )
 
         case v if v.startsWith("1.1") =>
