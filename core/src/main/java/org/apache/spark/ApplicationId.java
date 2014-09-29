@@ -37,7 +37,7 @@ public class ApplicationId implements Serializable {
     } else if (other == this) {
       return true;
     } else {
-      return appId.equals(other);
+      return appId.equals(((ApplicationId)other).appId);
     }
   }
 
