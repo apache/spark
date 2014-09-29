@@ -24,10 +24,8 @@ import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollServerSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
-import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.channel.{ChannelInitializer, ChannelFuture, ChannelOption}
 
 import org.apache.spark.Logging
@@ -60,24 +58,18 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager)
 
     // Use only one thread to accept connections, and 2 * num_cores for worker.
     def initNio(): Unit = {
-      val bossGroup = new NioEventLoopGroup(0, threadFactory)
+      val bossGroup = new NioEventLoopGroup(conf.serverThreads, threadFactory)
       val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[NioServerSocketChannel])
     }
-    def initOio(): Unit = {
-      val bossGroup = new OioEventLoopGroup(0, threadFactory)
-      val workerGroup = bossGroup
-      bootstrap.group(bossGroup, workerGroup).channel(classOf[OioServerSocketChannel])
-    }
     def initEpoll(): Unit = {
-      val bossGroup = new EpollEventLoopGroup(0, threadFactory)
+      val bossGroup = new EpollEventLoopGroup(conf.serverThreads, threadFactory)
       val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[EpollServerSocketChannel])
     }
 
     conf.ioMode match {
       case "nio" => initNio()
-      case "oio" => initOio()
       case "epoll" => initEpoll()
       case "auto" => if (Epoll.isAvailable) initEpoll() else initNio()
     }
