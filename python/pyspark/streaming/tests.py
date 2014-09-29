@@ -29,7 +29,6 @@ import unittest
 
 from pyspark.context import SparkContext
 from pyspark.streaming.context import StreamingContext
-from pyspark.streaming.duration import Seconds
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -45,11 +44,6 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.ssc.stop()
-
-    @classmethod
-    def tearDownClass(cls):
-        # Make sure tp shutdown the callback server
-        SparkContext._gateway._shutdown_callback_server()
 
     def _test_func(self, input, func, expected, sort=False):
         """

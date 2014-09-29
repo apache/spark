@@ -526,3 +526,8 @@ def write_int(value, stream):
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

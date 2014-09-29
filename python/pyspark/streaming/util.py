@@ -64,3 +64,8 @@ def rddToFileName(prefix, suffix, time):
         return prefix + "-" + str(time)
     else:
         return prefix + "-" + str(time) + "." + suffix
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

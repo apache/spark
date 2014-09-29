@@ -87,11 +87,7 @@ export PYSPARK_SUBMIT_ARGS
 if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR
   unset HADOOP_CONF_DIR
-  if [[ -n "$PYSPARK_DOC_TEST" ]]; then
-    exec "$PYSPARK_PYTHON" -m doctest $1
-  else
-    exec "$PYSPARK_PYTHON" $1
-  fi
+  exec "$PYSPARK_PYTHON" $1
   exit
 fi
 

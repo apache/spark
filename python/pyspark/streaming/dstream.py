@@ -410,7 +410,7 @@ class DStream(object):
         return self.transformWith(lambda a, b: a.fullOuterJoin(b, numPartitions), other)
 
     def _jtime(self, timestamp):
-        """ convert datetime or unix_timestamp into Time
+        """ Convert datetime or unix_timestamp into Time
         """
         if isinstance(timestamp, datetime):
             timestamp = time.mktime(timestamp.timetuple())
