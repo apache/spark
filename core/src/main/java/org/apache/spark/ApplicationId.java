@@ -15,11 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark;
 
 /**
  * This class represents unique application id for identifying each application
  */
-private[spark] case class ApplicationId(appId: String) {
-  override def toString = appId
+public class ApplicationId {
+
+  private String appId;
+
+  public ApplicationId(String appId) {
+    this.appId = appId;
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (!(other instanceof ApplicationId)) {
+      return false;
+    } else if (other == this) {
+      return true;
+    } else {
+      return appId.equals(other);
+    }
+  }
+
+  @Override
+  public int hashCode() {
+    return appId.hashCode();
+  }
+
+  @Override
+  public String toString() {
+    return appId;
+  }
 }

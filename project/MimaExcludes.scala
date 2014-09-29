@@ -39,7 +39,12 @@ object MimaExcludes {
             MimaBuild.excludeSparkPackage("graphx")
           ) ++
           MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
-          MimaBuild.excludeSparkClass("mllib.linalg.Vector")
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
+          Seq(
+            // Ignore SparkContext.createTaskScheduler because it's a private method.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+          )
 
         case v if v.startsWith("1.1") =>
           Seq(
