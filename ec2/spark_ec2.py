@@ -217,8 +217,15 @@ def is_active(instance):
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
     spark_shark_map = {
-        "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0", "1.0.1": "1.0.1", "1.0.2": "1.0.2", "1.1.0": "1.1.0"
+        "0.7.3": "0.7.1",
+        "0.8.0": "0.8.0",
+        "0.8.1": "0.8.1",
+        "0.9.0": "0.9.0",
+        "0.9.1": "0.9.1",
+        "1.0.0": "1.0.0",
+        "1.0.1": "1.0.1",
+        "1.0.2": "1.0.2",
+        "1.1.0": "1.1.0",
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
@@ -227,49 +234,49 @@ def get_spark_shark_version(opts):
     return (version, spark_shark_map[version])
 
 
-# Attempt to resolve an appropriate AMI given the architecture and
-# region of the request.
-# Information regarding Amazon Linux AMI instance type was update on 2014-6-20:
-# http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
+# Attempt to resolve an appropriate AMI given the architecture and region of the request.
+# Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
+# Last Updated: 2014-06-20
+# For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 def get_spark_ami(opts):
     instance_types = {
-        "m1.small":    "pvm",
-        "m1.medium":   "pvm",
-        "m1.large":    "pvm",
-        "m1.xlarge":   "pvm",
-        "t1.micro":    "pvm",
         "c1.medium":   "pvm",
         "c1.xlarge":   "pvm",
-        "m2.xlarge":   "pvm",
-        "m2.2xlarge":  "pvm",
-        "m2.4xlarge":  "pvm",
-        "cc1.4xlarge": "hvm",
-        "cc2.8xlarge": "hvm",
-        "cg1.4xlarge": "hvm",
-        "hs1.8xlarge": "pvm",
-        "hi1.4xlarge": "pvm",
-        "m3.medium":   "hvm",
-        "m3.large":    "hvm",
-        "m3.xlarge":   "hvm",
-        "m3.2xlarge":  "hvm",
-        "cr1.8xlarge": "hvm",
-        "i2.xlarge":   "hvm",
-        "i2.2xlarge":  "hvm",
-        "i2.4xlarge":  "hvm",
-        "i2.8xlarge":  "hvm",
-        "c3.large":    "pvm",
-        "c3.xlarge":   "pvm",
         "c3.2xlarge":  "pvm",
         "c3.4xlarge":  "pvm",
         "c3.8xlarge":  "pvm",
-        "r3.large":    "hvm",
-        "r3.xlarge":   "hvm",
+        "c3.large":    "pvm",
+        "c3.xlarge":   "pvm",
+        "cc1.4xlarge": "hvm",
+        "cc2.8xlarge": "hvm",
+        "cg1.4xlarge": "hvm",
+        "cr1.8xlarge": "hvm",
+        "hi1.4xlarge": "pvm",
+        "hs1.8xlarge": "pvm",
+        "i2.2xlarge":  "hvm",
+        "i2.4xlarge":  "hvm",
+        "i2.8xlarge":  "hvm",
+        "i2.xlarge":   "hvm",
+        "m1.large":    "pvm",
+        "m1.medium":   "pvm",
+        "m1.small":    "pvm",
+        "m1.xlarge":   "pvm",
+        "m2.2xlarge":  "pvm",
+        "m2.4xlarge":  "pvm",
+        "m2.xlarge":   "pvm",
+        "m3.2xlarge":  "hvm",
+        "m3.large":    "hvm",
+        "m3.medium":   "hvm",
+        "m3.xlarge":   "hvm",
         "r3.2xlarge":  "hvm",
         "r3.4xlarge":  "hvm",
         "r3.8xlarge":  "hvm",
+        "r3.large":    "hvm",
+        "r3.xlarge":   "hvm",
+        "t1.micro":    "pvm",
+        "t2.medium":   "hvm",
         "t2.micro":    "hvm",
         "t2.small":    "hvm",
-        "t2.medium":   "hvm"
     }
     if opts.instance_type in instance_types:
         instance_type = instance_types[opts.instance_type]
@@ -624,8 +631,8 @@ def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
 
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
-    # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Updated 2014-6-20
+    # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
+    # Last Updated: 2014-06-20
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
