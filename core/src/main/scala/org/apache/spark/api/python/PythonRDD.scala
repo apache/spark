@@ -775,17 +775,36 @@ private[spark] object PythonRDD extends Logging {
     }.toJavaRDD()
   }
 
+  private class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
+    private val pickle = new Pickler()
+    private var batch = 1
+    private val buffer = new mutable.ArrayBuffer[Any]
+
+    override def hasNext(): Boolean = iter.hasNext
+
+    override def next(): Array[Byte] = {
+      while (iter.hasNext && buffer.length < batch) {
+        buffer += iter.next()
+      }
+      val bytes = pickle.dumps(buffer.toArray)
+      val size = bytes.length
+      // let  1M < size < 10M
+      if (size < 1024 * 1024) {
+        batch *= 2
+      } else if (size > 1024 * 1024 * 10 && batch > 1) {
+        batch /= 2
+      }
+      buffer.clear()
+      bytes
+    }
+  }
+
   /**
    * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.
    */
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
-    jRDD.rdd.mapPartitions { iter =>
-      val pickle = new Pickler
-      iter.map { row =>
-        pickle.dumps(row)
-      }
-    }
+    jRDD.rdd.mapPartitions { iter => new AutoBatchedPickler(iter) }
   }
 
   /**

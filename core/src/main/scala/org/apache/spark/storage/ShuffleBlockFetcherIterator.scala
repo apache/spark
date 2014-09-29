@@ -162,8 +162,7 @@ final class ShuffleBlockFetcherIterator(
           logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
           results.put(new FetchResult(BlockId(blockId), -1, null))
         }
-      }
-    )
+      })
   }
 
   private[this] def splitLocalRemoteBlocks(): ArrayBuffer[FetchRequest] = {

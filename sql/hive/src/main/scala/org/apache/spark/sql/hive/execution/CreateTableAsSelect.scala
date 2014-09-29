@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LowerCaseSchema
 import org.apache.spark.sql.execution.{SparkPlan, Command, LeafNode}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
@@ -52,8 +51,7 @@ case class CreateTableAsSelect(
     sc.catalog.createTable(database, tableName, query.output, false)
     // Get the Metastore Relation
     sc.catalog.lookupRelation(Some(database), tableName, None) match {
-      case LowerCaseSchema(r: MetastoreRelation) => r
-      case o: MetastoreRelation => o
+      case r: MetastoreRelation => r
     }
   }
 

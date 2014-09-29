@@ -154,6 +154,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {

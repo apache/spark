@@ -501,7 +501,7 @@ private[nio] class ConnectionManager(
 
   def changeConnectionKeyInterest(connection: Connection, ops: Int) {
     keyInterestChangeRequests += ((connection.key, ops))
-    // so that registerations happen !
+    // so that registrations happen !
     wakeupSelector()
   }
 
@@ -832,7 +832,7 @@ private[nio] class ConnectionManager(
   }
 
   /**
-   * Send a message and block until an acknowldgment is received or an error occurs.
+   * Send a message and block until an acknowledgment is received or an error occurs.
    * @param connectionManagerId the message's destination
    * @param message the message being sent
    * @return a Future that either returns the acknowledgment message or captures an exception.

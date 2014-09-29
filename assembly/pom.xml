@@ -141,7 +141,9 @@
                     <include>com.google.common.**</include>
                   </includes>
                   <excludes>
-                    <exclude>com.google.common.base.Optional**</exclude>
+                    <exclude>com/google/common/base/Absent*</exclude>
+                    <exclude>com/google/common/base/Optional*</exclude>
+                    <exclude>com/google/common/base/Present*</exclude>
                   </excludes>
                 </relocation>
               </relocations>

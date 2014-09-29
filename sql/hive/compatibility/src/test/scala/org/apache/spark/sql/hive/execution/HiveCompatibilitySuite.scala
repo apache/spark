@@ -801,6 +801,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_or",
     "udf_parse_url",
     "udf_PI",
+    "udf_pmod",
     "udf_positive",
     "udf_pow",
     "udf_power",

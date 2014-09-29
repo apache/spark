@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.lang.{Boolean => JBoolean}
+import java.io.File
 import java.util.{Collections, Set => JSet}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -29,14 +30,12 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.StringInterner
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -100,30 +99,26 @@ object YarnSparkHadoopUtil {
   private val hostToRack = new ConcurrentHashMap[String, String]()
   private val rackToHostSet = new ConcurrentHashMap[String, JSet[String]]()
 
-  def addToEnvironment(
-      env: HashMap[String, String],
-      variable: String,
-      value: String,
-      classPathSeparator: String) = {
-    var envVariable = ""
-    if (env.get(variable) == None) {
-      envVariable = value
-    } else {
-      envVariable = env.get(variable).get + classPathSeparator + value
-    }
-    env put (StringInterner.weakIntern(variable), StringInterner.weakIntern(envVariable))
+  /**
+   * Add a path variable to the given environment map.
+   * If the map already contains this key, append the value to the existing value instead.
+   */
+  def addPathToEnvironment(env: HashMap[String, String], key: String, value: String): Unit = {
+    val newValue = if (env.contains(key)) { env(key) + File.pathSeparator + value } else value
+    env.put(key, newValue)
   }
 
-  def setEnvFromInputString(
-      env: HashMap[String, String],
-      envString: String,
-      classPathSeparator: String) = {
-    if (envString != null && envString.length() > 0) {
-      var childEnvs = envString.split(",")
-      var p = Pattern.compile(getEnvironmentVariableRegex())
+  /**
+   * Set zero or more environment variables specified by the given input string.
+   * The input string is expected to take the form "KEY1=VAL1,KEY2=VAL2,KEY3=VAL3".
+   */
+  def setEnvFromInputString(env: HashMap[String, String], inputString: String): Unit = {
+    if (inputString != null && inputString.length() > 0) {
+      val childEnvs = inputString.split(",")
+      val p = Pattern.compile(environmentVariableRegex)
       for (cEnv <- childEnvs) {
-        var parts = cEnv.split("=") // split on '='
-        var m = p.matcher(parts(1))
+        val parts = cEnv.split("=") // split on '='
+        val m = p.matcher(parts(1))
         val sb = new StringBuffer
         while (m.find()) {
           val variable = m.group(1)
@@ -131,8 +126,7 @@ object YarnSparkHadoopUtil {
           if (env.get(variable) != None) {
             replace = env.get(variable).get
           } else {
-            // if this key is not configured for the child .. get it
-            // from the env
+            // if this key is not configured for the child .. get it from the env
             replace = System.getenv(variable)
             if (replace == null) {
             // the env key is note present anywhere .. simply set it
@@ -142,14 +136,15 @@ object YarnSparkHadoopUtil {
           m.appendReplacement(sb, Matcher.quoteReplacement(replace))
         }
         m.appendTail(sb)
-        addToEnvironment(env, parts(0), sb.toString(), classPathSeparator)
+        // This treats the environment variable as path variable delimited by `File.pathSeparator`
+        // This is kept for backward compatibility and consistency with Hadoop's behavior
+        addPathToEnvironment(env, parts(0), sb.toString)
       }
     }
   }
 
-  private def getEnvironmentVariableRegex() : String = {
-    val osName = System.getProperty("os.name")
-    if (osName startsWith "Windows") {
+  private val environmentVariableRegex: String = {
+    if (Utils.isWindows) {
       "%([A-Za-z_][A-Za-z0-9_]*?)%"
     } else {
       "\\$([A-Za-z_][A-Za-z0-9_]*)"
@@ -181,14 +176,14 @@ object YarnSparkHadoopUtil {
     }
   }
 
-  private[spark] def lookupRack(conf: Configuration, host: String): String = {
+  def lookupRack(conf: Configuration, host: String): String = {
     if (!hostToRack.contains(host)) {
       populateRackInfo(conf, host)
     }
     hostToRack.get(host)
   }
 
-  private[spark] def populateRackInfo(conf: Configuration, hostname: String) {
+  def populateRackInfo(conf: Configuration, hostname: String) {
     Utils.checkHost(hostname)
 
     if (!hostToRack.containsKey(hostname)) {
@@ -212,8 +207,8 @@ object YarnSparkHadoopUtil {
     }
   }
 
-  private[spark] def getApplicationAclsForYarn(securityMgr: SecurityManager):
-      Map[ApplicationAccessType, String] = {
+  def getApplicationAclsForYarn(securityMgr: SecurityManager)
+      : Map[ApplicationAccessType, String] = {
     Map[ApplicationAccessType, String] (
       ApplicationAccessType.VIEW_APP -> securityMgr.getViewAcls,
       ApplicationAccessType.MODIFY_APP -> securityMgr.getModifyAcls

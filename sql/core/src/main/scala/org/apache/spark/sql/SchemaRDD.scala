@@ -45,9 +45,8 @@ import org.apache.spark.api.java.JavaRDD
  * explicitly using the `createSchemaRDD` function on a [[SQLContext]].
  *
  * A `SchemaRDD` can also be created by loading data in from external sources.
- * Examples are loading data from Parquet files by using by using the
- * `parquetFile` method on [[SQLContext]], and loading JSON datasets
- * by using `jsonFile` and `jsonRDD` methods on [[SQLContext]].
+ * Examples are loading data from Parquet files by using the `parquetFile` method on [[SQLContext]]
+ * and loading JSON datasets by using `jsonFile` and `jsonRDD` methods on [[SQLContext]].
  *
  * == SQL Queries ==
  * A SchemaRDD can be registered as a table in the [[SQLContext]] that was used to create it.  Once

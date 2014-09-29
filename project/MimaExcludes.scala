@@ -48,6 +48,15 @@ object MimaExcludes {
               "org.apache.spark.network.netty.PathResolver"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.network.netty.client.BlockClientListener")
+          ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
+          Seq(
+            // Added normL1 and normL2 to trait MultivariateStatisticalSummary
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2")
           )
 
         case v if v.startsWith("1.1") =>

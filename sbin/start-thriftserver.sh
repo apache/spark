@@ -27,7 +27,7 @@ set -o posix
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
-CLASS_NOT_FOUND_EXIT_STATUS=1
+CLASS_NOT_FOUND_EXIT_STATUS=101
 
 function usage {
   echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"

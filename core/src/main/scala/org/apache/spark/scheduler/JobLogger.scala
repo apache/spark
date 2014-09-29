@@ -171,7 +171,6 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     }
     val shuffleReadMetrics = taskMetrics.shuffleReadMetrics match {
       case Some(metrics) =>
-        " SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime +
         " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +

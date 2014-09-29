@@ -34,9 +34,9 @@ from math import sqrt, log, isinf, isnan
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, CompressedSerializer
+    PickleSerializer, pack_long, AutoBatchedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
-    python_right_outer_join, python_cogroup
+    python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
@@ -1375,7 +1375,7 @@ class RDD(object):
 
         For each element (k, v) in C{self}, the resulting RDD will either
         contain all pairs (k, (v, w)) for w in C{other}, or the pair
-        (k, (v, None)) if no elements in other have key k.
+        (k, (v, None)) if no elements in C{other} have key k.
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
@@ -1402,6 +1402,27 @@ class RDD(object):
         [('a', (2, 1)), ('b', (None, 4))]
         """
         return python_right_outer_join(self, other, numPartitions)
+
+    def fullOuterJoin(self, other, numPartitions=None):
+        """
+        Perform a right outer join of C{self} and C{other}.
+
+        For each element (k, v) in C{self}, the resulting RDD will either
+        contain all pairs (k, (v, w)) for w in C{other}, or the pair
+        (k, (v, None)) if no elements in C{other} have key k.
+
+        Similarly, for each element (k, w) in C{other}, the resulting RDD will
+        either contain all pairs (k, (v, w)) for v in C{self}, or the pair
+        (k, (None, w)) if no elements in C{self} have key k.
+
+        Hash-partitions the resulting RDD into the given number of partitions.
+
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2), ("c", 8)])
+        >>> sorted(x.fullOuterJoin(y).collect())
+        [('a', (1, 2)), ('b', (4, None)), ('c', (None, 8))]
+        """
+        return python_full_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
     # portable_hash is used as default, because builtin hash of None is different
@@ -1927,10 +1948,10 @@ class RDD(object):
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
         """
-        if not self._is_pickled():
-            self = self._reserialize(BatchedSerializer(PickleSerializer(), 1024))
-        batched = isinstance(self._jrdd_deserializer, BatchedSerializer)
-        return self.ctx._jvm.PythonRDD.pythonToJava(self._jrdd, batched)
+        rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer())) \
+            if not self._is_pickled() else self
+        is_batch = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
+        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, is_batch)
 
     def countApprox(self, timeout, confidence=0.95):
         """
@@ -2061,8 +2082,12 @@ class PipelinedRDD(RDD):
             self._jrdd_deserializer = NoOpSerializer()
         command = (self.func, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
+        # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
+        if pickled_command > (1 << 20):  # 1M
+            broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)

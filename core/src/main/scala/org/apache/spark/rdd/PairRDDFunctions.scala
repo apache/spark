@@ -86,7 +86,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
-      self.mapPartitionsWithContext((context, iter) => {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
@@ -507,6 +508,23 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Uses the given Partitioner to partition the output RDD.
+   */
+  def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
+      : RDD[(K, (Option[V], Option[W]))] = {
+    this.cogroup(other, partitioner).flatMapValues {
+      case (vs, Seq()) => vs.map(v => (Some(v), None))
+      case (Seq(), ws) => ws.map(w => (None, Some(w)))
+      case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
+    }
+  }
+
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
@@ -583,6 +601,31 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def rightOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Hash-partitions the resulting RDD using the existing partitioner/
+   * parallelism level.
+   */
+  def fullOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Hash-partitions the resulting RDD into the given number of partitions.
+   */
+  def fullOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin(other, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -872,7 +915,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.set("mapred.output.compression.codec", c.getCanonicalName)
       hadoopConf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
-    hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
+
+    // Use configured output committer if already set
+    if (conf.getOutputCommitter == null) {
+      hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
+    }
+
     FileOutputFormat.setOutputPath(hadoopConf,
       SparkHadoopWriter.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
