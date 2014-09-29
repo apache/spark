@@ -63,6 +63,41 @@ def _convert_to_vector(l):
         raise TypeError("Cannot convert type %s into Vector" % type(l))
 
 
+def _vector_size(v):
+    """
+    Returns the size of the vector.
+
+    >>> _vector_size([1., 2., 3.])
+    3
+    >>> _vector_size((1., 2., 3.))
+    3
+    >>> _vector_size(array.array('d', [1., 2., 3.]))
+    3
+    >>> _vector_size(np.zeros(3))
+    3
+    >>> _vector_size(np.zeros((3, 1)))
+    3
+    >>> _vector_size(np.zeros((1, 3)))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cannot treat an ndarray of shape (1, 3) as a vector
+    """
+    if isinstance(v, Vector):
+        return len(v)
+    elif type(v) in (array.array, list, tuple):
+        return len(v)
+    elif type(v) == np.ndarray:
+        if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
+            return len(v)
+        else:
+            raise ValueError("Cannot treat an ndarray of shape %s as a vector" % str(v.shape))
+    elif _have_scipy and scipy.sparse.issparse(v):
+        assert v.shape[1] == 1, "Expected column vector"
+        return v.shape[0]
+    else:
+        raise TypeError("Cannot treat type %s as a vector" % type(v))
+
+        
 class Vector(object):
     """
     Abstract class for DenseVector and SparseVector
@@ -103,16 +138,29 @@ class DenseVector(Vector):
         5.0
         >>> dense.dot(np.array(range(1, 3)))
         5.0
+        >>> dense.dot([1.,])
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> dense.dot(np.reshape([1., 2., 3., 4.], (2, 2), order='F'))
+        array([  5.,  11.])
+        >>> dense.dot(np.reshape([1., 2., 3.], (3, 1), order='F'))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
         """
-        assert len(self) == len(other), "vector sizes mismatch"
-        if isinstance(other, SparseVector):
-            return other.dot(self)
-        elif _have_scipy and scipy.sparse.issparse(other):
-            return other.transpose().dot(self.toArray())[0]
-        elif isinstance(other, Vector):
-            return np.dot(self.toArray(), other.toArray())
+        if (type(other) == np.ndarray and other.ndim > 1) or \
+            (_have_scipy and scipy.sparse.issparse(other)):
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return other.transpose().dot(self.toArray())
         else:
-            return np.dot(self.toArray(), other)
+            assert len(self) == _vector_size(other), "dimension mismatch"
+            if isinstance(other, SparseVector):
+                return other.dot(self)
+            elif isinstance(other, Vector):
+                return np.dot(self.toArray(), other.toArray())
+            else:
+                return np.dot(self.toArray(), other)
 
     def squared_distance(self, other):
         """
@@ -130,8 +178,16 @@ class DenseVector(Vector):
         >>> sparse1 = SparseVector(2, [0, 1], [2., 1.])
         >>> dense1.squared_distance(sparse1)
         2.0
+        >>> dense1.squared_distance([1.,])
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> dense1.squared_distance(SparseVector(1, [0,], [1.,]))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
         """
-        assert len(self) == len(other), "vector sizes mismatch"
+        assert len(self) == _vector_size(other), "dimension mismatch"
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
@@ -225,21 +281,33 @@ class SparseVector(Vector):
         0.0
         >>> a.dot(np.array([[1, 1], [2, 2], [3, 3], [4, 4]]))
         array([ 22.,  22.])
+        >>> a.dot([1., 2., 3.])
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> a.dot(np.array([1., 2.]))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> a.dot(DenseVector([1., 2.]))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> a.dot(np.zeros((3, 2)))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
         """
-        assert len(self) == len(other), "vector sizes mismatch"
         if type(other) == np.ndarray:
-            if other.ndim == 1:
-                result = 0.0
-                for i in xrange(len(self.indices)):
-                    result += self.values[i] * other[self.indices[i]]
-                return result
-            elif other.ndim == 2:
+            if other.ndim == 2:
                 results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
                 return np.array(results)
-            else:
-                raise Exception("Cannot call dot with %d-dimensional array" % other.ndim)
+            elif other.ndim > 2:
+                raise ValueError("Cannot call dot with %d-dimentaional array" % other.ndim)
 
-        elif type(other) in (array.array, DenseVector):
+        assert len(self) == _vector_size(other), "dimension mismatch"
+                        
+        if type(other) in (np.ndarray, array.array, DenseVector):
             result = 0.0
             for i in xrange(len(self.indices)):
                 result += self.values[i] * other[self.indices[i]]
@@ -258,6 +326,7 @@ class SparseVector(Vector):
                 else:
                     j += 1
             return result
+
         else:
             return self.dot(_convert_to_vector(other))
 
@@ -277,7 +346,16 @@ class SparseVector(Vector):
         30.0
         >>> b.squared_distance(a)
         30.0
+        >>> b.squared_distance([1., 2.])
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
+        >>> b.squared_distance(SparseVector(3, [1,], [1.0,]))
+        Traceback (most recent call last):
+            ...
+        AssertionError: dimension mismatch
         """
+        assert len(self) == _vector_size(other), "dimension mismatch"
         if type(other) in (list, array.array, DenseVector, np.array, np.ndarray):
             if type(other) is np.array and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
