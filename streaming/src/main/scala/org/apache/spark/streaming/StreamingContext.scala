@@ -413,7 +413,7 @@ class StreamingContext private[streaming] (
       dstreams: Seq[DStream[_]],
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
     ): DStream[T] = {
-    new TransformedDStream[T](dstreams, (transformFunc))
+    new TransformedDStream[T](dstreams, transformFunc)
   }
 
   /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for

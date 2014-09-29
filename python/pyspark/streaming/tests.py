@@ -348,7 +348,7 @@ class TestWindowFunctions(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByValueAndWindow(6, 1)
+            return dstream.countByValueAndWindow(5, 1)
 
         expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
@@ -357,7 +357,7 @@ class TestWindowFunctions(PySparkStreamingTestCase):
         input = [[('a', i)] for i in range(5)]
 
         def func(dstream):
-            return dstream.groupByKeyAndWindow(4, 1).mapValues(list)
+            return dstream.groupByKeyAndWindow(3, 1).mapValues(list)
 
         expected = [[('a', [0])], [('a', [0, 1])], [('a', [0, 1, 2])], [('a', [1, 2, 3])],
                     [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]

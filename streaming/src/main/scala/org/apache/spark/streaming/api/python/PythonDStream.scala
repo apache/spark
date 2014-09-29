@@ -41,7 +41,7 @@ trait PythonRDDFunction {
 /**
  * Wrapper for PythonRDDFunction
  */
-class RDDFunction(pfunc: PythonRDDFunction)
+private[python] class RDDFunction(pfunc: PythonRDDFunction)
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
 
   def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
@@ -68,6 +68,7 @@ class RDDFunction(pfunc: PythonRDDFunction)
     some(pfunc.call(time.milliseconds, List(wrapRDD(rdd), wrapRDD(rdd2)).asJava))
   }
 
+  // for JFunction2
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
     pfunc.call(time.milliseconds, rdds)
   }

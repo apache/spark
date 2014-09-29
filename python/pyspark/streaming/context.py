@@ -15,15 +15,15 @@
 # limitations under the License.
 #
 
+from py4j.java_collections import ListConverter
+from py4j.java_gateway import java_import
+
 from pyspark import RDD
 from pyspark.serializers import UTF8Deserializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import RDDFunction
-
-from py4j.java_collections import ListConverter
-from py4j.java_gateway import java_import
 
 __all__ = ["StreamingContext"]
 
