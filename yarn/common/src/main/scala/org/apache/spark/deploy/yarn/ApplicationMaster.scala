@@ -52,6 +52,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     .asInstanceOf[YarnConfiguration]
   private val isDriver = args.userClass != null
 
+  private var exitCode = 0
+
   // Default to numExecutors * 2, with minimum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures", math.max(args.numExecutors * 2, 3)))
@@ -95,7 +97,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         if (sc != null) {
           logInfo("Invoking sc stop from shutdown hook")
           sc.stop()
-          finish(FinalApplicationStatus.SUCCEEDED)
+        }
+
+        // Shuts down the AM.
+        if (!finished) {
+          finish(finalStatus)
         }
 
         // Cleanup the staging dir after the app is finished, or if it's the last attempt at
@@ -123,13 +129,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     } else {
       runExecutorLauncher(securityMgr)
     }
-
-    if (finalStatus != FinalApplicationStatus.UNDEFINED) {
-      finish(finalStatus)
-      0
-    } else {
-      1
-    }
+    exitCode
   }
 
   final def finish(status: FinalApplicationStatus, diagnostics: String = null) = synchronized {
@@ -211,7 +211,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
-    finalStatus = FinalApplicationStatus.SUCCEEDED
   }
 
   private def launchReporterThread(): Thread = {
@@ -386,31 +385,50 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
+    var stopped = false
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
     userClassThread = new Thread {
       override def run() {
-        var status = FinalApplicationStatus.FAILED
+        finalStatus = FinalApplicationStatus.FAILED
         try {
-          // Copy
-          val mainArgs = new Array[String](args.userArgs.size)
-          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
-          mainMethod.invoke(null, mainArgs)
-          // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
-          // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
-          status = FinalApplicationStatus.SUCCEEDED
-        } catch {
-          case e: InvocationTargetException =>
-            e.getCause match {
-              case _: InterruptedException =>
+          System.setSecurityManager(new java.lang.SecurityManager() {
+            override def checkExit(paramInt: Int) {
+              if (!stopped) {
+                exitCode = paramInt
+                if (exitCode == 0) {
+                  finalStatus = FinalApplicationStatus.SUCCEEDED
+                }
+                stopped = true
+              }
+            }
+
+            override def checkPermission(perm: java.security.Permission): Unit = {
+
+            }
+          })
+        }
+        catch {
+          case e: SecurityException =>
+            logError("Error in setSecurityManager:", e)
+        }
+
+        Utils.tryOrExit {
+          try {
+            val mainArgs = new Array[String](args.userArgs.size)
+            args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
+            mainMethod.invoke(null, mainArgs)
+            finalStatus = FinalApplicationStatus.SUCCEEDED
+          } catch {
+            case e: InvocationTargetException =>
+              e.getCause match {
+                case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
 
-              case e => throw e
-            }
-        } finally {
-          logDebug("Finishing main")
-          finalStatus = status
+                case e => throw e
+              }
+          }
         }
       }
     }
