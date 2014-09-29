@@ -17,16 +17,18 @@
 
 package org.apache.spark.network
 
-import java.io.{FileInputStream, RandomAccessFile, File, InputStream}
+import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode
+
+import scala.util.Try
 
 import com.google.common.io.ByteStreams
 import io.netty.buffer.{Unpooled, ByteBufInputStream, ByteBuf}
 import io.netty.channel.DefaultFileRegion
 
-import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
 
 
 /**
@@ -95,17 +97,44 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     try {
       channel = new RandomAccessFile(file, "r").getChannel
       channel.map(MapMode.READ_ONLY, offset, length)
+    } catch {
+      case e: IOException =>
+        Try(channel.size).toOption match {
+          case Some(fileLen) =>
+            throw new IOException(s"Error in reading $this (actual file length $fileLen)", e)
+          case None =>
+            throw new IOException(s"Error in opening $this", e)
+        }
     } finally {
       if (channel != null) {
-        channel.close()
+        Utils.tryLog(channel.close())
       }
     }
   }
 
   override def inputStream(): InputStream = {
-    val is = new FileInputStream(file)
-    is.skip(offset)
-    ByteStreams.limit(is, length)
+    var is: FileInputStream = null
+    try {
+      is = new FileInputStream(file)
+      is.skip(offset)
+      ByteStreams.limit(is, length)
+    } catch {
+      case e: IOException =>
+        if (is != null) {
+          Utils.tryLog(is.close())
+        }
+        Try(file.length).toOption match {
+          case Some(fileLen) =>
+            throw new IOException(s"Error in reading $this (actual file length $fileLen)", e)
+          case None =>
+            throw new IOException(s"Error in opening $this", e)
+        }
+      case e: Throwable =>
+        if (is != null) {
+          Utils.tryLog(is.close())
+        }
+        throw e
+    }
   }
 
   private[network] override def convertToNetty(): AnyRef = {
@@ -116,6 +145,8 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
   // Content of file segments are not in-memory, so no need to reference count.
   override def retain(): this.type = this
   override def release(): this.type = this
+
+  override def toString: String = s"${getClass.getName}($file, $offset, $length)"
 }
 
 
