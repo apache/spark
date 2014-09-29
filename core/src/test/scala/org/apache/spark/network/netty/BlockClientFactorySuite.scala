@@ -69,7 +69,7 @@ class BlockClientFactorySuite extends FunSuite with BeforeAndAfterAll {
         Thread.sleep(10)
       }
     }
-    Await.result(f, 3 seconds)
+    Await.result(f, 3.seconds)
     assert(!c1.isActive)
 
     // Create c2, which should be different from c1
