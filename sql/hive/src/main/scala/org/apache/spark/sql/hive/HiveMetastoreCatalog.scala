@@ -244,7 +244,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BooleanType => "boolean"
     case DecimalType => "decimal"
     case TimestampType => "timestamp"
-    case NullType => "null"
+    case NullType => "void"
   }
 }
 

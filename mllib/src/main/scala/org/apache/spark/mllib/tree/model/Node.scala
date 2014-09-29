@@ -41,12 +41,12 @@ import org.apache.spark.mllib.linalg.Vector
 @DeveloperApi
 class Node (
     val id: Int,
-    val predict: Double,
-    val isLeaf: Boolean,
-    val split: Option[Split],
+    var predict: Double,
+    var isLeaf: Boolean,
+    var split: Option[Split],
     var leftNode: Option[Node],
     var rightNode: Option[Node],
-    val stats: Option[InformationGainStats]) extends Serializable with Logging {
+    var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
     "split = " + split + ", stats = " + stats
@@ -166,6 +166,11 @@ class Node (
 }
 
 private[tree] object Node {
+
+  /**
+   * Return a node with the given node id (but nothing else set).
+   */
+  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, 0, false, None, None, None, None)
 
   /**
    * Return the index of the left child of this node.

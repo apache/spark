@@ -75,10 +75,10 @@ private[tree] class VarianceAggregator()
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double): Unit = {
-    allStats(offset) += 1
-    allStats(offset + 1) += label
-    allStats(offset + 2) += label * label
+  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
+    allStats(offset) += instanceWeight
+    allStats(offset + 1) += instanceWeight * label
+    allStats(offset + 2) += instanceWeight * label * label
   }
 
   /**

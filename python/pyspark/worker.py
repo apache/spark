@@ -43,6 +43,13 @@ def report_times(outfile, boot, init, finish):
     write_long(1000 * finish, outfile)
 
 
+def add_path(path):
+    # worker can be used, so donot add path multiple times
+    if path not in sys.path:
+        # overwrite system packages
+        sys.path.insert(1, path)
+
+
 def main(infile, outfile):
     try:
         boot_time = time.time()
@@ -61,11 +68,11 @@ def main(infile, outfile):
         SparkFiles._is_running_on_worker = True
 
         # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-        sys.path.append(spark_files_dir)  # *.py files that were added will be copied here
+        add_path(spark_files_dir)  # *.py files that were added will be copied here
         num_python_includes = read_int(infile)
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
-            sys.path.append(os.path.join(spark_files_dir, filename))
+            add_path(os.path.join(spark_files_dir, filename))
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)
