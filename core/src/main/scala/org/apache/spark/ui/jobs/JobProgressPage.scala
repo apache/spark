@@ -36,6 +36,8 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
       val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val failedStages = listener.failedStages.reverse.toSeq
+      val totalCompletedStages = listener.totalCompletedStages
+      val totalFailedStages = listener.totalFailedStages
       val now = System.currentTimeMillis
 
       val activeStagesTable =
@@ -70,11 +72,11 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
             </li>
             <li>
               <a href="#completed"><strong>Completed Stages:</strong></a>
-              {completedStages.size}
+              {totalCompletedStages}
             </li>
              <li>
              <a href="#failed"><strong>Failed Stages:</strong></a>
-              {failedStages.size}
+              {totalFailedStages}
             </li>
           </ul>
         </div>
@@ -87,9 +89,9 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
+        <h4 id="completed">Completed Stages ({totalCompletedStages})</h4> ++
         completedStagesTable.toNodeSeq ++
-        <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
+        <h4 id ="failed">Failed Stages ({totalFailedStages})</h4> ++
         failedStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage("Spark Stages", content, parent)
