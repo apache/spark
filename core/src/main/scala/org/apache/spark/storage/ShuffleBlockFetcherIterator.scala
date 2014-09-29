@@ -155,7 +155,7 @@ final class ShuffleBlockFetcherIterator(
             shuffleMetrics.remoteBytesRead += buf.size
             shuffleMetrics.remoteBlocksFetched += 1
           }
-          logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
 
         override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
