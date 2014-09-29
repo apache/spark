@@ -36,9 +36,11 @@ public class ApplicationId implements Serializable {
       return false;
     } else if (other == this) {
       return true;
-    } else {
+    }/* else if (appId != null) {
       return appId.equals(((ApplicationId)other).appId);
-    }
+    } else {
+      return false;
+    }*/ else return appId.equals(((ApplicationId)other).appId);
   }
 
   @Override
