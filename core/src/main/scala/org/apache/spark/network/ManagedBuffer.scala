@@ -121,7 +121,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     } catch {
       case e: IOException =>
         if (is != null) {
-          Utils.tryLog(is.close())
+          is.close()
         }
         Try(file.length).toOption match {
           case Some(fileLen) =>
@@ -131,20 +131,13 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
         }
       case e: Throwable =>
         if (is != null) {
-          Utils.tryLog(is.close())
+          is.close()
         }
         throw e
     }
   }
 
-  private[network] override def convertToNetty(): AnyRef = {
-    val fileChannel = new FileInputStream(file).getChannel
-    new DefaultFileRegion(fileChannel, offset, length)
-  }
-
-  // Content of file segments are not in-memory, so no need to reference count.
-  override def retain(): this.type = this
-  override def release(): this.type = this
+  override def toString: String = s"${getClass.getName}($file, $offset, $length)"
 }
 
 
