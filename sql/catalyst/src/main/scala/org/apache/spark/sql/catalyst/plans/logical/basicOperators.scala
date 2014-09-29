@@ -114,6 +114,22 @@ case class InsertIntoTable(
   }
 }
 
+case class InsertIntoOrcTable(
+    table: LogicalPlan,
+    partition: Map[String, Option[String]],
+    child: LogicalPlan,
+    overwrite: Boolean)
+  extends LogicalPlan {
+  // The table being inserted into is a child for the purposes of transformations.
+  def children = table :: child :: Nil
+  def references = Set.empty
+  def output = child.output
+
+  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
+    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+  }
+}
+
 case class CreateTableAsSelect(
     databaseName: Option[String],
     tableName: String,
@@ -126,6 +142,13 @@ case class WriteToFile(
     path: String,
     child: LogicalPlan) extends UnaryNode {
   override def output = child.output
+}
+
+case class WriteToOrcFile(
+    path: String,
+    child: LogicalPlan) extends UnaryNode {
+  def references = Set.empty
+  def output = child.output
 }
 
 case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {

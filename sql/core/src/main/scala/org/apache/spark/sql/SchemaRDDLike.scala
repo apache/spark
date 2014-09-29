@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 
 /**
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
@@ -75,6 +75,17 @@ private[sql] trait SchemaRDDLike {
    */
   def saveAsParquetFile(path: String): Unit = {
     sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+  }
+
+  /**
+   * Saves the contents of this `SchemaRDD` as a orc file, preserving the schema.  Files that
+   * are written out using this method can be read back in as a SchemaRDD using the `orcFile`
+   * function.
+   *
+   * @group schema
+   */
+  def saveAsOrcFile(path: String): Unit = {
+    sqlContext.executePlan(WriteToOrcFile(path, logicalPlan)).toRdd
   }
 
   /**
