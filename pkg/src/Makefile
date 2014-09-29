@@ -1,3 +1,4 @@
+
 SCALA_VERSION := 2.10
 SPARKR_VERSION := 0.1
 JAR_NAME := sparkr-assembly-$(SPARKR_VERSION).jar
@@ -13,6 +14,7 @@ SCALA_FILES := $(wildcard $(SCALA_SOURCE_DIR)/*.scala)
 RESOURCE_FILES := $(wildcard $(RESOURCE_DIR)/*)
 
 SPARK_HADOOP_VERSION ?= 1.0.4
+SPARK_VERSION ?= 1.1.0
 
 ifdef USE_MAVEN
 	TARGET_NAME := $(MAVEN_TARGET_NAME)
@@ -29,7 +31,7 @@ $(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
 	cp -f $(SBT_TARGET_NAME) ../inst/
 
 $(MAVEN_TARGET_NAME): pom.xml $(SCALA_FILES) $(RESOURCE_FILES)
-	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -DskipTests clean package shade:shade
+	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -Dspark.version=$(SPARK_VERSION) -DskipTests clean package shade:shade
 	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
 
 clean:
