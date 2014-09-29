@@ -29,7 +29,7 @@ private[spark] sealed trait MapStatus {
   /** Location where this task was run. */
   def location: BlockManagerId
 
-  /** Estimated size for the reduce block. */
+  /** Estimated size for the reduce block, in bytes. */
   def getSizeForBlock(reduceId: Int): Long
 }
 
@@ -38,9 +38,9 @@ private[spark] object MapStatus {
 
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
     if (uncompressedSizes.length > 2000) {
-      new LargeMapStatus(loc, uncompressedSizes)
+      new HighlyCompressedMapStatus(loc, uncompressedSizes)
     } else {
-      new DetailedMapStatus(loc, uncompressedSizes)
+      new CompressedMapStatus(loc, uncompressedSizes)
     }
   }
 
@@ -75,13 +75,13 @@ private[spark] object MapStatus {
 
 
 /**
- * A [[MapStatus]] implementation that tracks the size of each block. Block sizes are compressed
- * into a single byte.
+ * A [[MapStatus]] implementation that tracks the size of each block. Size for each block is
+ * represented using a single byte.
  *
  * @param loc location where the task is being executed.
  * @param compressedSizes size of the blocks, indexed by reduce partition id.
  */
-private[spark] class DetailedMapStatus(
+private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
     private[this] var compressedSizes: Array[Byte])
   extends MapStatus with Externalizable {
@@ -98,13 +98,13 @@ private[spark] class DetailedMapStatus(
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
 
-  override def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = {
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
   }
 
-  override def readExternal(in: ObjectInput) {
+  override def readExternal(in: ObjectInput): Unit = {
     loc = BlockManagerId(in)
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
@@ -119,7 +119,7 @@ private[spark] class DetailedMapStatus(
  * @param loc location where the task is being executed.
  * @param avgSize average size of all the blocks
  */
-private[spark] class LargeMapStatus(
+private[spark] class HighlyCompressedMapStatus(
     private[this] var loc: BlockManagerId,
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
@@ -134,12 +134,12 @@ private[spark] class LargeMapStatus(
 
   override def getSizeForBlock(reduceId: Int): Long = avgSize
 
-  override def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = {
     loc.writeExternal(out)
     out.writeLong(avgSize)
   }
 
-  override def readExternal(in: ObjectInput) {
+  override def readExternal(in: ObjectInput): Unit = {
     loc = BlockManagerId(in)
     avgSize = in.readLong()
   }

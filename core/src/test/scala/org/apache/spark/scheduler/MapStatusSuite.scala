@@ -46,17 +46,17 @@ class MapStatusSuite extends FunSuite {
     }
   }
 
-  test("large tasks should use LargeMapStatus") {
+  test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
     val status = MapStatus(null, sizes)
-    assert(status.isInstanceOf[LargeMapStatus])
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
     assert(status.getSizeForBlock(10) === 150L)
     assert(status.getSizeForBlock(50) === 150L)
     assert(status.getSizeForBlock(99) === 150L)
     assert(status.getSizeForBlock(2000) === 150L)
   }
 
-  test("DetailedMapStatus: estimated size after serialization shouldn't be off by more than 10%") {
+  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size is within 10%") {
     val sizes = Array.tabulate[Long](50) { i => i.toLong }
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
@@ -75,7 +75,7 @@ class MapStatusSuite extends FunSuite {
     }
   }
 
-  test("LargeMapStatus: estimated size after serialization should be the same") {
+  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size should be the average size") {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
     val avg = sizes.sum / sizes.length
     val loc = BlockManagerId("a", "b", 10)
@@ -85,7 +85,6 @@ class MapStatusSuite extends FunSuite {
     val status1 = ser.newInstance().deserialize[MapStatus](buf)
     assert(status1.location == loc)
     for (i <- 0 until 3000) {
-      // make sure the estimated size is within 10% of the input
       val estimate = status1.getSizeForBlock(i)
       assert(estimate === avg)
     }

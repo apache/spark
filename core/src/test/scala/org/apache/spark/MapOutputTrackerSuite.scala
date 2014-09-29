@@ -23,7 +23,7 @@ import akka.actor._
 import akka.testkit.TestActorRef
 import org.scalatest.FunSuite
 
-import org.apache.spark.scheduler.{DetailedMapStatus, MapStatus}
+import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
@@ -172,7 +172,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     // being sent.
     masterTracker.registerShuffle(20, 100)
     (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new DetailedMapStatus(
+      masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
         BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
     }
     intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
