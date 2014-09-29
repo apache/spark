@@ -17,10 +17,12 @@
 
 package org.apache.spark;
 
+import java.io.Serializable;
+
 /**
  * This class represents unique application id for identifying each application
  */
-public class ApplicationId {
+public class ApplicationId implements Serializable {
 
   private String appId;
 
