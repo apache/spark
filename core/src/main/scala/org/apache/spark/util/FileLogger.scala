@@ -51,10 +51,25 @@ private[spark] class FileLogger(
   def this(
       logDir: String,
       sparkConf: SparkConf,
-      compress: Boolean = false,
-      overwrite: Boolean = true) = {
+      compress: Boolean,
+      overwrite: Boolean) = {
     this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
       overwrite = overwrite)
+  }
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf,
+      compress: Boolean) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
+      overwrite = true)
+  }
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = false,
+      overwrite = true)
   }
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
