@@ -81,23 +81,19 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
         .invoke(null, conf).asInstanceOf[String]).getOrElse("http://")
 
     // If running a new enough Yarn, use the HA-aware API for retrieving the RM addresses.
-    val method = Try(classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
-      classOf[Configuration]))
-    method match {
-      case Success(proxiesMethod) =>
-        val proxies = proxiesMethod.invoke(null, conf).asInstanceOf[JList[String]]
-        val hosts = proxies.map { proxy => proxy.split(":")(0) }
-        val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
-        Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
-
-      case Failure(e: NoSuchMethodException) =>
+    try {
+      val method = classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
+        classOf[Configuration])
+      val proxies = method.invoke(null, conf).asInstanceOf[JList[String]]
+      val hosts = proxies.map { proxy => proxy.split(":")(0) }
+      val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
+      Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
+    } catch {
+      case e: NoSuchMethodException =>
         val proxy = WebAppUtils.getProxyHostAndPort(conf)
         val parts = proxy.split(":")
         val uriBase = prefix + proxy + proxyBase
         Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
-
-      case Failure(e) =>
-        throw e
     }
   }
 
