@@ -48,7 +48,9 @@ private[tree] class DecisionTreeMetadata(
     val quantileStrategy: QuantileStrategy,
     val maxDepth: Int,
     val minInstancesPerNode: Int,
-    val minInfoGain: Double) extends Serializable {
+    val minInfoGain: Double,
+    val numTrees: Int,
+    val numFeaturesPerNode: Int) extends Serializable {
 
   def isUnordered(featureIndex: Int): Boolean = unorderedFeatures.contains(featureIndex)
 
@@ -73,6 +75,11 @@ private[tree] class DecisionTreeMetadata(
     numBins(featureIndex) - 1
   }
 
+  /**
+   * Indicates if feature subsampling is being used.
+   */
+  def subsamplingFeatures: Boolean = numFeatures != numFeaturesPerNode
+
 }
 
 private[tree] object DecisionTreeMetadata {
@@ -82,7 +89,11 @@ private[tree] object DecisionTreeMetadata {
    * This computes which categorical features will be ordered vs. unordered,
    * as well as the number of splits and bins for each feature.
    */
-  def buildMetadata(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeMetadata = {
+  def buildMetadata(
+      input: RDD[LabeledPoint],
+      strategy: Strategy,
+      numTrees: Int,
+      featureSubsetStrategy: String): DecisionTreeMetadata = {
 
     val numFeatures = input.take(1)(0).features.size
     val numExamples = input.count()
@@ -128,13 +139,43 @@ private[tree] object DecisionTreeMetadata {
       }
     }
 
+    // Set number of features to use per node (for random forests).
+    val _featureSubsetStrategy = featureSubsetStrategy match {
+      case "auto" =>
+        if (numTrees == 1) {
+          "all"
+        } else {
+          if (strategy.algo == Classification) {
+            "sqrt"
+          } else {
+            "onethird"
+          }
+        }
+      case _ => featureSubsetStrategy
+    }
+    val numFeaturesPerNode: Int = _featureSubsetStrategy match {
+      case "all" => numFeatures
+      case "sqrt" => math.sqrt(numFeatures).ceil.toInt
+      case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
+      case "onethird" => (numFeatures / 3.0).ceil.toInt
+    }
+
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet, numBins,
       strategy.impurity, strategy.quantileCalculationStrategy, strategy.maxDepth,
-      strategy.minInstancesPerNode, strategy.minInfoGain)
+      strategy.minInstancesPerNode, strategy.minInfoGain, numTrees, numFeaturesPerNode)
   }
 
   /**
+   * Version of [[buildMetadata()]] for DecisionTree.
+   */
+  def buildMetadata(
+      input: RDD[LabeledPoint],
+      strategy: Strategy): DecisionTreeMetadata = {
+    buildMetadata(input, strategy, numTrees = 1, featureSubsetStrategy = "all")
+  }
+
+    /**
    * Given the arity of a categorical feature (arity = number of categories),
    * return the number of bins for the feature if it is to be treated as an unordered feature.
    * There is 1 split for every partitioning of categories into 2 disjoint, non-empty sets;
