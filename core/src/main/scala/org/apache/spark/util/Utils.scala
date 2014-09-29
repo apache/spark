@@ -1304,6 +1304,20 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** Executes the given block in a Try, logging any uncaught exceptions. */
+  def tryLog[T](f: => T): Try[T] = {
+    try {
+      val res = f
+      scala.util.Success(res)
+    } catch {
+      case ct: ControlThrowable =>
+        throw ct
+      case t: Throwable =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        scala.util.Failure(t)
+    }
+  }
+
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {
