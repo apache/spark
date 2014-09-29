@@ -125,6 +125,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
      the environment of the executor launcher. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.system.exit</code></td>
+  <td>true</td>
+  <td>
+    Exit from yarn client's main class by issuing a System.exit call (with code 0 in case of
+    success, 1 in case of failure)
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
