@@ -167,6 +167,8 @@ final class NioManagedBuffer(buf: ByteBuffer) extends ManagedBuffer {
   // [[ByteBuffer]] is managed by the JVM garbage collector itself.
   override def retain(): this.type = this
   override def release(): this.type = this
+
+  override def toString: String = s"${getClass.getName}($buf)"
 }
 
 
@@ -193,4 +195,6 @@ final class NettyManagedBuffer(buf: ByteBuf) extends ManagedBuffer {
     buf.release()
     this
   }
+
+  override def toString: String = s"${getClass.getName}($buf)"
 }
