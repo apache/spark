@@ -71,18 +71,39 @@ class ProtocolSuite extends FunSuite {
     assert(msg === serverChannel.readInbound())
   }
 
-  test("server to client protocol") {
+  test("server to client protocol - BlockFetchSuccess(\"a1234\", new TestManagedBuffer(10))") {
     testServerToClient(BlockFetchSuccess("a1234", new TestManagedBuffer(10)))
+  }
+
+  test("server to client protocol - BlockFetchSuccess(\"\", new TestManagedBuffer(0))") {
     testServerToClient(BlockFetchSuccess("", new TestManagedBuffer(0)))
+  }
+
+  test("server to client protocol - BlockFetchFailure(\"abcd\", \"this is an error\")") {
     testServerToClient(BlockFetchFailure("abcd", "this is an error"))
+  }
+
+  test("server to client protocol - BlockFetchFailure(\"\", \"\")") {
     testServerToClient(BlockFetchFailure("", ""))
   }
 
-  test("client to server protocol") {
+  test("client to server protocol - BlockFetchRequest(Seq.empty[String])") {
     testClientToServer(BlockFetchRequest(Seq.empty[String]))
+  }
+
+  test("client to server protocol - BlockFetchRequest(Seq(\"b1\"))") {
     testClientToServer(BlockFetchRequest(Seq("b1")))
+  }
+
+  test("client to server protocol - BlockFetchRequest(Seq(\"b1\", \"b2\", \"b3\"))") {
     testClientToServer(BlockFetchRequest(Seq("b1", "b2", "b3")))
+  }
+
+  ignore("client to server protocol - BlockUploadRequest(\"\", new TestManagedBuffer(0))") {
     testClientToServer(BlockUploadRequest("", new TestManagedBuffer(0)))
+  }
+
+  ignore("client to server protocol - BlockUploadRequest(\"b_upload\", new TestManagedBuffer(10))") {
     testClientToServer(BlockUploadRequest("b_upload", new TestManagedBuffer(10)))
   }
 }

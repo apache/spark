@@ -112,6 +112,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
         }
 
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+          data.retain()
           receivedBlockIds.add(blockId)
           receivedBuffers.add(data)
           sem.release()
@@ -130,6 +131,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds === Set(bufferBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))
     assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
   }
 
   test("fetch a FileSegment block via zero-copy send") {
@@ -137,6 +139,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds === Set(fileBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(fileBlockReference))
     assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
   }
 
   test("fetch a non-existent block") {
@@ -144,6 +147,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds.isEmpty)
     assert(buffers.isEmpty)
     assert(failBlockIds === Set("random-block"))
+    buffers.foreach(_.release())
   }
 
   test("fetch both ByteBuffer block and FileSegment block") {
@@ -151,6 +155,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds === Set(bufferBlockId, fileBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference, fileBlockReference))
     assert(failBlockIds.isEmpty)
+    buffers.foreach(_.release())
   }
 
   test("fetch both ByteBuffer block and a non-existent block") {
@@ -158,6 +163,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds === Set(bufferBlockId))
     assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))
     assert(failBlockIds === Set("random-block"))
+    buffers.foreach(_.release())
   }
 
   test("shutting down server should also close client") {
