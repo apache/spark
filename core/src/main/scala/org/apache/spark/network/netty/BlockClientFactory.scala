@@ -25,10 +25,8 @@ import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel._
 import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioSocketChannel
-import io.netty.channel.socket.oio.OioSocketChannel
 import io.netty.util.internal.PlatformDependent
 
 import org.apache.spark.{Logging, SparkConf}
@@ -65,23 +63,18 @@ class BlockClientFactory(val conf: NettyConfig) extends Logging with Closeable {
 
   /** Initialize [[socketChannelClass]] and [[workerGroup]] based on ioMode. */
   private def init(): Unit = {
-    def initOio(): Unit = {
-      socketChannelClass = classOf[OioSocketChannel]
-      workerGroup = new OioEventLoopGroup(0, threadFactory)
-    }
     def initNio(): Unit = {
       socketChannelClass = classOf[NioSocketChannel]
-      workerGroup = new NioEventLoopGroup(0, threadFactory)
+      workerGroup = new NioEventLoopGroup(conf.clientThreads, threadFactory)
     }
     def initEpoll(): Unit = {
       socketChannelClass = classOf[EpollSocketChannel]
-      workerGroup = new EpollEventLoopGroup(0, threadFactory)
+      workerGroup = new EpollEventLoopGroup(conf.clientThreads, threadFactory)
     }
 
     // For auto mode, first try epoll (only available on Linux), then nio.
     conf.ioMode match {
       case "nio" => initNio()
-      case "oio" => initOio()
       case "epoll" => initEpoll()
       case "auto" => if (Epoll.isAvailable) initEpoll() else initNio()
     }
@@ -102,7 +95,7 @@ class BlockClientFactory(val conf: NettyConfig) extends Logging with Closeable {
       return cachedClient
     }
 
-    logInfo(s"Creating new connection to $remoteHost:$remotePort")
+    logDebug(s"Creating new connection to $remoteHost:$remotePort")
 
     // There is a chance two threads are creating two different clients connecting to the same host.
     // But that's probably ok ...
