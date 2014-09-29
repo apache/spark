@@ -55,21 +55,21 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val bootstrapDriver = sys.env("SPARK_SUBMIT_BOOTSTRAP_DRIVER")
 
     // list of environment variables that override differently named properties
-    val envOverides = Map( "OUR_JAVA_MEM" -> SparkDriverMemory,
-      "SPARK_SUBMIT_DEPLOY_MODE" -> SparkDeployMode,
-      "SPARK_SUBMIT_PROPERTIES_FILE" -> SparkPropertiesFile,
-      "SPARK_SUBMIT_DRIVER_MEMORY" -> SparkDriverMemory,
-      "SPARK_SUBMIT_LIBRARY_PATH" -> SparkDriverExtraLibraryPath,
-      "SPARK_SUBMIT_CLASSPATH" -> SparkDriverExtraClassPath,
-      "SPARK_SUBMIT_OPTS" -> SparkDriverExtraJavaOptions
+    val envOverides = Map( "OUR_JAVA_MEM" -> SPARK_DRIVER_MEMORY,
+      "SPARK_SUBMIT_DEPLOY_MODE" -> SPARK_DEPLOY_MODE,
+      "SPARK_SUBMIT_PROPERTIES_FILE" -> SPARK_PROPERTIES_FILE,
+      "SPARK_SUBMIT_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
+      "SPARK_SUBMIT_LIBRARY_PATH" -> SPARK_DRIVER_EXTRA_LIBRARY_PATH,
+      "SPARK_SUBMIT_CLASSPATH" -> SPARK_DRIVER_EXTRA_CLASSPATH,
+      "SPARK_SUBMIT_OPTS" -> SPARK_DRIVER_EXTRA_JAVA_OPTIONS
     )
 
     // SPARK_SUBMIT environment variables are treated as the highest priority source
     //  of config information for their respective config variable (as listed in envOverrides)
     val submitEnvVars = new mutable.HashMap() ++ envOverides
-      .map( {case(varName, propName) => (sys.env.get(varName), propName) })
-      .filter( {case(varVariable, _) => varVariable.isDefined} )
-      .map( {case(varVariable, propName) => (propName->varVariable.get)})
+      .map { case(varName, propName) => (sys.env.get(varName), propName) }
+      .filter { case(varVariable, _) => varVariable.isDefined }
+      .map { case(varVariable, propName) => propName->varVariable.get }
 
      /* See docco for SparkSubmitArguments to see the various config sources and their priority.
       * Of note here is that we are explicitly treating SPARK_SUBMIT* environment vars
@@ -77,29 +77,28 @@ private[spark] object SparkSubmitDriverBootstrapper {
       * Followed by any property files located at SPARK_SUBMIT_PROPERTIES_FILE
       * Followed by the standard priorities specified by the docco un SparkSubmitArguments
       */
-    val conf = SparkSubmitArguments.mergeSparkProperties(Vector(submitEnvVars,
-        Map(SparkPropertiesFile->sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE").get)))
+    val conf = SparkSubmitArguments.mergeSparkProperties(Seq(submitEnvVars,
+        Map(SPARK_PROPERTIES_FILE->sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE").get)))
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
     assume(javaOpts != null, "JAVA_OPTS must be set")
     assume(defaultDriverMemory != null, "OUR_JAVA_MEM must be set")
-    assume(conf.getOrElse(SparkDeployMode, "") == "client",
+    assume(conf.getOrElse(SPARK_DEPLOY_MODE, "") == "client",
       "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
-    assume(conf.getOrElse(SparkPropertiesFile, null) != null, "" +
-      "SPARK_SUBMIT_PROPERTIES_FILE must be set")
+    assume(conf.contains(SPARK_PROPERTIES_FILE), "SPARK_SUBMIT_PROPERTIES_FILE must be set")
     assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
-    val confDriverMemory = conf.get(SparkDriverMemory)
-    val confLibraryPath = conf.get(SparkDriverExtraLibraryPath)
-    val confClasspath = conf.get(SparkDriverExtraClassPath)
-    val confJavaOpts = conf.get(SparkDriverExtraClassPath)
+    val confDriverMemory = conf.get(SPARK_DRIVER_MEMORY)
+    val confLibraryPath = conf.get(SPARK_DRIVER_EXTRA_LIBRARY_PATH)
+    val confClasspath = conf.get(SPARK_DRIVER_EXTRA_CLASSPATH)
+    val confJavaOpts = conf.get(SPARK_DRIVER_EXTRA_CLASSPATH)
 
     val filteredJavaOpts = Utils.splitCommandString(confJavaOpts.getOrElse(""))
       .filterNot(_.startsWith("-Xms"))
       .filterNot(_.startsWith("-Xmx"))
 
-    val newDriverMemory = conf.get(SparkDriverMemory).get
+    val newDriverMemory = conf.get(SPARK_DRIVER_MEMORY).get
 
     // Build up command
     val command: Seq[String] =

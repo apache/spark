@@ -24,140 +24,140 @@ private[spark] object ConfigConstants {
   /**
    * The name of the application. This will appear in the UI and in log data.
    */
-  val SparkAppName: String = "spark.app.name"
+  val SPARK_APP_NAME: String = "spark.app.name"
 
   /**
    * The main class to start executing
    */
-  val SparkAppClass: String = "spark.app.class"
+  val SPARK_APP_CLASS: String = "spark.app.class"
 
   /**
    * The cluster manager to connect to.
    */
-  val SparkMaster: String = "spark.master"
+  val SPARK_MASTER: String = "spark.master"
 
   /**
    *  Whether to launch the driver program locally ("client") or
    * on one of the worker machines inside the cluster ("cluster")
    */
-  val SparkDeployMode: String = "spark.deployMode"
+  val SPARK_DEPLOY_MODE: String = "spark.deployMode"
 
   /**
    * Yarn client only: Number of executors to launch
    */
-  val SparkExecutorInstances: String = "spark.executor.instances"
+  val SPARK_EXECUTOR_INSTANCES: String = "spark.executor.instances"
 
   /**
    * Spark standalone and Mesos only: Total cores for all executors.
    */
-  val SparkCoresMax: String = "spark.cores.max"
+  val SPARK_CORES_MAX: String = "spark.cores.max"
 
   /**
    * Yarn client only:  Number of cores per executor
    */
-  val SparkExecutorCores: String = "spark.executor.cores"
+  val SPARK_EXECUTOR_CORES: String = "spark.executor.cores"
 
   /**
    * Memory per executor
    */
-  val SparkExecutorMemory: String = "spark.executor.memory"
+  val SPARK_EXECUTOR_MEMORY: String = "spark.executor.memory"
 
   /**
    * Standalone cluster only: Memory for driver
    */
-  val SparkDriverMemory: String = "spark.driver.memory"
+  val SPARK_DRIVER_MEMORY: String = "spark.driver.memory"
 
   /**
    * Standalone cluster only: Number of cores for driver
    */
-  val SparkDriverCores: String = "spark.driver.cores"
+  val SPARK_DRIVER_CORES: String = "spark.driver.cores"
 
   /**
    *  Extra class path entries to pass to the driver. Note that
    *  jars added with --jars are automatically included in the classpath.
    */
-  val SparkDriverExtraClassPath: String = "spark.driver.extraClassPath"
+  val SPARK_DRIVER_EXTRA_CLASSPATH: String = "spark.driver.extraClassPath"
 
   /**
    * Extra Java options to pass to the driver
    */
-  val SparkDriverExtraJavaOptions: String = "spark.driver.extraJavaOptions"
+  val SPARK_DRIVER_EXTRA_JAVA_OPTIONS: String = "spark.driver.extraJavaOptions"
 
   /**
    * Extra library path entries to pass to the driver.
    */
-  val SparkDriverExtraLibraryPath: String = "spark.driver.extraLibraryPath"
+  val SPARK_DRIVER_EXTRA_LIBRARY_PATH: String = "spark.driver.extraLibraryPath"
 
   /**
    * Spark standalone with cluster deploy mode only:
    * restart driver application on failure
    */
-  val SparkDriverSupervise: String = "spark.driver.supervise"
+  val SPARK_DRIVER_SUPERVISE: String = "spark.driver.supervise"
 
   /**
    * The YARN queue to submit to
    */
-  val SparkYarnQueue: String = "spark.yarn.queue"
+  val SPARK_YARN_QUEUE: String = "spark.yarn.queue"
 
   /**
    * Comma-separated list of files to be placed in the working directory of each executor
    */
-  val SparkFiles: String = "spark.files"
+  val SPAKR_FILES: String = "spark.files"
 
   /**
    * Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
    */
-  val SparkSubmitPyFiles = "spark.submit.pyFiles"
+  val SPARK_SUBMIT_PYFILES = "spark.submit.pyFiles"
 
   /**
    * Yarn only: Comma separated list of archives to be extracted into the
    * working directory of each executor
    */
-  val SparkYarnDistArchives: String = "spark.yarn.dist.archives"
+  val SPARK_YARN_DIST_ARCHIVES: String = "spark.yarn.dist.archives"
 
   /**
    * Comma-separated list of local jars to include on the driver and executor classpaths.
    */
-  val SparkJars: String = "spark.jars"
+  val SPARK_JARS: String = "spark.jars"
 
   /**
    * Should spark-submit run in verbose mode
    */
-  val SparkVerbose: String = "spark.verbose"
+  val SPARK_VERBOSE: String = "spark.verbose"
 
   /**
    * Main application to run
    */
-  val SparkAppPrimaryResource: String =  "spark.app.primaryResource"
+  val SPARK_APP_PRIMARY_RESOURCE: String =  "spark.app.primaryResource"
 
   /**
    * Arguments for application
    */
-  val SparkAppArguments: String = "spark.app.arguments"
+  val SPARK_APP_ARGUMENTS: String = "spark.app.arguments"
 
   /**
-   * Path to an additional properties file to attempt to load at startup
+   * Property file to read in - usually set by SparkSubmitDriverBootstrap
    */
-  val SparkPropertiesFile = "spark.propertiesFile"
+  val SPARK_PROPERTIES_FILE: String = "spark.properties.file"
 
   /**
    * Location of the spark home directory
    */
-  val EnvSparkHome: String = "SPARK_HOME"
+  val ENV_SPARK_HOME: String = "SPARK_HOME"
 
   /**
    * If present then all config files are read form this directory, rather then SPARK_HOME/conf
    */
-  val EnvAltSparkConfPath: String = "SPARK_CONF_DIR"
+  val ENV_ALT_SPARK_CONF_PATH: String = "SPARK_CONF_DIR"
 
   /**
    * sub directory of SPARK_HOME that configuration is stored in
    */
-  val DirNameSparkConf: String = "conf"
+  val DIR_NAME_SPARK_CONF: String = "conf"
 
   /**
    * If this file exists in $SPARK_HOME/conf or $SparkSubmitDefaults then its config
    * will be used
    */
-  val FileNameSparkDefaultsConf: String = "spark-defaults.conf"
+  val FILENAME_SPARK_DEFAULTS_CONF: String = "spark-defaults.conf"
 }
