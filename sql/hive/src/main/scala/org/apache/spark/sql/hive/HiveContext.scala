@@ -75,7 +75,7 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
  */
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
-    
+
   // Change the default SQL dialect to HiveQL
   override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
