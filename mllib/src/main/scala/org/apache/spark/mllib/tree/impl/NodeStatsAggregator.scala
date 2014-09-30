@@ -34,6 +34,11 @@ private[tree] class NodeStatsAggregator(
   }
 
   /**
+   * Number of elements (Double values) used for the sufficient statistics of each bin.
+   */
+  val statsSize: Int = impurityAggregator.statsSize
+
+  /**
    * Number of bins for each feature.  This is indexed by the feature index.
    */
   private val numBins: Array[Int] = {
@@ -52,11 +57,6 @@ private[tree] class NodeStatsAggregator(
   private val featureOffsets: Array[Int] = {
     numBins.scanLeft(0)((total, nBins) => total + statsSize * nBins)
   }
-
-  /**
-   * Number of elements (Double values) used for the sufficient statistics of each bin.
-   */
-  val statsSize: Int = impurityAggregator.statsSize
 
 
   /**
